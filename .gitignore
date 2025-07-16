@@ -1,0 +1,12 @@
+**/*.wav
+**/*.mp4
+**/sensorTestOutput.dat
+**/models/**
+**/*.bag
+**/*.pyc
+**/*cpython*
+__pycache__/
+**/*.png
+**/*.svg
+**/cssr4africa_virtual_envs/**
+**/BehaviorTree.CPP/**
