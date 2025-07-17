@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-face_detection_node.py ROS2 Node for Face and Mutual Gaze Detection and Localization.
+face_detection_application.py ROS2 Node for Face and Mutual Gaze Detection and Localization.
 
 Copyright (C) 2023 CSSR4Africa Consortium
 
@@ -14,7 +14,7 @@ This program comes with ABSOLUTELY NO WARRANTY.
 """
 
 """
-face_detection_node.py   ROS2 node to run the face and mutual gaze detection algorithm.
+face_detection_application.py   ROS2 node to run the face and mutual gaze detection algorithm.
 
 The face detection is implemented using ROS2 image topics that could be configured to be the intel realsense camera or pepper robot
 camera. It uses OpenCV to visualize the detected faces and gaze direction. The gaze direction is calculated using face
