@@ -1,21 +1,33 @@
-/* behaviorControllerImplementation.cpp   Source code for the implementation of the robot mission node classes and other utility functions
+/**
+ * -----------------------------------------------------------------------------
+ * @file    behaviorControllerImplementation.cpp
+ * @brief   Implements the robot mission node classes and related utility functions.
+ * -----------------------------------------------------------------------------
  *
- * Author: Tsegazeab Taye Tefferi
- * Date: April 25, 2025
- * Version: 1.0
+ * @author  Yohannes Haile
+ * @date    July 18, 2025
+ * @version 1.0
  *
- * Copyright (C) 2023 CSSR4Africa Consortium
+ * @copyright
+ *   Copyright (C) 2023 CSSR4Africa Consortium
  *
- * This project is funded by the African Engineering and Technology Network (Afretec)
- * Inclusive Digital Transformation Research Grant Programme.
+ * @funding
+ *   Funded by the African Engineering and Technology Network (Afretec)
+ *   Inclusive Digital Transformation Research Grant Programme.
  *
- * Website: www.cssr4africa.org
+ * @website
+ *   https://www.cssr4africa.org
  *
- * This program comes with ABSOLUTELY NO WARRANTY.
- *
+ * @warning
+ *   This program comes with ABSOLUTELY NO WARRANTY.
+ * -----------------------------------------------------------------------------
  */
 
+
 #include "behaviorController/behaviorControllerInterface.h"
+#include <algorithm>
+#include <sstream>
+#include <chrono>
 
 /* Definitions for printMsg function */
 #define INFO_MSG 0
@@ -517,34 +529,26 @@ static inline void trim(std::string &s) {
 /* Returns the value of a key from the configuration file. */
 std::string getValueFromConfig(const std::string &key)
 {
-    std::string value;
     std::string package_path = ament_index_cpp::get_package_share_directory("cssr_system");
-    std::ifstream configFile(package_path + "/behaviorController/config/behaviorControllerConfiguration.ini");
-    if (!configFile.is_open()) {
-        throw std::runtime_error("Failed to open configuration file.");
-    }
-
-    std::string configLineRead;
-
-    while (std::getline(configFile, configLineRead)) {
-        std::istringstream iss(configLineRead);
-        std::string paramKey, paramValue;
-        iss >> paramKey;
-
-        trim(paramKey);
-        std::getline(iss, paramValue);
-        trim(paramValue);
-
-        if (paramKey == key) {
-            value = paramValue;
-            break;
+    std::string config_file_path = package_path + "/behaviorController/config/behaviorControllerConfiguration.yaml";
+    
+    try {
+        YAML::Node config = YAML::LoadFile(config_file_path);
+        
+        if (config[key]) {
+            if (config[key].IsScalar()) {
+                return config[key].as<std::string>();
+            } else {
+                throw std::runtime_error("Configuration value for key '" + key + "' is not a scalar value");
+            }
+        } else {
+            throw std::runtime_error("Configuration key '" + key + "' not found");
         }
+    } catch (const YAML::Exception& e) {
+        throw std::runtime_error("Failed to parse YAML configuration file: " + std::string(e.what()));
+    } catch (const std::exception& e) {
+        throw std::runtime_error("Failed to read configuration file: " + std::string(e.what()));
     }
-    configFile.close();
-    if (value.empty()) {
-        throw std::runtime_error("Failed to retrieve value for key: " + key);
-    }
-    return value;
 }
 
 /* Returns true if a topic is available */
@@ -576,9 +580,17 @@ bool checkTopics(std::vector<std::string> &topicsList)
 bool checkServices(std::vector<std::string> &servicesList)
 {
     bool success = true;
-    for (std::string service : servicesList) {
-        auto client = node->create_client<std_msgs::srv::Empty>(service);
-        if (!client->wait_for_service(std::chrono::seconds(1))) {
+    for (const std::string& service : servicesList) {
+        // Get list of available services
+        auto service_names_and_types = node->get_service_names_and_types();
+        bool found = false;
+        for (const auto& [service_name, service_types] : service_names_and_types) {
+            if (service_name == service) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
             success = false;
             RCLCPP_ERROR(node->get_logger(), "[%s] NOT FOUND", service.c_str());
         }

@@ -1,18 +1,29 @@
-/* behaviorControllerInterface.h - interface file for behaviorControllerApplication and behaviorControllerImplementation.
-*
-* Author: Tsegazeab Taye Tefferi
-* Date: April 08, 2025
-* Version: v1.0
-*
-* Copyright (C) 2023 CSSR4Africa Consortium
-*
-* This project is funded by the African Engineering and Technology Network (Afretec)
-* Inclusive Digital Transformation Research Grant Programme.
-*
-* Website: www.cssr4africa.org
-*
-* This program comes with ABSOLUTELY NO WARRANTY.
-*/
+/**
+ * -----------------------------------------------------------------------------
+ * @file    behaviorControllerInterface.h
+ * @brief   Public interface declarations for the Robot Mission Interpreter node,
+ *          including class definitions and utility function prototypes.
+ * -----------------------------------------------------------------------------
+ *
+ * @author  Yohannes Haile
+ * @date    July 18, 2025
+ * @version 1.0
+ *
+ * @copyright
+ *   Copyright (C) 2023 CSSR4Africa Consortium
+ *
+ * @funding
+ *   Funded by the African Engineering and Technology Network (Afretec)
+ *   Inclusive Digital Transformation Research Grant Programme.
+ *
+ * @website
+ *   https://www.cssr4africa.org
+ *
+ * @warning
+ *   This program comes with ABSOLUTELY NO WARRANTY.
+ * -----------------------------------------------------------------------------
+ */
+
 
 #ifndef BEHAVIOR_CONTROLLER_INTERFACE_H
 #define BEHAVIOR_CONTROLLER_INTERFACE_H
@@ -30,6 +41,7 @@
 #include <vector>
 #include <stdio.h>
 #include <stdexcept>
+#include <yaml-cpp/yaml.h>
 
 #include "utilities/cultureKnowledgeBaseInterface.h"
 #include "utilities/environmentKnowledgeBaseInterface.h"

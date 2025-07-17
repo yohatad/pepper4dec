@@ -1,80 +1,64 @@
-/* behaviorControllerApplication.cpp
-* 
-* <detailed functional description>
-* The component starts the 'Robot Mission Interpreter' ROS2 Node. This node is the starting point for the robot to execute the mission selected.
-* Though, this component exists as a standalone and can be started as such, without the set of ROS2 nodes that are part of the CSSR4Afica system architecture(see D3.1 System Architecture), it will not be able function.
-...
-* Libraries
-* Standard libraries
-- std::string, std::fstream
-* ROS2 libraries
-- rclcpp/rclcpp.hpp, ament_index_cpp, std_msgs
-* BehaviorTree.Cpp libraries
-- behaviortree_cpp/bt_factory.h, behaviortree_cpp/loggers/groot2_publisher.h
-...
-* Parameters
-* *
-* Command-line Parameters
-* *
-* None
- ...
-* Configuration File Parameters
-* Key | Value
-* ----|------
-* scenarioSpecification | <the mission scenario to be interpreted>
-* verboseMode           | <true/false - enables/disables the display of diagnostic messages>
-* asrEnabled            | <true/false> - enables/disables the Automatic Speech Recognition. If diabled, pepper's tablet will be primary input method
-* testMode              | <true/false> - enables/disabled the test sequence. If enabled, it's the test sequence that will run
-...
-* Subscribed Topics and Message Types
-**
-- /faceDetection/data       FaceDetectionData.msg
-- /overtAttention/mode      OvertAttentionMode.msg
-- /speechEvent/text         std_msgs::msg::String
-...
-* Published Topics and Message Types
-**
-* None
-...
-* Advertised Services
-* 
-* None
-...
-* Services Invoked
-* *
-* /animateBehaviour/setActivation
-* /gestureExecution/perform_gesture
-* /overtAttention/set_mode
-* /robotLocalization/reset_pose
-* /robotNavigation/set_goal
-* /speechEvent/set_language
-* /speechEvent/set_enabled
-* /tabletEvent/prompt_and_get_response
-* /textToSpeech/say_text                                    
-...
-* Input Data Files
-*
-* lab_tour.xml
-...
-* Output Data Files
-* 
-* None
-...
-* Configuration Files
-**
-* behaviorControllerConfiguration.ini
-...
-* Example Instantiation of the Module
-* *
-* ros2 run cssr_system behaviorController
-...
-* *
-* Author: Tsegazeab Taye Tefferi, Carnegie Mellon University Africa
-* Email: ttefferi@andrew.cmu.edu
-* Date: April 08, 2025
-* Version: v1.0
-* *
-*/
+/**
+ * -----------------------------------------------------------------------------
+ * @file    behaviorControllerApplication.cpp
+ * @brief   Starts the “Robot Mission Interpreter” ROS 2 node—the entry point for
+ *          executing the selected robot mission. Note that without the rest of
+ *          the CSSR4Africa system, this component will not function.
+ * -----------------------------------------------------------------------------
+ *
+ * @libraries
+ *   • Standard: <string>, <fstream>
+ *   • ROS 2:    rclcpp/rclcpp.hpp, ament_index_cpp, std_msgs/msg/String
+ *   • BehaviorTree.Cpp:
+ *       – behaviortree_cpp/bt_factory.h
+ *       – behaviortree_cpp/loggers/groot2_publisher.h
+ *
+ * @parameters
+ *   – **Command‑line**: None
+ *   – **Configuration File**: behaviorControllerConfiguration.ini
+ *     | Key                   | Type  | Description                                                      |
+ *     |-----------------------|-------|------------------------------------------------------------------|
+ *     | scenarioSpecification | string| Mission scenario to interpret                                     |
+ *     | verboseMode           | bool  | Enable/disable diagnostic messages                                |
+ *     | asrEnabled            | bool  | Enable/disable ASR; if disabled, tablet is primary input method  |
+ *     | testMode              | bool  | Enable/disable test sequence                                      |
+ *
+ * @subscribed_topics
+ *   – `/faceDetection/data`   : FaceDetectionData.msg
+ *   – `/overtAttention/mode`  : OvertAttentionMode.msg
+ *   – `/speechEvent/text`     : std_msgs::msg::String
+ *
+ * @published_topics
+ *   – None
+ *
+ * @services_invoked
+ *   – /animateBehaviour/setActivation
+ *   – /gestureExecution/perform_gesture
+ *   – /overtAttention/set_mode
+ *   – /robotLocalization/reset_pose
+ *   – /robotNavigation/set_goal
+ *   – /speechEvent/set_language
+ *   – /speechEvent/set_enabled
+ *   – /tabletEvent/prompt_and_get_response
+ *   – /textToSpeech/say_text
+ *
+ * @files
+ *   – **Input:**  lab_tour.xml
+ *   – **Output:** None
+ *
+ * @example
+ *   ros2 run cssr_system behaviorController
+ *
+ * @author
+ *   Yohannes Tadesse Haile<br>
+ *   Carnegie Mellon University Africa<br>
+ *   yohanneh@andrew.cmu.edu
+ *
+ * @date    July 18, 2025
+ * @version 1.0
+ * -----------------------------------------------------------------------------
+ */
+
 
 #include "behaviorController/behaviorControllerInterface.h"
 

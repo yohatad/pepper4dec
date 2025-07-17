@@ -27,11 +27,12 @@ find_package(rosidl_default_generators  REQUIRED)
 
 # BehaviorTree.CPP dependency (if available)
 find_package(behaviortree_cpp QUIET)
+find_package(yaml-cpp REQUIRED)
 
 # --- Message generation --------------------------------------------------
 
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "face_detection/msg/FaceDetection.msg"
+  "face_detection/msg/FaceDetectionMsgFile.msg"
   "behaviorController/msg/FaceDetectionData.msg"
   "behaviorController/msg/OvertAttentionMode.msg"
   "behaviorController/srv/AnimateBehaviorSetActivation.srv"
@@ -73,7 +74,7 @@ if(behaviortree_cpp_FOUND)
     behaviorController/include
     ${CMAKE_CURRENT_SOURCE_DIR}/behaviorController/include
   )
-  target_link_libraries(behaviorController utilities)
+  target_link_libraries(behaviorController utilities yaml-cpp)
   ament_target_dependencies(behaviorController 
     rclcpp 
     std_msgs 
