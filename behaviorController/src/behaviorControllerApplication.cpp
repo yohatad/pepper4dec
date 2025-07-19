@@ -111,6 +111,16 @@ int main(int argc, char** argv)
         return 0;
     }
 
+    /* Initialize knowledge base objects */
+    try {
+        environmentKnowledgeBase = std::make_shared<Environment::EnvironmentKnowledgeBase>(node);
+        culturalKnowledgeBase = std::make_shared<Culture::CultureKnowledgeBase>(node);
+    } catch (const std::exception& e) {
+        RCLCPP_ERROR(node->get_logger(), "Failed to initialize knowledge bases: %s", e.what());
+        rclcpp::shutdown();
+        return 0;
+    }
+
     /* Get the currently set language from the knowledge base*/
     missionLanguage = getMissionLanguage();
 

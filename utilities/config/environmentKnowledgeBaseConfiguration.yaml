@@ -1,0 +1,5 @@
+# Environment Knowledge Base Configuration
+# ROS2 YAML configuration file
+
+verbose_mode: false
+knowledge_base: "environmentKnowledgeBaseInput.dat"
