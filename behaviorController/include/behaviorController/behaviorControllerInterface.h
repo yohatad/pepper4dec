@@ -70,10 +70,6 @@ extern std::string nodeName;
 //Node Handler
 extern std::shared_ptr<rclcpp::Node> node;
 
-// Knowledge base objects
-extern std::shared_ptr<Environment::EnvironmentKnowledgeBase> environmentKnowledgeBase;
-extern std::shared_ptr<Culture::CultureKnowledgeBase> culturalKnowledgeBase;
-
 /* Returns true if all the topics in a list are available*/
 bool checkTopics(std::vector<std::string>& topicsList);
 

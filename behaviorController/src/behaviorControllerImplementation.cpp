@@ -51,14 +51,14 @@ static void storeResult(std::string key, int value);
 
 /***** Global Variables ****/
 // Environment Knowledge Base
-std::shared_ptr<Environment::EnvironmentKnowledgeBase> environmentKnowledgeBase;
+Environment::EnvironmentKnowledgeBase environmentKnowledgeBase;
 Environment::TourSpecificationType tour;
 Environment::KeyValueType enviornmentKeyValue;
 
 // Culture Knowledge Base
 Culture::KeyValueType cultureKeyValue;
-std::shared_ptr<Culture::CultureKnowledgeBase> culturalKnowledgeBase;
-std::string key;  // Changed from Culture::Keyword to std::string
+Culture::CultureKnowledgeBase culturalKnowledgeBase;
+Culture::Keyword key;
 /********************************** */
 
 /****** Mission(Action/Condition) Nodes */
@@ -498,22 +498,18 @@ void printMsg(int type, std::string args)
 /* Returns the current language from the knowledge base*/
 std::string getMissionLanguage()
 {
-    key = "phraseLanguage";
-    if (culturalKnowledgeBase->getValue(key, &cultureKeyValue)) {
-        return cultureKeyValue.alphanumericValue;
-    }
-    return "";
+    strcpy(key, "phraseLanguage");
+    culturalKnowledgeBase.getValue(key, &cultureKeyValue);
+    return cultureKeyValue.alphanumericValue;
 }
 
 /* Fetches the utility phrase from the culture knowledge base using the id and language */
 std::string getUtilityPhrase(std::string phraseId, std::string language)
 {
     std::string phraseKey = "utilityPhrase" + language + phraseId;
-    key = phraseKey;
-    if (culturalKnowledgeBase->getValue(key, &cultureKeyValue)) {
-        return cultureKeyValue.alphanumericValue;
-    }
-    return "";
+    strcpy(key, phraseKey.c_str());
+    culturalKnowledgeBase.getValue(key, &cultureKeyValue);
+    return cultureKeyValue.alphanumericValue;
 }
 
 /* Returns true if ch isn't an empty space character*/

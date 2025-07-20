@@ -50,8 +50,8 @@
  *   ros2 run cssr_system behaviorController
  *
  * @author
- *   Yohannes Tadesse Haile<br>
- *   Carnegie Mellon University Africa<br>
+ *   Yohannes Tadesse Haile
+ *   Carnegie Mellon University Africa
  *   yohanneh@andrew.cmu.edu
  *
  * @date    July 18, 2025
@@ -67,6 +67,7 @@ bool verboseMode;
 bool asrEnabled;
 std::string missionLanguage;
 bool testMode;
+
 /*************************/
 std::string nodeName;
 std::shared_ptr<rclcpp::Node> node = nullptr;

@@ -148,11 +148,11 @@
 # include "overtAttention/overtAttentionInterface.h"
 
 int main(int argc, char** argv) {
-    // Initialize ROS
-    ros::init(argc, argv, "overtAttention", ros::init_options::NoSigintHandler);
-    ros::NodeHandle nh;
+    // Initialize ROS2
+    rclcpp::init(argc, argv);
+    node = rclcpp::Node::make_shared("overtAttention");
 
-    node_name = ros::this_node::getName();                                      // Get the name of the node
+    node_name = node->get_name();                                               // Get the name of the node
 
     using clock = std::chrono::steady_clock;
     auto next_head_drop_time = clock::now();                                    // Controlls periodic head drop during seeking
@@ -173,9 +173,9 @@ int main(int argc, char** argv) {
                                     "\n\t\t\t\t\t\t Website: www.cssr4africa.org "
                                     "\n\t\t\t\t\t\t This program comes with ABSOLUTELY NO WARRANTY.";
 
-    ROS_INFO("%s", copyright_message.c_str());                                  // Print the copyright message
+    RCLCPP_INFO(node->get_logger(), "%s", copyright_message.c_str());           // Print the copyright message
 
-    ROS_INFO("%s: startup.", node_name.c_str());                                // Print startup message
+    RCLCPP_INFO(node->get_logger(), "%s: startup.", node_name.c_str());         // Print startup message
 
     // Read the configuration file
     int config_file_read = 0;
@@ -183,7 +183,7 @@ int main(int argc, char** argv) {
     
     // Check if the configuration file was read successfully
     if(config_file_read == 1){
-        ROS_ERROR("%s: error reading the configuration file.", node_name.c_str());
+        RCLCPP_ERROR(node->get_logger(), "%s: error reading the configuration file.", node_name.c_str());
         shut_down_handler(0);
         return 0;
     }  
@@ -191,7 +191,7 @@ int main(int argc, char** argv) {
     // Extract the topic for the camera
     std::string camera_topic;                                                   // stores the camera topic
     if(extract_topic(camera_type, topics_filename, &camera_topic) != 0){
-        ROS_ERROR("%s: error extracting the camera topic.", node_name.c_str());
+        RCLCPP_ERROR(node->get_logger(), "%s: error extracting the camera topic.", node_name.c_str());
         shut_down_handler(0);
         return -1;                                                              // return -1 if the camera topic is not extracted successfully
     }
@@ -199,117 +199,113 @@ int main(int argc, char** argv) {
     // Set the image parameters based on the camera type
     set_image_parameters(implementation_platform, camera_type, &horizontal_fov, &vertical_fov, &camera_image_width, &camera_image_height);
 
-    // Create an image transport subscriber
-    image_transport::ImageTransport it(nh);
-    // image_transport::TransportHints th("compressed");
-    ROS_INFO("%s: subscribing to %s...", node_name.c_str(), camera_topic.c_str());
-    image_transport::Subscriber sub = it.subscribe(camera_topic, 1, front_camera_message_received);
-    ROS_INFO("%s: subscribed to %s.", node_name.c_str(), camera_topic.c_str());
+    // Create an image subscriber
+    RCLCPP_INFO(node->get_logger(), "%s: subscribing to %s...", node_name.c_str(), camera_topic.c_str());
+    auto image_subscriber = node->create_subscription<sensor_msgs::msg::Image>(
+        camera_topic, 10, front_camera_message_received);
+    RCLCPP_INFO(node->get_logger(), "%s: subscribed to %s.", node_name.c_str(), camera_topic.c_str());
     
     // Extract the joint_states topic and subscribe to the joint states topic
     std::string joint_states_topic;
     if(extract_topic("JointStates", topics_filename, &joint_states_topic)){
-        ROS_ERROR("%s: error extracting the joint states topic.", node_name.c_str());
+        RCLCPP_ERROR(node->get_logger(), "%s: error extracting the joint states topic.", node_name.c_str());
         shut_down_handler(0);
         return 0;
     }
-    ROS_INFO("%s: subscribing to %s...", node_name.c_str(), joint_states_topic.c_str());
-    while(ros::ok() && !is_topic_available(joint_states_topic)){
-        ROS_WARN_THROTTLE(INITIALIZATION_INFO_PERIOD, "%s: waiting for %s topic to be available...", node_name.c_str(), joint_states_topic.c_str());
-        ros::Duration(1).sleep();
+    RCLCPP_INFO(node->get_logger(), "%s: subscribing to %s...", node_name.c_str(), joint_states_topic.c_str());
+    while(rclcpp::ok() && !is_topic_available(joint_states_topic)){
+        RCLCPP_WARN_THROTTLE(node->get_logger(), *node->get_clock(), INITIALIZATION_INFO_PERIOD * 1000, "%s: waiting for %s topic to be available...", node_name.c_str(), joint_states_topic.c_str());
+        rclcpp::sleep_for(std::chrono::seconds(1));
     }
-    ros::Subscriber joint_states_subscriber = nh.subscribe(joint_states_topic, 1, &joint_states_message_received);
-    ROS_INFO("%s: subscribed to %s.", node_name.c_str(), joint_states_topic.c_str());
+    auto joint_states_subscriber = node->create_subscription<sensor_msgs::msg::JointState>(
+        joint_states_topic, 10, joint_states_message_received);
+    RCLCPP_INFO(node->get_logger(), "%s: subscribed to %s.", node_name.c_str(), joint_states_topic.c_str());
 
     // Create a subscriber object for faceDetection data
     std::string face_detection_topic;
     if(extract_topic("FaceDetection", topics_filename, &face_detection_topic)){
-        ROS_ERROR("%s: error extracting the face detection topic.", node_name.c_str());
+        RCLCPP_ERROR(node->get_logger(), "%s: error extracting the face detection topic.", node_name.c_str());
         shut_down_handler(0);
         return 0;
     }
-    ROS_INFO("%s: subscribing to %s topic...", node_name.c_str(), face_detection_topic.c_str());
-    while(ros::ok() && !is_topic_available(face_detection_topic)){
-        ROS_WARN_THROTTLE(INITIALIZATION_INFO_PERIOD, "%s: waiting for %s topic to be available...", node_name.c_str(), face_detection_topic.c_str());
-        ros::Duration(1).sleep();
+    RCLCPP_INFO(node->get_logger(), "%s: subscribing to %s topic...", node_name.c_str(), face_detection_topic.c_str());
+    while(rclcpp::ok() && !is_topic_available(face_detection_topic)){
+        RCLCPP_WARN_THROTTLE(node->get_logger(), *node->get_clock(), INITIALIZATION_INFO_PERIOD * 1000, "%s: waiting for %s topic to be available...", node_name.c_str(), face_detection_topic.c_str());
+        rclcpp::sleep_for(std::chrono::seconds(1));
     }
-    ros::Subscriber face_detection_subscriber = nh.subscribe(face_detection_topic, 1, &face_detection_data_received);
-    ROS_INFO("%s: subscribed to %s topic.", node_name.c_str(), face_detection_topic.c_str());
+    auto face_detection_subscriber = node->create_subscription<cssr_system::msg::FaceDetectionData>(
+        face_detection_topic, 10, face_detection_data_received);
+    RCLCPP_INFO(node->get_logger(), "%s: subscribed to %s topic.", node_name.c_str(), face_detection_topic.c_str());
 
     // Create a subscriber object for sound localization data
     std::string sound_localization_topic;
     if(extract_topic("SoundLocalization", topics_filename, &sound_localization_topic)){
-        ROS_ERROR("%s: error extracting the sound localization topic.", node_name.c_str());
+        RCLCPP_ERROR(node->get_logger(), "%s: error extracting the sound localization topic.", node_name.c_str());
         shut_down_handler(0);
         return 0;
     }
-    ROS_INFO("%s: subscribing to %s topic...", node_name.c_str(), sound_localization_topic.c_str());
-    while(ros::ok() && !is_topic_available(sound_localization_topic)){
-        ROS_WARN_THROTTLE(INITIALIZATION_INFO_PERIOD, "%s: waiting for %s topic to be available...", node_name.c_str(), sound_localization_topic.c_str());
-        ros::Duration(1).sleep();
+    RCLCPP_INFO(node->get_logger(), "%s: subscribing to %s topic...", node_name.c_str(), sound_localization_topic.c_str());
+    while(rclcpp::ok() && !is_topic_available(sound_localization_topic)){
+        RCLCPP_WARN_THROTTLE(node->get_logger(), *node->get_clock(), INITIALIZATION_INFO_PERIOD * 1000, "%s: waiting for %s topic to be available...", node_name.c_str(), sound_localization_topic.c_str());
+        rclcpp::sleep_for(std::chrono::seconds(1));
     }
-    ros::Subscriber sound_localization_subscriber = nh.subscribe(sound_localization_topic, 1, &sound_localization_data_received);
-    ROS_INFO("%s: subscribed to %s topic.", node_name.c_str(), sound_localization_topic.c_str());
+    auto sound_localization_subscriber = node->create_subscription<std_msgs::msg::Float32>(
+        sound_localization_topic, 10, sound_localization_data_received);
+    RCLCPP_INFO(node->get_logger(), "%s: subscribed to %s topic.", node_name.c_str(), sound_localization_topic.c_str());
     
     // Create a publisher for the velocity commands
     std::string velocity_topic;
     if(extract_topic("Wheels", topics_filename, &velocity_topic)){
-        ROS_ERROR("%s: error extracting the wheels topic.", node_name.c_str());
+        RCLCPP_ERROR(node->get_logger(), "%s: error extracting the wheels topic.", node_name.c_str());
         shut_down_handler(0);
         return 0;
     }
-    ROS_INFO("%s: creating a publisher for the velocity commands...", node_name.c_str());
-    while(ros::ok() && !is_topic_available(velocity_topic)){
-        ROS_WARN_THROTTLE(INITIALIZATION_INFO_PERIOD, "%s: waiting for %s topic to be available...", node_name.c_str(), velocity_topic.c_str());
-        attention_velocity_publisher = nh.advertise<geometry_msgs::Twist>(velocity_topic.c_str(), 1, true);
-        ros::Duration(1).sleep();
-    }
-    // attention_velocity_publisher = n.advertise<geometry_msgs::Twist>(velocity_topic.c_str(), 1000, true);
-    ROS_INFO("%s: created a publisher for the velocity commands.", node_name.c_str());
+    RCLCPP_INFO(node->get_logger(), "%s: creating a publisher for the velocity commands...", node_name.c_str());
+    attention_velocity_publisher = node->create_publisher<geometry_msgs::msg::Twist>(velocity_topic, 10);
+    RCLCPP_INFO(node->get_logger(), "%s: created a publisher for the velocity commands.", node_name.c_str());
 
     // Subscribe to the /robotLocalization/pose topic
     std::string robot_pose_topic;
     if(extract_topic("RobotPose", topics_filename, &robot_pose_topic)){
-        ROS_ERROR("%s: error extracting the robot pose topic.", node_name.c_str());
+        RCLCPP_ERROR(node->get_logger(), "%s: error extracting the robot pose topic.", node_name.c_str());
         shut_down_handler(0);
         return 0;
     }
-    ROS_INFO("%s: subscribing to robot pose topic...", node_name.c_str());
-    while(ros::ok() && !is_topic_available(robot_pose_topic)){
-        ROS_WARN_THROTTLE(INITIALIZATION_INFO_PERIOD, "%s: waiting for %s topic to be available...", node_name.c_str(), robot_pose_topic.c_str());
-        ros::Duration(1).sleep();
+    RCLCPP_INFO(node->get_logger(), "%s: subscribing to robot pose topic...", node_name.c_str());
+    while(rclcpp::ok() && !is_topic_available(robot_pose_topic)){
+        RCLCPP_WARN_THROTTLE(node->get_logger(), *node->get_clock(), INITIALIZATION_INFO_PERIOD * 1000, "%s: waiting for %s topic to be available...", node_name.c_str(), robot_pose_topic.c_str());
+        rclcpp::sleep_for(std::chrono::seconds(1));
     }
-    ros::Subscriber robot_pose_subscriber = nh.subscribe(robot_pose_topic, 1, &robot_pose_message_received);
-    ROS_INFO("%s: subscribed to robot pose topic.", node_name.c_str());
+    auto robot_pose_subscriber = node->create_subscription<geometry_msgs::msg::Pose2D>(
+        robot_pose_topic, 10, robot_pose_message_received);
+    RCLCPP_INFO(node->get_logger(), "%s: subscribed to robot pose topic.", node_name.c_str());
 
     // Advertise the /overtAttention/set_mode service
     std::string set_mode_service_name = "/overtAttention/set_mode";
-    ros::ServiceServer set_mode_service;
-    ROS_INFO("%s: advertising the %s service...", node_name.c_str(), set_mode_service_name.c_str());
-    while(ros::ok() && !set_mode_service){
-        set_mode_service = nh.advertiseService(set_mode_service_name, set_mode);
-        ros::Duration(1).sleep();
-    }
-    ROS_INFO("%s: advertised the %s service", node_name.c_str(), set_mode_service_name.c_str());
+    RCLCPP_INFO(node->get_logger(), "%s: advertising the %s service...", node_name.c_str(), set_mode_service_name.c_str());
+    auto set_mode_service = node->create_service<cssr_system::srv::OvertAttentionSetMode>(
+        set_mode_service_name, 
+        [](const std::shared_ptr<cssr_system::srv::OvertAttentionSetMode::Request> request,
+           std::shared_ptr<cssr_system::srv::OvertAttentionSetMode::Response> response) {
+            set_mode(request, response);
+        });
+    RCLCPP_INFO(node->get_logger(), "%s: advertised the %s service", node_name.c_str(), set_mode_service_name.c_str());
 
     // Advertise the /overtAttention/mode topic
     std::string engagement_mode_topic = "/overtAttention/mode";
-    ROS_INFO("%s: advertising the %s topic...", node_name.c_str(), engagement_mode_topic.c_str());
-    while(ros::ok() && !is_topic_available(engagement_mode_topic)){
-        overt_attention_mode_pub = nh.advertise<cssr_system::Status>(engagement_mode_topic, 1);
-        ros::Duration(1).sleep();
-    }
-    ROS_INFO("%s: advertised the %s topic", node_name.c_str(), engagement_mode_topic.c_str());
+    RCLCPP_INFO(node->get_logger(), "%s: advertising the %s topic...", node_name.c_str(), engagement_mode_topic.c_str());
+    overt_attention_mode_pub = node->create_publisher<cssr_system::msg::OvertAttentionMode>(engagement_mode_topic, 10);
+    RCLCPP_INFO(node->get_logger(), "%s: advertised the %s topic", node_name.c_str(), engagement_mode_topic.c_str());
 
     // Print the node ready message after initialization complete
-    ROS_INFO("%s: initialization complete...", node_name.c_str());
+    RCLCPP_INFO(node->get_logger(), "%s: initialization complete...", node_name.c_str());
 
     // Extract the topic for the head
     std::string head_topic;     // stores the head topic
     if(extract_topic("Head", topics_filename, &head_topic) == 0){
         // Set to head to horizontal looking forward
         if(move_robot_head_biological_motion(head_topic, DEFAULT_HEAD_PITCH, DEFAULT_HEAD_YAW, 1.0, verbose_mode) != 0){
-            ROS_ERROR("%s: error setting the head to the horizontal looking forward pose.", node_name.c_str());
+            RCLCPP_ERROR(node->get_logger(), "%s: error setting the head to the horizontal looking forward pose.", node_name.c_str());
             shut_down_handler(0);
             return -1;                                                                // return -1 if the head cannot be set to the horizontal looking forward pose
         }
@@ -317,10 +313,10 @@ int main(int argc, char** argv) {
     }
 
     // Main loop
-    while(ros::ok()){   
-        ROS_INFO_THROTTLE(OPERATION_INFO_PERIOD, "%s: running...", node_name.c_str());  // Print a message every 10 seconds
-        ros::spinOnce();                                                        // Check for new messages on the topics
-        // ros::Duration(1).sleep();                                               // Sleep for 1 second
+    while(rclcpp::ok()){   
+        RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), OPERATION_INFO_PERIOD * 1000, "%s: running...", node_name.c_str());  // Print a message every 10 seconds
+        rclcpp::spin_some(node);                                                // Check for new messages on the topics
+        // rclcpp::sleep_for(std::chrono::seconds(1));                             // Sleep for 1 second
         auto now = clock::now();
 
         /* Execute the attention mode selected in the request */
@@ -329,12 +325,12 @@ int main(int argc, char** argv) {
                 // Publish the disabled attention mode status
                 overt_attention_mode_msg.state = ATTENTION_DISABLED_STATE;
                 overt_attention_mode_msg.value = ATTENTION_MODE_DISABLED;
-                overt_attention_mode_pub.publish(overt_attention_mode_msg);
+                overt_attention_mode_pub->publish(overt_attention_mode_msg);
 
                 if(!disabled_once){                                             // If the disabled mode has not been called at least once, set the previous time to the current time
                     // Set head to center pose looking forward
                     if(move_robot_head_biological_motion(head_topic, DEFAULT_HEAD_PITCH, DEFAULT_HEAD_YAW, 1.0, verbose_mode) != 0){
-                        ROS_ERROR("%s: error setting the head to the horizontal looking forward pose in disabled mode.", node_name.c_str());
+                        RCLCPP_ERROR(node->get_logger(), "%s: error setting the head to the horizontal looking forward pose in disabled mode.", node_name.c_str());
                     }
                     disabled_once = true;
                 }
@@ -348,7 +344,7 @@ int main(int argc, char** argv) {
                     scanning_state_value = MUTUAL_GAZE_DETECTED;
                 }
                 overt_attention_mode_msg.value = scanning_state_value;
-                overt_attention_mode_pub.publish(overt_attention_mode_msg);
+                overt_attention_mode_pub->publish(overt_attention_mode_msg);
 
                 // Call the social attention function
                 if(!social_attention_done){                                     // If the social attention has not been done from the last time messages arrived
@@ -368,7 +364,7 @@ int main(int argc, char** argv) {
                         // face_detected = false;
                     }
                     overt_attention_mode_msg.value = scanning_state_value;
-                    overt_attention_mode_pub.publish(overt_attention_mode_msg);
+                    overt_attention_mode_pub->publish(overt_attention_mode_msg);
                     
                     // Compute the saliency features and get the center of the most salient region
                     int centre_x = 0;
@@ -376,7 +372,7 @@ int main(int argc, char** argv) {
                     int saliency_features_status = compute_saliency_features(camera_image, &centre_x, &centre_y, verbose_mode);
 
                     if(saliency_features_status != 0){
-                        ROS_ERROR("Error computing the saliency features\n");
+                        RCLCPP_ERROR(node->get_logger(), "Error computing the saliency features\n");
                         break;
                     }
                     
@@ -404,21 +400,21 @@ int main(int argc, char** argv) {
                     // Publish the overt attention mode and value saying that mutual gaze is detected
                     overt_attention_mode_msg.state = ATTENTION_SEEKING_STATE;
                     overt_attention_mode_msg.value = MUTUAL_GAZE_DETECTED;
-                    overt_attention_mode_pub.publish(overt_attention_mode_msg);
+                    overt_attention_mode_pub->publish(overt_attention_mode_msg);
                     seeking_completed = true;
 
                     if(now >= next_head_drop_time){
                         // ROS_INFO("dropping head now...");
                         next_head_drop_time = now + std::chrono::seconds(5);
-                        ros::Duration(1).sleep();
+                        rclcpp::sleep_for(std::chrono::seconds(1));
                         // Set head to focus on the person with whom mutual gaze was established
                         if(move_robot_head_biological_motion(head_topic, DROP_HEAD_PITCH, mutual_gaze_person_yaw, 1.0, verbose_mode) != 0){
-                            ROS_ERROR("%s: error setting the head to focus on the person in seeking mode.", node_name.c_str());
+                            RCLCPP_ERROR(node->get_logger(), "%s: error setting the head to focus on the person in seeking mode.", node_name.c_str());
                         }
                     } else{
                         // Set head to focus on the person with whom mutual gaze was established
                         if(move_robot_head_biological_motion(head_topic, mutual_gaze_person_pitch, mutual_gaze_person_yaw, 1.0, verbose_mode) != 0){
-                            ROS_ERROR("%s: error setting the head to focus on the person in seeking mode.", node_name.c_str());
+                            RCLCPP_ERROR(node->get_logger(), "%s: error setting the head to focus on the person in seeking mode.", node_name.c_str());
                         }
                     }
                     
@@ -430,7 +426,7 @@ int main(int argc, char** argv) {
                     // Publish the overt attention mode and value saying that mutual gaze is being detected
                     overt_attention_mode_msg.state = ATTENTION_SEEKING_STATE;
                     overt_attention_mode_msg.value = DETECTING_MUTUAL_GAZE;
-                    overt_attention_mode_pub.publish(overt_attention_mode_msg);
+                    overt_attention_mode_pub->publish(overt_attention_mode_msg);
 
                     // Call the seeking attention function
                     attention_execution_status = seeking_attention(topics_filename, realignment_threshold, attention_velocity_publisher, overt_attention_mode_pub, verbose_mode);
@@ -441,13 +437,13 @@ int main(int argc, char** argv) {
                 // If seeking is completed, publish the information and break
                 overt_attention_mode_msg.state = ATTENTION_SEEKING_STATE;
                 overt_attention_mode_msg.value = MUTUAL_GAZE_NOT_DETECTED;
-                overt_attention_mode_pub.publish(overt_attention_mode_msg);        
+                overt_attention_mode_pub->publish(overt_attention_mode_msg);        
                 break;
             case ATTENTION_MODE_LOCATION:                                       // Location attention mode
                 // Publish the location attention mode status
                 overt_attention_mode_msg.state = ATTENTION_LOCATION_STATE;
                 overt_attention_mode_msg.value = ATTENTION_MODE_DEFAULT;
-                overt_attention_mode_pub.publish(overt_attention_mode_msg);
+                overt_attention_mode_pub->publish(overt_attention_mode_msg);
                 // Check if the location has already been attended to
                 if(!location_attended_to){                                      // If location has not been attended to, attend to the location
                     // Call the location attention function
@@ -457,7 +453,7 @@ int main(int argc, char** argv) {
                 break;
             default:                                                            // Invalid attention mode
                 if(verbose_mode){
-                    ROS_ERROR_THROTTLE(OPERATION_INFO_PERIOD, "%s: invalid attention mode selected", node_name.c_str());
+                    RCLCPP_ERROR_THROTTLE(node->get_logger(), *node->get_clock(), OPERATION_INFO_PERIOD * 1000, "%s: invalid attention mode selected", node_name.c_str());
                 }
                 break;
         }

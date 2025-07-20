@@ -2,7 +2,7 @@
 *
 * Author: Muhammed Danso and Adedayo Akinade
 * Date: January 10, 2025
-* Version: v1.0
+* Version: v2.0 (ROS2 conversion)
 *
 * Copyright (C) 2023 CSSR4Africa Consortium
 *
@@ -18,16 +18,15 @@
 #define OVERT_ATTENTION_INTERFACE_H
 
 // Include the necessary libraries
-#include <ros/ros.h>
-#include <ros/package.h>
-#include <ros/master.h>
-#include <actionlib/client/simple_action_client.h>              // For the action client
-#include <sensor_msgs/JointState.h>                             // For subscribing to the /sensor_msgs/joint_states topic
-#include <control_msgs/FollowJointTrajectoryAction.h>           // For the FollowJointTrajectoryAction action
+#include <rclcpp/rclcpp.hpp>
+#include <ament_index_cpp/get_package_share_directory.hpp>
+#include <rclcpp_action/rclcpp_action.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
+#include <control_msgs/action/follow_joint_trajectory.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/twist.hpp>
+
 #include <string>
-#include <boost/algorithm/string.hpp>                           // For string manipulation
-#include <geometry_msgs/Twist.h>                                // For publishing Twist messages
-#include <geometry_msgs/PoseStamped.h>                          // For storing the pose of the robot
 #include <vector>
 #include <random>
 #include <chrono>
@@ -44,36 +43,41 @@
 #include <math.h>
 #include <signal.h>
 #include <csignal>
-#include <std_msgs/Float64.h>                                   // For publishing Float64 messages
-#include "std_msgs/Float32.h"                                   // For publishing Float32 messages
-#include <trajectory_msgs/JointTrajectory.h>
-#include <trajectory_msgs/JointTrajectoryPoint.h>
 #include <fstream>
 #include <sstream>
 #include <iostream>
-#include "cssr_system/face_detection_msg_file.h"                            // For subscribing to the /face_detection/data topic
-#include <geometry_msgs/Pose2D.h>                       // Include for the Pose2D message of the /robotLocalization/pose topic
-#include "geometry_msgs/Point.h"                                // For storing the centroids of the detected faces
-#include "cssr_system/setMode.h"                               // For advertising the /overAttention/set_mode service
-#include "cssr_system/Status.h"                                   // For publishing /overtAttention/mode messages
+
+#include <std_msgs/msg/float64.hpp>
+#include <std_msgs/msg/float32.hpp>
+#include <trajectory_msgs/msg/joint_trajectory.hpp>
+#include <trajectory_msgs/msg/joint_trajectory_point.hpp>
+#include <geometry_msgs/msg/pose2_d.hpp>
+#include <geometry_msgs/msg/point.hpp>
+#include <image_transport/image_transport.hpp>
 #include <iomanip> 
 #include <regex>
-#include <image_transport/image_transport.h>                    // For image transport
-//opencv
+#include <yaml-cpp/yaml.h>
+
+// OpenCV
 #include <opencv2/opencv.hpp>
 #include <opencv2/saliency.hpp>
 #include <cv_bridge/cv_bridge.h>
 
+// ROS2 message and service includes
+#include "cssr_system/msg/face_detection_data.hpp"
+#include "cssr_system/msg/overt_attention_mode.hpp"
+#include "cssr_system/srv/overt_attention_set_mode.hpp"
+
 // Namespaces used in the software
 using namespace std;
 using namespace cv;
-using namespace boost::algorithm;
 
-// Constants for the ROS
-#define ROS
+// Constants for the ROS2
+#define ROS2
 #define DEBUG 0
 
-#define SOFTWARE_VERSION            "v1.0"
+#define SOFTWARE_VERSION            "v2.0"
+
 // Constants for the attention modes
 #define ATTENTION_SOCIAL_STATE      "social"
 #define ATTENTION_SCANNING_STATE    "scanning"
@@ -123,7 +127,7 @@ using namespace boost::algorithm;
 #define DEFAULT_HEAD_YAW           0.0
 
 #define DROP_HEAD_PITCH            0.1
-#define MAX_HEAD_PITCH_PERSON       -0.25
+#define MAX_HEAD_PITCH_PERSON     -0.25
 
 // Pepper robot links lengths (mm)
 #define TORSO_HEIGHT            820.0
@@ -135,11 +139,6 @@ using namespace boost::algorithm;
 #define ENGAGEMENT_TIMEOUT 12.00
 
 // Constants for the camera in image processing
-// #define VFOV                            44.30
-// #define HFOV                            55.20
-// #define IMG_W                           640
-// #define IMG_H                           480
-
 #define VFOV_PEPPER_FRONT_CAMERA        44.30
 #define HFOV_PEPPER_FRONT_CAMERA        55.20
 #define IMG_WIDTH_PEPPER_FRONT_CAMERA   640
@@ -160,14 +159,13 @@ using namespace boost::algorithm;
 #define HABITUATION_RATE 0.1
 #define IOR_LIMIT 50
 
-
 // Periods for printing ROS_INFO/ROS_ERROR messages during initialization and operation
 #define INITIALIZATION_INFO_PERIOD          5.0
 #define OPERATION_INFO_PERIOD               10.0
 
 // Type definitions for the control client
-typedef actionlib::SimpleActionClient<control_msgs::FollowJointTrajectoryAction> ControlClient;
-typedef boost::shared_ptr<ControlClient> ControlClientPtr;
+using ControlClient = rclcpp_action::Client<control_msgs::action::FollowJointTrajectory>;
+using ControlClientPtr = std::shared_ptr<ControlClient>;
 
 /*
  *   Struct to store the angle changes required to refocus the robot head on a point in its FOV
@@ -192,6 +190,9 @@ struct PixelCoordinates {
             Defined and initialized in overtAttentionImplementation.cpp 
     -------------------------------------------------- 
 */
+
+// ROS2 node handle
+extern std::shared_ptr<rclcpp::Node> node;
 
 // Joint states of the robot - updated by subscribing to the /sensor_msgs/joint_states topic
 extern std::vector<double> head_joint_states;
@@ -240,7 +241,7 @@ extern bool seeking_completed;                                                  
 
 extern size_t seeking_index;                                                    // Index for the seeking angles
 
-extern cssr_system::Status overt_attention_mode_msg;                            // Message to publish the attention mode
+extern cssr_system::msg::OvertAttentionMode overt_attention_mode_msg;           // Message to publish the attention mode
 
 // Variables for the saliency features
 extern std::vector<std::tuple<double, double, int>> previous_locations;         // Stores locations that won in the WTA
@@ -259,10 +260,10 @@ extern std::mt19937 random_generator;
 extern std::uniform_int_distribution<int> random_distribution;
 
 // Publisher for the velocity commands
-extern ros::Publisher attention_velocity_publisher;
+extern rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr attention_velocity_publisher;
 
 // Declare the publisher of the /overt_attention/mode topic
-extern ros::Publisher overt_attention_mode_pub;
+extern rclcpp::Publisher<cssr_system::msg::OvertAttentionMode>::SharedPtr overt_attention_mode_pub;
 
 // Configuration parameters
 extern std::string implementation_platform;
@@ -282,51 +283,45 @@ extern std::string node_name;                                                   
 extern bool shutdown_requested;                                                  // Flag to indicate if a shutdown has been requested
 extern bool node_initialized;                                                    // Flag to indicate if the node has been initialized
 
-
-
-
-
 /* ------ CALLBACK FUNCTIONS ------ */
 
 /*
  *   Callback function for the face detection data received from the /face_detection/data topic
  *   The function receives the face detection data and computes the required head angles to look at the detected faces
  */
-void face_detection_data_received(const cssr_system::face_detection_msg_file& data_msg);
+void face_detection_data_received(const cssr_system::msg::FaceDetectionData::SharedPtr data_msg);
 
 /* 
  *   Callback function for the sound localization data received from the /soundDetection/direction topic
  *   The function receives the sound localization data and stores the angle of the sound source
  */
-void sound_localization_data_received(const std_msgs::Float32& data_msg);
+void sound_localization_data_received(const std_msgs::msg::Float32::SharedPtr data_msg);
 
 /* 
  *   Callback function for the camera image received from the /camera/color/image_raw topic
  *   The function receives the camera image and converts it to a cv::Mat image
  */
-void front_camera_message_received(const sensor_msgs::ImageConstPtr& msg);
+void front_camera_message_received(const sensor_msgs::msg::Image::SharedPtr msg);
 
 /* 
  *   Callback function for the joint states message received from the /joint_states topic
  *   The function receives the joint states message and stores the states of the head joints
  */
-void joint_states_message_received(const sensor_msgs::JointState& msg);
+void joint_states_message_received(const sensor_msgs::msg::JointState::SharedPtr msg);
 
 /* 
  *   Callback function for the robot pose message received from the /robotLocalization/pose topic
  *   The function receives the robot pose message and stores the pose of the robot
  */
-void robot_pose_message_received(const geometry_msgs::Pose2D& msg);
+void robot_pose_message_received(const geometry_msgs::msg::Pose2D::SharedPtr msg);
 
 /* 
- *   Callback function for the set_activation service
- *   The function receives a request to set the activation status of the attention system 
- *   and sets the system to the specified status
+ *   Callback function for the set_mode service
+ *   The function receives a request to set the mode of the attention system 
+ *   and sets the system to the specified mode
  */
-bool set_mode(cssr_system::setMode::Request  &service_request, cssr_system::setMode::Response &service_response);
-
-
-
+void set_mode(const std::shared_ptr<cssr_system::srv::OvertAttentionSetMode::Request> request,
+              std::shared_ptr<cssr_system::srv::OvertAttentionSetMode::Response> response);
 
 /*  --------------------------------------------------
             CONFIGURATION CONTROL FUNCTIONS 
@@ -386,7 +381,7 @@ int extract_topic(string key, string topic_file_name, string* topic_value);
 void set_image_parameters(string platform, string camera, double* vertical_fov, double* horizontal_fov, int* image_width, int* image_height);
 
 /* 
- *   Function to read the overt attention configuration.
+ *   Function to read the overt attention configuration from YAML file.
  *   The configuration file contains the platform, camera, realignment threshold, x offset to head yaw, y offset to head pitch, simulator topics, robot topics, topics filename, and debug mode.
  *   The function reads the configuration file and sets the values for the specified parameters.
  * 
@@ -400,6 +395,7 @@ void set_image_parameters(string platform, string camera, double* vertical_fov, 
  *   robot_topics: the robot topics value
  *   topics_filename: the topics filename value
  *   social_attention_mode: the social attention mode value
+ *   use_sound: the use sound flag
  *   debug_mode: the debug mode value
  * 
  * @return:
@@ -407,7 +403,6 @@ void set_image_parameters(string platform, string camera, double* vertical_fov, 
  *   1 if the configuration file is not read successfully
  */
 int read_configuration_file(string* platform, string* camera, int* realignment_threshold, int* x_offset_to_head_yaw, int* y_offset_to_head_pitch, string* simulator_topics, string* robot_topics, string* topics_filename, int* social_attention_mode, bool* use_sound, bool* debug_mode);
-
 
 /* 
  *   Function to print the overt attention configuration
@@ -427,9 +422,6 @@ int read_configuration_file(string* platform, string* camera, int* realignment_t
  *    None
  */
 void print_configuration(string platform, string camera, int realignment_threshold, int x_offset_to_head_yaw, int y_offset_to_head_pitch, string simulator_topics, string robot_topics, string topics_filename, bool debug_mode);
-
-
-
 
 /*  --------------------------------------------------
             INVERSE KINEMATICS UTILITY FUNCTIONS 
@@ -452,9 +444,6 @@ void print_configuration(string platform, string camera, int realignment_thresho
  */
 void get_head_angles(double camera_x, double camera_y, double camera_z, double* head_yaw, double* head_pitch);
 
-
-
-
 /*  --------------------------------------------------
             IMAGE PIXEL UTILITY FUNCTIONS 
     -------------------------------------------------- 
@@ -474,7 +463,6 @@ void get_head_angles(double camera_x, double camera_y, double camera_z, double* 
  *   @return:
  *       AngleChange: the head_yaw and head_pitch angle changes required
  */
-
 AngleChange get_angles_from_pixel(double center_x, double center_y, double image_width, double image_height, double theta_h, double theta_v);
 
 /*  
@@ -492,10 +480,6 @@ AngleChange get_angles_from_pixel(double center_x, double center_y, double image
  *       (x, y): Pixel coordinates corresponding to the angle changes
  */
 PixelCoordinates calculate_pixel_coordinates(double delta_yaw, double delta_pitch, int W, int H, double theta_h, double theta_v);
-
-
-
-
 
 /*  --------------------------------------------------
             SALEIENCY COMPUTATION FUNCTIONS 
@@ -556,10 +540,6 @@ std::pair<cv::Mat, std::vector<std::tuple<double, double, int>>> inhibition_of_r
  */
 int compute_saliency_features(cv::Mat camera_image, int* centre_x, int* centre_y, bool debug_mode);
 
-
-
-
-
 /*  --------------------------------------------------
             ACTUATOR CONTROL FUNCTIONS 
     -------------------------------------------------- 
@@ -589,7 +569,7 @@ ControlClientPtr create_client(const std::string& topic_name);
  *   @return:
  *       None
  */
-void rotate_robot(double angle_degrees, ros::Publisher velocity_publisher, bool debug);
+void rotate_robot(double angle_degrees, rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr velocity_publisher, bool debug);
 
 /*  
  *   Function to compute the trajectory for an actuator from a start position to an end position
@@ -701,7 +681,8 @@ void move_to_position_biological_motion(ControlClientPtr& client, const std::vec
  *       None
  */	
 void move_robot_head_wheels_to_position(ControlClientPtr& head_client, const std::vector<std::string>& joint_names, double duration, 
-                        std::vector<double> positions, bool rotate_robot, double angle_radians, ros::Publisher velocity_publisher, bool debug);
+                        std::vector<double> positions, bool rotate_robot, double angle_radians, 
+                        rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr velocity_publisher, bool debug);
 
 /*  
  *   Function to move the robot head and wheels to a position specified by the head pitch and head yaw angles
@@ -726,7 +707,8 @@ void move_robot_head_wheels_to_position_biological_motion(ControlClientPtr& clie
                                         double gesture_duration, std::vector<double> duration, 
                                         std::vector<std::vector<double>> positions, std::vector<std::vector<double>> velocities, 
                                         std::vector<std::vector<double>> accelerations,
-                                        bool rotate_robot, double angle_radians, ros::Publisher velocity_publisher, bool debug);
+                                        bool rotate_robot, double angle_radians, 
+                                        rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr velocity_publisher, bool debug);
 
 /* 
  *   Function to control the robot's head and wheels
@@ -746,10 +728,8 @@ void move_robot_head_wheels_to_position_biological_motion(ControlClientPtr& clie
  *       None
  */
 void control_robot_head_wheels(std::string head_topic, double head_pitch, double head_yaw, double gesture_duration, 
-                            bool rotate_robot, double angle_radians, ros::Publisher velocity_publisher, bool debug);
-
-
-
+                            bool rotate_robot, double angle_radians, 
+                            rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr velocity_publisher, bool debug);
 
 /*  --------------------------------------------------
             ATTENTION MODES CONTROL FUNCTIONS 
@@ -765,12 +745,14 @@ void control_robot_head_wheels(std::string head_topic, double head_pitch, double
  *   point_y: the y coordinate of the point to look at
  *   point_z: the z coordinate of the point to look at
  *   topics_file: the topics file
+ *   velocity_publisher: the velocity publisher
  *   debug: the debug mode
  * 
  * @return:
  *   1 if the attention is executed successfully
  */
-int location_attention(float point_x, float point_y, float point_z, string topics_file, ros::Publisher velocity_publisher, bool debug);
+int location_attention(float point_x, float point_y, float point_z, string topics_file, 
+                      rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr velocity_publisher, bool debug);
 
 /* 
  *   Function to execute the social attention
@@ -786,7 +768,9 @@ int location_attention(float point_x, float point_y, float point_z, string topic
  * @return:
  *   1 if the attention is executed successfully
  */
-int social_attention(std::string topics_file, int realignment_threshold, ros::Publisher velocity_publisher, int social_control, bool debug);
+int social_attention(std::string topics_file, int realignment_threshold, 
+                    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr velocity_publisher, 
+                    int social_control, bool debug);
 
 /* 
  *   Function to execute the scanning attention
@@ -802,7 +786,8 @@ int social_attention(std::string topics_file, int realignment_threshold, ros::Pu
  * @return:
  *   1 if the attention is executed successfully
  */
-int scanning_attention(double control_head_yaw, double control_head_pitch, string topics_file, ros::Publisher velocity_publisher, bool debug);
+int scanning_attention(double control_head_yaw, double control_head_pitch, string topics_file, 
+                      rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr velocity_publisher, bool debug);
 
 /* 
  *   Function to execute the seeking attention
@@ -818,8 +803,10 @@ int scanning_attention(double control_head_yaw, double control_head_pitch, strin
  * @return:
  *   1 if the attention is executed successfully
  */
-int seeking_attention(string topics_file, int realignment_threshold, ros::Publisher velocity_publisher, ros::Publisher overt_attention_engagement_status_pub, bool debug);
-
+int seeking_attention(string topics_file, int realignment_threshold, 
+                     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr velocity_publisher, 
+                     rclcpp::Publisher<cssr_system::msg::OvertAttentionMode>::SharedPtr overt_attention_engagement_status_pub, 
+                     bool debug);
 
 /*  --------------------------------------------------
             UTILITIY CONTROL FUNCTIONS 
@@ -881,6 +868,5 @@ void prompt_and_continue();
  *      None
  */
 void shut_down_handler(int sig);
-
 
 #endif // OVERT_ATTENTION_INTERFACE_H

@@ -1,0 +1,12 @@
+# Overt Attention Configuration
+# ROS2 YAML configuration file
+
+camera: "RealSenseCamera"
+realignment_threshold: 50
+x_offset_to_head_yaw: 0
+y_offset_to_head_pitch: 0
+simulator_topics: "simulatorTopics.yaml"
+robot_topics: "pepperTopics.yaml"
+social_attention_mode: "random"
+use_sound: false
+verbose_mode: false

@@ -1,21 +1,17 @@
-/* overtAttentionImplementation.cpp
-*
-* Author: Muhammed Danso and Adedayo Akinade, Carnegie Mellon University Africa
-* Email: mdanso@andrew.cmu.edu, aakinade@andrew.cmu.edu
-* Date: January 10, 2025
-* Version: v1.0
-*
-* Copyright (C) 2023 CSSR4Africa Consortium
-*
-* This project is funded by the African Engineering and Technology Network (Afretec)
-* Inclusive Digital Transformation Research Grant Programme.
-*
-* Website: www.cssr4africa.org
-*
-* This program comes with ABSOLUTELY NO WARRANTY.
-*/
 
-# include "overtAttention/overtAttentionInterface.h"
+#include "overtAttention/overtAttentionInterface.h"
+
+// Utility function to trim whitespace from strings
+void trim(std::string& str) {
+    // Remove leading whitespace
+    str.erase(str.begin(), std::find_if(str.begin(), str.end(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }));
+    // Remove trailing whitespace
+    str.erase(std::find_if(str.rbegin(), str.rend(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }).base(), str.end());
+}
 
 // Home positions for the robot head
 std::vector<double> head_home_position = {0.0, 0.0};                    // Head pitch and yaw
@@ -33,11 +29,18 @@ std::vector<double> attention_head_yaw;
 double mutual_gaze_person_pitch;
 double mutual_gaze_person_yaw;
 
+// ROS2 node handle
+std::shared_ptr<rclcpp::Node> node;
+
 // Publisher for the velocity commands
-ros::Publisher attention_velocity_publisher;
+rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr attention_velocity_publisher;
 
 // Declare the publisher of the /overt_attention/mode topic
-ros::Publisher overt_attention_mode_pub;
+rclcpp::Publisher<cssr_system::msg::OvertAttentionMode>::SharedPtr overt_attention_mode_pub;
+
+// Action client type for ROS2
+using ControlClient = rclcpp_action::Client<control_msgs::action::FollowJointTrajectory>;
+using ControlClientPtr = std::shared_ptr<ControlClient>;
 
 // Variables for the information about the sound source
 double angle_of_sound = 0.0;                                            // Stores the angle of the sound source
@@ -77,7 +80,7 @@ bool forward_seeking = true;                                            // Flag 
 bool seeking_completed = false;                                         // Flag to indicate if seeking is completed
 int seeking_rotation_count = 0;                                         // Counter for the number of times seeking rotation has been called
 
-cssr_system::Status overt_attention_mode_msg;                           // Message to publish the attention mode
+cssr_system::msg::OvertAttentionMode overt_attention_mode_msg;           // Message to publish the attention mode
 
 // Variables for the saliency features
 cv::Mat faces_map;                                                      // Stores the map of the faces detected         
@@ -113,17 +116,8 @@ std::string node_name;                                                 // Stores
 bool shutdown_requested = false;                                       // Flag to indicate if a shutdown has been requested
 bool node_initialized = false;                                         // Flag to indicate if the node has been initialized
 
-/*  --------------------------------------------------
-            CALLBACK FUNCTIONS 
-    -------------------------------------------------- 
-*/
-
-/*
- *   Callback function for the face detection data received from the /face_detection/data topic
- *   The function receives the face detection data and computes the required head angles to look at the detected faces
- */
-void face_detection_data_received(const cssr_system::face_detection_msg_file& data_msg){
-    size_t message_length = data_msg.centroids.size();                  // Get the number of faces detected
+void face_detection_data_received(const cssr_system::msg::FaceDetectionData::SharedPtr data_msg){
+    size_t message_length = data_msg->centroids.size();                  // Get the number of faces detected
 
     if (message_length == 0) {                                          // Check if no face is detected
         return;                                                         // Return if no face is detected
@@ -137,7 +131,6 @@ void face_detection_data_received(const cssr_system::face_detection_msg_file& da
     AngleChange angle_change;                                           // Stores the angle change
     double local_image_head_pitch;                                      // Stores the local image head pitch
     double local_image_head_yaw;                                        // Stores the local image head yaw
-    int image_number = 0;
 
     faces_map = cv::Mat::zeros(camera_image_height, camera_image_width, CV_8UC1);                  // Create a zero matrix with the same size and type as the input image
     
@@ -147,13 +140,13 @@ void face_detection_data_received(const cssr_system::face_detection_msg_file& da
     // Loop through the detected faces
     for(size_t i = 0; i < message_length; i++){
         // check for faces within 2 meters and mutual gaze
-        if (data_msg.centroids[i].z <= 2.0) {
+        if (data_msg->centroids[i].z <= 2.0) {
             face_within_range = true;
-            if (data_msg.mutualGaze[i] == true) {
+            if (data_msg->mutual_gaze[i] == true) {
                 gaze_detected = true;
 
                 if(!seeking_completed){
-                    geometry_msgs::Point person_centroid = data_msg.centroids[i];
+                    geometry_msgs::msg::Point person_centroid = data_msg->centroids[i];
                     double person_centroid_x = person_centroid.x;
                     double person_centroid_y = person_centroid.y;
 
@@ -169,7 +162,7 @@ void face_detection_data_received(const cssr_system::face_detection_msg_file& da
             }
         } 
 
-        geometry_msgs::Point face_centroid = data_msg.centroids[i];     // Get the centroid of the faces
+        geometry_msgs::msg::Point face_centroid = data_msg->centroids[i];     // Get the centroid of the faces
         double face_centroid_x = face_centroid.x;
         double face_centroid_y = face_centroid.y;
 
@@ -180,16 +173,8 @@ void face_detection_data_received(const cssr_system::face_detection_msg_file& da
         local_image_head_pitch = radians(angle_change.delta_pitch);
         local_image_head_yaw = radians(angle_change.delta_yaw);
 
-        // int new_label = data_msg.face_labels[i];
+        // int new_label = data_msg->face_labels[i];
         int new_label = i+1;
-
-        // if (verbose_mode){
-        //     ROS_INFO("%s: Face %d detected at (%.2f, %.2f, %.2f) with head pitch %.2f and head yaw %.2f", node_name.c_str(), new_label, face_centroid.x, face_centroid.y, face_centroid.z, local_image_head_pitch, local_image_head_yaw);
-        // }
-
-        // if (face_centroid.z <= 0){                                      // Check if the face centroid is less than or equal to zero
-        //     continue;                                                   // Skip the current iteration
-        // }
 
         if (face_centroid.z < 1){                                      // Check if the face centroid is less than or equal to zero
             face_centroid.z = 1;                                      // Set the face centroid to 0.1
@@ -200,7 +185,7 @@ void face_detection_data_received(const cssr_system::face_detection_msg_file& da
         // Make the point face_centroid_x, face_centroid_y white
         faces_map.at<float>(face_centroid_y, face_centroid_x) = 1 * scale_factor;
 
-        // ROS_INFO("%s: Face on map %.2f", node_name.c_str(), faces_map.at<float>(face_centroid_y, face_centroid_x));
+        // RCLCPP_INFO(node->get_logger(), "%s: Face on map %.2f", node_name.c_str(), faces_map.at<float>(face_centroid_y, face_centroid_x));
 
         // Calibrate the head pitch and yaw angles based on the local image angles
         attention_head_pitch.push_back(local_image_head_pitch);
@@ -218,17 +203,14 @@ void face_detection_data_received(const cssr_system::face_detection_msg_file& da
     }
 }
 
-/* 
- *   Callback function for the sound localization data received from the /soundDetection/direction topic
- *   The function receives the sound localization data and stores the angle of the sound source
- */
-void sound_localization_data_received(const std_msgs::Float32& data_msg){
-    if(isnan(std::abs(data_msg.data))){                                 // Check if the sound localization data is NaN
+
+void sound_localization_data_received(const std_msgs::msg::Float32::SharedPtr data_msg){
+    if(isnan(std::abs(data_msg->data))){                                 // Check if the sound localization data is NaN
         angle_of_sound = previous_angle_of_sound;                       // Set the angle of sound to the previous angle of sound
         return;
     }
     previous_angle_of_sound = angle_of_sound;                           // Store the previous angle of sound
-    angle_of_sound = data_msg.data;                                     // Store the current angle of sound
+    angle_of_sound = data_msg->data;                                     // Store the current angle of sound
     angle_of_sound = radians(angle_of_sound);
     
     social_attention_done = false;                                      // Set the social attention done status to false
@@ -238,11 +220,8 @@ void sound_localization_data_received(const std_msgs::Float32& data_msg){
     }
 }
 
-/* 
- *   Callback function for the camera image received from the /camera/color/image_raw topic
- *   The function receives the camera image and converts it to a cv::Mat image
- */
-void front_camera_message_received(const sensor_msgs::ImageConstPtr& msg) {
+
+void front_camera_message_received(const sensor_msgs::msg::Image::SharedPtr msg) {
     cv_bridge::CvImagePtr cv_ptr;                                        //  declare a pointer to a CvImage
 
     //  convert to BGR image
@@ -251,55 +230,45 @@ void front_camera_message_received(const sensor_msgs::ImageConstPtr& msg) {
 
     // Check if the image is empty
     if (camera_image.empty()) {
-        ROS_ERROR("Camera image is empty\n");
+        RCLCPP_ERROR(node->get_logger(), "Camera image is empty\n");
     }
 }
 
-/* 
- *   Callback function for the joint states message received from the /joint_states topic
- *   The function receives the joint states message and stores the states of the head joints
- */
-void joint_states_message_received(const sensor_msgs::JointState& msg) {
+
+void joint_states_message_received(const sensor_msgs::msg::JointState::SharedPtr msg) {
     // Create an iterator for the head pitch and head yaw joints
-    auto head_pitch_iterator = std::find(msg.name.begin(), msg.name.end(), "HeadPitch");
-    auto head_yaw_iterator = std::find(msg.name.begin(), msg.name.end(), "HeadYaw");
+    auto head_pitch_iterator = std::find(msg->name.begin(), msg->name.end(), "HeadPitch");
+    auto head_yaw_iterator = std::find(msg->name.begin(), msg->name.end(), "HeadYaw");
 
     // Get the index of the head pitch and head yaw joints
-    int head_pitch_index = std::distance(msg.name.begin(), head_pitch_iterator);
-    int head_yaw_index = std::distance(msg.name.begin(), head_yaw_iterator);
+    int head_pitch_index = std::distance(msg->name.begin(), head_pitch_iterator);
+    int head_yaw_index = std::distance(msg->name.begin(), head_yaw_iterator);
 
     // Update the head joint states
-    head_joint_states[0] = msg.position[head_pitch_index];
-    head_joint_states[1] = msg.position[head_yaw_index];
+    head_joint_states[0] = msg->position[head_pitch_index];
+    head_joint_states[1] = msg->position[head_yaw_index];
 }
 
-/* 
- *   Callback function for the robot pose message received from the /robotLocalization/pose topic
- *   The function receives the robot pose message and stores the pose of the robot
- */
-void robot_pose_message_received(const geometry_msgs::Pose2D& msg) {
-    robot_pose[0] = msg.x;
-    robot_pose[1] = msg.y;
-    robot_pose[2] = msg.theta;
+
+void robot_pose_message_received(const geometry_msgs::msg::Pose2D::SharedPtr msg) {
+    robot_pose[0] = msg->x;
+    robot_pose[1] = msg->y;
+    robot_pose[2] = msg->theta;
 }
 
-/* 
- *   Callback function for the set_activation service
- *   The function receives a request to set the activation status of the attention system 
- *   and sets the system to the specified status
- */
-bool set_mode(cssr_system::setMode::Request  &service_request, cssr_system::setMode::Response &service_response){
+void set_mode(const std::shared_ptr<cssr_system::srv::OvertAttentionSetMode::Request> request,
+              std::shared_ptr<cssr_system::srv::OvertAttentionSetMode::Response> response){
     // Extract request parameters
-    string attention_system_state = service_request.state;
-    double point_location_x = service_request.location_x;
-    double point_location_y = service_request.location_y;
-    double point_location_z = service_request.location_z;
+    string attention_system_state = request->state;
+    double point_location_x = request->location_x;
+    double point_location_y = request->location_y;
+    double point_location_z = request->location_z;
 
     if (verbose_mode){
-        ROS_INFO("%s: request to /overtAttention/set_mode service: \
+        RCLCPP_INFO(node->get_logger(), "%s: request to /overtAttention/set_mode service: \
                 \n\t\t\t\t\t\t\tstate\t\t\t: %s, \n\t\t\t\t\t\t\tlocation_x\t\t: %.2f, \
                 \n\t\t\t\t\t\t\tlocation_y\t\t: %.2f, \n\t\t\t\t\t\t\tlocation_z\t\t: %.2f.",\
-                node_name.c_str(), service_request.state.c_str(), service_request.location_x, service_request.location_y, service_request.location_z);
+                node_name.c_str(), request->state.c_str(), request->location_x, request->location_y, request->location_z);
     }
 
     face_within_range = false;
@@ -308,17 +277,17 @@ bool set_mode(cssr_system::setMode::Request  &service_request, cssr_system::setM
     if(attention_system_state == ATTENTION_DISABLED_STATE){
         attention_mode = ATTENTION_MODE_DISABLED;
         disabled_once = false;                                          // Set the disabled mode called status
-        service_response.mode_set_success = 1;                          // Attention mode set to disabled successfully
+        response->mode_set_success = 1;                                 // Attention mode set to disabled successfully
     }
     else if(attention_system_state == ATTENTION_SOCIAL_STATE){
         attention_mode = ATTENTION_MODE_SOCIAL;
         face_detected  = false;
-        service_response.mode_set_success = 1;                          // Attention mode set to social successfully
+        response->mode_set_success = 1;                                 // Attention mode set to social successfully
     } 
     else if(attention_system_state == ATTENTION_SCANNING_STATE){
         attention_mode = ATTENTION_MODE_SCANNING;
         scan_once = false;                                              // Reset the scan mode called status
-        service_response.mode_set_success = 1;                          // Attention mode set to scanning successfully
+        response->mode_set_success = 1;                                 // Attention mode set to scanning successfully
     } 
     else if(attention_system_state == ATTENTION_SEEKING_STATE){
         attention_mode = ATTENTION_MODE_SEEKING;
@@ -327,7 +296,7 @@ bool set_mode(cssr_system::setMode::Request  &service_request, cssr_system::setM
         seeking_index = -1;                                              // Reset the seeking index to 0
         seeking_rotation_count = 0;
         seeking_completed = false;
-        service_response.mode_set_success = 1;                          // Attention mode set to scanning successfully
+        response->mode_set_success = 1;                                 // Attention mode set to scanning successfully
     } 
     else if(attention_system_state == ATTENTION_LOCATION_STATE){
         attention_mode = ATTENTION_MODE_LOCATION;
@@ -335,42 +304,24 @@ bool set_mode(cssr_system::setMode::Request  &service_request, cssr_system::setM
         location_y = point_location_y;
         location_z = point_location_z;
         location_attended_to = false;                                   // Reset the location attended to status
-        service_response.mode_set_success = 1;                          // Attention mode set to location successfully
+        response->mode_set_success = 1;                                 // Attention mode set to location successfully
     } 
     else{
-        ROS_ERROR("%s: Invalid attention system state; supported states are 'disabled', 'seeking', 'social', 'scanning', and 'location'", node_name.c_str());
+        RCLCPP_ERROR(node->get_logger(), "%s: Invalid attention system state; supported states are 'disabled', 'seeking', 'social', 'scanning', and 'location'", node_name.c_str());
         attention_mode = ATTENTION_MODE_DISABLED;
-        service_response.mode_set_success = 0;                          // Attention mode set unsuccessful
+        response->mode_set_success = 0;                                 // Attention mode set unsuccessful
     }
 
-    if (service_response.mode_set_success == 1){                        // Print the response to the service
+    if (response->mode_set_success == 1){                               // Print the response to the service
         if(verbose_mode){ 
-            ROS_INFO("%s: executing service request successful.", node_name.c_str());
+            RCLCPP_INFO(node->get_logger(), "%s: executing service request successful.", node_name.c_str());
         }
     }
     else{
-        ROS_ERROR("%s: executing service request failed.", node_name.c_str());
+        RCLCPP_ERROR(node->get_logger(), "%s: executing service request failed.", node_name.c_str());
     }
-    return true;
 }
 
-
-
-
-
-/*  --------------------------------------------------
-            CONFIGURATION CONTROL FUNCTIONS 
-    -------------------------------------------------- 
-*/
-
-/* 
- *   Function to read the the robot pose from an input file
- * @param:
- *   robot_pose_input: vector to store the robot pose
- *
- * @return:
- *    None
- */
 void read_robot_pose_input(std::vector<double>& robot_pose_input){
     bool debug_mode = false;   // used to turn debug message on
 
@@ -449,23 +400,13 @@ void read_robot_pose_input(std::vector<double>& robot_pose_input){
     }
 }
 
-
-/* 
- *   Function to verify if a topic is available
- * @param:
- *   topic_name: string to store the topic name
- * 
- * @return:
- *  boolean indicating if the topic is available
- */
 bool is_topic_available(std::string topic_name){
     bool topic_available = false;                                       // boolean to store if the topic is available
-    ros::master::V_TopicInfo master_topics;                             // vector to store the topics
-    ros::master::getTopics(master_topics);                              // get the topics
+    auto topic_names_and_types = node->get_topic_names_and_types();     // get the topics
 
     // Iterate through the topics to check if the topic is available
-    for (const auto& topic : master_topics){
-        if (topic.name == topic_name){                                  // if the topic is found
+    for (const auto& topic : topic_names_and_types){
+        if (topic.first == topic_name){                                 // if the topic is found
             topic_available = true;                                     // set the topic as available
             break;
         }
@@ -474,85 +415,45 @@ bool is_topic_available(std::string topic_name){
     return topic_available;                                             // return the topic availability
 }
 
-/*  
- *   Function to extract the topic from the topics file
- *   The function reads the topics file and extracts the topic for the specified key.
- *
- *   @param:
- *       key: the key to search for in the topics file
- *       topic_file_name: the topics filename
- *       topic_value: the topic value
- *
- *   @return:
- *       0 if the topic is extracted successfully
- *       1 if the topic is not extracted successfully
- */
 int extract_topic(string key, string topic_file_name, string* topic_value){
     bool debug = false;                                                 // used to turn debug message on
     
     std::string topic_path;                                             // topic filename path
     std::string topic_path_and_file;                                    // topic with path and file 
 
-    // Construct the full path of the topic file
-    #ifdef ROS
-        topic_path = ros::package::getPath(ROS_PACKAGE_NAME).c_str();
-    #else
-        topic_path = "..";
-    #endif
-
-    // set topic path    
-    topic_path += "/overtAttention/data/";
-    topic_path_and_file = topic_path;
-    topic_path_and_file += topic_file_name;
-
-    // Open topic file
-    std::ifstream topic_if(topic_path_and_file.c_str());
-    if (!topic_if.is_open()){
-        ROS_ERROR("%s: Unable to open the topic file %s\n", node_name.c_str(), topic_path_and_file.c_str());
+    // Construct the full path of the topic file using ROS2 package path
+    try {
+        topic_path = ament_index_cpp::get_package_share_directory("cssr_system");
+        topic_path += "/overtAttention/data/";
+        topic_path_and_file = topic_path + topic_file_name;
+    } catch (const std::exception& e) {
+        RCLCPP_ERROR(node->get_logger(), "%s: Unable to find package path: %s", node_name.c_str(), e.what());
         return 1;
     }
 
-    std::string topic_line_read;                                        // variable to read the line in the file
-    // Get key-value pairs from the topic file
-    while(std::getline(topic_if, topic_line_read)){
-        std::istringstream iss(topic_line_read);
-        std::string param_key;
-        std::string param_value;
-        iss >> param_key;
-        trim(param_key);
-        std::getline(iss, param_value);
-        iss >> param_value;
-        trim(param_value);
-        if (param_key == key) {                                         // if the key is found
-            *topic_value = param_value;                                 // set the topic value
-            break;
+    try {
+        // Load YAML file
+        YAML::Node config = YAML::LoadFile(topic_path_and_file);
+        
+        if (!config["topics"]) {
+            RCLCPP_ERROR(node->get_logger(), "%s: No 'topics' section found in %s", node_name.c_str(), topic_path_and_file.c_str());
+            return 1;
         }
-    }
-    topic_if.close();
-
-    // verify the topic_value is not empty
-    if (*topic_value == ""){
-        ROS_ERROR("%s: unable to find a valid topic for '%s'. Please check the topics file:\n\t\t\t\t\t\t '%s'.", node_name.c_str(), key.c_str(), topic_path_and_file.c_str());
+        
+        if (config["topics"][key]) {
+            *topic_value = config["topics"][key].as<std::string>();
+            return 0;
+        } else {
+            RCLCPP_ERROR(node->get_logger(), "%s: unable to find a valid topic for '%s'. Please check the topics file: '%s'.", node_name.c_str(), key.c_str(), topic_path_and_file.c_str());
+            return 1;
+        }
+    } catch (const YAML::Exception& e) {
+        RCLCPP_ERROR(node->get_logger(), "%s: Error parsing YAML file %s: %s", node_name.c_str(), topic_path_and_file.c_str(), e.what());
         return 1;
     }
-    return 0;
 }
 
-/* 
- *   Function to set the image parameters for the camera
- *   The function sets the image parameters for the specified camera.
- *
- *   @param:
- *       platform: the platform value
- *       camera: the camera value
- *       vertical_fov: the vertical field of view of the camera
- *       horizontal_fov: the horizontal field of view of the camera
- *       image_width: the width of the image
- *       image_height: the height of the image
- *
- *   @return:
- *       None
- */
+
 void set_image_parameters(string platform, string camera, double* vertical_fov, double* horizontal_fov, int* image_width, int* image_height){
     if (camera == "FrontCamera"){                                       // Set the image parameters for the front camera
         *vertical_fov = VFOV_PEPPER_FRONT_CAMERA;                       // Set the vertical field of view
@@ -580,248 +481,131 @@ void set_image_parameters(string platform, string camera, double* vertical_fov, 
     }
 }
 
-
-/* 
- *   Function to read the overt attention configuration.
- *   The configuration file contains the platform, camera, realignment threshold, x offset to head yaw, y offset to head pitch, simulator topics, robot topics, topics filename, and debug mode.
- *   The function reads the configuration file and sets the values for the specified parameters.
- * 
- * @param:
- *   platform: the platform value
- *   camera: the camera value
- *   realignment_threshold: the realignment threshold value
- *   x_offset_to_head_yaw: the x offset to head yaw value
- *   y_offset_to_head_pitch: the y offset to head pitch value
- *   simulator_topics: the simulator topics value
- *   robot_topics: the robot topics value
- *   topics_filename: the topics filename value
- *   social_attention_mode: the social attention mode value
- *   debug_mode: the debug mode value
- * 
- * @return:
- *   0 if the configuration file is read successfully
- *   1 if the configuration file is not read successfully
- */
 int read_configuration_file(string* platform, string* camera, int* realignment_threshold, int* x_offset_to_head_yaw, int* y_offset_to_head_pitch, string* simulator_topics, string* robot_topics, string* topics_filename, int* social_attention_mode, bool* use_sound, bool* debug_mode){
-    std::string config_file = "overtAttentionConfiguration.ini";        // data filename
-    std::string config_path;                                            // data path
-    std::string config_path_and_file;                                   // data path and filename
-     
-    std::string platform_key = "platform";                              // platform key 
-    std::string camera_key = "camera";                                  // camera key
-    std::string realignment_threshold_key = "realignmentThreshold";     // realignment threshold key
-    std::string x_offset_to_head_yaw_key = "xOffsetToHeadYaw";          // x offset to head yaw key
-    std::string y_offset_to_head_pitch_key = "yOffsetToHeadPitch";      // y offset to head pitch key
-    std::string simulator_topics_key = "simulatorTopics";               // simulator topics key
-    std::string robot_topics_key = "robotTopics";                       // robot topics key
-    std::string social_attention_mode_key = "socialAttentionMode";      // social attention mode key
-    std::string use_sound_key = "useSound";                             // use sound key
-    std::string verbose_mode_key = "verboseMode";                       // verbose mode key
+    std::string config_file = "overtAttentionConfiguration.yaml";       // YAML config filename
+    std::string config_path;                                            // config path
+    std::string config_path_and_file;                                   // config path and filename
 
-    std::string platform_value;                                         // platform value 
-    std::string camera_value;                                           // camera value
-    std::string realignment_threshold_value;                            // realignment threshold value
-    std::string x_offset_to_head_yaw_value;                             // x offset to head yaw value
-    std::string y_offset_to_head_pitch_value;                           // y offset to head pitch value
-    std::string simulator_topics_value;                                 // simulator topics value
-    std::string robot_topics_value;                                     // robot topics value
-    std::string social_attention_mode_value;                            // social attention mode value
-    std::string use_sound_value;                                        // use sound value
-    std::string verbose_mode_value;                                     // verbose mode value
-
-    // Construct the full path of the configuration file
-    #ifdef ROS
-        config_path = ros::package::getPath(ROS_PACKAGE_NAME).c_str();
-    #else
-        data_path = "..";
-    #endif
-
-    // set configuration path
-    config_path += "/overtAttention/config/";
-    config_path_and_file = config_path;
-    config_path_and_file += config_file;
-
-    // Open configuration file
-    std::ifstream data_if(config_path_and_file.c_str());
-    if (!data_if.is_open()){
-        ROS_ERROR("%s: unable to open the configuration file %s\n", node_name.c_str(), config_path_and_file.c_str());
+    // Construct the full path of the configuration file using ROS2 package path
+    try {
+        config_path = ament_index_cpp::get_package_share_directory("cssr_system");
+        config_path += "/overtAttention/config/";
+        config_path_and_file = config_path + config_file;
+    } catch (const std::exception& e) {
+        RCLCPP_ERROR(node->get_logger(), "%s: Unable to find package path: %s", node_name.c_str(), e.what());
         return 1;
     }
 
-    // Set platform to the default value of robot
-    *platform = "robot";
-    platform_value = "robot";
-
-    std::string data_line_read;                                         // variable to read the line in the file
-    // Get key-value pairs from the configuration file
-    while(std::getline(data_if, data_line_read)){
-        std::istringstream iss(data_line_read);
-        std::string param_key, param_value;
-        iss >> param_key;
-        trim(param_key);
-        std::getline(iss, param_value);
-        iss >> param_value;
-        trim(param_value);
+    try {
+        // Load YAML configuration file
+        YAML::Node config = YAML::LoadFile(config_path_and_file);
         
-        // Extract the platform -- Removed the platform key from the configuration file but will be useful if you need it
-        if (param_key == platform_key){ 
-            boost::algorithm::to_lower(param_value);                    // modifies string to lower case
-            platform_value = param_value;
-            *platform = param_value;
-            if(platform_value != "robot" && platform_value != "simulator"){
-                ROS_WARN("%s: platform value not supported in configuration. Supported values are: robot and simulator.", node_name.c_str());
+        // Set platform to the default value of robot
+        *platform = "robot";
+        
+        // Read camera configuration
+        if (config["camera"]) {
+            *camera = config["camera"].as<std::string>();
+            if (*camera != "FrontCamera" && *camera != "StereoCamera" && *camera != "RealSenseCamera") {
+                RCLCPP_WARN(node->get_logger(), "%s: camera value not supported in configuration. Supported values are: FrontCamera, RealSenseCamera and StereoCamera.", node_name.c_str());
                 return 1;
             }
-        }
-        
-        else if (param_key == camera_key){ 
-            camera_value = param_value;
-            *camera = param_value;
-            if(camera_value != "FrontCamera" && camera_value != "StereoCamera" && camera_value != "RealSenseCamera"){
-                ROS_WARN("%s: camera value not supported in configuration. Supported values are: FrontCamera, RealSenseCamera and StereoCamera.", node_name.c_str());
-                return 1;
-            }
+        } else {
+            RCLCPP_ERROR(node->get_logger(), "%s: camera parameter not found in configuration file", node_name.c_str());
+            return 1;
         }
 
-        else if (param_key == realignment_threshold_key){ 
-            realignment_threshold_value = param_value;
-            *realignment_threshold = std::stoi(param_value);
+        // Read realignment threshold
+        if (config["realignment_threshold"]) {
+            *realignment_threshold = config["realignment_threshold"].as<int>();
+        } else {
+            *realignment_threshold = 50; // default value
         }
 
-        else if (param_key == x_offset_to_head_yaw_key){ 
-            x_offset_to_head_yaw_value = param_value;
-            *x_offset_to_head_yaw = std::stoi(param_value);
+        // Read x offset to head yaw
+        if (config["x_offset_to_head_yaw"]) {
+            *x_offset_to_head_yaw = config["x_offset_to_head_yaw"].as<int>();
+        } else {
+            *x_offset_to_head_yaw = 0; // default value
         }
 
-        else if (param_key == y_offset_to_head_pitch_key){ 
-            y_offset_to_head_pitch_value = param_value;
-            *y_offset_to_head_pitch = std::stoi(param_value);
+        // Read y offset to head pitch
+        if (config["y_offset_to_head_pitch"]) {
+            *y_offset_to_head_pitch = config["y_offset_to_head_pitch"].as<int>();
+        } else {
+            *y_offset_to_head_pitch = 0; // default value
         }
 
-        else if (param_key == simulator_topics_key){ 
-            simulator_topics_value = param_value;
-            *simulator_topics = param_value;
+        // Read simulator topics
+        if (config["simulator_topics"]) {
+            *simulator_topics = config["simulator_topics"].as<std::string>();
+        } else {
+            RCLCPP_ERROR(node->get_logger(), "%s: simulator_topics parameter not found in configuration file", node_name.c_str());
+            return 1;
         }
 
-        else if (param_key == robot_topics_key){ 
-            robot_topics_value = param_value;
-            *robot_topics = param_value;
+        // Read robot topics
+        if (config["robot_topics"]) {
+            *robot_topics = config["robot_topics"].as<std::string>();
+        } else {
+            RCLCPP_ERROR(node->get_logger(), "%s: robot_topics parameter not found in configuration file", node_name.c_str());
+            return 1;
         }
-        
-        else if(param_key == social_attention_mode_key){
-            social_attention_mode_value = param_value;
-            if(social_attention_mode_value == "saliency"){
+
+        // Read social attention mode
+        if (config["social_attention_mode"]) {
+            std::string social_attention_mode_value = config["social_attention_mode"].as<std::string>();
+            if (social_attention_mode_value == "saliency") {
                 *social_attention_mode = SALIENCY_SOCIAL_CONTROL;
-            }
-            else if(social_attention_mode_value == "random"){
+            } else if (social_attention_mode_value == "random") {
                 *social_attention_mode = RANDOM_SOCIAL_CONTROL;
-            }
-            else{
-                ROS_WARN("%s: social attention mode value not supported. Supported values are: saliency and random", node_name.c_str());
+            } else {
+                RCLCPP_WARN(node->get_logger(), "%s: social attention mode value not supported. Supported values are: saliency and random", node_name.c_str());
                 return 1;
             }
+        } else {
+            *social_attention_mode = RANDOM_SOCIAL_CONTROL; // default value
         }
 
-        else if (param_key == use_sound_key){ 
-            boost::algorithm::to_lower(param_value);                    // modifies string to lower case
-            use_sound_value = param_value;
-            if(use_sound_value == "true"){
-                *use_sound = true;
-            }
-            else if(use_sound_value == "false"){
-                *use_sound = false;
-            }
-            else{
-                ROS_WARN("%s: use sound value not supported in configuration. Supported values are: true and false.", node_name.c_str());
-                return 1;
-            }
+        // Read use sound flag
+        if (config["use_sound"]) {
+            *use_sound = config["use_sound"].as<bool>();
+        } else {
+            *use_sound = false; // default value
         }
 
-        else if (param_key == verbose_mode_key){ 
-            boost::algorithm::to_lower(param_value);                    // modifies string to lower case
-            verbose_mode_value = param_value;
-            if(verbose_mode_value == "true"){
-                *debug_mode = true;
-            }
-            else if(verbose_mode_value == "false"){
-                *debug_mode = false;
-            }
-            else{
-                ROS_WARN("%s: verbose mode value not supported in configuration. Supported values are: true and false.", node_name.c_str());
-                return 1;
-            }
+        // Read verbose mode
+        if (config["verbose_mode"]) {
+            *debug_mode = config["verbose_mode"].as<bool>();
+        } else {
+            *debug_mode = false; // default value
         }
-    }
-    data_if.close();
 
-    if(*platform == "" || *camera == "" || *simulator_topics == "" || *robot_topics == ""){
-        ROS_WARN("%s: unable to find a valid configuration. Please check the configuration file:\n\t\t\t\t\t\t '%s'.", node_name.c_str(), config_path_and_file.c_str());
+        // Set topics filename based on platform
+        *topics_filename = *robot_topics; // Default to robot topics
+
+        print_configuration(*platform, *camera, *realignment_threshold, *x_offset_to_head_yaw, *y_offset_to_head_pitch, *simulator_topics, *robot_topics, *topics_filename, *debug_mode);
+        return 0;
+
+    } catch (const YAML::Exception& e) {
+        RCLCPP_ERROR(node->get_logger(), "%s: Error parsing YAML configuration file %s: %s", node_name.c_str(), config_path_and_file.c_str(), e.what());
         return 1;
     }
-
-    if (platform_value == "robot"){
-        *topics_filename = *robot_topics;
-    }
-    else if(platform_value == "simulator"){
-        *topics_filename = *simulator_topics;
-    }
-
-    print_configuration(*platform, *camera, *realignment_threshold, *x_offset_to_head_yaw, *y_offset_to_head_pitch, *simulator_topics, *robot_topics, *topics_filename, *debug_mode);
-    return 0;
 }
 
-/* 
- *   Function to print the overt attention configuration
- *
- *  @param:
- *     platform: the platform value
- *     camera: the camera value
- *     realignment_threshold: the realignment threshold value
- *     x_offset_to_head_yaw: the x offset to head yaw value
- *     y_offset_to_head_pitch: the y offset to head pitch value
- *     simulator_topics: the simulator topics value
- *     robot_topics: the robot topics value
- *     topics_filename: the topics filename value
- *     debug_mode: the debug mode value
- * 
- *  @return:
- *    None
- */
+
 void print_configuration(string platform, string camera, int realignment_threshold, int x_offset_to_head_yaw, int y_offset_to_head_pitch, string simulator_topics, string robot_topics, string topics_filename, bool debug_mode){
     // Print the gesture execution configuration
-    ROS_INFO("%s: configuration parameters: \
+    RCLCPP_INFO(node->get_logger(), "%s: configuration parameters: \
                 \n\t\t\t\t\t\t\tImplementation platform\t\t: %s, \n\t\t\t\t\t\t\tCamera\t\t\t\t: %s, \
                 \n\t\t\t\t\t\t\tRealignment Threshold\t\t: %d, \n\t\t\t\t\t\t\tX Offset to Head Yaw\t\t: %d, \
                 \n\t\t\t\t\t\t\tY Offset to Head Pitch\t\t: %d, \n\t\t\t\t\t\t\tSimulator Topics file\t\t: %s, \
                 \n\t\t\t\t\t\t\tRobot Topics file\t\t: %s, \n\t\t\t\t\t\t\tVerbose Mode\t\t\t: %s.",\
-                node_name.c_str(), implementation_platform.c_str(), camera.c_str(), realignment_threshold, \
+                node_name.c_str(), platform.c_str(), camera.c_str(), realignment_threshold, \
                 x_offset_to_head_yaw, y_offset_to_head_pitch, simulator_topics.c_str(), robot_topics.c_str(), \
                 debug_mode ? "true" : "false");
 }
 
-
-
-
-
-/*  --------------------------------------------------
-            INVERSE KINEMATICS UTILITY FUNCTIONS 
-    -------------------------------------------------- 
-*/
-
-/* 
- *   Function that returns the head angles given the head end-effector position (BottomCamera)
- *   The function calculates the head yaw and head pitch angles of the head chain
- *
- * @param:
- *   camera_x: the x position of the head end-effector
- *   camera_y: the y position of the head end-effector
- *   camera_z: the z position of the head end-effector
- *   head_yaw: the head yaw angle to be updated
- *   head_pitch: the head pitch angle to be updated
- *
- * @return:
- *   None
- */
 void get_head_angles(double camera_x, double camera_y, double camera_z, double* head_yaw, double* head_pitch){
    double link_1 = -38.0;
    double link_2 = 169.9;
@@ -842,29 +626,6 @@ void get_head_angles(double camera_x, double camera_y, double camera_z, double* 
    }
 }
 
-
-
-
-/*  --------------------------------------------------
-            IMAGE PIXEL UTILITY FUNCTIONS 
-    -------------------------------------------------- 
-*/
-
-/*  
- *   Function to compute the angle changes required refocus the robot head on a point it's FOV
- *
- *   @param:
- *       center_x: x coordinate of the point of interest
- *       center_y: y coordinate of the point of interest
- *       image_width: width of the original image
- *       image_height: height of the original image
- *       theta_v: the vertical FOV of the camera
- *       theta_h: the horizontal FOV of the camera
- *
- *   @return:
- *       AngleChange: the head_yaw and head_pitch angle changes required
- */
-
 AngleChange get_angles_from_pixel(double center_x, double center_y, double image_width, double image_height, double theta_h, double theta_v){
     // Calculate the offsets from the image center
     double x_offset = center_x - image_width / 2.0;
@@ -882,20 +643,6 @@ AngleChange get_angles_from_pixel(double center_x, double center_y, double image
     return {delta_yaw, delta_pitch};
 }
 
-/*  
- *   Function to compute the image pixel coordinates for points in the world given the required change of angle from the current head pose.
- *
- *   @param:
- *       delta_yaw (float): Change in yaw angle (in radians)
- *       delta_pitch (float): Change in pitch angle (in radians)
- *       W (int): Width of the image in pixels
- *       H (int): Height of the image in pixels
- *       theta_h (float): Horizontal field of view of the camera (in degrees)
- *       theta_v (float): Vertical field of view of the camera (in degrees)
- *
- *   @return:
- *       (x, y): Pixel coordinates corresponding to the angle changes
- */
 PixelCoordinates calculate_pixel_coordinates(double delta_yaw, double delta_pitch, int W, int H, double theta_h, double theta_v) {
     // Calculate the proportions of the angles within the field of view
     double x_proportion = delta_yaw / radians(theta_h) * -1;
@@ -913,24 +660,6 @@ PixelCoordinates calculate_pixel_coordinates(double delta_yaw, double delta_pitc
     return {x, y};
 }
 
-
-
-
-
-/*  --------------------------------------------------
-            SALEIENCY COMPUTATION FUNCTIONS 
-    -------------------------------------------------- 
-*/
-
-/*  
- *   Function to compute the most salient point in a saliency map.
- *
- *   @param:
- *       saliencyMap (matrix): the map of points with values indicating saliency in increasing order
- *
- *   @return:
- *       (x, y): Pixel coordinates corresponding to the winner
- */
 std::pair<int, int> winner_takes_all(const cv::Mat& saliency_map) {
     // Declare the variables to store the minimum and maximum values and their locations
     double min_val;
@@ -945,18 +674,7 @@ std::pair<int, int> winner_takes_all(const cv::Mat& saliency_map) {
     return {max_loc.x, max_loc.y};
 }
 
-/*  
- *   Function to gradually reduce the saliency of previously attended points.
- *
- *   @param:
- *       saliencyMap (matrix): the map of points with values indicating saliency in increasing order
- *       wtaMap (matrix): a white background image showing all previous attended points in some variation of blue
- *       previous_locations (vector): the list of previous attended points
- *
- *   @return:
- *       wtaMap (matrix): a white background image showing all previous attended points in some variation of blue
- *       previous_locations (vector): the new updated list of previous attended points
- */
+
 std::pair<cv::Mat, std::vector<std::tuple<double, double, int>>> habituation(cv::Mat& saliency_map, cv::Mat& wta_map, const std::vector<std::tuple<double, double, int>>& previous_locations) {
     std::vector<std::tuple<double, double, int>> prev;
     
@@ -996,18 +714,7 @@ std::pair<cv::Mat, std::vector<std::tuple<double, double, int>>> habituation(cv:
     return {saliency_map, prev};
 }
 
-/*  
- *   Function to inhibit previous attended points that have reached the IOR limit and remove them from previous attended locations.
- *
- *   @param:
- *       saliencyMap (matrix): the map of points with values indicating saliency in increasing order
- *       wtaMap (matrix): a white background image showing all previous attended points in some variation of blue
- *       previous_locations (vector): the list of previous attended points
- *
- *   @return:
- *       wtaMap (matrix): a white background image showing all previous attended points in some variation of blue
- *       previous_locations (vector): the new updated list of previous attended points
- */
+
 std::pair<cv::Mat, std::vector<std::tuple<double, double, int>>> inhibition_of_return(cv::Mat& saliency_map, cv::Mat& wta_map, const std::vector<std::tuple<double, double, int>>& previous_locations) {
     std::vector<std::tuple<double, double, int>> prev;
 
@@ -1052,19 +759,7 @@ std::pair<cv::Mat, std::vector<std::tuple<double, double, int>>> inhibition_of_r
     return {saliency_map, prev};
 }
 
-/*  
- *   Function to compute the saliency features of an image.
- *
- *   @param:
- *       camera_image (matrix): the image to compute the saliency features
- *       centre_x (int): the x coordinate of the most salient point
- *       centre_y (int): the y coordinate of the most salient point
- *       debug_mode (bool): the debug mode
- *
- *   @return:
- *       0 if the saliency features are computed successfully
- *       -1 if the saliency features are not computed successfully
- */
+
 int compute_saliency_features(cv::Mat camera_image, int* centre_x, int* centre_y, bool debug_mode){
     cv::Mat wta = cv::Mat::zeros(camera_image.size(), camera_image.type());  // Create a zero matrix with the same size and type as the input image
 
@@ -1083,7 +778,7 @@ int compute_saliency_features(cv::Mat camera_image, int* centre_x, int* centre_y
     bool success = saliency->computeSaliency(camera_image, saliency_map);
 
     if (!success) {                                                         // Check if the saliency map was computed successfully
-        ROS_ERROR("%s: Error computing saliency map.", node_name.c_str());  // Print an error message
+        RCLCPP_ERROR(node->get_logger(), "%s: Error computing saliency map.", node_name.c_str());  // Print an error message
         return -1;                                                          // Return -1 to indicate an error
     }
 
@@ -1147,63 +842,30 @@ int compute_saliency_features(cv::Mat camera_image, int* centre_x, int* centre_y
 
 }
 
-
-
-
-
-/*  --------------------------------------------------
-            ACTUATOR CONTROL FUNCTIONS 
-    -------------------------------------------------- 
-*/
-
-/*  
- *   Function to create a control client
- *   The function creates a control client for the specified topic.
- *
- *   @param:
- *       topic_name: the topic name
- *
- *   @return:
- *       the control client
- */
 ControlClientPtr create_client(const std::string& topic_name) {
-    // Create a new action client
-    ControlClientPtr actionClient(new ControlClient(topic_name, true));
+    // Create a new action client for ROS2
+    ControlClientPtr actionClient = rclcpp_action::create_client<control_msgs::action::FollowJointTrajectory>(node, topic_name);
     int max_iterations = 5;                                            // maximum number of iterations to wait for the server to come up
 
     for (int iterations = 0; iterations < max_iterations; ++iterations) {
-        if (actionClient->waitForServer(ros::Duration(1.0))) {
+        if (actionClient->wait_for_action_server(std::chrono::seconds(1))) {
             return actionClient;                                        // return the action client if the server is available
         }
-        ROS_WARN_THROTTLE(INITIALIZATION_INFO_PERIOD,"%s: waiting for the %s controller to come up", node_name.c_str(), topic_name.c_str());
+        RCLCPP_WARN(node->get_logger(), "%s: waiting for the %s controller to come up", node_name.c_str(), topic_name.c_str());
     }
     // Throw an exception if the server is not available and client creation fails
-    ROS_ERROR("%s: error creating action client for %s controller: Server not available", node_name.c_str(), topic_name.c_str());
+    RCLCPP_ERROR(node->get_logger(), "%s: error creating action client for %s controller: Server not available", node_name.c_str(), topic_name.c_str());
     return nullptr;                                                     // return nullptr if the server is not available
 }
 
 
-/*  
- *   Function to rotate the robot by a specified angle in degrees.
- *   The robot is rotated by the specified angle in degrees.
- *
- *   @param:
- *       angle_degrees: the angle in degrees
- *       velocity_publisher: the velocity publisher
- *       debug: boolean to store the debug mode
- *
- *   @return:
- *       None
- */
-void rotate_robot(double angle_degrees, ros::Publisher velocity_publisher, bool debug){
+
+void rotate_robot(double angle_degrees, rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr velocity_publisher, bool debug){
     double angle_radians;                                               // stores the angle in radians
     angle_radians = radians(angle_degrees);                             // Convert angle from degrees to radians (function found in pepperKinematicsUtilities.h)
 
     // Declare a geometry_msgs::Twist message to send velocity commands to the robot
-    geometry_msgs::Twist velocity_command;
-
-    // Set publishing rate to 10 Hz
-    ros::Rate loop_rate(10);
+    geometry_msgs::msg::Twist velocity_command;
 
     // Set the linear velocities to zero and angular velocity to the angle in radian
     velocity_command.linear.x = 0.0;
@@ -1215,29 +877,13 @@ void rotate_robot(double angle_degrees, ros::Publisher velocity_publisher, bool 
     velocity_command.angular.z = angle_radians;
 
     // Publish the velocity command to the robot
-    velocity_publisher.publish(velocity_command);
+    velocity_publisher->publish(velocity_command);
 
     // Sleep for the duration of the rotation
-    ros::Duration(4).sleep();
+    std::this_thread::sleep_for(std::chrono::seconds(4));
 }
 
-/*  
- *   Function to compute the trajectory for an actuator from a start position to an end position
- *   The function uses the minimum-jerk model of biological motion to compute the trajectory
- *
- *   @param:
- *       start_position: vector containing the start position (joint angles) of the actuator
- *       end_position: vector containing the end position (joint angles) of the actuator
- *       number_of_joints: the number of joints in the actuator
- *       trajectory_duration: the duration of the trajectory
- *       positions: vector to store the positions of the computed trajectory
- *       velocities: vector to store the velocities of the computed trajectory
- *       accelerations: vector to store the accelerations of the computed trajectory
- *       durations: vector to store the durations of the computed trajectory
- *
- *   @return:
- *       None
- */
+
 void compute_trajectory(std::vector<double> start_position, std::vector<double> end_position, 
                         int number_of_joints, double trajectory_duration, 
                         std::vector<std::vector<double>>& positions, std::vector<std::vector<double>>& velocities, 
@@ -1289,48 +935,16 @@ void compute_trajectory(std::vector<double> start_position, std::vector<double> 
         velocities_t.clear();
         accelerations_t.clear();
     }
-    // Compute the trajectory for the last point in time
-    // time_t = trajectory_duration;
-    // for(int i = 0; i < number_of_joints; i++){                          // Create a trajectory for each joint (5 joints for the arm)   
-    //     position = start_position[i] + (end_position[i] - start_position[i]) * ((10 * (pow(time_t/trajectory_duration, 3))) - (15 * (pow(time_t/trajectory_duration, 4))) + (6 * (pow(time_t/trajectory_duration, 5))));
-    //     positions_t.push_back(position);
-
-    //     velocity = ((end_position[i] - start_position[i])/trajectory_duration) * ((30 * (pow(time_t/trajectory_duration, 2))) - (60 * (pow(time_t/trajectory_duration, 3))) + (30 * (pow(time_t/trajectory_duration, 4))));
-    //     velocities_t.push_back(velocity);
-
-    //     acceleration = ((end_position[i] - start_position[i])/(trajectory_duration*trajectory_duration)) * ((60 * (pow(time_t/trajectory_duration, 1))) - (180 * (pow(time_t/trajectory_duration, 2))) + (120 * (pow(time_t/trajectory_duration, 3))));
-    //     accelerations_t.push_back(acceleration);
-    // }
-    // // Store the computed trajectory for the last point in time
-    // positions.push_back(positions_t);
-    // velocities.push_back(velocities_t);
-    // accelerations.push_back(accelerations_t);
-    // durations.push_back(time_t);
-
     return;
 }
 
-/*  
- *   Function to move the head to a position specified by the head pitch and head yaw angles
- *   The function moves the head to the specified position using the control client
- *
- *   @param:
- *       head_topic: the topic for the head
- *       head_pitch: the pitch angle of the head
- *       head_yaw: the yaw angle of the head
- *       gesture_duration: the duration of the gesture
- *       debug: boolean to indicate if debugging information should be printed
- *
- *   @return:
- *       0 if head is moved successfully
- *      -1 if head is not moved successfully
- */
+
 int move_robot_head(std::string head_topic, double head_pitch, double head_yaw, double gesture_duration, bool debug){
     // Create a control client for the head
     ControlClientPtr head_client = create_client(head_topic);
 
     if(head_client == nullptr){
-        ROS_ERROR("%s: error creating action client for head controller", node_name.c_str());
+        RCLCPP_ERROR(node->get_logger(), "%s: error creating action client for head controller", node_name.c_str());
         return -1;
     }
     std::vector<std::string> head_joint_names = {"HeadPitch", "HeadYaw"};// Set the joint names for the head to the specified joint names
@@ -1351,26 +965,12 @@ int move_robot_head(std::string head_topic, double head_pitch, double head_yaw, 
     return 0;
 }
 
-/*  
- *   Function to move the head to a position specified by the head pitch and head yaw angles
- *   The function moves the head to the specified position using the minimum-jerk model of biological motion
- *
- *   @param:
- *       head_topic: the topic for the head
- *       head_pitch: the pitch angle of the head
- *       head_yaw: the yaw angle of the head
- *       gesture_duration: the duration of the gesture
- *       debug: boolean to indicate if debugging information should be printed
- *
- *   @return:
- *       0 if head is moved successfully
- *      -1 if head is not moved successfully
- */
+
 int move_robot_head_biological_motion(std::string head_topic, double head_pitch, double head_yaw, double gesture_duration, bool debug){
     // Create a control client for the head
     ControlClientPtr head_client = create_client(head_topic);
     if(head_client == nullptr){
-        ROS_ERROR("%s: error creating action client for head controller", node_name.c_str());
+        RCLCPP_ERROR(node->get_logger(), "%s: error creating action client for head controller", node_name.c_str());
         return -1;
     }
 
@@ -1395,19 +995,7 @@ int move_robot_head_biological_motion(std::string head_topic, double head_pitch,
     return 0;
 }
 
-/*  
- *   Function to move an actuator to a position when using linear interpolation
- *   The actuator is moved using the control client to the specified position
- *
- *   @param:
- *       client: the control client for the actuator
- *       joint_names: vector containing the joint names of the actuator
- *       duration: the duration of the movement
- *       positions: vector containing the joint angles of the position to move the actuator to
- *
- *   @return:
- *       None
- */
+
 void move_to_position(ControlClientPtr& client, const std::vector<std::string>& joint_names, double duration, 
                         std::vector<double> positions){
     // Create a goal message
@@ -1417,29 +1005,24 @@ void move_to_position(ControlClientPtr& client, const std::vector<std::string>& 
     trajectory.points.resize(1);                                        // Set the number of points in the trajectory to 1
 
     trajectory.points[0].positions = positions;                         // Set the positions in the trajectory to the specified positions
-    trajectory.points[0].time_from_start = ros::Duration(duration);     // Set the time from start of the trajectory to the specified duration
+    trajectory.points[0].time_from_start = rclcpp::Duration::from_seconds(duration);     // Set the time from start of the trajectory to the specified duration
 
-    // Send the goal to move the actuator to the specified position
-    client->sendGoal(goal);
-    client->waitForResult(ros::Duration(duration));                     // Wait for the actuator to reach the specified position
+    // Send the goal to move the actuator to the specified position using ROS2 async API
+    auto goal_handle_future = client->async_send_goal(goal);
+    
+    // Wait for the goal to be accepted
+    if (rclcpp::spin_until_future_complete(node, goal_handle_future) == rclcpp::FutureReturnCode::SUCCESS) {
+        auto goal_handle = goal_handle_future.get();
+        if (goal_handle) {
+            // Wait for the result
+            auto result_future = client->async_get_result(goal_handle);
+            rclcpp::spin_until_future_complete(node, result_future, std::chrono::seconds(static_cast<int>(duration) + 1));
+        }
+    }
 }
 
 
-/*  Function to move the arm to a position using the minimum-jerk model of biological motion
- *   The function moves the arm to the specified position using the control client
- *
- *   @param:
- *       client: the control client for the arm
- *       joint_names: vector containing the joint names of the arm
- *       duration: vector containing the duration of the movement
- *       gesture_duration: the duration of the gesture
- *       positions: vector containing the joint angles of the position to move the arm to
- *       velocities: vector containing the joint velocities of the position to move the arm to
- *       accelerations: vector containing the joint accelerations of the position to move the arm to
- *
- *   @return:
- *       None
- */
+
 void move_to_position_biological_motion(ControlClientPtr& client, const std::vector<std::string>& joint_names, 
                                         double gesture_duration, std::vector<double> duration, 
                                         std::vector<std::vector<double>> positions, std::vector<std::vector<double>> velocities, 
@@ -1455,46 +1038,38 @@ void move_to_position_biological_motion(ControlClientPtr& client, const std::vec
         trajectory.points[i].positions = positions[i];
         trajectory.points[i].velocities = velocities[i];
         trajectory.points[i].accelerations = accelerations[i];
-        trajectory.points[i].time_from_start = ros::Duration(duration[i]);
+        trajectory.points[i].time_from_start = rclcpp::Duration::from_seconds(duration[i]);
     }
 
-    // Send the goal to move the head to the specified position
-    client->sendGoal(goal);
-    client->waitForResult(ros::Duration(gesture_duration));             // Wait for the arm to reach the specified position
+    // Send the goal to move the head to the specified position using ROS2 async API
+    auto goal_handle_future = client->async_send_goal(goal);
+    
+    // Wait for the goal to be accepted
+    if (rclcpp::spin_until_future_complete(node, goal_handle_future) == rclcpp::FutureReturnCode::SUCCESS) {
+        auto goal_handle = goal_handle_future.get();
+        if (goal_handle) {
+            // Wait for the result
+            auto result_future = client->async_get_result(goal_handle);
+            rclcpp::spin_until_future_complete(node, result_future, std::chrono::seconds(static_cast<int>(gesture_duration) + 1));
+        }
+    }
 }
 
-/*  
- *   Function to move the robot head and wheels to a position specified by the head pitch and head yaw angles
- *   The function moves the head and wheels to the specified position using the control client
- *
- *   @param:
- *       head_client: the control client for the head
- *       joint_names: vector containing the joint names of the head
- *       duration: the duration of the movement
- *       positions: vector containing the joint angles of the position to move the head to
- *       rotate_robot: boolean to indicate if the robot should be rotated
- *       angle_radians: the angle in radians to rotate the robot
- *       velocity_publisher: the velocity publisher
- *       debug: boolean to indicate if debugging information should be printed
- *
- *   @return:
- *       None
- */	
+
 void move_robot_head_wheels_to_position(ControlClientPtr& head_client, const std::vector<std::string>& joint_names, double duration, 
-                        std::vector<double> positions, bool rotate_robot, double angle_radians, ros::Publisher velocity_publisher, bool debug){
+                        std::vector<double> positions, bool rotate_robot, double angle_radians, 
+                        rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr velocity_publisher, bool debug){
     // Create a goal message
-    control_msgs::FollowJointTrajectoryGoal goal;
-    trajectory_msgs::JointTrajectory& trajectory = goal.trajectory;
+    control_msgs::action::FollowJointTrajectory::Goal goal;
+    trajectory_msgs::msg::JointTrajectory& trajectory = goal.trajectory;
     trajectory.joint_names = joint_names;                               // Set the joint names for the actuator to the specified joint names
     trajectory.points.resize(1);                                        // Set the number of points in the trajectory to 1
 
     trajectory.points[0].positions = positions;                         // Set the positions in the trajectory to the specified positions
-    trajectory.points[0].time_from_start = ros::Duration(duration);     // Set the time from start of the trajectory to the specified duration
+    trajectory.points[0].time_from_start = rclcpp::Duration::from_seconds(duration);     // Set the time from start of the trajectory to the specified duration
 
     // Configure parameters for rotating the robot
-    geometry_msgs::Twist velocity_command;                              // Declare a geometry_msgs::Twist message to send velocity commands to the robot
-
-    ros::Rate loop_rate(10);                                            // Set publishing rate to 10 Hz        
+    geometry_msgs::msg::Twist velocity_command;                         // Declare a geometry_msgs::Twist message to send velocity commands to the robot
 
     // Set the linear velocities to zero and angular velocity to the angle in radian
     velocity_command.linear.x = 0.0;
@@ -1505,39 +1080,26 @@ void move_robot_head_wheels_to_position(ControlClientPtr& head_client, const std
     velocity_command.angular.y = 0.0;
     velocity_command.angular.z = angle_radians;
 
-    // Send the goal to move the head to the specified position
-    head_client->sendGoal(goal);
+    // Send the goal to move the head to the specified position using ROS2 async API
+    auto goal_handle_future = head_client->async_send_goal(goal);
 
     // Rotate the robot by the specified angle
     if(rotate_robot){
         // Publish the velocity command to the robot
-        velocity_publisher.publish(velocity_command);
-
-        // // Sleep for the duration of the rotation
-        // loop_rate.sleep();
+        velocity_publisher->publish(velocity_command);
     }
-    head_client->waitForResult(ros::Duration(duration));                // Wait for the actuator to reach the specified position
+    
+    // Wait for the goal to be accepted and completed
+    if (rclcpp::spin_until_future_complete(node, goal_handle_future) == rclcpp::FutureReturnCode::SUCCESS) {
+        auto goal_handle = goal_handle_future.get();
+        if (goal_handle) {
+            // Wait for the result
+            auto result_future = head_client->async_get_result(goal_handle);
+            rclcpp::spin_until_future_complete(node, result_future, std::chrono::seconds(static_cast<int>(duration) + 1));
+        }
+    }
 }
 
-/*  
- *   Function to move the robot head and wheels to a position specified by the head pitch and head yaw angles
- *   The function moves the head and wheels to the specified position using the minimum-jerk model of biological motion
- *
- *   @param:
- *       head_client: the control client for the head
- *       joint_names: vector containing the joint names of the head
- *       duration: the duration of the movement
- *       positions: vector containing the joint angles of the position to move the head to
- *       velocities: vector containing the joint velocities of the position to move the head to
- *       accelerations: vector containing the joint accelerations of the position to move the head to
- *       rotate_robot: boolean to indicate if the robot should be rotated
- *       angle_radians: the angle in radians to rotate the robot
- *       velocity_publisher: the velocity publisher
- *       debug: boolean to indicate if debugging information should be printed
- *
- *   @return:
- *       None
- */
 void move_robot_head_wheels_to_position_biological_motion(ControlClientPtr& client, const std::vector<std::string>& joint_names, 
                                         double gesture_duration, std::vector<double> duration, 
                                         std::vector<std::vector<double>> positions, std::vector<std::vector<double>> velocities, 
@@ -1586,22 +1148,7 @@ void move_robot_head_wheels_to_position_biological_motion(ControlClientPtr& clie
     client->waitForResult(ros::Duration(gesture_duration));             // Wait for the actuator to reach the specified position
 }
 
-/* 
- *   Function to control the robot's head and wheels
- *   The function controls the robot's head and wheels to look at a specified point in the environment
- *
- *   @param:
- *       head_topic: the topic for the head
- *       head_pitch: the pitch angle of the head
- *       head_yaw: the yaw angle of the head
- *       gesture_duration: the duration of the gesture
- *       rotate_robot: boolean to indicate if the robot should be rotated
- *       angle_radians: the angle in radians to rotate the robot
- *       velocity_publisher: the velocity publisher
- *       debug: boolean to indicate if debugging information should be printed
- *
- *   @return:
- *       None
+    None
  */
 void control_robot_head_wheels(std::string head_topic, double head_pitch, double head_yaw, double gesture_duration, 
                             bool rotate_robot, double angle_radians, ros::Publisher velocity_publisher, bool debug){
@@ -1625,36 +1172,11 @@ void control_robot_head_wheels(std::string head_topic, double head_pitch, double
     std::vector<std::vector<double>> accelerations_t_head;
     std::vector<double> duration_t_head;
 
-    // Compute the trajectory for the head movement
-    // compute_trajectory(head_joint_states, head_position, number_of_joints, gesture_duration, positions_t_head, velocities_t_head, accelerations_t_head, duration_t_head);
-
-    // // Move the head and wheels to the specified position
-    // move_robot_head_wheels_to_position_biological_motion(head_client, head_joint_names, gesture_duration, duration_t_head, positions_t_head, velocities_t_head, accelerations_t_head, rotate_robot, angle_radians, velocity_publisher, debug);
-
-    // Move the head and wheels to the specified position
     move_robot_head_wheels_to_position(head_client, head_joint_names, gesture_duration, head_position, rotate_robot, angle_radians, velocity_publisher, debug);
 
 }
 
-/*  --------------------------------------------------
-            ATTENTION MODES CONTROL FUNCTIONS 
-    -------------------------------------------------- 
-*/
 
-/*  
- *   Function to execute the location attention
- *   The function moves the robot's head to look at the specified point in the environment.
- *   
- * @param:
- *   point_x: the x coordinate of the point to look at
- *   point_y: the y coordinate of the point to look at
- *   point_z: the z coordinate of the point to look at
- *   topics_file: the topics file
- *   debug: the debug mode
- * 
- * @return:
- *   1 if the attention is executed successfully
- */
 int location_attention(float point_x, float point_y, float point_z, string topics_file, ros::Publisher velocity_publisher, bool debug){
     ROS_INFO("%s: location mode called x: %f, y: %f, y: %f", node_name.c_str(), point_x, point_y, point_z);
     // Robot pose coordinates
@@ -1701,9 +1223,7 @@ int location_attention(float point_x, float point_y, float point_z, string topic
     location_y = (relative_pointing_y * cos(-robot_theta)) + (relative_pointing_x * sin(-robot_theta));
     location_z = point_z * 1000;   
 
-    /* Account for unreachable points in the cartesian space 
-    (e.g. outside the robot's forward reach)
-    Rotate the robot appropriately (by 90 degrees) if necessary */
+
 
     // Case 1: Pointing coordinates directly in front of the robot (+x direction): No rotation is needed, just choose arm
     if(location_x >= 0.0){
@@ -1775,20 +1295,7 @@ int location_attention(float point_x, float point_y, float point_z, string topic
     return 1;                                                           // attention executed successfully
 }
 
-/* 
- *   Function to execute the social attention
- *   The function moves the robot's head to look at the specified point in the environment centered around the detected faces.
- * 
- * @param:
- *    topics_file: the topics file
- *    realignment_threshold: the realignment threshold
- *    velocity_publisher: the velocity publisher
- *    social_control: the social control mode - saliency or random
- *    debug: the debug mode
- * 
- * @return:
- *   1 if the attention is executed successfully
- */
+
 int social_attention(std::string topics_file, int realignment_threshold, ros::Publisher velocity_publisher, int social_control, bool debug){
     std::string head_topic;                                             // stores the head topic
     // Extract the topic for the head
@@ -1900,7 +1407,7 @@ int social_attention(std::string topics_file, int realignment_threshold, ros::Pu
         // Set the control head pitch and yaw
         control_head_pitch = head_joint_states[0];
         control_head_yaw = head_joint_states[1];
-        // ROS_INFO("%s: Joint States: Head Pitch: %f, Head Yaw: %f", node_name.c_str(), control_head_pitch, control_head_yaw);
+  
 
 
         if(face_detected && sound_detected){                            // When a face is detected and sound is detected
@@ -1975,20 +1482,7 @@ int social_attention(std::string topics_file, int realignment_threshold, ros::Pu
     return 1;                                                           // attention executed successfully  
 }
 
-/* 
- *   Function to execute the scanning attention
- *   The function moves the robot's head to scan the environment.
- * 
- * @param:
- *    control_head_yaw: the yaw angle of the head
- *    control_head_pitch: the pitch angle of the head
- *    topics_file: the topics file
- *    velocity_publisher: the velocity publisher
- *    debug: the debug mode
- * 
- * @return:
- *   1 if the attention is executed successfully
- */
+
 int scanning_attention(double control_head_yaw, double control_head_pitch, string topics_file, ros::Publisher velocity_publisher, bool debug){
 
     string head_topic;
@@ -2015,11 +1509,6 @@ int scanning_attention(double control_head_yaw, double control_head_pitch, strin
         control_head_pitch = MIN_HEAD_PITCH_SCANNING;
     }
 
-    // Move the robot's head to scan the environment based on the specified head pitch and head yaw
-    // if(move_robot_head_biological_motion(head_topic, control_head_pitch, control_head_yaw, 1.0, debug) != 0){
-    //     ROS_WARN("%s: error moving the robot's head to the scanning location", node_name.c_str());
-    //     return -1;                                                      // return -1 if the robot's head is not moved to the specified scanning location
-    // }
     if(move_robot_head(head_topic, control_head_pitch, control_head_yaw, 0.5, debug) != 0){
         ROS_WARN("%s: error moving the robot's head to the scanning location", node_name.c_str());
         return -1;                                                      // return -1 if the robot's head is not moved to the specified scanning location
@@ -2034,20 +1523,7 @@ int scanning_attention(double control_head_yaw, double control_head_pitch, strin
     return 1;
 }
 
-/* 
- *   Function to execute the seeking attention
- *   The function moves the robot's head to seek the environment.
- * 
- * @param:
- *    topics_file: the topics file
- *    realignment_threshold: the realignment threshold
- *    velocity_publisher: the velocity publisher
- *    overt_attention_mode_pub: the overt attention mode publisher
- *    debug: the debug mode
- * 
- * @return:
- *   1 if the attention is executed successfully
- */
+
 int seeking_attention(string topics_file, int realignment_threshold, ros::Publisher velocity_publisher, ros::Publisher overt_attention_mode_pub, bool debug){
     double next_angle;
     double control_head_yaw;
@@ -2097,10 +1573,7 @@ int seeking_attention(string topics_file, int realignment_threshold, ros::Publis
     overt_attention_mode_msg.value = DETECTING_MUTUAL_GAZE;
     overt_attention_mode_pub.publish(overt_attention_mode_msg);
 
-    // if(move_robot_head(head_topic, control_head_pitch, control_head_yaw, 0.5, debug) != 0){
-    //     ROS_WARN("%s: error moving the robot's head to the seeking location", node_name.c_str());
-    //     return -1;                                                      // return -1 if the robot's head is not moved to the specified seeking location
-    // }
+
 
     if(move_robot_head_biological_motion(head_topic, control_head_pitch, control_head_yaw, 1.0, debug) != 0){
         ROS_WARN("%s: error moving the robot's head to the seeking location", node_name.c_str());
@@ -2113,67 +1586,26 @@ int seeking_attention(string topics_file, int realignment_threshold, ros::Publis
 }
 
 
-/*  --------------------------------------------------
-            UTILITIY CONTROL FUNCTIONS 
-    -------------------------------------------------- 
-*/
 
-/* 
- *   Function to convert radians to degrees
- *   This function converts the angle in radians to degrees
- *
- * @param:
- *   radians: the angle in radians
- *
- * @return:
- *   the angle in degrees
- */
 double degrees(double radians)
 {
-    double degrees = radians * (double) 180.0 / (double) M_PI;          // David Vernon ... cast to float
+    double degrees = radians * (double) 180.0 / (double) M_PI;         
     return degrees;
 }
 
-/* 
- *   Function to convert degrees to radians
- *   This function converts the angle in degrees to radians
- *
- * @param:
- *   degrees: the angle in degrees
- *
- * @return:
- *   the angle in radians
- */
+\
 double radians(double degrees)
 {
-    double radians = degrees / ((double) 180.0 / (double) M_PI);        // David Vernon ... cast to float
+    double radians = degrees / ((double) 180.0 / (double) M_PI);        
     return radians;
 }
  
-/*  
- *   Function to prompt the user to press any key to exit the program
- *
- *   @param:
- *       status: the status of the program
- *
- *   @return:
- *       None
- */
 void prompt_and_exit(int status){
     printf("%s: Press any key to exit the program...", node_name.c_str());
     getchar();
     exit(status);
 }
 
-/*  
- *   Function to prompt the user to press any key to continue or press X to exit the program
- *
- *   @param:
- *       None
- *
- *   @return:
- *       None
- */
 void prompt_and_continue(){
     printf("%s: Press any key to continue or press X to exit the program...", node_name.c_str());
     char got_char = getchar();
@@ -2183,14 +1615,6 @@ void prompt_and_continue(){
     }
 }
 
-/*  
- *   Function to handle the shutdown signal
- *   Cancels all active goals and shuts down ROS
- *  @param:
- *      sig: the signal
- *  @return:
- *      None
- */
 void shut_down_handler(int sig) {
     printf("\n");
     ROS_WARN("%s: shutting down...", node_name.c_str());

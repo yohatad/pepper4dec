@@ -15,14 +15,18 @@ endif()
 # --- Find ament, ROS 2 & 3rd‑party deps ---------------------------------
 find_package(ament_cmake                REQUIRED)
 find_package(rclcpp                     REQUIRED)
+find_package(rclcpp_action              REQUIRED)
 find_package(std_msgs                   REQUIRED)
 find_package(geometry_msgs              REQUIRED)
 find_package(sensor_msgs                REQUIRED)
+find_package(trajectory_msgs            REQUIRED)
+find_package(control_msgs               REQUIRED)
 find_package(cv_bridge                  REQUIRED)
 find_package(image_transport            REQUIRED)
 find_package(rosidl_default_generators  REQUIRED)
 find_package(behaviortree_cpp           QUIET)
 find_package(yaml-cpp                   REQUIRED)
+find_package(OpenCV                     REQUIRED)
 
 # --- Message/service generation -----------------------------------------
 rosidl_generate_interfaces(${PROJECT_NAME}
@@ -40,6 +44,10 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "behaviorController/srv/SpeechEventSetLanguage.srv"
   "behaviorController/srv/TabletEventPromptAndGetResponse.srv"
   "behaviorController/srv/TextToSpeechSayText.srv"
+  # # overtAttention messages & services
+  # "overtAttention/msg/Mode.msg"
+  # "overtAttention/msg/Status.msg"
+  # "overtAttention/srv/SetMode.srv"
   DEPENDENCIES
     std_msgs
     geometry_msgs
@@ -99,35 +107,76 @@ else()
   message(WARNING "BehaviorTree.CPP not found; skipping behaviorController build.")
 endif()
 
-# --- 3) Install utilities library ---------------------------------------
+# # --- 3) overtAttention executable ----------------------------------------
+# add_executable(overtAttention
+#   overtAttention/src/overtAttentionApplication.cpp
+#   overtAttention/src/overtAttentionImplementation.cpp
+# )
+# target_include_directories(overtAttention
+#   PRIVATE
+#     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/overtAttention/include>
+#     $<INSTALL_INTERFACE:include>
+# )
+# ament_target_dependencies(overtAttention
+#   rclcpp
+#   rclcpp_action
+#   std_msgs
+#   sensor_msgs
+#   geometry_msgs
+#   trajectory_msgs
+#   control_msgs
+#   cv_bridge
+#   image_transport
+# )
+# target_link_libraries(overtAttention
+#   ${OpenCV_LIBRARIES}
+#   yaml-cpp
+# )
+# rosidl_target_interfaces(
+#   overtAttention
+#   ${PROJECT_NAME}
+#   "rosidl_typesupport_cpp"
+# )
+# install(TARGETS overtAttention
+#   RUNTIME DESTINATION lib/${PROJECT_NAME}
+# )
+
+# --- 4) Install utilities library ---------------------------------------
 install(TARGETS utilities
   ARCHIVE DESTINATION lib/${PROJECT_NAME}
   LIBRARY DESTINATION lib/${PROJECT_NAME}
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
-# --- 4) Install all headers --------------------------------------------
-# This will make #include "utilities/..." and #include "behaviorController/..."
+# --- 5) Install all headers --------------------------------------------
+# This will make #include "utilities/...", #include "behaviorController/...", and #include "overtAttention/..."
 # resolve correctly from the install space.
 install(DIRECTORY
   utilities/include/
   behaviorController/include/
+  # overtAttention/include/
   DESTINATION include
 )
 
-# --- 5) Python node ------------------------------------------------------
+# --- 6) Python node ------------------------------------------------------
 install(PROGRAMS
   face_detection/src/face_detection_application.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# --- 6) face_detection assets -------------------------------------------
+# --- 7) Module assets ---------------------------------------------------
 install(DIRECTORY
   face_detection/launch
   face_detection/models
   face_detection/config
   DESTINATION share/${PROJECT_NAME}/face_detection
 )
+
+# install(DIRECTORY
+#   overtAttention/config
+#   overtAttention/data
+#   DESTINATION share/${PROJECT_NAME}/overtAttention
+# )
 
 # (Optional) if you ever add top‑level .launch.py files:
 # install(DIRECTORY launch
