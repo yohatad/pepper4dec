@@ -33,17 +33,17 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   # face_detection messages
   "face_detection/msg/FaceDetectionMsgFile.msg"
   # behaviorController messages & services
-  "behaviorController/msg/FaceDetectionData.msg"
-  "behaviorController/msg/OvertAttentionMode.msg"
-  "behaviorController/srv/AnimateBehaviorSetActivation.srv"
-  "behaviorController/srv/GestureExecutionPerformGesture.srv"
-  "behaviorController/srv/OvertAttentionSetMode.srv"
-  "behaviorController/srv/RobotLocalizationResetPose.srv"
-  "behaviorController/srv/RobotNavigationSetGoal.srv"
-  "behaviorController/srv/SpeechEventSetEnabled.srv"
-  "behaviorController/srv/SpeechEventSetLanguage.srv"
-  "behaviorController/srv/TabletEventPromptAndGetResponse.srv"
-  "behaviorController/srv/TextToSpeechSayText.srv"
+  # "behaviorController/msg/FaceDetectionData.msg"
+  # "behaviorController/msg/OvertAttentionMode.msg"
+  # "behaviorController/srv/AnimateBehaviorSetActivation.srv"
+  # "behaviorController/srv/GestureExecutionPerformGesture.srv"
+  # "behaviorController/srv/OvertAttentionSetMode.srv"
+  # "behaviorController/srv/RobotLocalizationResetPose.srv"
+  # "behaviorController/srv/RobotNavigationSetGoal.srv"
+  # "behaviorController/srv/SpeechEventSetEnabled.srv"
+  # "behaviorController/srv/SpeechEventSetLanguage.srv"
+  # "behaviorController/srv/TabletEventPromptAndGetResponse.srv"
+  # "behaviorController/srv/TextToSpeechSayText.srv"
   # # overtAttention messages & services
   # "overtAttention/msg/Mode.msg"
   # "overtAttention/msg/Status.msg"
@@ -54,58 +54,39 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 )
 ament_export_dependencies(rosidl_default_runtime)
 
-# --- 1) Utilities library ------------------------------------------------
-add_library(utilities
-  utilities/src/cultureKnowledgeBaseImplementation.cpp
-  utilities/src/environmentKnowledgeBaseImplementation.cpp
-  utilities/src/behaviorControllerUtilities.cpp
-)
-target_include_directories(utilities
-  PUBLIC
-    # build‑time include
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/utilities/include>
-    # install‑time include
-    $<INSTALL_INTERFACE:include>
-)
-ament_target_dependencies(utilities
-  rclcpp
-  std_msgs
-  yaml-cpp
-)
-
-# --- 2) behaviorController executable ------------------------------------
-if(behaviortree_cpp_FOUND)
-  add_executable(behaviorController
-    behaviorController/src/behaviorControllerImplementation.cpp
-    behaviorController/src/behaviorControllerApplication.cpp
-  )
-  target_include_directories(behaviorController
-    PRIVATE
-      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/behaviorController/include>
-      $<INSTALL_INTERFACE:include>
-  )
-  ament_target_dependencies(behaviorController
-    rclcpp
-    std_msgs
-    geometry_msgs
-    behaviortree_cpp
-    yaml-cpp
-  )
-  target_link_libraries(behaviorController
-    utilities
-    yaml-cpp
-  )
-  rosidl_target_interfaces(
-    behaviorController
-    ${PROJECT_NAME}
-    "rosidl_typesupport_cpp"
-  )
-  install(TARGETS behaviorController
-    RUNTIME DESTINATION lib/${PROJECT_NAME}
-  )
-else()
-  message(WARNING "BehaviorTree.CPP not found; skipping behaviorController build.")
-endif()
+# --- 1) behaviorController executable ------------------------------------
+# if(behaviortree_cpp_FOUND)
+#   add_executable(behaviorController
+#     behaviorController/src/behaviorControllerImplementation.cpp
+#     behaviorController/src/behaviorControllerApplication.cpp
+#   )
+#   target_include_directories(behaviorController
+#     PRIVATE
+#       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/behaviorController/include>
+#       $<INSTALL_INTERFACE:include>
+#   )
+#   ament_target_dependencies(behaviorController
+#     rclcpp
+#     std_msgs
+#     geometry_msgs
+#     behaviortree_cpp
+#     yaml-cpp
+#   )
+#   target_link_libraries(behaviorController
+#     utilities
+#     yaml-cpp
+#   )
+#   rosidl_target_interfaces(
+#     behaviorController
+#     ${PROJECT_NAME}
+#     "rosidl_typesupport_cpp"
+#   )
+#   install(TARGETS behaviorController
+#     RUNTIME DESTINATION lib/${PROJECT_NAME}
+#   )
+# else()
+#   message(WARNING "BehaviorTree.CPP not found; skipping behaviorController build.")
+# endif()
 
 # # --- 3) overtAttention executable ----------------------------------------
 # add_executable(overtAttention
@@ -141,19 +122,13 @@ endif()
 #   RUNTIME DESTINATION lib/${PROJECT_NAME}
 # )
 
-# --- 4) Install utilities library ---------------------------------------
-install(TARGETS utilities
-  ARCHIVE DESTINATION lib/${PROJECT_NAME}
-  LIBRARY DESTINATION lib/${PROJECT_NAME}
-  RUNTIME DESTINATION lib/${PROJECT_NAME}
-)
 
 # --- 5) Install all headers --------------------------------------------
 # This will make #include "utilities/...", #include "behaviorController/...", and #include "overtAttention/..."
 # resolve correctly from the install space.
 install(DIRECTORY
-  utilities/include/
-  behaviorController/include/
+  # utilities/include/
+  # behaviorController/include/
   # overtAttention/include/
   DESTINATION include
 )

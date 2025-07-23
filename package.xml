@@ -3,7 +3,7 @@
   <name>cssr_system</name>
   <version>0.0.1</version>
   <description>All CSSR nodes</description>
-  <maintainer email="you@domain.tld">Your Name</maintainer>
+  <maintainer email="yohanneh@andrew.cmu.edu">Yohannes Tadesse Haile</maintainer>
   <license>Apache-2.0</license>
 
   <!-- build system -->
@@ -48,6 +48,10 @@
   <build_depend>opencv</build_depend>
   <exec_depend>opencv</exec_depend>
 
-  <!-- Python/runtime-only dependencies -->
   <exec_depend>rclpy</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+
 </package>

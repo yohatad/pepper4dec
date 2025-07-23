@@ -1,9 +1,0 @@
-string gesture_type
-int32 gesture_id
-int32 gesture_duration
-float32 bow_nod_angle
-float32 location_x
-float32 location_y
-float32 location_z
----
-bool gesture_success

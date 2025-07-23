@@ -15,8 +15,8 @@ This program comes with ABSOLUTELY NO WARRANTY.
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, GroupAction
-from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, TextSubstitution
+from launch.conditions import LaunchConfigurationEquals
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 import os
@@ -28,31 +28,31 @@ def generate_launch_description():
         default_value='172.29.111.230',
         description='Pepper robot IP address'
     )
-    
+
     roscore_ip_arg = DeclareLaunchArgument(
         'roscore_ip',
         default_value='127.0.0.1',
         description='ROS core IP address'
     )
-    
+
     robot_port_arg = DeclareLaunchArgument(
         'robot_port',
         default_value='9559',
         description='Pepper robot port'
     )
-    
+
     network_interface_arg = DeclareLaunchArgument(
         'network_interface',
         default_value='wlp0s20f3',
         description='Network interface for Pepper robot connection'
     )
-    
+
     namespace_arg = DeclareLaunchArgument(
         'namespace',
         default_value='naoqi_driver',
         description='Namespace for naoqi driver'
     )
-    
+
     camera_arg = DeclareLaunchArgument(
         'camera',
         default_value='realsense',
@@ -70,12 +70,11 @@ def generate_launch_description():
     # Face detection node
     face_detection_node = Node(
         package='cssr_system',
-        executable='face_detection_node.py',
+        executable='face_detection_application.py',
         name='faceDetection',
         parameters=[
             {'camera': camera},
             {'unit_tests': False},
-            # Load parameters from YAML file
             os.path.join(
                 FindPackageShare('cssr_system').find('cssr_system'),
                 'face_detection/config',
@@ -85,32 +84,34 @@ def generate_launch_description():
         output='screen'
     )
 
-    # Pepper Robot group (launch naoqi_driver if camera=pepper)
+    # Pepper Robot group (only if camera == pepper)
     pepper_group = GroupAction(
-        condition=IfCondition(
-            [camera, TextSubstitution(text=' == pepper')]
-        ),
+        condition=LaunchConfigurationEquals('camera', 'pepper'),
         actions=[
             Node(
                 package='naoqi_driver',
                 executable='naoqi_driver_node',
                 name=namespace,
                 arguments=[
-                    '--qi-url=tcp://', robot_ip, ':', robot_port,
-                    '--roscore_ip=', roscore_ip,
-                    '--network_interface=', network_interface,
-                    '--namespace=', namespace
+                    TextSubstitution(text='--qi-url=tcp://'),
+                    robot_ip,
+                    TextSubstitution(text=':'),
+                    robot_port,
+                    TextSubstitution(text=' --roscore_ip='),
+                    roscore_ip,
+                    TextSubstitution(text=' --network_interface='),
+                    network_interface,
+                    TextSubstitution(text=' --namespace='),
+                    namespace
                 ],
                 output='screen'
             )
         ]
     )
 
-    # RealSense Camera group (launch realsense if camera=realsense)
+    # RealSense Camera group (only if camera == realsense)
     realsense_group = GroupAction(
-        condition=IfCondition(
-            [camera, TextSubstitution(text=' == realsense')]
-        ),
+        condition=LaunchConfigurationEquals('camera', 'realsense'),
         actions=[
             Node(
                 package='realsense2_camera',
@@ -132,15 +133,15 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        # Launch arguments
+        # Declare arguments
         robot_ip_arg,
         roscore_ip_arg,
         robot_port_arg,
         network_interface_arg,
         namespace_arg,
         camera_arg,
-        
-        # Nodes and groups
+
+        # Launch nodes
         face_detection_node,
         pepper_group,
         realsense_group
