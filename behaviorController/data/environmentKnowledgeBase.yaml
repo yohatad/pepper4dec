@@ -142,6 +142,7 @@ locations:
     pre_gesture_message_isizulu: "No message in isiZulu"
     pre_gesture_message_kinyarwanda: "Iyiyo yitwa rumba"
     post_gesture_message_english: "who oversees these programs and even try a mini hackathon challenge yourself!"
+    post_gesture_message_isizulu: "No message in isiZulu"
     post_gesture_message_kinyarwanda: "Tuyikoresha mukwigisha mobile robotikisi"
     cultural_knowledge: ["DeicticShape"]
 

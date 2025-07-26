@@ -67,7 +67,9 @@ bool KnowledgeManager::loadFromPackage(const std::string& packagePath) {
     std::lock_guard<std::mutex> lock(mutex_);
     try {
         // Load culture knowledge base
-        YAML::Node cultureConfig = YAML::LoadFile(packagePath + "/config/behaviorControllerConfiguration.yaml");
+        std::string cultureFilePath = packagePath + "/behaviorController/data/cultureKnowledgeBase.yaml";
+        std::cout << "Loading culture knowledge base from: " << cultureFilePath << std::endl;
+        YAML::Node cultureConfig = YAML::LoadFile(cultureFilePath);
         if (cultureConfig["utility_phrases"]) {
             for (const auto& langNode : cultureConfig["utility_phrases"]) {
                 std::string lang = langNode.first.as<std::string>();
@@ -80,7 +82,9 @@ bool KnowledgeManager::loadFromPackage(const std::string& packagePath) {
         }
 
         // Load environment knowledge base
-        YAML::Node envConfig = YAML::LoadFile(packagePath + "/data/environmentKnowledgeBase.yaml");
+        std::string envFilePath = packagePath + "/behaviorController/data/environmentKnowledgeBase.yaml";
+        std::cout << "Loading environment knowledge base from: " << envFilePath << std::endl;
+        YAML::Node envConfig = YAML::LoadFile(envFilePath);
         if (envConfig["locations"]) {
             for (const auto& locationNode : envConfig["locations"]) {
                 std::string locationId = locationNode.first.as<std::string>();
@@ -122,8 +126,10 @@ bool KnowledgeManager::loadFromPackage(const std::string& packagePath) {
         }
 
         loaded_ = true;
+        std::cout << "Knowledge base loaded successfully" << std::endl;
         return true;
-    } catch (const std::exception&) {
+    } catch (const std::exception& e) {
+        std::cout << "Exception loading knowledge base: " << e.what() << std::endl;
         return false;
     }
 }
@@ -306,7 +312,7 @@ void BaseTreeNode::storeTestResult(const std::string& nodeName, bool success) {
 std::string getConfigValue(const std::string& key) {
     try {
         std::string packagePath = ament_index_cpp::get_package_share_directory("cssr_system");
-        YAML::Node config = YAML::LoadFile(packagePath + "/config/behaviorControllerConfiguration.yaml");
+        YAML::Node config = YAML::LoadFile(packagePath + "/behaviorController/config/behaviorControllerConfiguration.yaml");
         
         if (config[key]) {
             return config[key].as<std::string>();
@@ -316,39 +322,6 @@ std::string getConfigValue(const std::string& key) {
     } catch (const YAML::Exception& e) {
         throw std::runtime_error("YAML parsing error: " + std::string(e.what()));
     }
-}
-
-std::string readValueFromFile(const std::string& filename, const std::string& key) {
-    std::string packagePath = ament_index_cpp::get_package_share_directory("cssr_system");
-    std::string fullPath = packagePath + "/data/" + filename;
-    
-    std::ifstream file(fullPath);
-    if (!file.is_open()) {
-        throw std::runtime_error("Failed to open file: " + fullPath);
-    }
-    
-    std::string line;
-    while (std::getline(file, line)) {
-        std::istringstream iss(line);
-        std::string fileKey;
-        std::string value;
-        
-        if (iss >> fileKey) {
-            std::getline(iss, value);
-            
-            // Trim whitespace
-            value.erase(0, value.find_first_not_of(" \t"));
-            value.erase(value.find_last_not_of(" \t") + 1);
-            
-            if (fileKey == key) {
-                file.close();
-                return value;
-            }
-        }
-    }
-    
-    file.close();
-    throw std::runtime_error("Key not found in file " + filename + ": " + key);
 }
 
 bool validateConfigurationFile(const std::string& configPath) {

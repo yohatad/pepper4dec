@@ -1,4 +1,4 @@
-/* behaviorControllerInterface.h - Clean and optimized interface
+/* behaviorControllerInterface.h 
  *
  * Author: Yohannes Tadesse Haile
  * Date: July 25, 2025
@@ -6,7 +6,6 @@
  *
  * Copyright (C) 2025 CyLab Carnegie Mellon University Africa
  */
-
 #ifndef BEHAVIOR_CONTROLLER_INTERFACE_H
 #define BEHAVIOR_CONTROLLER_INTERFACE_H
 
@@ -243,13 +242,18 @@ protected:
 };
 
 //=============================================================================
+// Global Shutdown Coordination Functions (NEW)
+//=============================================================================
+void setGlobalNode(std::shared_ptr<rclcpp::Node> node);
+void setShutdownRequested(bool shutdown);
+std::shared_ptr<rclcpp::Node> getGlobalNode();
+bool isShutdownRequested();
+
+//=============================================================================
 // Function Declarations
 //=============================================================================
 BT::Tree initializeTree(const std::string& scenario, std::shared_ptr<rclcpp::Node> node);
 std::string getConfigValue(const std::string& key);
-
-// Global node setter for behavior tree nodes
-void setGlobalNode(std::shared_ptr<rclcpp::Node> node);
 
 //=============================================================================
 // Template Implementations
@@ -259,11 +263,23 @@ bool ServiceManager::callService(const std::string& serviceName,
                                 typename ServiceType::Request::SharedPtr request,
                                 typename ServiceType::Response::SharedPtr& response) {
     try {
+        // Check if ROS is still OK before attempting service call
+        if (!rclcpp::ok()) {
+            RCLCPP_WARN(node_->get_logger(), "ROS is shutting down, skipping service call to %s", serviceName.c_str());
+            return false;
+        }
+        
         auto client = getClient<ServiceType>(serviceName);
         auto timeout = std::chrono::seconds(Constants::SERVICE_TIMEOUT_SEC);
         
         if (!client->wait_for_service(timeout)) {
             RCLCPP_ERROR(node_->get_logger(), "Service %s not available", serviceName.c_str());
+            return false;
+        }
+        
+        // Check again before making the actual call
+        if (!rclcpp::ok()) {
+            RCLCPP_WARN(node_->get_logger(), "ROS is shutting down, aborting service call to %s", serviceName.c_str());
             return false;
         }
         

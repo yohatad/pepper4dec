@@ -27,11 +27,13 @@ find_package(rosidl_default_generators  REQUIRED)
 find_package(behaviortree_cpp           QUIET)
 find_package(yaml-cpp                   REQUIRED)
 find_package(OpenCV                     REQUIRED)
+find_package(ament_index_cpp            REQUIRED)
 
 # --- Message/service generation -----------------------------------------
 rosidl_generate_interfaces(${PROJECT_NAME}
   # face_detection messages
   "face_detection/msg/FaceDetectionMsgFile.msg"
+  
   # behaviorController messages & services
   "behaviorController/msg/FaceDetectionData.msg"
   "behaviorController/msg/OvertAttentionMode.msg"
@@ -44,10 +46,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "behaviorController/srv/SpeechEventSetLanguage.srv"
   "behaviorController/srv/TabletEventPromptAndGetResponse.srv"
   "behaviorController/srv/TextToSpeechSayText.srv"
-  # overtAttention messages & services
-  # "overtAttention/msg/Mode.msg"
-  # "overtAttention/msg/Status.msg"
-  # "overtAttention/srv/SetMode.srv"
+  
   DEPENDENCIES builtin_interfaces std_msgs geometry_msgs
 )
 
@@ -60,19 +59,23 @@ if(behaviortree_cpp_FOUND)
     behaviorController/src/behaviorControllerApplication.cpp
     behaviorController/src/behaviorControllerUtilities.cpp
   )
+  
   target_include_directories(behaviorController
     PRIVATE
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/behaviorController/include>
       $<INSTALL_INTERFACE:include>
   )
+  
   ament_target_dependencies(behaviorController
     rclcpp
     std_msgs
     geometry_msgs
     behaviortree_cpp
     yaml-cpp
+    ament_index_cpp
   )
   target_link_libraries(behaviorController yaml-cpp)
+  
   rosidl_target_interfaces(behaviorController ${PROJECT_NAME} "rosidl_typesupport_cpp")
   
   install(TARGETS behaviorController RUNTIME DESTINATION lib/${PROJECT_NAME})
@@ -82,47 +85,11 @@ else()
 endif()
 
 # # --- 3) overtAttention executable ----------------------------------------
-# add_executable(overtAttention
-#   overtAttention/src/overtAttentionApplication.cpp
-#   overtAttention/src/overtAttentionImplementation.cpp
-# )
-# target_include_directories(overtAttention
-#   PRIVATE
-#     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/overtAttention/include>
-#     $<INSTALL_INTERFACE:include>
-# )
-# ament_target_dependencies(overtAttention
-#   rclcpp
-#   rclcpp_action
-#   std_msgs
-#   sensor_msgs
-#   geometry_msgs
-#   trajectory_msgs
-#   control_msgs
-#   cv_bridge
-#   image_transport
-# )
-# target_link_libraries(overtAttention
-#   ${OpenCV_LIBRARIES}
-#   yaml-cpp
-# )
-# rosidl_target_interfaces(
-#   overtAttention
-#   ${PROJECT_NAME}
-#   "rosidl_typesupport_cpp"
-# )
-# install(TARGETS overtAttention
-#   RUNTIME DESTINATION lib/${PROJECT_NAME}
-# )
-
+# (omitted for brevity)
 
 # --- 5) Install all headers --------------------------------------------
-# This will make #include "utilities/...", #include "behaviorController/...", and #include "overtAttention/..."
-# resolve correctly from the install space.
 install(DIRECTORY
-  # utilities/include/
   behaviorController/include/
-  # overtAttention/include/
   DESTINATION include
 )
 
@@ -140,15 +107,18 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}/face_detection
 )
 
-# install(DIRECTORY
-#   overtAttention/config
-#   overtAttention/data
-#   DESTINATION share/${PROJECT_NAME}/overtAttention
-# )
+# Install behaviorController config where the code expects it
+install(DIRECTORY
+  behaviorController/config/
+  DESTINATION share/${PROJECT_NAME}/behaviorController/config
+)
 
-# (Optional) if you ever add top‑level .launch.py files:
-# install(DIRECTORY launch
-#   DESTINATION share/${PROJECT_NAME}/launch
-# )
+# Keep behaviorController’s data grouped under its own folder
+install(DIRECTORY
+  behaviorController/data/
+  DESTINATION share/${PROJECT_NAME}/behaviorController/data
+)
+
+# (Optional) other installs…
 
 ament_package()
