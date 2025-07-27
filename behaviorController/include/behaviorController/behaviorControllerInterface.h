@@ -6,6 +6,7 @@
  *
  * Copyright (C) 2025 CyLab Carnegie Mellon University Africa
  */
+
 #ifndef BEHAVIOR_CONTROLLER_INTERFACE_H
 #define BEHAVIOR_CONTROLLER_INTERFACE_H
 
@@ -242,18 +243,13 @@ protected:
 };
 
 //=============================================================================
-// Global Shutdown Coordination Functions (NEW)
-//=============================================================================
-void setGlobalNode(std::shared_ptr<rclcpp::Node> node);
-void setShutdownRequested(bool shutdown);
-std::shared_ptr<rclcpp::Node> getGlobalNode();
-bool isShutdownRequested();
-
-//=============================================================================
 // Function Declarations
 //=============================================================================
 BT::Tree initializeTree(const std::string& scenario, std::shared_ptr<rclcpp::Node> node);
 std::string getConfigValue(const std::string& key);
+
+// Global node setter for behavior tree nodes
+void setGlobalNode(std::shared_ptr<rclcpp::Node> node);
 
 //=============================================================================
 // Template Implementations

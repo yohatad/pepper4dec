@@ -189,74 +189,45 @@ Version: v1.0
 
 namespace {
     std::atomic<bool> shutdownRequested{false};
-    std::atomic<bool> cleanupInProgress{false};
     std::shared_ptr<rclcpp::Node> globalNode = nullptr;
     std::unique_ptr<BT::Groot2Publisher> groot2Publisher = nullptr;
     BT::Tree* globalTree = nullptr;
-    std::mutex cleanupMutex;
 }
 
 void signalHandler(int signal) {
     if (signal == SIGINT || signal == SIGTERM) {
-        bool expected = false;
-        if (shutdownRequested.compare_exchange_strong(expected, true)) {
-            // Only log the first signal
-            if (globalNode) {
-                RCLCPP_INFO(globalNode->get_logger(), "Shutdown signal received");
-            } else {
-                std::cout << "Shutdown signal received" << std::endl;
-            }
-        }
-        // Don't call rclcpp::shutdown() here - let main handle it
+        RCLCPP_INFO(rclcpp::get_logger("behaviorController"), "Shutdown signal received");
+        shutdownRequested = true;
     }
 }
 
 void cleanupResources() {
-    std::lock_guard<std::mutex> lock(cleanupMutex);
-    
-    // Prevent multiple cleanup attempts
-    if (cleanupInProgress.exchange(true)) {
-        return;
-    }
-    
     try {
         // 1. First, halt the behavior tree to stop all ongoing operations
         if (globalTree) {
-            try {
-                globalTree->haltTree();
-                // Give tree time to properly halt
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            } catch (const std::exception& e) {
-                // Ignore tree halt exceptions during shutdown
-            }
-            globalTree = nullptr;
+            globalTree->haltTree();
         }
         
         // 2. Reset Groot2Publisher before shutting down ROS
         if (groot2Publisher) {
-            try {
-                groot2Publisher.reset();
-            } catch (const std::exception& e) {
-                // Ignore publisher reset exceptions
-            }
+            groot2Publisher.reset();
         }
         
         // 3. Clear knowledge manager cache
-        try {
-            KnowledgeManager::instance().clearCache();
-        } catch (const std::exception& e) {
-            // Ignore cache clear exceptions
-        }
+        KnowledgeManager::instance().clearCache();
         
         // 4. Give time for any pending operations to complete
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        
+        // 5. Reset global node reference
+        if (globalNode) {
+            globalNode.reset();
+        }
         
     } catch (const std::exception& e) {
         // Ignore exceptions during cleanup to prevent cascading errors
-        if (globalNode) {
-            RCLCPP_WARN(globalNode->get_logger(), 
-                       "Exception during cleanup: %s", e.what());
-        }
+        RCLCPP_WARN(rclcpp::get_logger("behaviorController"), 
+                   "Exception during cleanup: %s", e.what());
     }
 }
 
@@ -394,12 +365,6 @@ int main(int argc, char** argv) {
         try {
             tree = initializeTree(scenario, node);
             globalTree = &tree;
-            
-            // Set shutdown flag function for behavior tree nodes
-            // (You'll need to declare this function in your header)
-            extern void setShutdownRequested(bool);
-            setShutdownRequested(false);
-            
         } catch (const std::exception& e) {
             logger.error("Failed to initialize behavior tree: " + std::string(e.what()));
             exitCode = 1;
@@ -418,37 +383,16 @@ int main(int argc, char** argv) {
         logger.info("Starting Mission Execution...");
         logger.info("=== START OF TREE ===");
         
-        // Track consecutive failures to prevent infinite loops
-        int consecutiveFailures = 0;
-        const int maxConsecutiveFailures = 5;
-        
-        while (rclcpp::ok() && !shutdownRequested && consecutiveFailures < maxConsecutiveFailures) {
+        while (rclcpp::ok() && !shutdownRequested) {
             try {
-                // Check if shutdown was requested
+                // Check if shutdown was requested before ticking the tree
                 if (shutdownRequested) {
-                    // Signal behavior tree nodes to stop
-                    extern void setShutdownRequested(bool);
-                    setShutdownRequested(true);
-                    
                     logger.info("Shutdown requested, stopping behavior tree execution");
                     break;
                 }
                 
-                // Tick the behavior tree with timeout protection
-                BT::NodeStatus status = BT::NodeStatus::RUNNING;
-                try {
-                    status = tree.tickOnce();
-                    consecutiveFailures = 0; // Reset on successful tick
-                } catch (const std::exception& e) {
-                    logger.error("Exception during tree tick: " + std::string(e.what()));
-                    consecutiveFailures++;
-                    if (consecutiveFailures >= maxConsecutiveFailures) {
-                        logger.error("Too many consecutive failures, shutting down");
-                        break;
-                    }
-                    rate.sleep();
-                    continue;
-                }
+                // Tick the behavior tree
+                auto status = tree.tickOnce();
                 
                 // Handle tree completion
                 if (status == BT::NodeStatus::SUCCESS) {
@@ -460,14 +404,9 @@ int main(int argc, char** argv) {
                     break;
                 }
                 
-                // Process ROS callbacks only if ROS is still OK and not shutting down
+                // Process ROS callbacks only if ROS is still OK
                 if (rclcpp::ok() && !shutdownRequested) {
-                    try {
-                        rclcpp::spin_some(node);
-                    } catch (const std::exception& e) {
-                        logger.warn("Exception during spin_some: " + std::string(e.what()));
-                        // Continue execution, this is not critical
-                    }
+                    rclcpp::spin_some(node);
                 }
                 
                 // Periodic status logging
@@ -478,30 +417,16 @@ int main(int argc, char** argv) {
                     }
                 }
                 
-                // Sleep only if not shutting down
-                if (!shutdownRequested) {
-                    rate.sleep();
-                }
+                rate.sleep();
                 
             } catch (const std::exception& e) {
                 logger.error("Exception in main loop: " + std::string(e.what()));
-                consecutiveFailures++;
-                
                 // If we get an exception during shutdown, break the loop
                 if (shutdownRequested || !rclcpp::ok()) {
                     break;
                 }
-                
-                // If too many failures, break
-                if (consecutiveFailures >= maxConsecutiveFailures) {
-                    logger.error("Too many consecutive failures, shutting down");
-                    break;
-                }
-                
                 // Continue execution for non-critical exceptions
-                if (!shutdownRequested) {
-                    rate.sleep();
-                }
+                rate.sleep();
             }
         }
         
@@ -513,7 +438,7 @@ int main(int argc, char** argv) {
     cleanup:
     // Cleanup section - this runs regardless of how we exit
     try {
-        if (globalNode && !cleanupInProgress) {
+        if (globalNode) {
             Logger logger(globalNode);
             logger.info("Shutting down gracefully...");
         }
@@ -521,33 +446,22 @@ int main(int argc, char** argv) {
         // Clean up resources in proper order
         cleanupResources();
         
-        // Shutdown ROS if it's still running
+        // Shutdown ROS last
         if (rclcpp::ok()) {
             rclcpp::shutdown();
         }
         
-        // Wait a bit longer for ROS to fully shutdown
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        // Final wait to ensure all threads are cleaned up
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
         
-        // Reset global node last
         if (globalNode) {
-            try {
-                globalNode.reset();
-            } catch (const std::exception& e) {
-                // Ignore node reset exceptions
-            }
+            Logger logger(globalNode);
+            logger.info("Shutdown complete");
         }
-        
-        // Final status message
-        std::cout << "Shutdown complete" << std::endl;
         
     } catch (const std::exception& e) {
         // Final exception handler - don't throw anything from here
         std::cerr << "Exception during final cleanup: " << e.what() << std::endl;
-        exitCode = 1;
-    } catch (...) {
-        // Catch any other type of exception
-        std::cerr << "Unknown exception during final cleanup" << std::endl;
         exitCode = 1;
     }
     
