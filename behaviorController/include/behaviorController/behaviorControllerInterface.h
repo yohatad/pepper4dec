@@ -85,8 +85,8 @@ struct LocationInfo {
     std::string description;
     RobotPose robotPose;
     Position3D gestureTarget;
-    std::unordered_map<std::string, std::string> preMessages;  // language -> message
-    std::unordered_map<std::string, std::string> postMessages; // language -> message
+    std::unordered_map<std::string, std::string> preMessages;  
+    std::unordered_map<std::string, std::string> postMessages;
 };
 
 struct TourSpec {
@@ -132,7 +132,6 @@ public:
     static KnowledgeManager& instance();
     
     bool loadFromPackage(const std::string& packagePath);
-    void clearCache();
     
     std::string getUtilityPhrase(const std::string& phraseId, const std::string& language = "");
     LocationInfo getLocationInfo(const std::string& locationId);
@@ -141,7 +140,7 @@ public:
 private:
     KnowledgeManager() = default;
     mutable std::mutex mutex_;
-    std::unordered_map<std::string, std::string> utilityPhrases_; // "lang:id" -> phrase
+    std::unordered_map<std::string, std::string> utilityPhrases_;
     std::unordered_map<std::string, LocationInfo> locations_;
     std::optional<TourSpec> tourSpec_;
     bool loaded_ = false;
@@ -201,16 +200,6 @@ private:
     bool isTopicAvailable(const std::string& topicName);
 };
 
-// Test Manager
-class TestManager {
-public:
-    explicit TestManager(std::shared_ptr<rclcpp::Node> node);
-    void storeResult(const std::string& key, bool success);
-
-private:
-    std::shared_ptr<rclcpp::Node> node_;
-};
-
 // Word Processing Utilities
 class TextUtils {
 public:
@@ -223,33 +212,48 @@ public:
 //=============================================================================
 class BaseTreeNode {
 protected:
-    std::shared_ptr<rclcpp::Node> node_;
-    std::unique_ptr<Logger> logger_;
+    std::shared_ptr<rclcpp::Node>   node_;
+    std::unique_ptr<Logger>         logger_;
     std::unique_ptr<ServiceManager> serviceManager_;
-    std::unique_ptr<TestManager> testManager_;
-    
+
 public:
-    explicit BaseTreeNode(std::shared_ptr<rclcpp::Node> node);
+    /** 
+     * Construct by retrieving the ROS2 node handle from the BT blackboard.
+     * Throws if someone forgot to put "node" into the blackboard before tree creation.
+     */
+    explicit BaseTreeNode(const BT::NodeConfiguration &config);
+
     virtual ~BaseTreeNode() = default;
 
 protected:
-    void storeTestResult(const std::string& nodeName, bool success);
-    
     template<typename ServiceType>
-    bool callServiceSafely(const std::string& serviceName,
-                          typename ServiceType::Request::SharedPtr request,
-                          typename ServiceType::Response::SharedPtr& response,
-                          const std::string& nodeName);
+    bool callServiceSafely(const std::string                        &serviceName,
+                           typename ServiceType::Request::SharedPtr  request,
+                           typename ServiceType::Response::SharedPtr &response,
+                           const std::string                        &treeNodeName);
 };
 
 //=============================================================================
 // Function Declarations
 //=============================================================================
-BT::Tree initializeTree(const std::string& scenario, std::shared_ptr<rclcpp::Node> node);
-std::string getConfigValue(const std::string& key);
+namespace behavior_controller {
 
-// Global node setter for behavior tree nodes
-void setGlobalNode(std::shared_ptr<rclcpp::Node> node);
+/**
+ * @brief Build and register all ROS2‑aware and custom BehaviorTree.CPP nodes,
+ *        load the XML file for the given scenario, and return a ready‑to‑tick tree.
+ *
+ * @param scenario      Base name (without “.xml”) of the tree file under data/
+ * @param node_handle   Shared pointer to your ROS2 node (injected into every BT node)
+ * @return BT::Tree     The fully constructed behavior tree
+ * @throws std::runtime_error if the XML file cannot be found or loaded
+ */
+BT::Tree initializeTree(
+    const std::string &scenario,
+    std::shared_ptr<rclcpp::Node> node_handle);
+
+}  // namespace behavior_controller
+
+std::string getConfigValue(const std::string& key);
 
 //=============================================================================
 // Template Implementations
@@ -315,11 +319,11 @@ template<typename ServiceType>
 bool BaseTreeNode::callServiceSafely(const std::string& serviceName,
                                      typename ServiceType::Request::SharedPtr request,
                                      typename ServiceType::Response::SharedPtr& response,
-                                     const std::string& nodeName) {
+                                     const std::string& treeNodeName) {
     try {
         return serviceManager_->callService<ServiceType>(serviceName, request, response);
     } catch (const std::exception& e) {
-        logger_->error("Exception in " + nodeName + " service call: " + e.what());
+        logger_->error("Exception in " + treeNodeName + " service call: " + e.what());
         return false;
     }
 }

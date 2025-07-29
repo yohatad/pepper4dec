@@ -7,7 +7,7 @@ This program comes with ABSOLUTELY NO WARRANTY.
 */
 
 /*
-behaviorControllerApplication.cpp   ROS2 node to execute robot missions using Behavior Tree framework.
+behaviorControllerApplication.cpp ROS2 node to execute robot missions using Behavior Tree framework.
 
 The behavior controller is implemented as a ROS2 node that orchestrates complex robot behaviors through a behavior tree
 architecture. It manages multi-language tour guide scenarios for the Pepper robot, including face detection integration,
@@ -60,7 +60,6 @@ Configuration File Parameters:
     scenario_specification          lab_tour                Mission scenario XML file name
     verbose_mode                    true/false              Enable/disable detailed logging
     asr_enabled                     true/false              Enable/disable Automatic Speech Recognition
-    test_mode                       true/false              Enable/disable test result recording
 
 Behavior Tree Node Types:
     Action Nodes:
@@ -108,7 +107,6 @@ Services Invoked:
     /robotNavigation/set_goal                       cssr_system::srv::RobotNavigationSetGoal           Navigate to target locations
     /speechEvent/set_language                       cssr_system::srv::SpeechEventSetLanguage           Configure speech recognition language
     /speechEvent/set_enabled                        cssr_system::srv::SpeechEventSetEnabled            Enable/disable speech recognition
-    /tabletEvent/prompt_and_get_response            cssr_system::srv::TabletEventPromptAndGetResponse  Display tablet interface prompts
     /textToSpeech/say_text                          cssr_system::srv::TextToSpeechSayText              Execute text-to-speech synthesis
 
 Input Data Files:
@@ -117,57 +115,23 @@ Input Data Files:
     - cultureKnowledgeBase.yaml: Language-specific phrases and cultural data
 
 Output Data Files:
-    None (Results stored as ROS2 parameters when in test mode)
+    None
 
 Configuration Files:
     - behaviorControllerConfiguration.yaml: Main configuration file
     - environmentKnowledgeBase.yaml: Spatial and content knowledge
     - cultureKnowledgeBase.yaml: Cultural and linguistic knowledge
 
-Multi-Language Support:
-    Supported Languages:
-        - English: Primary language with full feature support
-        - Kinyarwanda: Local language support for Rwanda deployment
-        - IsiZulu: Additional African language support
+Supported Languages:
+    - English: Primary language with full feature support
+    - Kinyarwanda: Local language support for Rwanda deployment
     
-    Language-Specific Features:
-        - Utility phrases and greetings
-        - Location descriptions and tour content
-        - Speech recognition vocabulary
-        - Cultural gesture preferences
-
-Tour Management:
-    Location Features:
-        - Dynamic tour route configuration
-        - Multi-language location descriptions
-        - Gesture target coordinates
-        - Cultural interaction preferences
-    
-    Interaction Modes:
-        - Face-to-face conversation
-        - Tablet-based interaction
-        - Speech recognition input
-        - Gesture-based communication
-
-Error Handling and Recovery:
-    - Service availability verification
-    - Topic connectivity monitoring
-    - Graceful degradation for missing components
-    - Comprehensive test result tracking
-    - Signal-based shutdown handling
-
 Example Instantiation of the Module:
     # Basic execution
     ros2 run cssr_system behaviorController
 
     # With custom configuration
     ros2 run cssr_system behaviorController --ros-args -p config_path:=/path/to/config.yaml
-
-    # Launch with full system
-    ros2 launch cssr_system behavior_controller_launch.py
-
-    # Test mode execution
-    ros2 run cssr_system behaviorController --ros-args -p test_mode:=true
 
 System Architecture Integration:
     The behavior controller serves as the central orchestrator in the CSSR4Africa system architecture,
@@ -176,7 +140,6 @@ System Architecture Integration:
         - Speech recognition and text-to-speech subsystem  
         - Robot navigation and localization subsystem
         - Gesture execution and animation subsystem
-        - Tablet interface and human-computer interaction subsystem
         - Knowledge management and cultural adaptation subsystem
 
 Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
@@ -187,283 +150,163 @@ Version: v1.0
 
 #include "behaviorController/behaviorControllerInterface.h"
 
-namespace {
-    std::atomic<bool> shutdownRequested{false};
-    std::shared_ptr<rclcpp::Node> globalNode = nullptr;
-    std::unique_ptr<BT::Groot2Publisher> groot2Publisher = nullptr;
-    BT::Tree* globalTree = nullptr;
-}
-
-void signalHandler(int signal) {
-    if (signal == SIGINT || signal == SIGTERM) {
-        RCLCPP_INFO(rclcpp::get_logger("behaviorController"), "Shutdown signal received");
-        shutdownRequested = true;
-    }
-}
-
-void cleanupResources() {
-    try {
-        // 1. First, halt the behavior tree to stop all ongoing operations
-        if (globalTree) {
-            globalTree->haltTree();
-        }
-        
-        // 2. Reset Groot2Publisher before shutting down ROS
-        if (groot2Publisher) {
-            groot2Publisher.reset();
-        }
-        
-        // 3. Clear knowledge manager cache
-        KnowledgeManager::instance().clearCache();
-        
-        // 4. Give time for any pending operations to complete
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        
-        // 5. Reset global node reference
-        if (globalNode) {
-            globalNode.reset();
-        }
-        
-    } catch (const std::exception& e) {
-        // Ignore exceptions during cleanup to prevent cascading errors
-        RCLCPP_WARN(rclcpp::get_logger("behaviorController"), 
-                   "Exception during cleanup: %s", e.what());
-    }
-}
-
-void displayStartupInfo(std::shared_ptr<rclcpp::Node> node) {
+void displayStartupInfo() {
     std::string softwareVersion = "1.0";
     std::string indent = "\n\t\t";
     
-    RCLCPP_INFO(node->get_logger(), "\n"
-         "**************************************************************************************************\n"
-         "%s%s\tv%s"
-         "%sCopyright (C) 2025 CyLab Carnegie Mellon University Africa"
-         "%sThis program comes with ABSOLUTELY NO WARRANTY."
-         "\n\n**************************************************************************************************\n\n",
-         indent.c_str(), ConfigManager::instance().getNodeName().c_str(), softwareVersion.c_str(),
-         indent.c_str(), indent.c_str()
-    );
+    // RCLCPP_INFO("fix this", "\n"
+    //      "**************************************************************************************************\n"
+    //      "%s%s\tv%s"
+    //      "%sCopyright (C) 2025 CyLab Carnegie Mellon University Africa"
+    //      "%sThis program comes with ABSOLUTELY NO WARRANTY."
+    //      "\n\n**************************************************************************************************\n\n",
+    //      indent.c_str(), softwareVersion.c_str(),
+    //      indent.c_str(), indent.c_str()
+    // );
 }
 
-bool initializeSystem(std::shared_ptr<rclcpp::Node> node) {
-    Logger logger(node);
+bool initializeSystem() {
+    // Logger logger(node);
     
     // Load configuration
     std::string packagePath = ament_index_cpp::get_package_share_directory("cssr_system");
     std::string configPath = packagePath + "/behaviorController/config/behaviorControllerConfiguration.yaml";
     
     if (!ConfigManager::instance().loadFromFile(configPath)) {
-        logger.error("Failed to load configuration from: " + configPath);
+        // logger.error("Failed to load configuration from: " + configPath);
         return false;
     }
     
     // Load knowledge base
     if (!KnowledgeManager::instance().loadFromPackage(packagePath)) {
-        logger.error("Failed to load knowledge base from: " + packagePath);
+        // logger.error("Failed to load knowledge base from: " + packagePath);
         return false;
     }
     
     // Log configuration
-    auto& config = ConfigManager::instance();
-    logger.info("Mode: " + std::string(config.isTestMode() ? "Test" : "Normal"));
-    logger.info("ASR Enabled: " + std::string(config.isAsrEnabled() ? "Yes" : "No"));
-    logger.info("Verbose Mode: " + std::string(config.isVerbose() ? "Yes" : "No"));
-    
+    // auto& config = ConfigManager::instance();
+    // logger.info("ASR Enabled: " + std::string(config.isAsrEnabled() ? "Yes" : "No"));
+    // logger.info("Verbose Mode: " + std::string(config.isVerbose() ? "Yes" : "No"));
+
     return true;
 }
 
-bool checkSystemRequirements(std::shared_ptr<rclcpp::Node> node) {
-    Logger logger(node);
-    ServiceManager serviceManager(node);
-    TopicMonitor topicMonitor(node);
+// bool checkSystemRequirements() {
+//     // Logger logger(node);
+//     ServiceManager serviceManager(node);
+//     TopicMonitor topicMonitor(node);
     
-    // Required services
-    std::vector<std::string> requiredServices = {
-        "/animateBehaviour/setActivation",
-        "/gestureExecution/perform_gesture",
-        "/overtAttention/set_mode",
-        "/robotLocalization/reset_pose",
-        "/robotNavigation/set_goal",
-        "/speechEvent/set_language",
-        "/speechEvent/set_enabled",
-        "/tabletEvent/prompt_and_get_response",
-        "/textToSpeech/say_text"
-    };
+//     // Required services
+//     std::vector<std::string> requiredServices = {
+//         "/animateBehaviour/setActivation",
+//         "/gestureExecution/perform_gesture",
+//         "/overtAttention/set_mode",
+//         "/robotLocalization/reset_pose",
+//         "/robotNavigation/set_goal",
+//         "/speechEvent/set_language",
+//         "/speechEvent/set_enabled",
+//         "/tabletEvent/prompt_and_get_response",
+//         "/textToSpeech/say_text"
+//     };
     
-    // Required topics
-    std::vector<std::string> requiredTopics = {
-        "/faceDetection/data",
-        "/overtAttention/mode",
-        "/speechEvent/text"
-    };
+//     // Required topics
+//     std::vector<std::string> requiredTopics = {
+//         "/faceDetection/data",
+//         "/overtAttention/mode",
+//         "/speechEvent/text"
+//     };
     
-    logger.info("Checking Services...");
-    if (!serviceManager.checkServicesAvailable(requiredServices)) {
-        logger.error("Not all required services are available");
-        return false;
-    }
-    logger.info("All required services are available");
+//     logger.info("Checking Services...");
     
-    logger.info("Checking Topics...");
-    if (!topicMonitor.checkTopicsAvailable(requiredTopics)) {
-        logger.error("Not all required topics are available");
-        return false;
-    }
-    logger.info("All required topics are available");
+//     if (!serviceManager.checkServicesAvailable(requiredServices)) {
+//         logger.error("Not all required services are available");
+//         return false;
+//     }
+
+//     logger.info("All required services are available");
     
-    return true;
-}
+//     logger.info("Checking Topics...");
+    
+//     if (!topicMonitor.checkTopicsAvailable(requiredTopics)) {
+//         logger.error("Not all required topics are available");
+//         return false;
+//     }
+
+//     logger.info("All required topics are available");
+    
+//     return true;
+// }
 
 int main(int argc, char** argv) {
-    int exitCode = 0;
     
-    try {
+        // logger.info("startup");
+        // displayStartupInfo(node);
+
+        std::string scenario = "lab_tour"; // Default scenario
+
+        try {
+        scenario = getConfigValue("scenario_specification");
+        
+        if (scenario.empty()) {
+            throw std::runtime_error("Scenario specification is empty");
+        }
+        } catch (const std::exception& e) {
+            // logger.error("Fatal Error retrieving scenario: " + std::string(e.what()));
+            return 1; // Exit if scenario retrieval fails
+        }
+
+    
+        // // Initialize system
+        // if (!initializeSystem(node)) {
+        //     return 1; // Exit if initialization fails
+        // }
+        
+        // // Check system requirements (skip in standalone mode for testing)
+        // if (!checkSystemRequirements(node)) {
+        //     return 1; // Exit if requirements are not met
+        // }
+    
         // Initialize ROS
         rclcpp::init(argc, argv);
         
-        // Install signal handlers
-        std::signal(SIGINT, signalHandler);
-        std::signal(SIGTERM, signalHandler);
-        
         // Create node
         auto node = rclcpp::Node::make_shared("behaviorController");
-        globalNode = node;
-        Logger logger(node);
-        
-        logger.info("startup");
-        displayStartupInfo(node);
-        
-        // Initialize system
-        if (!initializeSystem(node)) {
-            exitCode = 1;
-            goto cleanup;
-        }
-        
-        // Check system requirements (skip in standalone mode for testing)
-        if (!checkSystemRequirements(node)) {
-            logger.warn("System requirements not met - running in standalone mode");
-        }
-        
-        // Get scenario specification
-        std::string scenario;
-        try {
-            scenario = getConfigValue("scenario_specification");
-            if (scenario.empty()) {
-                throw std::runtime_error("Scenario specification is empty");
-            }
-        } catch (const std::exception& e) {
-            logger.error("Fatal Error retrieving scenario: " + std::string(e.what()));
-            exitCode = 1;
-            goto cleanup;
-        }
-        
-        logger.info("Scenario Specification: " + scenario);
-        
-        // Initialize behavior tree
+
         BT::Tree tree;
+
         try {
-            tree = initializeTree(scenario, node);
-            globalTree = &tree;
-        } catch (const std::exception& e) {
-            logger.error("Failed to initialize behavior tree: " + std::string(e.what()));
-            exitCode = 1;
-            goto cleanup;
+        tree = behavior_controller::initializeTree(scenario, node);
         }
-        
-        // Initialize tree monitoring (optional)
-        try {
-            groot2Publisher = std::make_unique<BT::Groot2Publisher>(tree);
-        } catch (const std::exception& e) {
-            logger.warn("Failed to initialize Groot2Publisher: " + std::string(e.what()));
+        catch (const std::exception &e) {
+            RCLCPP_FATAL(node->get_logger(), "Failed to init tree: %s", e.what());
+            return 1;
         }
+
+        // registerRos2Nodes(factory);
+
+        // (Optional) visualize in Groot:
+        BT::Groot2Publisher publisher(tree);
+                    
+        // logger.info("Scenario Specification: " + scenario);
         
-        // Main execution loop
-        rclcpp::Rate rate(Constants::LOOP_RATE_HZ);
-        logger.info("Starting Mission Execution...");
-        logger.info("=== START OF TREE ===");
-        
-        while (rclcpp::ok() && !shutdownRequested) {
-            try {
-                // Check if shutdown was requested before ticking the tree
-                if (shutdownRequested) {
-                    logger.info("Shutdown requested, stopping behavior tree execution");
-                    break;
-                }
-                
-                // Tick the behavior tree
-                auto status = tree.tickOnce();
-                
-                // Handle tree completion
-                if (status == BT::NodeStatus::SUCCESS) {
-                    logger.info("Mission completed successfully");
-                    break;
-                } else if (status == BT::NodeStatus::FAILURE) {
-                    logger.error("Mission failed");
-                    exitCode = 1;
-                    break;
-                }
-                
-                // Process ROS callbacks only if ROS is still OK
-                if (rclcpp::ok() && !shutdownRequested) {
-                    rclcpp::spin_some(node);
-                }
-                
-                // Periodic status logging
-                if (ConfigManager::instance().isVerbose()) {
-                    static int counter = 0;
-                    if (++counter % 100 == 0) { // Log every 10 seconds at 10Hz
-                        logger.info("running");
-                    }
-                }
-                
-                rate.sleep();
-                
-            } catch (const std::exception& e) {
-                logger.error("Exception in main loop: " + std::string(e.what()));
-                // If we get an exception during shutdown, break the loop
-                if (shutdownRequested || !rclcpp::ok()) {
-                    break;
-                }
-                // Continue execution for non-critical exceptions
-                rate.sleep();
-            }
+        // 7) Execute the tree in a loop until it returns SUCCESS or FAILURE
+        rclcpp::Rate rate(Constants::LOOP_RATE_HZ);  // 10 Hz tick rate
+        while (rclcpp::ok()) {
+            auto status = tree.tickOnce();
+            if (status != BT::NodeStatus::RUNNING) break;
+            rclcpp::spin_some(node);
+            rate.sleep();
         }
+
+        // 8) Shutdown ROS and exit
+        rclcpp::shutdown();
+        return 0;
         
-    } catch (const std::exception& e) {
-        RCLCPP_ERROR(rclcpp::get_logger("behaviorController"), "Fatal exception: %s", e.what());
-        exitCode = 1;
-    }
-    
-    cleanup:
-    // Cleanup section - this runs regardless of how we exit
-    try {
-        if (globalNode) {
-            Logger logger(globalNode);
-            logger.info("Shutting down gracefully...");
-        }
-        
-        // Clean up resources in proper order
-        cleanupResources();
-        
-        // Shutdown ROS last
-        if (rclcpp::ok()) {
-            rclcpp::shutdown();
-        }
-        
-        // Final wait to ensure all threads are cleaned up
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        
-        if (globalNode) {
-            Logger logger(globalNode);
-            logger.info("Shutdown complete");
-        }
-        
-    } catch (const std::exception& e) {
-        // Final exception handler - don't throw anything from here
-        std::cerr << "Exception during final cleanup: " << e.what() << std::endl;
-        exitCode = 1;
-    }
-    
-    return exitCode;
+        // // Periodic status logging
+        // if (ConfigManager::instance().isVerbose()) {
+        //     static int counter = 0;
+        //     if (++counter % 100 == 0) { // Log every 10 seconds at 10Hz
+        //         logger.info("running");
+        //     }
+        // }
 }

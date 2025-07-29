@@ -24,7 +24,6 @@ bool ConfigManager::loadFromFile(const std::string& configPath) {
         YAML::Node config = YAML::LoadFile(configPath);
         verbose_ = config["verbose_mode"].as<bool>(false);
         asrEnabled_ = config["asr_enabled"].as<bool>(false);
-        testMode_ = config["test_mode"].as<bool>(false);
         return true;
     } catch (const std::exception&) {
         return false;
@@ -39,11 +38,6 @@ bool ConfigManager::isVerbose() const {
 bool ConfigManager::isAsrEnabled() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return asrEnabled_;
-}
-
-bool ConfigManager::isTestMode() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return testMode_;
 }
 
 std::string ConfigManager::getLanguage() const {
@@ -171,14 +165,6 @@ TourSpec KnowledgeManager::getTourSpecification() {
     throw std::runtime_error("Tour specification not found");
 }
 
-void KnowledgeManager::clearCache() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    utilityPhrases_.clear();
-    locations_.clear();
-    tourSpec_.reset();
-    loaded_ = false;
-}
-
 //=============================================================================
 // Utility Classes Implementation
 //=============================================================================
@@ -204,6 +190,20 @@ void Logger::error(const std::string& msg) {
 }
 
 //=============================================================================
+
+BaseTreeNode::BaseTreeNode(const BT::NodeConfiguration &config)
+{
+    // 1) grab the shared_ptr<rclcpp::Node> that we stashed under "node"
+    //    when we built the tree in initializeTree():
+    node_ = config.blackboard->get<std::shared_ptr<rclcpp::Node>>("node");
+    if (!node_) {
+        throw std::runtime_error("BaseTreeNode: no \"node\" on the blackboard");
+    }
+
+    // 2) now we can build our logger and serviceManager
+    logger_         = std::make_unique<Logger>(node_);
+    serviceManager_ = std::make_unique<ServiceManager>(node_);
+}
 
 ServiceManager::ServiceManager(std::shared_ptr<rclcpp::Node> node) : node_(node) {}
 
@@ -254,27 +254,6 @@ bool TopicMonitor::checkTopicsAvailable(const std::vector<std::string>& topics) 
 
 //=============================================================================
 
-TestManager::TestManager(std::shared_ptr<rclcpp::Node> node) : node_(node) {}
-
-void TestManager::storeResult(const std::string& key, bool success) {
-    if (!ConfigManager::instance().isTestMode()) return;
-    
-    std::string parameterPath = "behaviorControllerTest." + key;
-    int value = success ? 1 : 0;
-    
-    try {
-        if (!node_->has_parameter(parameterPath)) {
-            node_->declare_parameter(parameterPath, value);
-        } else {
-            node_->set_parameter(rclcpp::Parameter(parameterPath, value));
-        }
-    } catch (const std::exception& e) {
-        RCLCPP_ERROR(node_->get_logger(), "Failed to store test result %s: %s", key.c_str(), e.what());
-    }
-}
-
-//=============================================================================
-
 bool TextUtils::containsAnyWord(const std::string& text, const std::vector<std::string>& words) {
     std::string lowerText = toLowerCase(text);
     for (const auto& word : words) {
@@ -292,18 +271,6 @@ std::string TextUtils::toLowerCase(const std::string& text) {
     return result;
 }
 
-//=============================================================================
-
-BaseTreeNode::BaseTreeNode(std::shared_ptr<rclcpp::Node> node) 
-    : node_(node)
-    , logger_(std::make_unique<Logger>(node))
-    , serviceManager_(std::make_unique<ServiceManager>(node))
-    , testManager_(std::make_unique<TestManager>(node)) {
-}
-
-void BaseTreeNode::storeTestResult(const std::string& nodeName, bool success) {
-    testManager_->storeResult(nodeName, success);
-}
 
 //=============================================================================
 // Standalone Utility Functions
@@ -333,7 +300,6 @@ bool validateConfigurationFile(const std::string& configPath) {
             "scenario_specification",
             "verbose_mode",
             "asr_enabled",
-            "test_mode"
         };
         
         for (const auto& field : requiredFields) {
@@ -350,83 +316,6 @@ bool validateConfigurationFile(const std::string& configPath) {
                    "Configuration file validation failed: %s", e.what());
         return false;
     }
-}
-
-bool waitForRosServices(std::shared_ptr<rclcpp::Node> node, 
-                       const std::vector<std::string>& serviceNames,
-                       std::chrono::seconds timeout) {
-    auto startTime = std::chrono::steady_clock::now();
-    
-    while (std::chrono::steady_clock::now() - startTime < timeout) {
-        bool allAvailable = true;
-        auto availableServices = node->get_service_names_and_types();
-        
-        for (const auto& serviceName : serviceNames) {
-            bool found = false;
-            for (const auto& [name, types] : availableServices) {
-                if (name == serviceName) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                allAvailable = false;
-                break;
-            }
-        }
-        
-        if (allAvailable) {
-            return true;
-        }
-        
-        rclcpp::sleep_for(std::chrono::milliseconds(100));
-        rclcpp::spin_some(node);
-    }
-    
-    return false;
-}
-
-bool waitForRosTopics(std::shared_ptr<rclcpp::Node> node,
-                     const std::vector<std::string>& topicNames,
-                     std::chrono::seconds timeout) {
-    auto startTime = std::chrono::steady_clock::now();
-    
-    while (std::chrono::steady_clock::now() - startTime < timeout) {
-        bool allAvailable = true;
-        auto availableTopics = node->get_topic_names_and_types();
-        
-        for (const auto& topicName : topicNames) {
-            bool found = false;
-            for (const auto& [name, types] : availableTopics) {
-                if (name == topicName) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                allAvailable = false;
-                break;
-            }
-        }
-        
-        if (allAvailable) {
-            return true;
-        }
-        
-        rclcpp::sleep_for(std::chrono::milliseconds(100));
-        rclcpp::spin_some(node);
-    }
-    
-    return false;
-}
-
-std::string formatDuration(std::chrono::steady_clock::duration duration) {
-    auto seconds = std::chrono::duration_cast<std::chrono::seconds>(duration);
-    auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(duration % std::chrono::seconds(1));
-    
-    std::ostringstream oss;
-    oss << seconds.count() << "." << std::setfill('0') << std::setw(3) << milliseconds.count() << "s";
-    return oss.str();
 }
 
 void logSystemInfo(std::shared_ptr<rclcpp::Node> node) {

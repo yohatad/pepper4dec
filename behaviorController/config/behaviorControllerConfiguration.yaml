@@ -2,4 +2,3 @@
 scenario_specification: "lab_tour"
 verbose_mode: true
 asr_enabled: true
-test_mode: false
