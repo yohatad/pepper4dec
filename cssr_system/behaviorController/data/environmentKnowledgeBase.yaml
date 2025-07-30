@@ -1,0 +1,165 @@
+# Environment Knowledge Base
+tour_specification: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+locations:
+  1:
+    robot_location_description: "Pepper's starting location"
+    robot_location_pose:
+      x: 4.0
+      y: 6.8
+      theta: 90.0
+    gesture_target:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+    pre_gesture_message_english: "Hello and thank you for visiting the Upanzi DEC. I'm your guide. In this tour, you will be the citizen protagonist"
+    pre_gesture_message_isizulu: "No message in isiZulu"
+    pre_gesture_message_kinyarwanda: "Murakazaneza muri laboratwari ya robotikisi muri kaneji meloni iniverisite yafurika"
+    post_gesture_message_english: "Together, we'll explore how Upanzi's open-source digital solutions make everyday services easier and more secure. Feel free to ask questions as we go along"
+    post_gesture_message_isizulu: "No message in isiZulu"
+    post_gesture_message_kinyarwanda: "Ngiye kubatemberezaho gato, nizereko muribuze kuryoherwa"
+    cultural_knowledge: ["SymbolicShapeRespect", "BowExtentRespect"]
+
+  2:
+    robot_location_description: "DPG/DPI Booth 1"
+    robot_location_pose:
+      x: 4.8
+      y: 8.0
+      theta: 45.0
+    gesture_target:
+      x: 6.0
+      y: 8.0
+      z: 0.0
+    pre_gesture_message_english: "Our first stop is crucial – establishing your digital identity. Here a researcher will get you registered for a National Digital ID"
+    pre_gesture_message_isizulu: "No message in isiZulu"
+    pre_gesture_message_kinyarwanda: "Iyi yitwa pepa humanoyidi roboti"
+    post_gesture_message_english: "Please introduce yourself, and help our citizen out"
+    post_gesture_message_isizulu: "No message in isiZulu"
+    post_gesture_message_kinyarwanda: "Tuyikoresha mubushakashatsi mubijyanye nimibanire hamwe nimikoranire hagati yabantu ndetse naza robo"
+    cultural_knowledge: ["DeicticShape"]
+
+  3:
+    robot_location_description: "DPG/DPI Booth 2"
+    robot_location_pose:
+      x: 4.8
+      y: 5.6
+      theta: 45.0
+    gesture_target:
+      x: 6.0
+      y: 5.6
+      z: 0.0
+    pre_gesture_message_english: "Welcome to the Bank of Upanzi! Our able bank officer will assist you in opening your digital bank account today."
+    pre_gesture_message_isizulu: "No message in isiZulu"
+    pre_gesture_message_kinyarwanda: "Iyi yitwa pepa humanoyidi roboti"
+    post_gesture_message_english: "Please take over and help our citizen out"
+    post_gesture_message_isizulu: "No message in isiZulu"
+    post_gesture_message_kinyarwanda: "Tuyikoresha mubushakashatsi mubijyanye nimibanire hamwe nimikoranire hagati yabantu ndetse naza robo"
+    cultural_knowledge: ["DeicticShape"]
+
+  4:
+    robot_location_description: "Data Exchange Booth 1"
+    robot_location_pose:
+      x: 3.2
+      y: 1.6
+      theta: 100.0
+    gesture_target:
+      x: 3.2
+      y: 0.4
+      z: 270.0
+    pre_gesture_message_english: "At this station a Program Officer helps citizens enroll in social benefit programs. In our scenario, Upanzi Republic offers a fertilizer subsidy to farmers, and you will sign up for it."
+    pre_gesture_message_isizulu: "No message in isiZulu"
+    pre_gesture_message_kinyarwanda: "Iyi robo ni likisi moshoni"
+    post_gesture_message_english: "This process uses the Upanzi Programs Management System (UPMS). Please help out our citizen"
+    post_gesture_message_isizulu: "No message in isiZulu"
+    post_gesture_message_kinyarwanda: "Tuyikoresha mukwigisha roboti manipileshoni"
+    cultural_knowledge: ["DeicticShape"]
+
+  5:
+    robot_location_description: "Data Exchange Booth 2"
+    robot_location_pose:
+      x: 1.6
+      y: 1.6
+      theta: 50.0
+    gesture_target:
+      x: 1.6
+      y: 0.4
+      z: 270.0
+    pre_gesture_message_english: "Finally, you arrive at a mock retail shop – MojaShop, a demo point-of-sale that showcases how digital payments and subsidies work in real time"
+    pre_gesture_message_isizulu: "No message in isiZulu"
+    pre_gesture_message_kinyarwanda: "Nizereko mwaryohewe no gutemberezwa"
+    post_gesture_message_english: "Our Vendor will help you buy a bag of fertilizer using your subsidy. Over to you"
+    post_gesture_message_isizulu: "No message in isiZulu"
+    post_gesture_message_kinyarwanda: "Tuzongere kubonana ubutaha"
+    cultural_knowledge: ["DeicticShape"]
+
+  6:
+    robot_location_description: "Connectivity Booth"
+    robot_location_pose:
+      x: 2.4
+      y: 3.2
+      theta: 50.0
+    gesture_target:
+      x: 1.2
+      y: 3.2
+      z: 180.0
+    pre_gesture_message_english: "Access to the internet is the gateway to digital services. In the Connectivity section, Upanzi showcases projects aimed at expanding and measuring internet access in Africa, especially in underserved rural regions. Currently, a deep urban-rural digital divide persists: in Africa, about 57% of urban dwellers use the Internet, compared to just 23% of people in rural areas​. Upanzi's projects tackle this gap from multiple angles – by piloting innovative connectivity solutions, monitoring internet resilience, and promoting open data for informed policy"
+    pre_gesture_message_isizulu: "No message in isiZulu"
+    pre_gesture_message_kinyarwanda: "Iyiyo yitwa rumba"
+    post_gesture_message_english: "Our connectivity engineer will work you through"
+    post_gesture_message_isizulu: "No message in isiZulu"
+    post_gesture_message_kinyarwanda: "Tuyikoresha mukwigisha mobile robotikisi"
+    cultural_knowledge: ["DeicticShape"]
+
+  7:
+    robot_location_description: "Cybersecurity Booth 1"
+    robot_location_pose:
+      x: 2.4
+      y: 5.2
+      theta: 50.0
+    gesture_target:
+      x: 1.2
+      y: 5.2
+      z: 180.0
+    pre_gesture_message_english: "This section showcases Upanzi's cutting-edge cybersecurity research projects. As Africa's digital ecosystem grows (with e-government services, mobile apps, and AI technologies), ensuring their security and integrity is paramount. Upanzi researchers are working on multiple fronts: security testing of e-services and mobile apps, innovative defenses against AI-driven threats like deepfake voices, and studying emerging attack vectors such as smishing (SMS phishing)"
+    pre_gesture_message_isizulu: "No message in isiZulu"
+    pre_gesture_message_kinyarwanda: "Iyiyo yitwa rumba"
+    post_gesture_message_english: "In this interactive lab, you'll engage with demonstrations of these projects. The goal is to highlight how we proactively find vulnerabilities and develop defenses, making digital infrastructure trustworthy for all users"
+    post_gesture_message_isizulu: "No message in isiZulu"
+    post_gesture_message_kinyarwanda: "Tuyikoresha mukwigisha mobile robotikisi"
+    cultural_knowledge: ["DeicticShape"]
+
+  8:
+    robot_location_description: "Cybersecurity Booth 2"
+    robot_location_pose:
+      x: 2.4
+      y: 7.6
+      theta: 50.0
+    gesture_target:
+      x: 1.2
+      y: 7.6
+      z: 180.0
+    pre_gesture_message_english: "Digital transformation isn't just about technology; it's about people. Upanzi's Capacity Building initiatives focus on empowering individuals – students, researchers, policymakers and implementers  with the skills, knowledge, and ethical frameworks to drive and sustain digital innovation. In this final section of the tour, you will learn about several programs: our annual Digital Identity Hackathon and picoCTF Africa, the use of AI for Policy Analysis, our efforts in Responsible Research and Innovation (RRI), and the aforementioned Data Quality Measurement project. These initiatives ensure that the digital public goods we develop are used effectively and responsibly, and that a pipeline of talent and ideas continues to grow. The format here is part showcase, part dialogue – you'll meet an Innovation Coach"
+    pre_gesture_message_isizulu: "No message in isiZulu"
+    pre_gesture_message_kinyarwanda: "Iyiyo yitwa rumba"
+    post_gesture_message_english: "who oversees these programs and even try a mini hackathon challenge yourself!"
+    post_gesture_message_isizulu: "No message in isiZulu"
+    post_gesture_message_kinyarwanda: "Tuyikoresha mukwigisha mobile robotikisi"
+    cultural_knowledge: ["DeicticShape"]
+
+  9:
+    robot_location_description: "Pepper's ending location"
+    robot_location_pose:
+      x: 4.0
+      y: 6.8
+      theta: 100.0
+    gesture_target:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+    pre_gesture_message_english: "Thank you for joining us today and accepting to play the role of citizen protagonist. Overall, the tour painted a comprehensive picture of the Upanzi Network's approach: building interoperable Digital Public Infrastructure that is open-source and scalable, while simultaneously investing in the governance, security, and capacity required to make that infrastructure impactful. You have seen how a citizen's single digital identity threads through various services – a powerful illustration of the whole being greater than the sum of its parts. By the end of this immersive experience, it's evident that digital public goods do not stand alone; they interlock like pieces of a puzzle, supported by robust connectivity and safeguarded by vigilant cybersecurity measures, all driven forward by skilled and conscientious individuals."
+    pre_gesture_message_isizulu: "No message in isiZulu"
+    pre_gesture_message_kinyarwanda: "Murakazaneza muri laboratwari ya robotikisi muri kaneji meloni iniverisite yafurika"
+    post_gesture_message_english: "Hope you enjoyed the tour, goodbye."
+    post_gesture_message_isizulu: "No message in isiZulu"
+    post_gesture_message_kinyarwanda: "Ngiye kubatemberezaho gato, nizereko muribuze kuryoherwa"
+    cultural_knowledge: ["IconicShape"]
