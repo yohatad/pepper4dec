@@ -183,7 +183,6 @@ public:
 private:
     std::shared_ptr<rclcpp::Node> node_;
     std::unordered_map<std::string, rclcpp::ClientBase::SharedPtr> clients_;
-    mutable std::mutex clientsMutex_;
     
     template<typename ServiceType>
     std::shared_ptr<rclcpp::Client<ServiceType>> getClient(const std::string& serviceName);
@@ -198,13 +197,6 @@ public:
 private:
     std::shared_ptr<rclcpp::Node> node_;
     bool isTopicAvailable(const std::string& topicName);
-};
-
-// Word Processing Utilities
-class TextUtils {
-public:
-    static bool containsAnyWord(const std::string& text, const std::vector<std::string>& words);
-    static std::string toLowerCase(const std::string& text);
 };
 
 //=============================================================================

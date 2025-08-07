@@ -28,6 +28,7 @@ find_package(behaviortree_cpp           QUIET)
 find_package(yaml-cpp                   REQUIRED)
 find_package(OpenCV                     REQUIRED)
 find_package(ament_index_cpp            REQUIRED)
+find_package(naoqi_bridge_msgs          REQUIRED)
 
 # --- Message/service generation -----------------------------------------
 rosidl_generate_interfaces(${PROJECT_NAME}
@@ -51,6 +52,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "overtAttention/msg/Mode.msg"
   "overtAttention/msg/Status.msg"
   "overtAttention/srv/SetMode.srv"
+  "overtAttention/srv/GetMode.srv"
 
   DEPENDENCIES builtin_interfaces std_msgs geometry_msgs
 )
@@ -58,36 +60,36 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 ament_export_dependencies(rosidl_default_runtime)
 
 # --- 1) behaviorController executable ------------------------------------
-if(behaviortree_cpp_FOUND)
-  add_executable(behaviorController
-    behaviorController/src/behaviorControllerImplementation.cpp
-    behaviorController/src/behaviorControllerApplication.cpp
-    behaviorController/src/behaviorControllerUtilities.cpp
-  )
+# if(behaviortree_cpp_FOUND)
+#   add_executable(behaviorController
+#     behaviorController/src/behaviorControllerImplementation.cpp
+#     behaviorController/src/behaviorControllerApplication.cpp
+#     behaviorController/src/behaviorControllerUtilities.cpp
+#   )
   
-  target_include_directories(behaviorController
-    PRIVATE
-      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/behaviorController/include>
-      $<INSTALL_INTERFACE:include>
-  )
+#   target_include_directories(behaviorController
+#     PRIVATE
+#       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/behaviorController/include>
+#       $<INSTALL_INTERFACE:include>
+#   )
   
-  ament_target_dependencies(behaviorController
-    rclcpp
-    std_msgs
-    geometry_msgs
-    behaviortree_cpp
-    yaml-cpp
-    ament_index_cpp
-  )
-  target_link_libraries(behaviorController yaml-cpp)
+#   ament_target_dependencies(behaviorController
+#     rclcpp
+#     std_msgs
+#     geometry_msgs
+#     behaviortree_cpp
+#     yaml-cpp
+#     ament_index_cpp
+#   )
+#   target_link_libraries(behaviorController yaml-cpp)
   
-  rosidl_target_interfaces(behaviorController ${PROJECT_NAME} "rosidl_typesupport_cpp")
+#   rosidl_target_interfaces(behaviorController ${PROJECT_NAME} "rosidl_typesupport_cpp")
   
-  install(TARGETS behaviorController RUNTIME DESTINATION lib/${PROJECT_NAME})
+#   install(TARGETS behaviorController RUNTIME DESTINATION lib/${PROJECT_NAME})
 
-else()
-  message(WARNING "BehaviorTree.CPP not found; skipping behaviorController build.")
-endif()
+# else()
+#   message(WARNING "BehaviorTree.CPP not found; skipping behaviorController build.")
+# endif()
 
 # --- 3) overtAttention executable ------------------------------------
 add_executable(overtAttention
@@ -114,6 +116,7 @@ ament_target_dependencies(overtAttention
   behaviortree_cpp
   yaml-cpp
   ament_index_cpp
+  naoqi_bridge_msgs
 )
 target_link_libraries(overtAttention yaml-cpp ${OpenCV_LIBS})
 
@@ -123,7 +126,7 @@ install(TARGETS overtAttention RUNTIME DESTINATION lib/${PROJECT_NAME})
 
 # --- 5) Install all headers --------------------------------------------
 install(DIRECTORY
-  behaviorController/include/
+  # behaviorController/include/
   overtAttention/include/
   DESTINATION include
 )
@@ -143,16 +146,16 @@ install(DIRECTORY
 )
 
 # Install behaviorController config where the code expects it
-install(DIRECTORY
-  behaviorController/config/
-  DESTINATION share/${PROJECT_NAME}/behaviorController/config
-)
+#  install(DIRECTORY
+#    behaviorController/config/
+#   # DESTINATION share/${PROJECT_NAME}/behaviorController/config
+# )
 
 # Keep behaviorController’s data grouped under its own folder
-install(DIRECTORY
-  behaviorController/data/
-  DESTINATION share/${PROJECT_NAME}/behaviorController/data
-)
+# install(DIRECTORY
+#   behaviorController/data/
+#   DESTINATION share/${PROJECT_NAME}/behaviorController/data
+# )
 
 # Install overtAttention config where the code expects it
 install(DIRECTORY

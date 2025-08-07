@@ -1,4 +1,4 @@
 string      state
-float64     location_x
-float64     location_y
-float64     location_z
+float32     location_x
+float32     location_y
+float32     location_z

@@ -13,42 +13,44 @@
 // Singleton Implementations
 //=============================================================================
 
-ConfigManager& ConfigManager::instance() {
-    static ConfigManager instance;
-    return instance;
-}
+class ConfigManager {
+public:
+    // Singleton accessor
+    static ConfigManager& instance() {
+    static ConfigManager inst;
+    return inst;
+  }
 
-bool ConfigManager::loadFromFile(const std::string& configPath) {
-    std::lock_guard<std::mutex> lock(mutex_);
+  // Call once (e.g. in main()) before spawning threads
+  bool loadFromFile(const std::string& configPath) {
     try {
-        YAML::Node config = YAML::LoadFile(configPath);
-        verbose_ = config["verbose_mode"].as<bool>(false);
-        asrEnabled_ = config["asr_enabled"].as<bool>(false);
-        return true;
+      auto config = YAML::LoadFile(configPath);
+      verbose_    = config["verbose_mode"].as<bool>(false);
+      asrEnabled_ = config["asr_enabled"].as<bool>(false);
+      language_   = config["language"].as<std::string>("");
+      return true;
     } catch (const std::exception&) {
-        return false;
+      return false;
     }
-}
+  }
 
-bool ConfigManager::isVerbose() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return verbose_;
-}
+  // Simple, inline getters
+  bool        isVerbose()    const { return verbose_;    }
+  bool        isAsrEnabled() const { return asrEnabled_; }
+  std::string getLanguage()  const { return language_;   }
 
-bool ConfigManager::isAsrEnabled() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return asrEnabled_;
-}
+private:
+    ConfigManager() = default;
+    ~ConfigManager() = default;
+    ConfigManager(const ConfigManager&)            = delete;
+    ConfigManager& operator=(const ConfigManager&) = delete;
 
-std::string ConfigManager::getLanguage() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return language_;
-}
-
-std::string ConfigManager::getNodeName() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return nodeName_;
-}
+  // Storage for settings
+  bool        verbose_    = false;
+  bool        asrEnabled_ = false;
+  std::string language_;
+  std::string nodeName_;
+};
 
 //=============================================================================
 
@@ -100,11 +102,10 @@ bool KnowledgeManager::loadFromPackage(const std::string& packagePath) {
                 // Messages by language
                 info.preMessages["English"] = location["pre_gesture_message_english"].as<std::string>();
                 info.preMessages["Kinyarwanda"] = location["pre_gesture_message_kinyarwanda"].as<std::string>();
-                info.preMessages["IsiZulu"] = location["pre_gesture_message_isizulu"].as<std::string>();
                 
                 info.postMessages["English"] = location["post_gesture_message_english"].as<std::string>();
                 info.postMessages["Kinyarwanda"] = location["post_gesture_message_kinyarwanda"].as<std::string>();
-                info.postMessages["IsiZulu"] = location["post_gesture_message_isizulu"].as<std::string>();
+                
                 
                 locations_[locationId] = info;
             }
