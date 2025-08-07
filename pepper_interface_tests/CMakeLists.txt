@@ -1,71 +1,88 @@
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 3.5)
 project(pepper_interface_tests)
 
-# Compile as C++11, supported in ROS Kinetic and newer
-# add_compile_options(-std=c++11)
+# Default to C++14
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 14)
+endif()
 
-# Option to build for the simulator, which would not require naoqi_driver and specific definitions
+# Option to build for the simulator
 option(SIMULATOR "Build for simulator without naoqi_driver and PEPPER_ROBOT definitions" OFF)
 
-# Find catkin and system dependencies
+# Find dependencies
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(rclcpp_action REQUIRED)
+find_package(control_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(cv_bridge REQUIRED)
+find_package(image_transport REQUIRED)
 
-# Conditionally find naoqi_driver unless building for the simulator
 if(NOT SIMULATOR)
   message(STATUS "Building for Pepper robot")
-  find_package(catkin REQUIRED COMPONENTS 
-  roscpp
-  roslib
-  cv_bridge
-  image_transport
-  sensor_msgs
-  std_msgs
-  actionlib
-  control_msgs 
-  naoqi_driver) 
+  find_package(naoqi_driver REQUIRED)
   add_definitions(-DPEPPER_ROBOT)
 else()
   message(STATUS "Building for simulator")
-  find_package(catkin REQUIRED COMPONENTS
-  roscpp
-  roslib
-  cv_bridge
-  image_transport
-  sensor_msgs
-  std_msgs
-  actionlib
-  control_msgs)
 endif()
 
-# System dependencies are found with CMake's conventions
-find_package(OpenCV REQUIRED)
-
-# Define catkin package dependencies conditionally based on whether building for the simulator or not
-if(NOT SIMULATOR)
-  catkin_package(
-    CATKIN_DEPENDS cv_bridge image_transport roscpp sensor_msgs std_msgs naoqi_driver
-  )
-else()
-  catkin_package(
-    CATKIN_DEPENDS cv_bridge image_transport roscpp sensor_msgs std_msgs
-  )
-endif()
-
-###########
-## Build ##
-###########
-
-# Specify additional locations of header files
+# Include directories
 include_directories(
   include
-  ${catkin_INCLUDE_DIRS}
 )
 
-# Declare a C++ executable for actuator test
-add_executable(${PROJECT_NAME}_actuatorTest src/actuatorTestImplementation.cpp src/actuatorTestApplication.cpp)
-set_target_properties(${PROJECT_NAME}_actuatorTest PROPERTIES OUTPUT_NAME actuatorTest PREFIX "")
-target_link_libraries(${PROJECT_NAME}_actuatorTest ${catkin_LIBRARIES})
+# Declare executables
+add_executable(actuator_test
+  src/actuatorTestImplementation.cpp
+  src/actuatorTestApplication.cpp
+)
+target_include_directories(actuator_test PRIVATE
+  ${rclcpp_INCLUDE_DIRS}
+  ${rclcpp_action_INCLUDE_DIRS}
+)
+target_link_libraries(actuator_test
+  rclcpp::rclcpp
+  rclcpp_action::rclcpp_action
+  control_msgs::control_msgs
+  ${naoqi_driver_LIBRARIES}
+)
 
-# Declare a C++ executable for sensor test
-add_executable(${PROJECT_NAME}_sensorTest src/sensorTestImplementation.cpp src/sensorTestApplication.cpp)
-set_target_properties(${PROJECT_NAME}_sensorTest PROPERTIES OUTPUT_NAME sensorTest PREFIX "")
-target_link_libraries(${PROJECT_NAME}_sensorTest ${OpenCV_LIBS} ${catkin_LIBRARIES})
+add_executable(sensor_test
+  src/sensorTestImplementation.cpp
+  src/sensorTestApplication.cpp
+)
+target_include_directories(sensor_test PRIVATE
+  ${rclcpp_INCLUDE_DIRS}
+  ${OpenCV_INCLUDE_DIRS}
+)
+target_link_libraries(sensor_test
+  rclcpp::rclcpp
+  cv_bridge::cv_bridge
+  ${OpenCV_LIBS}
+)
+
+# Install targets
+install(TARGETS
+  actuator_test
+  sensor_test
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+# Install launch files
+install(DIRECTORY
+  launch
+  DESTINATION share/${PROJECT_NAME}
+)
+
+# Install config files
+install(DIRECTORY
+  config
+  data
+  DESTINATION share/${PROJECT_NAME}
+)
+
+ament_package()
