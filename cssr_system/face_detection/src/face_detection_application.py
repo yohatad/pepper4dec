@@ -3,13 +3,6 @@
 """
 face_detection_application.py ROS2 Node for Face and Mutual Gaze Detection and Localization.
 
-Copyright (C) 2023 CSSR4Africa Consortium
-
-This project is funded by the African Engineering and Technology Network (Afretec)
-Inclusive Digital Transformation Research Grant Programme.
-
-Website: www.cssr4africa.org
-
 This program comes with ABSOLUTELY NO WARRANTY.
 """
 

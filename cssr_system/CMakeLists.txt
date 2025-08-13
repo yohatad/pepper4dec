@@ -92,47 +92,48 @@ ament_export_dependencies(rosidl_default_runtime)
 # endif()
 
 # --- 3) overtAttention executable ------------------------------------
-add_executable(overtAttention
-  overtAttention/src/overtAttentionImplementation.cpp
-  overtAttention/src/overtAttentionApplication.cpp
-)
+# add_executable(overtAttention
+#   overtAttention/src/overtAttentionImplementation.cpp
+#   overtAttention/src/overtAttentionApplication.cpp
+# )
 
-target_include_directories(overtAttention
-  PRIVATE
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/overtAttention/include>
-    $<INSTALL_INTERFACE:include>
-    ${OpenCV_INCLUDE_DIRS}
-)
+# target_include_directories(overtAttention
+#   PRIVATE
+#     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/overtAttention/include>
+#     $<INSTALL_INTERFACE:include>
+#     ${OpenCV_INCLUDE_DIRS}
+# )
 
-ament_target_dependencies(overtAttention
-  rclcpp
-  rclcpp_action
-  sensor_msgs     
-  std_msgs
-  image_transport 
-  geometry_msgs
-  control_msgs
-  cv_bridge 
-  behaviortree_cpp
-  yaml-cpp
-  ament_index_cpp
-  naoqi_bridge_msgs
-)
-target_link_libraries(overtAttention yaml-cpp ${OpenCV_LIBS})
+# ament_target_dependencies(overtAttention
+#   rclcpp
+#   rclcpp_action
+#   sensor_msgs     
+#   std_msgs
+#   image_transport 
+#   geometry_msgs
+#   control_msgs
+#   cv_bridge 
+#   behaviortree_cpp
+#   yaml-cpp
+#   ament_index_cpp
+#   naoqi_bridge_msgs
+# )
+# target_link_libraries(overtAttention yaml-cpp ${OpenCV_LIBS})
 
-rosidl_target_interfaces(overtAttention ${PROJECT_NAME} "rosidl_typesupport_cpp")
+# rosidl_target_interfaces(overtAttention ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
-install(TARGETS overtAttention RUNTIME DESTINATION lib/${PROJECT_NAME})
+# install(TARGETS overtAttention RUNTIME DESTINATION lib/${PROJECT_NAME})
 
 # --- 5) Install all headers --------------------------------------------
-install(DIRECTORY
-  # behaviorController/include/
-  overtAttention/include/
-  DESTINATION include
-)
+# install(DIRECTORY
+#   behaviorController/include/
+#   overtAttention/include/
+#   DESTINATION include
+# )
 
 # --- 6) Python node ------------------------------------------------------
 install(PROGRAMS
+  overt_attention/src/overt_attention_application.py
   face_detection/src/face_detection_application.py
   DESTINATION lib/${PROJECT_NAME}
 )
@@ -145,28 +146,11 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}/face_detection
 )
 
-# Install behaviorController config where the code expects it
-#  install(DIRECTORY
-#    behaviorController/config/
-#   # DESTINATION share/${PROJECT_NAME}/behaviorController/config
-# )
-
-# Keep behaviorController’s data grouped under its own folder
-# install(DIRECTORY
-#   behaviorController/data/
-#   DESTINATION share/${PROJECT_NAME}/behaviorController/data
-# )
-
-# Install overtAttention config where the code expects it
-install(DIRECTORY
-  overtAttention/config/
-  DESTINATION share/${PROJECT_NAME}/overtAttention/config
-)
-
-# Keep overtAttention’s data grouped under its own folder
-install(DIRECTORY
-  overtAttention/data/
-  DESTINATION share/${PROJECT_NAME}/overtAttention/data
+install(PARENT_DIRECTORY
+  overt_attention/launch
+  overt_attention/models
+  overt_attention/config
+  DESTINATION share/${PROJECT_NAME}/overt_attention
 )
 
 ament_package()
