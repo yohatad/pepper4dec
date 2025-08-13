@@ -33,7 +33,7 @@ find_package(naoqi_bridge_msgs          REQUIRED)
 # --- Message/service generation -----------------------------------------
 rosidl_generate_interfaces(${PROJECT_NAME}
   # face_detection messages
-  "face_detection/msg/FaceDetectionMsgFile.msg"
+  "face_detection/msg/FaceDetection.msg"
   
   # behaviorController messages & services
   "behaviorController/msg/FaceDetectionData.msg"
@@ -49,10 +49,10 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "behaviorController/srv/TextToSpeechSayText.srv"
 
   # overtAttention messages
-  "overtAttention/msg/Mode.msg"
-  "overtAttention/msg/Status.msg"
-  "overtAttention/srv/SetMode.srv"
-  "overtAttention/srv/GetMode.srv"
+  "overt_attention/msg/Mode.msg"
+  "overt_attention/msg/Status.msg"
+  "overt_attention/srv/SetMode.srv"
+  "overt_attention/srv/GetMode.srv"
 
   DEPENDENCIES builtin_interfaces std_msgs geometry_msgs
 )
@@ -146,9 +146,8 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}/face_detection
 )
 
-install(PARENT_DIRECTORY
+install(DIRECTORY
   overt_attention/launch
-  overt_attention/models
   overt_attention/config
   DESTINATION share/${PROJECT_NAME}/overt_attention
 )

@@ -104,7 +104,7 @@ Version: v1.0
 """
 
 import rclpy
-from face_detection_implementation import MediaPipe, SixDrepNet, FaceDetectionNode
+from .face_detection_implementation import MediaPipe, SixDrepNet, FaceDetectionNode
 
 def main():
     # Define the node name and software version

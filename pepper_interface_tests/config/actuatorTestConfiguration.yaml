@@ -1,4 +1,0 @@
-platform: "robot"
-simulatorTopics: "simulatorTopics.yaml"
-robotTopics: "pepperTopics.yaml"
-mode: "sequential"
