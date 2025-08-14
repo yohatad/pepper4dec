@@ -67,21 +67,22 @@ def generate_launch_description():
     namespace = LaunchConfiguration('namespace')
     camera = LaunchConfiguration('camera')
 
-    # Face detection node
+    
+    cfg_path = os.path.join(
+        FindPackageShare('cssr_system').find('cssr_system'),
+        'face_detection', 'config', 'face_detection_configuration.yaml'
+    )
+    
     face_detection_node = Node(
-        package='cssr_system',
-        executable='face_detection_application.py',
-        name='faceDetection',
-        parameters=[
-            {'camera': camera},
-            {'unit_tests': False},
-            os.path.join(
-                FindPackageShare('cssr_system').find('cssr_system'),
-                'face_detection/config',
-                'face_detection_configuration.yaml'
-            )
-        ],
-        output='screen'
+    package='cssr_system',
+    executable='face_detection_application.py',
+    name='faceDetection',
+    parameters=[
+        {'config_path': cfg_path},
+        {'camera': camera},
+        {'unit_tests': False},
+    ],
+    output='screen',
     )
 
     # Pepper Robot group (only if camera == pepper)

@@ -135,6 +135,8 @@ ament_export_dependencies(rosidl_default_runtime)
 install(PROGRAMS
   overt_attention/src/overt_attention_application.py
   face_detection/src/face_detection_application.py
+  face_detection/src/face_detection_implementation.py
+  face_detection/src/face_detection_tracking.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -143,6 +145,7 @@ install(DIRECTORY
   face_detection/launch
   face_detection/models
   face_detection/config
+  face_detection/data
   DESTINATION share/${PROJECT_NAME}/face_detection
 )
 

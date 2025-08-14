@@ -5,13 +5,6 @@ Author: Yohannes Tadesse Haile
 Date: April 18, 2025
 Version: v1.0
 
-Copyright (C) 2023 CSSR4Africa Consortium
-
-This project is funded by the African Engineering and Technology Network (Afretec)
-Inclusive Digital Transformation Research Grant Programme.
-
-Website: www.cssr4africa.org
-
 This program comes with ABSOLUTELY NO WARRANTY.
 """
 
@@ -33,14 +26,14 @@ from cv_bridge import CvBridge, CvBridgeError
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from geometry_msgs.msg import Point
 from typing import Tuple, List
-from cssr_system.msg import FaceDetectionMsgFile
+from cssr_system.msg import FaceDetection
 from face_detection_tracking import Sort, CentroidTracker
 
 class FaceDetectionNode(Node):
     def __init__(self, node_name='faceDetection'):
         super().__init__(node_name)
         
-        self.pub_gaze = self.create_publisher(FaceDetectionMsgFile, "/faceDetection/data", 10)
+        self.pub_gaze = self.create_publisher(FaceDetection, "/faceDetection/data", 10)
         self.bridge = CvBridge()
         self.depth_image = None  # Initialize depth_image
         self.color_image = None  # Initialize color_image
@@ -432,7 +425,7 @@ class FaceDetectionNode(Node):
             # Don't publish empty messages
             return
             
-        face_msg = FaceDetectionMsgFile()
+        face_msg = FaceDetection()
 
         # Initialize lists for each attribute in the message
         face_msg.face_label_id = [data['face_id'] for data in tracking_data]
