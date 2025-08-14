@@ -41,7 +41,7 @@ class FaceDetectionNode(Node):
         # Declare parameters with default values
         self.declare_parameter('useCompressed', False)
         self.declare_parameter('camera', 'realsense')
-        self.declare_parameter('verboseMode', False)
+        self.declare_parameter('verboseMode', True)
         self.declare_parameter('imageTimeout', 2.0)
         
         self.use_compressed = self.get_parameter('useCompressed').get_parameter_value().bool_value
@@ -422,19 +422,17 @@ class FaceDetectionNode(Node):
     def publish_face_detection(self, tracking_data):
         """Publish the face detection results."""
         if not tracking_data:
-            # Don't publish empty messages
             return
-            
+
         face_msg = FaceDetection()
 
-        # Initialize lists for each attribute in the message
-        face_msg.face_label_id = [data['face_id'] for data in tracking_data]
-        face_msg.centroids = [data['centroid'] for data in tracking_data]
-        face_msg.width = [data['width'] for data in tracking_data]  # Add width data
-        face_msg.height = [data['height'] for data in tracking_data]  # Add height data
-        face_msg.mutual_gaze = [data['mutual_gaze'] for data in tracking_data]
+        # Coerce everything to native Python types (not numpy dtypes)
+        face_msg.face_label_id = [str(d['face_id']) for d in tracking_data]          # string[]
+        face_msg.centroids     = [d['centroid']       for d in tracking_data]        # geometry_msgs/Point[]
+        face_msg.width         = [float(d['width'])   for d in tracking_data]        # float32[]
+        face_msg.height        = [float(d['height'])  for d in tracking_data]        # float32[]
+        face_msg.mutual_gaze   = [bool(d['mutual_gaze']) for d in tracking_data]     # bool[]
 
-        # Publish the message
         self.pub_gaze.publish(face_msg)
 
 class MediaPipe(FaceDetectionNode):

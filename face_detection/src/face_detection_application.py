@@ -104,58 +104,46 @@ Version: v1.0
 """
 
 import rclpy
-from face_detection_implementation import MediaPipe, SixDrepNet, FaceDetectionNode
+from rclpy.node import Node
+from face_detection_implementation import MediaPipe, SixDrepNet
+
+BANNER = """faceDetection v1.0
+\t\t\t    This program comes with ABSOLUTELY NO WARRANTY.
+"""
+
+ALGORITHM_MAP = {
+    "mediapipe": MediaPipe,
+    "sixdrep": SixDrepNet,
+}
 
 def main():
-    # Define the node name and software version
-    node_name = "faceDetection"
-    software_version = " v1.0"  # Replace with the actual software version
-
-    # Construct the copyright message
-    copyright_message = (
-        f"{node_name}  {software_version}\n"
-        "\t\t\t    This project is funded by the African Engineering and Technology Network (Afretec)\n"
-        "\t\t\t    Inclusive Digital Transformation Research Grant Programme.\n"
-        "\t\t\t    Website: www.cssr4africa.org\n"
-        "\t\t\t    This program comes with ABSOLUTELY NO WARRANTY."
-    )
-    
     rclpy.init()
-    
-    # Create a temporary node to get parameters and log messages
-    temp_node = rclpy.create_node('temp_face_detection_node')
-    
-    # Print the messages using ROS2 logging
-    temp_node.get_logger().info(copyright_message)
-    temp_node.get_logger().info(f"{node_name}: startup.")
-    
-    # Read the configuration file
-    config = FaceDetectionNode.read_yaml_file('cssr_system')
-    
-    # Declare and get parameters
-    temp_node.declare_parameter('unit_tests', False)
-    unit_tests = temp_node.get_parameter('unit_tests').get_parameter_value().bool_value
-    
-    temp_node.declare_parameter('algorithm', config.get('algorithm', 'sixdrep'))
-    algorithm = temp_node.get_parameter('algorithm').get_parameter_value().string_value
-    
-    # Destroy temporary node
-    temp_node.destroy_node()
 
-    if algorithm == 'mediapipe':
-        face_detection = MediaPipe()
-        face_detection.spin()
-    elif algorithm == 'sixdrep':
-        face_detection = SixDrepNet()
-        face_detection.spin()
-    else:
-        temp_node = rclpy.create_node('temp_face_detection_node')
-        temp_node.get_logger().error("Invalid algorithm selected. Exiting...")
-        temp_node.destroy_node()
+    # Create a short-lived chooser node **with the same name** as the detector node.
+    # This ensures launch-file parameters (algorithm, etc.) are applied here.
+    chooser = rclpy.create_node("faceDetection")  # <- matches YAML/launch node name
+    chooser.get_logger().info(BANNER)
+
+    # Declare with a sane default; launch-file overrides will replace it.
+    chooser.declare_parameter("algorithm", "sixdrep")
+    algorithm = chooser.get_parameter("algorithm").get_parameter_value().string_value.strip().lower()
+
+    chooser.get_logger().info(f"faceDetection: startup (algorithm='{algorithm}').")
+    chooser.destroy_node()  # avoid name conflict before creating the actual detector node
+
+    # Pick implementation and run
+    impl_cls = ALGORITHM_MAP.get(algorithm)
+    if impl_cls is None:
+        # Fall back + clear error
+        temp = rclpy.create_node("faceDetection")
+        temp.get_logger().error(f"Invalid algorithm '{algorithm}'. Expected one of: {list(ALGORITHM_MAP)}.")
+        temp.destroy_node()
         rclpy.shutdown()
         return
 
+    detector = impl_cls()  # MediaPipe() or SixDrepNet(); both create a Node named 'faceDetection' internally
+    detector.spin()
     rclpy.shutdown()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

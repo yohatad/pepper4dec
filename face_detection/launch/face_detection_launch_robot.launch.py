@@ -80,7 +80,6 @@ def generate_launch_description():
     parameters=[
         {'config_path': cfg_path},
         {'camera': camera},
-        {'unit_tests': False},
     ],
     output='screen',
     )
