@@ -105,10 +105,10 @@ Version: v1.0
 
 import sys
 import rclpy
-from rclpy.node import Node
 import os
 import sys
-from cssr_system.face_detection.face_detection_implementation import MediaPipe, SixDrepNet
+from rclpy.node import Node
+from face_detection_implementation import MediaPipe, SixDrepNet
 BANNER = """faceDetection v1.0
 This program comes with ABSOLUTELY NO WARRANTY.
 """
