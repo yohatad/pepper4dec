@@ -133,11 +133,15 @@ ament_export_dependencies(rosidl_default_runtime)
 
 # --- 6) Python node ------------------------------------------------------
 install(PROGRAMS
-  overt_attention/src/overt_attention_application.py
   face_detection/src/face_detection_application.py
-  face_detection/src/face_detection_implementation.py
-  face_detection/src/face_detection_tracking.py
   DESTINATION lib/${PROJECT_NAME}
+  RENAME face_detection
+)
+
+install(PROGRAMS
+  overt_attention/src/overt_attention_application.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME overt_attention
 )
 
 # --- 7) Module assets ---------------------------------------------------

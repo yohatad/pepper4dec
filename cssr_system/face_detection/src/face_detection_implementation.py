@@ -1,4 +1,4 @@
-""""
+"""
 face_detection_implementation.py Implementation code for running the Face and Mutual Gaze Detection and Localization ROS2 node.
 
 Author: Yohannes Tadesse Haile
@@ -18,6 +18,8 @@ import multiprocessing
 import yaml
 import random
 import threading
+import signal
+import sys
 from ament_index_python.packages import get_package_share_directory
 from rclpy.node import Node
 from math import cos, sin, pi
@@ -435,6 +437,14 @@ class FaceDetectionNode(Node):
 
         self.pub_gaze.publish(face_msg)
 
+    def cleanup(self):
+        """Clean up resources before shutdown"""
+        try:
+            cv2.destroyAllWindows()
+            self.get_logger().info(f"{self.node_name}: Cleanup completed")
+        except Exception as e:
+            self.get_logger().error(f"{self.node_name}: Error during cleanup: {e}")
+
 class MediaPipe(FaceDetectionNode):
     def __init__(self):
         super().__init__()
@@ -479,28 +489,38 @@ class MediaPipe(FaceDetectionNode):
     def spin(self):
         """Main loop to display processed frames and depth images."""
         rate = self.create_rate(30)  # Adjust the rate as needed
-        while rclpy.ok():
-            if self.latest_frame is not None:
+        try:
+            while rclpy.ok():
+                if self.latest_frame is not None:
+                    if self.verbose_mode:
+                        # Display the processed frame
+                        cv2.imshow("Face Detection & Mutual Gaze Estimation", self.latest_frame)
+
+                if (self.get_clock().now() - self.timer_start).nanoseconds / 1e9 > 10:
+                    self.get_logger().info(f"{self.node_name}: running.")
+                    self.timer_start = self.get_clock().now()
+
+                # Display the depth image if verbose mode is enabled
                 if self.verbose_mode:
-                    # Display the processed frame
-                    cv2.imshow("Face Detection & Mutual Gaze Estimation", self.latest_frame)
+                    self.display_depth_image()
 
-            if (self.get_clock().now() - self.timer_start).nanoseconds / 1e9 > 10:
-                self.get_logger().info(f"{self.node_name}: running.")
-                self.timer_start = self.get_clock().now()
+                # Wait for GUI events
+                if cv2.waitKey(1) & 0xFF == ord("q"):
+                    rclpy.shutdown()
+                    break
 
-            # Display the depth image if verbose mode is enabled
-            if self.verbose_mode:
-                self.display_depth_image()
-
-            # Wait for GUI events
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                rclpy.shutdown()
-
-            rclpy.spin_once(self, timeout_sec=0.01)
-
-        # Clean up OpenCV windows on shutdown
-        cv2.destroyAllWindows()
+                try:
+                    rclpy.spin_once(self, timeout_sec=0.01)
+                except Exception as e:
+                    # Handle ROS2 context errors gracefully
+                    if rclpy.ok():
+                        self.get_logger().error(f"{self.node_name}: Error in spin_once: {e}")
+                    break
+        except Exception as e:
+            self.get_logger().error(f"{self.node_name}: Error in spin loop: {e}")
+        finally:
+            # Clean up OpenCV windows on shutdown
+            cv2.destroyAllWindows()
 
     def process_face_mesh(self, frame, rgb_frame, img_h, img_w):
         results = self.face_mesh.process(rgb_frame)
@@ -872,25 +892,35 @@ class SixDrepNet(FaceDetectionNode):
     def spin(self):
         """Main loop to display processed frames and depth images."""
         rate = self.create_rate(30)  # Adjust the rate as needed
-        while rclpy.ok():
-            if (self.get_clock().now() - self.timer_start).nanoseconds / 1e9 > 10:
-                self.get_logger().info(f"{self.node_name}: running.")
-                self.timer_start = self.get_clock().now()
+        try:
+            while rclpy.ok():
+                if (self.get_clock().now() - self.timer_start).nanoseconds / 1e9 > 10:
+                    self.get_logger().info(f"{self.node_name}: running.")
+                    self.timer_start = self.get_clock().now()
 
-            if self.latest_frame is not None:
+                if self.latest_frame is not None:
+                    if self.verbose_mode:
+                        # Display the processed frame
+                        cv2.imshow("Face Detection & Head Pose Estimation", self.latest_frame)
+
+                # Display the depth image if verbose mode is enabled
                 if self.verbose_mode:
-                    # Display the processed frame
-                    cv2.imshow("Face Detection & Head Pose Estimation", self.latest_frame)
+                    self.display_depth_image()
 
-            # Display the depth image if verbose mode is enabled
-            if self.verbose_mode:
-                self.display_depth_image()
+                # Wait for GUI events
+                if cv2.waitKey(1) & 0xFF == ord("q"):
+                    rclpy.shutdown()
+                    break
 
-            # Wait for GUI events
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                rclpy.shutdown()
-
-            rclpy.spin_once(self, timeout_sec=0.01)
-
-        # Clean up OpenCV windows on shutdown
-        cv2.destroyAllWindows()
+                try:
+                    rclpy.spin_once(self, timeout_sec=0.01)
+                except Exception as e:
+                    # Handle ROS2 context errors gracefully
+                    if rclpy.ok():
+                        self.get_logger().error(f"{self.node_name}: Error in spin_once: {e}")
+                    break
+        except Exception as e:
+            self.get_logger().error(f"{self.node_name}: Error in spin loop: {e}")
+        finally:
+            # Clean up OpenCV windows on shutdown
+            cv2.destroyAllWindows()

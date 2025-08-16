@@ -103,47 +103,56 @@ Date: April 18, 2025
 Version: v1.0
 """
 
+import sys
 import rclpy
 from rclpy.node import Node
-from face_detection_implementation import MediaPipe, SixDrepNet
-
+import os
+import sys
+from cssr_system.face_detection.face_detection_implementation import MediaPipe, SixDrepNet
 BANNER = """faceDetection v1.0
-\t\t\t    This program comes with ABSOLUTELY NO WARRANTY.
+This program comes with ABSOLUTELY NO WARRANTY.
 """
 
-ALGORITHM_MAP = {
+ALGORITHMS = {
     "mediapipe": MediaPipe,
     "sixdrep": SixDrepNet,
 }
 
 def main():
     rclpy.init()
+    node = rclpy.create_node("faceDetection")
+    node.get_logger().info(BANNER)
 
-    # Create a short-lived chooser node **with the same name** as the detector node.
-    # This ensures launch-file parameters (algorithm, etc.) are applied here.
-    chooser = rclpy.create_node("faceDetection")  # <- matches YAML/launch node name
-    chooser.get_logger().info(BANNER)
+    # Declare and read algorithm param (default = sixdrep)
+    node.declare_parameter("algorithm", "sixdrep")
+    algo = node.get_parameter("algorithm").get_parameter_value().string_value.lower()
 
-    # Declare with a sane default; launch-file overrides will replace it.
-    chooser.declare_parameter("algorithm", "sixdrep")
-    algorithm = chooser.get_parameter("algorithm").get_parameter_value().string_value.strip().lower()
-
-    chooser.get_logger().info(f"faceDetection: startup (algorithm='{algorithm}').")
-    chooser.destroy_node()  # avoid name conflict before creating the actual detector node
-
-    # Pick implementation and run
-    impl_cls = ALGORITHM_MAP.get(algorithm)
-    if impl_cls is None:
-        # Fall back + clear error
-        temp = rclpy.create_node("faceDetection")
-        temp.get_logger().error(f"Invalid algorithm '{algorithm}'. Expected one of: {list(ALGORITHM_MAP)}.")
-        temp.destroy_node()
+    if algo not in ALGORITHMS:
+        node.get_logger().error(f"Invalid algorithm '{algo}'. Choose from {list(ALGORITHMS)}.")
+        node.destroy_node()
         rclpy.shutdown()
-        return
+        sys.exit(1)
 
-    detector = impl_cls()  # MediaPipe() or SixDrepNet(); both create a Node named 'faceDetection' internally
-    detector.spin()
-    rclpy.shutdown()
+    node.destroy_node()
+    algo_node = ALGORITHMS[algo]()  # instantiate the chosen node
+
+    try:
+        if hasattr(algo_node, "spin"):
+            algo_node.spin()
+        else:
+            rclpy.spin(algo_node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        # Always try to clean up gracefully
+        if hasattr(algo_node, "cleanup"):
+            try:
+                algo_node.cleanup()
+            except Exception:
+                pass
+        algo_node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 if __name__ == "__main__":
     main()
