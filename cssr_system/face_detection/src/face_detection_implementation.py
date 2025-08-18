@@ -7,6 +7,7 @@ Version: v1.0
 
 This program comes with ABSOLUTELY NO WARRANTY.
 """
+
 import cv2
 import mediapipe as mp
 import numpy as np
@@ -30,268 +31,109 @@ from typing import Tuple, List
 from cssr_interfaces.msg import FaceDetection
 from .face_detection_tracking import Sort, CentroidTracker
 
+
+def load_configuration() -> Dict:
+    """
+    Load configuration from the default YAML file location.
+    
+    Returns:
+        Dict: Configuration data with defaults for missing values
+    """
+    config = {
+        # Default values
+        'algorithm': 'sixdrep',
+        'useCompressed': False,
+        'camera': 'realsense',
+        'verboseMode': True,
+        'imageTimeout': 2.0,
+        'mpFacedetConfidence': 0.5,
+        'mpHeadposeAngle': 8,
+        'centroidMaxDisappeared': 15,
+        'centroidMaxDistance': 100,
+        'sixdrepnetConfidence': 0.65,
+        'sixdrepnetHeadposeAngle': 10,
+        'sortMaxDisappeared': 5,
+        'sortMinHits': 3,
+        'sortIouThreshold': 0.3
+    }
+    
+    try:
+        package_path = get_package_share_directory('face_detection')
+        config_file = os.path.join(package_path, 'config', 'face_detection_configuration.yaml')
+        
+        if os.path.exists(config_file):
+            with open(config_file, 'r') as file:
+                file_config = yaml.safe_load(file) or {}
+                config.update(file_config)  # Update defaults with file values
+                print(f"Loaded configuration from {config_file}")
+        else:
+            print(f"Warning: Configuration file not found at {config_file}, using defaults")
+            
+    except Exception as e:
+        print(f"Error reading configuration file: {e}")
+        print("Using default configuration values")
+        
+    return config
+
 class FaceDetectionNode(Node):
-    def __init__(self, node_name='faceDetection'):
+    def __init__(self, config: Dict, node_name: str = 'faceDetection'):
         super().__init__(node_name)
         
+        self.config = config
         self.pub_gaze = self.create_publisher(FaceDetection, "/faceDetection/data", 10)
         self.bridge = CvBridge()
-        self.depth_image = None  # Initialize depth_image
-        self.color_image = None  # Initialize color_image
+        self.depth_image: Optional[np.ndarray] = None
+        self.color_image: Optional[np.ndarray] = None
         
-        # Load configuration from default file location
-        self.config = self.read_config()
-        
-        # Set configuration values with defaults
-        self.use_compressed = self.config.get('useCompressed', False)
-        self.camera_type = self.config.get('camera', 'realsense')
-        self.verbose_mode = self.config.get('verboseMode', True)
-        self.image_timeout = self.config.get('imageTimeout', 2.0)
+        # Configuration values
+        self.use_compressed = config['useCompressed']
+        self.camera_type = config['camera']
+        self.verbose_mode = config['verboseMode']
+        self.image_timeout = config['imageTimeout']
         
         self.node_name = self.get_name()
         self.timer_start = self.get_clock().now()
         self.last_image_time = self.get_clock().now()
 
-    def read_config(self):
-        """
-        Read configuration from the default YAML file location.
-        
-        Returns:
-            dict: Configuration data from YAML file, or default values if file not found
-        """
-        config = {}
-        
+    def get_model_paths(self) -> Tuple[str, str]:
+        """Get paths to the ONNX model files."""
         try:
             package_path = get_package_share_directory('face_detection')
-            config_file = os.path.join(package_path, 'config', 'face_detection_configuration.yaml')
+            yolo_path = os.path.join(package_path, 'models/face_detection_goldYOLO.onnx')
+            sixdrepnet_path = os.path.join(package_path, 'models/face_detection_sixdrepnet360.onnx')
             
-            if os.path.exists(config_file):
-                with open(config_file, 'r') as file:
-                    config = yaml.safe_load(file) or {}
-                    self.get_logger().info(f"{self.get_name()}: Loaded configuration from {config_file}")
-            else:
-                self.get_logger().warn(f"{self.get_name()}: Configuration file not found at {config_file}, using defaults")
+            # Validate paths exist
+            if not os.path.exists(yolo_path):
+                raise FileNotFoundError(f"YOLO model not found: {yolo_path}")
+            if not os.path.exists(sixdrepnet_path):
+                raise FileNotFoundError(f"SixDrepNet model not found: {sixdrepnet_path}")
                 
+            return yolo_path, sixdrepnet_path
         except Exception as e:
-            self.get_logger().error(f"{self.get_name()}: Error reading configuration file: {e}")
+            self.get_logger().error(f"Failed to get model paths: {e}")
+            raise
+
+    def get_topic_names(self) -> Tuple[str, str]:
+        """Get RGB and depth topic names based on camera type."""
+        topic_mapping = {
+            "realsense": ("RealSenseCameraRGB", "RealSenseCameraDepth"),
+            "pepper": ("PepperFrontCamera", "PepperDepthCamera"),
+        }
+        
+        if self.camera_type not in topic_mapping:
+            raise ValueError(f"Invalid camera type: {self.camera_type}")
             
-        return config
-
-    def subscribe_topics(self):
-        # Set up for indefinite waiting
-        wait_rate = self.create_rate(1)  # Check once per second
-        start_time = self.get_clock().now()
+        rgb_key, depth_key = topic_mapping[self.camera_type]
+        rgb_topic = self._extract_topic(rgb_key)
+        depth_topic = self._extract_topic(depth_key)
         
-        if self.camera_type == "realsense":
-            self.rgb_topic = self.extract_topics("RealSenseCameraRGB")
-            self.depth_topic = self.extract_topics("RealSenseCameraDepth")
-        
-        elif self.camera_type == "pepper":
-            self.rgb_topic = self.extract_topics("PepperFrontCamera")
-            self.depth_topic = self.extract_topics("PepperDepthCamera")
-        
-        elif self.camera_type == "video":
-            self.rgb_topic = self.extract_topics("RealSenseCameraRGB")
-            self.depth_topic = self.extract_topics("RealSenseCameraDepth") 
-        
-        else:
-            self.get_logger().error(f"{self.node_name}: Invalid camera type specified")
-            return
-        
-        # Check if topics were found
-        if not self.rgb_topic or not self.depth_topic:
-            self.get_logger().error(f"{self.node_name}: Camera topic not found.")
-            return
-
-        # Determine topic names based on compression settings
-        if self.use_compressed and self.camera_type == "realsense":
-            color_topic = self.rgb_topic + "/compressed"
-            depth_topic = self.depth_topic + "/compressedDepth"
-        
-        elif self.use_compressed and self.camera_type == "pepper":
-            # There is no compressed topic for Pepper cameras
-            self.get_logger().warn(f"{self.node_name}: Compressed images are not available for Pepper cameras.")
-            color_topic = self.rgb_topic
-            depth_topic = self.depth_topic
-        
-        elif self.camera_type == "video":
-            color_topic = self.rgb_topic + "/compressed"
-            depth_topic = self.depth_topic + "/compressedDepth"
-        
-        else:
-            color_topic = self.rgb_topic
-            depth_topic = self.depth_topic
-        
-        # Wait for topics to be available, with indefinite waiting
-        self.get_logger().info(f"{self.node_name}: Waiting for topics: {color_topic}, {depth_topic}")
-        topics_available = False
-        warning_interval = 5.0  # Warn every 5 seconds
-        last_warning_time = start_time
-        
-        while not topics_available and rclpy.ok():
-            # Get list of available topics
-            topic_names_and_types = self.get_topic_names_and_types()
-            published_topics = [name for name, _ in topic_names_and_types]
+        if not rgb_topic or not depth_topic:
+            raise ValueError("Failed to extract camera topics")
             
-            color_available = color_topic in published_topics
-            depth_available = depth_topic in published_topics
-            
-            if color_available and depth_available:
-                topics_available = True
-                if self.verbose_mode:
-                    self.get_logger().info(f"{self.node_name}: Both topics are available!")
-                break
-            
-            # Generate warning messages periodically
-            current_time = self.get_clock().now()
-            elapsed_time = (current_time - start_time).nanoseconds / 1e9
-            
-            if (current_time - last_warning_time).nanoseconds / 1e9 >= warning_interval:
-                missing_topics = []
-                if not color_available:
-                    missing_topics.append(color_topic)
-                if not depth_available:
-                    missing_topics.append(depth_topic)
-                    
-                self.get_logger().warn(f"{self.node_name}: Still waiting for topics after {int(elapsed_time)}s: {', '.join(missing_topics)}")
-                last_warning_time = current_time
-                
-            rclpy.spin_once(self, timeout_sec=1.0)
-        
-        # Subscribe to topics
-        if self.use_compressed and self.camera_type == "realsense":
-            color_sub = Subscriber(self, CompressedImage, color_topic)
-            depth_sub = Subscriber(self, CompressedImage, depth_topic)
-            self.get_logger().info(f"{self.node_name}: Subscribed to {color_topic}")
-            self.get_logger().info(f"{self.node_name}: Subscribed to {depth_topic}")
-        
-        elif self.use_compressed and self.camera_type == "pepper":
-            color_sub = Subscriber(self, Image, color_topic)
-            depth_sub = Subscriber(self, Image, depth_topic)
-            self.get_logger().info(f"{self.node_name}: Subscribed to {color_topic}")
-            self.get_logger().info(f"{self.node_name}: Subscribed to {depth_topic}")
+        return rgb_topic, depth_topic
 
-        elif self.camera_type == "video":
-            color_sub = Subscriber(self, CompressedImage, color_topic)
-            depth_sub = Subscriber(self, CompressedImage, depth_topic)
-            self.get_logger().info(f"{self.node_name}: Subscribed to {color_topic}")
-            self.get_logger().info(f"{self.node_name}: Subscribed to {depth_topic}")
-
-        else:
-            color_sub = Subscriber(self, Image, color_topic)
-            depth_sub = Subscriber(self, Image, depth_topic)
-            self.get_logger().info(f"{self.node_name}: Subscribed to {color_topic}")
-            self.get_logger().info(f"{self.node_name}: Subscribed to {depth_topic}")
-
-        # ApproximateTimeSynchronizer setup
-        if self.camera_type == "pepper":
-            ats = ApproximateTimeSynchronizer([color_sub, depth_sub], queue_size=10, slop=5.0)
-        else:
-            ats = ApproximateTimeSynchronizer([color_sub, depth_sub], queue_size=10, slop=0.1)  
-        
-        ats.registerCallback(self.synchronized_callback)
-
-    def synchronized_callback(self, color_data, depth_data):
-        self.last_image_time = self.get_clock().now()
-        try:
-            # --- Color Image Processing ---
-            if isinstance(color_data, CompressedImage):
-                np_arr = np.frombuffer(color_data.data, np.uint8)
-                self.color_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-            else:
-                self.color_image = self.bridge.imgmsg_to_cv2(color_data, desired_encoding="bgr8")
-
-            # --- Depth Image Processing ---
-            if isinstance(depth_data, CompressedImage):
-                # Ensure depth_data.format is valid before accessing it
-                if hasattr(depth_data, "format") and depth_data.format and "compressedDepth png" in depth_data.format:
-                    try:
-                        # Handle PNG compression in compressedDepth format
-                        depth_header_size = 12
-                        depth_img_data = depth_data.data[depth_header_size:]
-                        np_arr = np.frombuffer(depth_img_data, np.uint8)
-                        depth_img = cv2.imdecode(np_arr, cv2.IMREAD_ANYDEPTH)
-
-                        if depth_img is not None:
-                            self.depth_image = depth_img
-                        else:
-                            self.get_logger().error(f"{self.node_name}: Failed to decode PNG depth image")
-                    except Exception as e:
-                        self.get_logger().error(f"{self.node_name}: Depth decoding error: {str(e)}")
-                else:
-                    # Regular compressed image
-                    np_arr = np.frombuffer(depth_data.data, np.uint8)
-                    self.depth_image = cv2.imdecode(np_arr, cv2.IMREAD_UNCHANGED)
-            else:
-                self.depth_image = self.bridge.imgmsg_to_cv2(depth_data, desired_encoding="passthrough")
-
-            if self.color_image is None or self.depth_image is None:
-                self.get_logger().warn(f"{self.node_name}: synchronized_callback: Decoded images are None.")
-                return
-
-            # Process synchronized images
-            self.process_images()
-            self.last_image_time = self.get_clock().now()
-
-        except CvBridgeError as e:
-            self.get_logger().error(f"{self.node_name}: synchronized_callback CvBridge Error: {str(e)}")
-        except Exception as e:
-            self.get_logger().error(f"{self.node_name}: synchronized_callback Exception: {str(e)}")
-
-    def start_timeout_monitor(self):
-        def monitor():
-            rate = self.create_rate(1)
-            while rclpy.ok():
-                time_since_last = (self.get_clock().now() - self.last_image_time).nanoseconds / 1e9
-                if time_since_last > self.image_timeout and self.color_image is not None:
-                    self.get_logger().warn(f"{self.node_name}: No image received for {self.image_timeout} seconds. Shutting down.")
-                    rclpy.shutdown()
-                    break
-                rclpy.spin_once(self, timeout_sec=1.0)
-
-        threading.Thread(target=monitor, daemon=True).start()
-
-    def check_camera_resolution(self, color_image, depth_image):
-        """Check if the color and depth images have the same resolution."""
-        if color_image is None or depth_image is None:
-            self.get_logger().warn(f"{self.node_name}: check_camera_resolution: One of the images is None")
-            return False
-        rgb_h, rgb_w = color_image.shape[:2]
-        depth_h, depth_w = depth_image.shape[:2]
-        return rgb_h == depth_h and rgb_w == depth_w
-
-    @staticmethod
-    def read_yaml_file(package_name):
-        """
-        Read and parse a YAML configuration file from the specified ROS2 package.
-        
-        Args:
-            package_name (str): Name of the ROS2 package containing the config file
-            
-        Returns:
-            dict: Configuration data from YAML file, or empty dict if file not found
-        """
-        try:
-            package_path = get_package_share_directory(package_name)
-            
-            directory = 'face_detection/config'
-            config_file = 'face_detection_configuration.yaml'
-            
-            config_path = os.path.join(package_path, directory, config_file)
-            
-            if os.path.exists(config_path):
-                with open(config_path, 'r') as file:
-                    data = yaml.safe_load(file)
-                    return data
-            else:
-                print(f"Configuration file not found at {config_path}")
-                return {}
-                
-        except Exception as e:
-            print(f"Error reading configuration file: {e}")
-            return {}
-    
-    def extract_topics(self, image_topic):
+    def _extract_topic(self, image_topic: str) -> Optional[str]:
+        """Extract topic name from configuration file."""
         try:
             package_path = get_package_share_directory('face_detection')
             config_path = os.path.join(package_path, 'data', 'pepper_topics.dat')
@@ -302,165 +144,248 @@ class FaceDetectionNode(Node):
                         line = line.strip()
                         if not line or line.startswith('#'):
                             continue
-                        key, value = line.split(maxsplit=1)
-                        if key.lower() == image_topic.lower():
-                            return value
+                        parts = line.split(maxsplit=1)
+                        if len(parts) == 2 and parts[0].lower() == image_topic.lower():
+                            return parts[1]
             else:
-                self.get_logger().error(f"{self.node_name}: extract_topics: Data file not found at {config_path}")
+                self.get_logger().error(f"Topic data file not found: {config_path}")
         except Exception as e:
-            self.get_logger().error(f"{self.node_name}: ROS2 package 'face_detection' not found: {e}")
+            self.get_logger().error(f"Error extracting topic '{image_topic}': {e}")
         
         return None
 
-    def process_images(self):
-        if self.color_image is None or self.depth_image is None:
-            self.get_logger().warn(f"{self.node_name}: process_images: Missing images.")
-            return
+    def wait_for_topics(self, color_topic: str, depth_topic: str, timeout: float = 30.0) -> bool:
+        """Wait for topics to become available."""
+        self.get_logger().info(f"Waiting for topics: {color_topic}, {depth_topic}")
+        
+        start_time = self.get_clock().now()
+        warning_interval = 5.0
+        last_warning_time = start_time
+        
+        while rclpy.ok():
+            # Check if topics are available
+            topic_names_and_types = self.get_topic_names_and_types()
+            published_topics = [name for name, _ in topic_names_and_types]
+            
+            if color_topic in published_topics and depth_topic in published_topics:
+                if self.verbose_mode:
+                    self.get_logger().info("Both topics are available!")
+                return True
+            
+            # Check timeout
+            elapsed = (self.get_clock().now() - start_time).nanoseconds / 1e9
+            if elapsed > timeout:
+                self.get_logger().error(f"Timeout waiting for topics after {timeout}s")
+                return False
+            
+            # Periodic warnings
+            if (self.get_clock().now() - last_warning_time).nanoseconds / 1e9 >= warning_interval:
+                missing = [t for t in [color_topic, depth_topic] if t not in published_topics]
+                self.get_logger().warn(f"Still waiting for topics after {int(elapsed)}s: {missing}")
+                last_warning_time = self.get_clock().now()
+                
+            rclpy.spin_once(self, timeout_sec=1.0)
+        
+        return False
 
-        if not self.check_camera_resolution(self.color_image, self.depth_image) and self.camera_type != "pepper":
-            self.get_logger().warn(f"{self.node_name}: process_images: Color and depth image resolutions do not match.")
-            pass
+    def setup_subscribers(self) -> bool:
+        """Set up image subscribers based on camera configuration."""
+        try:
+            rgb_topic, depth_topic = self.get_topic_names()
+            
+            # Determine final topic names based on compression
+            if self.use_compressed and self.camera_type == "realsense":
+                color_topic = rgb_topic + "/compressed"
+                depth_topic = depth_topic + "/compressedDepth"
+                color_msg_type = CompressedImage
+                depth_msg_type = CompressedImage
+            elif self.use_compressed and self.camera_type == "pepper":
+                self.get_logger().warn("Compressed images not available for Pepper cameras")
+                color_topic = rgb_topic
+                depth_topic = depth_topic
+                color_msg_type = Image
+                depth_msg_type = Image
+            else:
+                color_topic = rgb_topic
+                depth_topic = depth_topic
+                color_msg_type = Image
+                depth_msg_type = Image
 
-        if hasattr(self, 'face_mesh'):  # MediaPipe implementation
-            rgb_frame = cv2.cvtColor(self.color_image, cv2.COLOR_BGR2RGB)
-            img_h, img_w = self.color_image.shape[:2]
-            self.process_face_mesh(self.color_image, rgb_frame, img_h, img_w)
+            # Wait for topics
+            if not self.wait_for_topics(color_topic, depth_topic):
+                return False
 
-        elif hasattr(self, 'yolo_model'):  # SixDrepNet implementation
-            self.latest_frame = self.process_frame(self.color_image)
-        else:
-            self.get_logger().warn(f"{self.node_name}: process_images: No processing method found (face_mesh/yolo_model missing).")
+            # Create subscribers
+            color_sub = Subscriber(self, color_msg_type, color_topic)
+            depth_sub = Subscriber(self, depth_msg_type, depth_topic)
+            
+            self.get_logger().info(f"Subscribed to {color_topic}")
+            self.get_logger().info(f"Subscribed to {depth_topic}")
 
-    def display_depth_image(self):
-        if self.depth_image is not None:
-            try:
-                # Convert depth image to float32 for processing
-                depth_array = np.array(self.depth_image, dtype=np.float32)
+            # Set up synchronizer
+            slop = 5.0 if self.camera_type == "pepper" else 0.1
+            ats = ApproximateTimeSynchronizer([color_sub, depth_sub], queue_size=10, slop=slop)
+            ats.registerCallback(self.synchronized_callback)
+            
+            return True
+            
+        except Exception as e:
+            self.get_logger().error(f"Failed to setup subscribers: {e}")
+            return False
 
-                # Handle invalid depth values (e.g., NaNs, infs)
-                depth_array = np.nan_to_num(depth_array, nan=0.0, posinf=0.0, neginf=0.0)
+    def synchronized_callback(self, color_data, depth_data):
+        """Process synchronized color and depth images."""
+        self.last_image_time = self.get_clock().now()
+        
+        try:
+            # Process color image
+            if isinstance(color_data, CompressedImage):
+                np_arr = np.frombuffer(color_data.data, np.uint8)
+                self.color_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            else:
+                self.color_image = self.bridge.imgmsg_to_cv2(color_data, desired_encoding="bgr8")
 
-                # Normalize the depth image to the 0-255 range
-                normalized_depth = cv2.normalize(depth_array, None, 0, 255, cv2.NORM_MINMAX)
+            # Process depth image
+            self.depth_image = self._process_depth_image(depth_data)
 
-                # Convert to 8-bit image
-                normalized_depth = np.uint8(normalized_depth)
+            if self.color_image is None or self.depth_image is None:
+                self.get_logger().warn("Failed to decode images")
+                return
 
-                # Apply a colormap for better visualization (optional)
-                depth_colormap = cv2.applyColorMap(normalized_depth, cv2.COLORMAP_JET)
+            # Process the images
+            self.process_images()
+            
+        except Exception as e:
+            self.get_logger().error(f"Error in synchronized_callback: {e}")
 
-                # Display the depth image
-                cv2.imshow("Depth Image", depth_colormap)
+    def _process_depth_image(self, depth_data) -> Optional[np.ndarray]:
+        """Process depth image data."""
+        try:
+            if isinstance(depth_data, CompressedImage):
+                if hasattr(depth_data, "format") and depth_data.format and "compressedDepth png" in depth_data.format:
+                    # Handle PNG compression
+                    depth_header_size = 12
+                    depth_img_data = depth_data.data[depth_header_size:]
+                    np_arr = np.frombuffer(depth_img_data, np.uint8)
+                    return cv2.imdecode(np_arr, cv2.IMREAD_ANYDEPTH)
+                else:
+                    # Regular compressed image
+                    np_arr = np.frombuffer(depth_data.data, np.uint8)
+                    return cv2.imdecode(np_arr, cv2.IMREAD_UNCHANGED)
+            else:
+                return self.bridge.imgmsg_to_cv2(depth_data, desired_encoding="passthrough")
+        except Exception as e:
+            self.get_logger().error(f"Depth image processing error: {e}")
+            return None
 
-            except Exception as e:
-                self.get_logger().error(f"{self.node_name}: display_depth_image: Error displaying depth image: {e}")
+    def start_timeout_monitor(self):
+        """Start a thread to monitor image reception timeout."""
+        def monitor():
+            while rclpy.ok():
+                time_since_last = (self.get_clock().now() - self.last_image_time).nanoseconds / 1e9
+                if time_since_last > self.image_timeout and self.color_image is not None:
+                    self.get_logger().warn(f"No image received for {self.image_timeout}s. Shutting down.")
+                    rclpy.shutdown()
+                    break
+                rclpy.spin_once(self, timeout_sec=1.0)
 
-    def get_depth_at_centroid(self, centroid_x, centroid_y):
-        """Get the depth value at the centroid of a face."""
+        threading.Thread(target=monitor, daemon=True).start()
+
+    def check_camera_resolution(self, color_image: np.ndarray, depth_image: np.ndarray) -> bool:
+        """Check if color and depth images have matching resolutions."""
+        if color_image is None or depth_image is None:
+            return False
+        return color_image.shape[:2] == depth_image.shape[:2]
+
+    def get_depth_at_centroid(self, centroid_x: float, centroid_y: float) -> Optional[float]:
+        """Get depth value at specific coordinates."""
         if self.depth_image is None:
             return None
 
         height, width = self.depth_image.shape[:2]
-        x = int(round(centroid_x))
-        y = int(round(centroid_y))
+        x, y = int(round(centroid_x)), int(round(centroid_y))
 
-        # Check bounds
-        if x < 0 or x >= width or y < 0 or y >= height:
-            self.get_logger().warn(f"{self.node_name}: Centroid coordinates ({x}, {y}) are out of bounds.")
-            return None
-
-        depth_value = self.depth_image[y, x]
-
-        # Handle invalid depth values
-        if np.isfinite(depth_value) and depth_value > 0:
-            # Convert to meters if necessary
-            depth_in_meters = depth_value / 1000.0
-            return depth_in_meters
-        else:
-            return None
+        if 0 <= x < width and 0 <= y < height:
+            depth_value = self.depth_image[y, x]
+            if np.isfinite(depth_value) and depth_value > 0:
+                return depth_value / 1000.0  # Convert to meters
         
-    def get_depth_in_region(self, centroid_x, centroid_y, box_width, box_height, region_scale=0.1):
-        """
-        Get the depth value within a scaled region around the centroid of a bounding box.
-        Uses median filtering to be more robust against compression artifacts.
-        """
+        return None
+
+    def get_depth_in_region(self, centroid_x: float, centroid_y: float, 
+                           box_width: float, box_height: float, 
+                           region_scale: float = 0.1) -> Optional[float]:
+        """Get median depth value in a region around the centroid."""
         if self.depth_image is None:
             return None
 
-        # Calculate scaled region dimensions
-        region_width = int(box_width * region_scale)
-        region_height = int(box_height * region_scale)
-        
-        # Ensure minimum region size (e.g., 5x5 pixels)
-        region_width = max(5, region_width)
-        region_height = max(5, region_height)
+        # Calculate region dimensions
+        region_width = max(5, int(box_width * region_scale))
+        region_height = max(5, int(box_height * region_scale))
 
-        # Calculate the top-left corner of the scaled region
-        x_start = int(round(centroid_x - region_width / 2))
-        y_start = int(round(centroid_y - region_height / 2))
+        # Calculate region bounds
+        x_start = max(0, int(centroid_x - region_width / 2))
+        y_start = max(0, int(centroid_y - region_height / 2))
+        x_end = min(self.depth_image.shape[1], x_start + region_width)
+        y_end = min(self.depth_image.shape[0], y_start + region_height)
 
-        # Calculate the bottom-right corner of the scaled region
-        x_end = x_start + region_width
-        y_end = y_start + region_height
-
-        # Get image dimensions
-        image_height, image_width = self.depth_image.shape[:2]
-
-        # Ensure the region is within bounds
-        x_start = max(0, x_start)
-        y_start = max(0, y_start)
-        x_end = min(image_width, x_end)
-        y_end = min(image_height, y_end)
-
-        # If the region is invalid (e.g., zero area), return None
         if x_start >= x_end or y_start >= y_end:
-            self.get_logger().warn(f"{self.node_name}: Invalid region coordinates ({x_start}, {y_start}, {x_end}, {y_end}).")
             return None
 
-        # Extract the region of interest
+        # Extract region and get valid depth values
         depth_roi = self.depth_image[y_start:y_end, x_start:x_end]
+        valid_depths = depth_roi[np.isfinite(depth_roi) & (depth_roi > 0)]
 
-        # Filter out invalid depth values (e.g., zeros or NaNs)
-        valid_depth_values = depth_roi[np.isfinite(depth_roi) & (depth_roi > 0)]
+        return np.median(valid_depths) / 1000.0 if valid_depths.size > 0 else None
 
-        if valid_depth_values.size > 0:
-            # Use median instead of mean for more robustness against artifacts
-            median_depth_in_meters = np.median(valid_depth_values) / 1000.0
-            return median_depth_in_meters
-        else:
-            return None
-        
-    def generate_dark_color(self):
-        """Generate a dark color that is visible on a white background."""
+    def generate_dark_color(self) -> Tuple[int, int, int]:
+        """Generate a dark color for visualization."""
         while True:
-            color = (random.randint(0, 150), random.randint(0, 150), random.randint(0, 150))  # Dark colors (0-150)
-            brightness = (0.299 * color[0] + 0.587 * color[1] + 0.114 * color[2])  # Perceived brightness
-            if brightness < 130:  # Ensure the color is dark enough
+            color = (random.randint(0, 150), random.randint(0, 150), random.randint(0, 150))
+            brightness = 0.299 * color[0] + 0.587 * color[1] + 0.114 * color[2]
+            if brightness < 130:
                 return color
 
-    def publish_face_detection(self, tracking_data):
-        """Publish the face detection results."""
+    def publish_face_detection(self, tracking_data: List[Dict]):
+        """Publish face detection results."""
         if not tracking_data:
             return
 
         face_msg = FaceDetection()
-
-        # Coerce everything to native Python types (not numpy dtypes)
-        face_msg.face_label_id = [str(d['face_id']) for d in tracking_data]          # string[]
-        face_msg.centroids     = [d['centroid']       for d in tracking_data]        # geometry_msgs/Point[]
-        face_msg.width         = [float(d['width'])   for d in tracking_data]        # float32[]
-        face_msg.height        = [float(d['height'])  for d in tracking_data]        # float32[]
-        face_msg.mutual_gaze   = [bool(d['mutual_gaze']) for d in tracking_data]     # bool[]
+        face_msg.face_label_id = [str(d['face_id']) for d in tracking_data]
+        face_msg.centroids = [d['centroid'] for d in tracking_data]
+        face_msg.width = [float(d['width']) for d in tracking_data]
+        face_msg.height = [float(d['height']) for d in tracking_data]
+        face_msg.mutual_gaze = [bool(d['mutual_gaze']) for d in tracking_data]
 
         self.pub_gaze.publish(face_msg)
 
+    def display_depth_image(self):
+        """Display depth image for debugging."""
+        if self.depth_image is None:
+            return
+            
+        try:
+            depth_array = np.array(self.depth_image, dtype=np.float32)
+            depth_array = np.nan_to_num(depth_array, nan=0.0, posinf=0.0, neginf=0.0)
+            normalized_depth = cv2.normalize(depth_array, None, 0, 255, cv2.NORM_MINMAX)
+            normalized_depth = np.uint8(normalized_depth)
+            depth_colormap = cv2.applyColorMap(normalized_depth, cv2.COLORMAP_JET)
+            cv2.imshow("Depth Image", depth_colormap)
+        except Exception as e:
+            self.get_logger().error(f"Error displaying depth image: {e}")
+
+    def process_images(self):
+        """Override in subclasses to implement specific processing."""
+        raise NotImplementedError("Subclasses must implement process_images")
+
     def cleanup(self):
-        """Clean up resources before shutdown"""
+        """Clean up resources."""
         try:
             cv2.destroyAllWindows()
-            self.get_logger().info(f"{self.node_name}: Cleanup completed")
+            self.get_logger().info("Cleanup completed")
         except Exception as e:
-            self.get_logger().error(f"{self.node_name}: Error during cleanup: {e}")
+            self.get_logger().error(f"Error during cleanup: {e}")
 
 class MediaPipe(FaceDetectionNode):
     def __init__(self):

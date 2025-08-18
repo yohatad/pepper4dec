@@ -105,11 +105,7 @@ Version: v1.0
 
 import sys
 import rclpy
-import os
-import yaml
-from rclpy.node import Node
-from ament_index_python.packages import get_package_share_directory
-from .face_detection_implementation import MediaPipe, SixDrepNet
+from .face_detection_implementation import MediaPipe, SixDrepNet, load_configuration
 
 BANNER = """faceDetection v1.0
 This program comes with ABSOLUTELY NO WARRANTY.
@@ -120,39 +116,13 @@ ALGORITHMS = {
     "sixdrep": SixDrepNet,
 }
 
-def read_config():
-    """
-    Read configuration from the default YAML file location.
-    
-    Returns:
-        dict: Configuration data from YAML file, or default values if file not found
-    """
-    config = {}
-    
-    try:
-        
-        package_path = get_package_share_directory('face_detection')
-        config_file = os.path.join(package_path, 'config', 'face_detection_configuration.yaml')
-        
-        if os.path.exists(config_file):
-            with open(config_file, 'r') as file:
-                config = yaml.safe_load(file) or {}
-                print(f"Loaded configuration from {config_file}")
-        else:
-            print(f"Warning: Configuration file not found at {config_file}, using defaults")
-            
-    except Exception as e:
-        print(f"Error reading configuration file: {e}")
-        
-    return config
-
 def main():
     print(BANNER)
 
-    # Read configuration from default location
-    config = read_config()
+    # Load configuration once
+    config = load_configuration()
     
-    # Get algorithm from configuration file (default to 'sixdrep')
+    # Get algorithm from configuration
     algo = config.get('algorithm', 'sixdrep').lower()
 
     # Validate algorithm
@@ -164,27 +134,48 @@ def main():
 
     # Initialize ROS2
     rclpy.init()
-    
-    # Instantiate the chosen algorithm node (config file is always default location)
-    algo_node = ALGORITHMS[algo]()
 
     try:
+        # Create the algorithm node with config
+        algo_node = ALGORITHMS[algo](config)
+        
+        # Setup subscribers
+        if not algo_node.setup_subscribers():
+            print("Failed to setup subscribers")
+            sys.exit(1)
+            
+        # Start monitoring
+        algo_node.start_timeout_monitor()
+        
+        # Check camera resolution compatibility
+        if (algo_node.depth_image is not None and 
+            not algo_node.check_camera_resolution(algo_node.color_image, algo_node.depth_image) and 
+            algo_node.camera_type != "pepper"):
+            algo_node.get_logger().error("Color and depth camera resolutions don't match")
+            sys.exit(1)
+
+        # Run the node
         if hasattr(algo_node, "spin"):
             algo_node.spin()
         else:
             rclpy.spin(algo_node)
+            
     except KeyboardInterrupt:
-        pass
+        print("\nShutdown requested by user")
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
     finally:
-        # Always try to clean up gracefully
-        if hasattr(algo_node, "cleanup"):
-            try:
-                algo_node.cleanup()
-            except Exception:
-                pass
-        algo_node.destroy_node()
-        if rclpy.ok():
-            rclpy.shutdown()
+        # Cleanup
+        try:
+            if 'algo_node' in locals():
+                if hasattr(algo_node, "cleanup"):
+                    algo_node.cleanup()
+                algo_node.destroy_node()
+            if rclpy.ok():
+                rclpy.shutdown()
+        except Exception as e:
+            print(f"Error during cleanup: {e}")
 
 if __name__ == "__main__":
     main()
