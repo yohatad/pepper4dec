@@ -6,7 +6,7 @@ pkg = "face_detection"
 setup(
     name=pkg,
     version="0.1.0",
-    packages=[pkg],
+    packages=["src"],
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="Yohannes",
@@ -15,7 +15,7 @@ setup(
     license="",
     entry_points={
         "console_scripts": [
-            "face_detection = face_detection.face_detection_application:main",
+            "face_detection = src.face_detection_application:main",
         ],
     },
     data_files=[
