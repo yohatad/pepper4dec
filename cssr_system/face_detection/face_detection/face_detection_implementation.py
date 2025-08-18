@@ -28,8 +28,8 @@ from cv_bridge import CvBridge, CvBridgeError
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from geometry_msgs.msg import Point
 from typing import Tuple, List
-from cssr_system.msg import FaceDetection
-from face_detection_tracking import Sort, CentroidTracker
+from cssr_interfaces.msg import FaceDetection
+from .face_detection_tracking import Sort, CentroidTracker
 
 class FaceDetectionNode(Node):
     def __init__(self, node_name='faceDetection'):
@@ -252,13 +252,8 @@ class FaceDetectionNode(Node):
         try:
             package_path = get_package_share_directory(package_name)
             
-            # Determine the directory and file name based on the package name
-            if package_name == 'unit_tests':
-                directory = 'face_detection_test/config'
-                config_file = 'face_detection_test_configuration.yaml'
-            else:
-                directory = 'face_detection/config'
-                config_file = 'face_detection_configuration.yaml'
+            directory = 'face_detection/config'
+            config_file = 'face_detection_configuration.yaml'
             
             config_path = os.path.join(package_path, directory, config_file)
             
@@ -276,8 +271,8 @@ class FaceDetectionNode(Node):
     
     def extract_topics(self, image_topic):
         try:
-            package_path = get_package_share_directory('cssr_system')
-            config_path = os.path.join(package_path, 'face_detection/data', 'pepper_topics.dat')
+            package_path = get_package_share_directory('face_detection')
+            config_path = os.path.join(package_path, 'data', 'pepper_topics.dat')
 
             if os.path.exists(config_path):
                 with open(config_path, 'r') as file:
@@ -291,7 +286,7 @@ class FaceDetectionNode(Node):
             else:
                 self.get_logger().error(f"{self.node_name}: extract_topics: Data file not found at {config_path}")
         except Exception as e:
-            self.get_logger().error(f"{self.node_name}: ROS2 package 'cssr_system' not found: {e}")
+            self.get_logger().error(f"{self.node_name}: ROS2 package 'face_detection' not found: {e}")
         
         return None
 
@@ -707,9 +702,9 @@ class SixDrepNet(FaceDetectionNode):
 
         # Set up model paths
         try:
-            package_path = get_package_share_directory('cssr_system')
-            yolo_model_path = os.path.join(package_path, 'face_detection/models/face_detection_goldYOLO.onnx')
-            sixdrepnet_model_path = os.path.join(package_path, 'face_detection/models/face_detection_sixdrepnet360.onnx')
+            package_path = get_package_share_directory('face_detection')
+            yolo_model_path = os.path.join(package_path, 'models/face_detection_goldYOLO.onnx')
+            sixdrepnet_model_path = os.path.join(package_path, 'models/face_detection_sixdrepnet360.onnx')
         except Exception as e:
             self.get_logger().error(f"{self.node_name}: Failed to get package path: {e}")
             return

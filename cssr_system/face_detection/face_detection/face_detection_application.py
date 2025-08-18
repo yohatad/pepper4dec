@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/home/yoha/face_detection_env/bin/python3
 
 """
 face_detection_application.py ROS2 Node for Face and Mutual Gaze Detection and Localization.
@@ -108,7 +108,8 @@ import rclpy
 import os
 import sys
 from rclpy.node import Node
-from face_detection_implementation import MediaPipe, SixDrepNet
+from .face_detection_implementation import MediaPipe, SixDrepNet
+
 BANNER = """faceDetection v1.0
 This program comes with ABSOLUTELY NO WARRANTY.
 """

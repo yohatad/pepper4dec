@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>cssr_interfaces</name>
+  <version>0.0.1</version>
+  <description>Messages and services for CSSR</description>
+
+  <maintainer email="you@example.com">Your Name</maintainer>
+  <license>Apache-2.0</license>
+
+  <!-- Build tools -->
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>rosidl_default_generators</buildtool_depend>
+
+  <!-- Message deps if referenced by your .msg/.srv -->
+  <depend>builtin_interfaces</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+
+  <!-- Runtime for generated code -->
+  <exec_depend>rosidl_default_runtime</exec_depend>
+
+  <!-- Required for interface packages -->
+  <member_of_group>rosidl_interface_packages</member_of_group>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
