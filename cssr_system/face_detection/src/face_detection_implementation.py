@@ -7,7 +7,6 @@ Version: v1.0
 
 This program comes with ABSOLUTELY NO WARRANTY.
 """
-
 import cv2
 import mediapipe as mp
 import numpy as np
@@ -40,20 +39,43 @@ class FaceDetectionNode(Node):
         self.depth_image = None  # Initialize depth_image
         self.color_image = None  # Initialize color_image
         
-        # Declare parameters with default values
-        self.declare_parameter('useCompressed', False)
-        self.declare_parameter('camera', 'realsense')
-        self.declare_parameter('verboseMode', True)
-        self.declare_parameter('imageTimeout', 2.0)
+        # Load configuration from default file location
+        self.config = self.read_config()
         
-        self.use_compressed = self.get_parameter('useCompressed').get_parameter_value().bool_value
-        self.camera_type = self.get_parameter('camera').get_parameter_value().string_value
-        self.verbose_mode = self.get_parameter('verboseMode').get_parameter_value().bool_value
-        self.image_timeout = self.get_parameter('imageTimeout').get_parameter_value().double_value
+        # Set configuration values with defaults
+        self.use_compressed = self.config.get('useCompressed', False)
+        self.camera_type = self.config.get('camera', 'realsense')
+        self.verbose_mode = self.config.get('verboseMode', True)
+        self.image_timeout = self.config.get('imageTimeout', 2.0)
         
         self.node_name = self.get_name()
         self.timer_start = self.get_clock().now()
         self.last_image_time = self.get_clock().now()
+
+    def read_config(self):
+        """
+        Read configuration from the default YAML file location.
+        
+        Returns:
+            dict: Configuration data from YAML file, or default values if file not found
+        """
+        config = {}
+        
+        try:
+            package_path = get_package_share_directory('face_detection')
+            config_file = os.path.join(package_path, 'config', 'face_detection_configuration.yaml')
+            
+            if os.path.exists(config_file):
+                with open(config_file, 'r') as file:
+                    config = yaml.safe_load(file) or {}
+                    self.get_logger().info(f"{self.get_name()}: Loaded configuration from {config_file}")
+            else:
+                self.get_logger().warn(f"{self.get_name()}: Configuration file not found at {config_file}, using defaults")
+                
+        except Exception as e:
+            self.get_logger().error(f"{self.get_name()}: Error reading configuration file: {e}")
+            
+        return config
 
     def subscribe_topics(self):
         # Set up for indefinite waiting
@@ -444,17 +466,11 @@ class MediaPipe(FaceDetectionNode):
     def __init__(self):
         super().__init__()
         
-        # Declare MediaPipe specific parameters
-        self.declare_parameter('mpFacedetConfidence', 0.5)
-        self.declare_parameter('mpHeadposeAngle', 8)
-        self.declare_parameter('centroidMaxDisappeared', 15)
-        self.declare_parameter('centroidMaxDistance', 100)
-        
-        # Get parameter values
-        mp_confidence = self.get_parameter('mpFacedetConfidence').get_parameter_value().double_value
-        self.mp_angle = self.get_parameter('mpHeadposeAngle').get_parameter_value().integer_value
-        centroid_max_disappeared = self.get_parameter('centroidMaxDisappeared').get_parameter_value().integer_value
-        centroid_max_distance = self.get_parameter('centroidMaxDistance').get_parameter_value().integer_value
+        # Get MediaPipe specific configuration values with defaults
+        mp_confidence = self.config.get('mpFacedetConfidence', 0.5)
+        self.mp_angle = self.config.get('mpHeadposeAngle', 8)
+        centroid_max_disappeared = self.config.get('centroidMaxDisappeared', 15)
+        centroid_max_distance = self.config.get('centroidMaxDistance', 100)
         
         # Initialize MediaPipe components
         self.mp_face_mesh = mp.solutions.face_mesh
@@ -683,19 +699,12 @@ class SixDrepNet(FaceDetectionNode):
     def __init__(self):
         super().__init__()
         
-        # Declare SixDrepNet specific parameters
-        self.declare_parameter('sixdrepnetConfidence', 0.65)
-        self.declare_parameter('sixdrepnetHeadposeAngle', 10)
-        self.declare_parameter('sortMaxDisappeared', 5)
-        self.declare_parameter('sortMinHits', 3)
-        self.declare_parameter('sortIouThreshold', 0.3)
-        
-        # Get parameter values
-        sixdrepnet_confidence = self.get_parameter('sixdrepnetConfidence').get_parameter_value().double_value
-        self.sixdrep_angle = self.get_parameter('sixdrepnetHeadposeAngle').get_parameter_value().integer_value
-        self.sort_max_disappeared = self.get_parameter('sortMaxDisappeared').get_parameter_value().integer_value
-        self.sort_min_hits = self.get_parameter('sortMinHits').get_parameter_value().integer_value
-        self.sort_iou_threshold = self.get_parameter('sortIouThreshold').get_parameter_value().double_value
+        # Get SixDrepNet specific configuration values with defaults
+        sixdrepnet_confidence = self.config.get('sixdrepnetConfidence', 0.65)
+        self.sixdrep_angle = self.config.get('sixdrepnetHeadposeAngle', 10)
+        self.sort_max_disappeared = self.config.get('sortMaxDisappeared', 5)
+        self.sort_min_hits = self.config.get('sortMinHits', 3)
+        self.sort_iou_threshold = self.config.get('sortIouThreshold', 0.3)
         
         if self.verbose_mode:
             self.get_logger().info(f"{self.node_name}: Initializing SixDrepNet...")

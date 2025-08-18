@@ -106,8 +106,9 @@ Version: v1.0
 import sys
 import rclpy
 import os
-import sys
+import yaml
 from rclpy.node import Node
+from ament_index_python.packages import get_package_share_directory
 from .face_detection_implementation import MediaPipe, SixDrepNet
 
 BANNER = """faceDetection v1.0
@@ -119,23 +120,53 @@ ALGORITHMS = {
     "sixdrep": SixDrepNet,
 }
 
+def read_config():
+    """
+    Read configuration from the default YAML file location.
+    
+    Returns:
+        dict: Configuration data from YAML file, or default values if file not found
+    """
+    config = {}
+    
+    try:
+        
+        package_path = get_package_share_directory('face_detection')
+        config_file = os.path.join(package_path, 'config', 'face_detection_configuration.yaml')
+        
+        if os.path.exists(config_file):
+            with open(config_file, 'r') as file:
+                config = yaml.safe_load(file) or {}
+                print(f"Loaded configuration from {config_file}")
+        else:
+            print(f"Warning: Configuration file not found at {config_file}, using defaults")
+            
+    except Exception as e:
+        print(f"Error reading configuration file: {e}")
+        
+    return config
+
 def main():
-    rclpy.init()
-    node = rclpy.create_node("faceDetection")
-    node.get_logger().info(BANNER)
+    print(BANNER)
 
-    # Declare and read algorithm param (default = sixdrep)
-    node.declare_parameter("algorithm", "sixdrep")
-    algo = node.get_parameter("algorithm").get_parameter_value().string_value.lower()
+    # Read configuration from default location
+    config = read_config()
+    
+    # Get algorithm from configuration file (default to 'sixdrep')
+    algo = config.get('algorithm', 'sixdrep').lower()
 
+    # Validate algorithm
     if algo not in ALGORITHMS:
-        node.get_logger().error(f"Invalid algorithm '{algo}'. Choose from {list(ALGORITHMS)}.")
-        node.destroy_node()
-        rclpy.shutdown()
+        print(f"Error: Invalid algorithm '{algo}' in configuration. Choose from {list(ALGORITHMS)}.")
         sys.exit(1)
 
-    node.destroy_node()
-    algo_node = ALGORITHMS[algo]()  # instantiate the chosen node
+    print(f"Using algorithm: {algo}")
+
+    # Initialize ROS2
+    rclpy.init()
+    
+    # Instantiate the chosen algorithm node (config file is always default location)
+    algo_node = ALGORITHMS[algo]()
 
     try:
         if hasattr(algo_node, "spin"):
