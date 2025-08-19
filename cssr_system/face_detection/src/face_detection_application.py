@@ -22,7 +22,6 @@ BANNER = """faceDetection v1.0
 This program comes with ABSOLUTELY NO WARRANTY.
 """
 
-
 def main():
     print(BANNER)
 
@@ -54,9 +53,7 @@ def main():
         node.start_timeout_monitor()
 
         # Verify camera resolution compatibility (except Pepper)
-        if (node.depth_image is not None and
-            not node.check_camera_resolution(node.color_image, node.depth_image) and
-            node.camera_type != "pepper"):
+        if (node.depth_image is not None and not node.check_camera_resolution(node.color_image, node.depth_image) and node.camera_type != "pepper"):
             node.get_logger().error("Color and depth camera resolutions don't match")
             sys.exit(1)
 
@@ -65,9 +62,11 @@ def main():
 
     except KeyboardInterrupt:
         print("\nShutdown requested by user")
+
     except Exception as e:
         print(f"Error during execution: {e}")
         sys.exit(1)
+        
     finally:
         if node is not None:
             try:
