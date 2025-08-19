@@ -20,6 +20,7 @@ import random
 import threading
 import signal
 import sys
+import time
 from ament_index_python.packages import get_package_share_directory
 from rclpy.node import Node
 from math import cos, sin, pi
@@ -27,10 +28,9 @@ from sensor_msgs.msg import Image, CompressedImage
 from cv_bridge import CvBridge, CvBridgeError
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from geometry_msgs.msg import Point
-from typing import Tuple, List
+from typing import Tuple, List, Dict, Optional
 from cssr_interfaces.msg import FaceDetection
 from .face_detection_tracking import Sort, CentroidTracker
-
 
 def load_configuration() -> Dict:
     """
@@ -81,6 +81,8 @@ class FaceDetectionNode(Node):
         
         self.config = config
         self.pub_gaze = self.create_publisher(FaceDetection, "/faceDetection/data", 10)
+        self.debug_pub = self.create_publisher(Image, "/faceDetection/debug", 1)
+
         self.bridge = CvBridge()
         self.depth_image: Optional[np.ndarray] = None
         self.color_image: Optional[np.ndarray] = None
@@ -93,25 +95,39 @@ class FaceDetectionNode(Node):
         
         self.node_name = self.get_name()
         self.timer_start = self.get_clock().now()
-        self.last_image_time = self.get_clock().now()
+        self.last_image_time = None   # timestamp of the last received imag
 
-    def get_model_paths(self) -> Tuple[str, str]:
-        """Get paths to the ONNX model files."""
+        # Thread safety for visualization
+        self.frame_lock = threading.Lock()
+        self.latest_frame: Optional[np.ndarray] = None
+
+        # Start visualization timer (30 Hz)
+        self.vis_timer = self.create_timer(1.0 / 30.0, self.visualization_callback)
+
+    def update_latest_frame(self, frame: np.ndarray):
+        """Update the latest frame safely for visualization."""
+        with self.frame_lock:
+            self.latest_frame = frame.copy()
+
+    def visualization_callback(self):
+        """Timer callback for showing or publishing debug images."""
+        frame = None
+        with self.frame_lock:
+            if self.latest_frame is not None:
+                frame = self.latest_frame.copy()
+
+        if frame is None:
+            return
+
+        if self.config.get("verboseMode", False) and os.environ.get("DISPLAY", "") != "":
+            cv2.imshow("Face Detection Debug", frame)
+            cv2.waitKey(1)
+
         try:
-            package_path = get_package_share_directory('face_detection')
-            yolo_path = os.path.join(package_path, 'models/face_detection_goldYOLO.onnx')
-            sixdrepnet_path = os.path.join(package_path, 'models/face_detection_sixdrepnet360.onnx')
-            
-            # Validate paths exist
-            if not os.path.exists(yolo_path):
-                raise FileNotFoundError(f"YOLO model not found: {yolo_path}")
-            if not os.path.exists(sixdrepnet_path):
-                raise FileNotFoundError(f"SixDrepNet model not found: {sixdrepnet_path}")
-                
-            return yolo_path, sixdrepnet_path
+            msg = self.bridge.cv2_to_imgmsg(frame, encoding="bgr8")
+            self.debug_pub.publish(msg)
         except Exception as e:
-            self.get_logger().error(f"Failed to get model paths: {e}")
-            raise
+            self.get_logger().error(f"Failed to publish debug image: {e}")
 
     def get_topic_names(self) -> Tuple[str, str]:
         """Get RGB and depth topic names based on camera type."""
@@ -124,34 +140,26 @@ class FaceDetectionNode(Node):
             raise ValueError(f"Invalid camera type: {self.camera_type}")
             
         rgb_key, depth_key = topic_mapping[self.camera_type]
-        rgb_topic = self._extract_topic(rgb_key)
-        depth_topic = self._extract_topic(depth_key)
+        rgb_topic = self.extract_topic(rgb_key)
+        depth_topic = self.extract_topic(depth_key)
         
         if not rgb_topic or not depth_topic:
             raise ValueError("Failed to extract camera topics")
             
         return rgb_topic, depth_topic
 
-    def _extract_topic(self, image_topic: str) -> Optional[str]:
-        """Extract topic name from configuration file."""
+    def extract_topic(self, image_topic:str) -> Optional[str]:
+        """Extract topic name from configuration file"""
         try:
-            package_path = get_package_share_directory('face_detection')
-            config_path = os.path.join(package_path, 'data', 'pepper_topics.dat')
+            package = get_package_share_directory('face_detection')
+            config_path = os.path.join(package, 'data', 'pepper_topics.yaml')
 
-            if os.path.exists(config_path):
-                with open(config_path, 'r') as file:
-                    for line in file:
-                        line = line.strip()
-                        if not line or line.startswith('#'):
-                            continue
-                        parts = line.split(maxsplit=1)
-                        if len(parts) == 2 and parts[0].lower() == image_topic.lower():
-                            return parts[1]
-            else:
-                self.get_logger().error(f"Topic data file not found: {config_path}")
+            with open(config_path, 'r') as file:
+                topics = yaml.safe_load(file)
+                return topics.get(image_topic)
         except Exception as e:
             self.get_logger().error(f"Error extracting topic '{image_topic}': {e}")
-        
+
         return None
 
     def wait_for_topics(self, color_topic: str, depth_topic: str, timeout: float = 30.0) -> bool:
@@ -188,7 +196,7 @@ class FaceDetectionNode(Node):
         
         return False
 
-    def setup_subscribers(self) -> bool:
+    def subscribe_topics(self) -> bool:
         """Set up image subscribers based on camera configuration."""
         try:
             rgb_topic, depth_topic = self.get_topic_names()
@@ -235,7 +243,7 @@ class FaceDetectionNode(Node):
 
     def synchronized_callback(self, color_data, depth_data):
         """Process synchronized color and depth images."""
-        self.last_image_time = self.get_clock().now()
+        self.last_image_time = self.get_clock().now().nanoseconds / 1e9
         
         try:
             # Process color image
@@ -246,7 +254,7 @@ class FaceDetectionNode(Node):
                 self.color_image = self.bridge.imgmsg_to_cv2(color_data, desired_encoding="bgr8")
 
             # Process depth image
-            self.depth_image = self._process_depth_image(depth_data)
+            self.depth_image = self.process_depth_image(depth_data)
 
             if self.color_image is None or self.depth_image is None:
                 self.get_logger().warn("Failed to decode images")
@@ -258,7 +266,7 @@ class FaceDetectionNode(Node):
         except Exception as e:
             self.get_logger().error(f"Error in synchronized_callback: {e}")
 
-    def _process_depth_image(self, depth_data) -> Optional[np.ndarray]:
+    def process_depth_image(self, depth_data) -> Optional[np.ndarray]:
         """Process depth image data."""
         try:
             if isinstance(depth_data, CompressedImage):
@@ -279,23 +287,36 @@ class FaceDetectionNode(Node):
             return None
 
     def start_timeout_monitor(self):
-        """Start a thread to monitor image reception timeout."""
-        def monitor():
-            while rclpy.ok():
-                time_since_last = (self.get_clock().now() - self.last_image_time).nanoseconds / 1e9
-                if time_since_last > self.image_timeout and self.color_image is not None:
-                    self.get_logger().warn(f"No image received for {self.image_timeout}s. Shutting down.")
-                    rclpy.shutdown()
-                    break
-                rclpy.spin_once(self, timeout_sec=1.0)
+        self.create_timer(1.0, self.check_timeout)
 
-        threading.Thread(target=monitor, daemon=True).start()
+    def check_timeout(self):
+        if self.last_image_time is not None:
+            elapsed = self.get_clock().now().nanoseconds / 1e9 - self.last_image_time
+            if elapsed > self.image_timeout:
+                self.get_logger().warn(
+                    f"No images received for {elapsed:.1f}s (timeout={self.image_timeout}s)"
+                )
 
     def check_camera_resolution(self, color_image: np.ndarray, depth_image: np.ndarray) -> bool:
         """Check if color and depth images have matching resolutions."""
         if color_image is None or depth_image is None:
             return False
         return color_image.shape[:2] == depth_image.shape[:2]
+
+    def display_depth_image(self):
+        """Display depth image for debugging."""
+        if self.depth_image is None:
+            return
+            
+        try:
+            depth_array = np.array(self.depth_image, dtype=np.float32)
+            depth_array = np.nan_to_num(depth_array, nan=0.0, posinf=0.0, neginf=0.0)
+            normalized_depth = cv2.normalize(depth_array, None, 0, 255, cv2.NORM_MINMAX)
+            normalized_depth = np.uint8(normalized_depth)
+            depth_colormap = cv2.applyColorMap(normalized_depth, cv2.COLORMAP_JET)
+            cv2.imshow("Depth Image", depth_colormap)
+        except Exception as e:
+            self.get_logger().error(f"Error displaying depth image: {e}")
 
     def get_depth_at_centroid(self, centroid_x: float, centroid_y: float) -> Optional[float]:
         """Get depth value at specific coordinates."""
@@ -360,25 +381,6 @@ class FaceDetectionNode(Node):
 
         self.pub_gaze.publish(face_msg)
 
-    def display_depth_image(self):
-        """Display depth image for debugging."""
-        if self.depth_image is None:
-            return
-            
-        try:
-            depth_array = np.array(self.depth_image, dtype=np.float32)
-            depth_array = np.nan_to_num(depth_array, nan=0.0, posinf=0.0, neginf=0.0)
-            normalized_depth = cv2.normalize(depth_array, None, 0, 255, cv2.NORM_MINMAX)
-            normalized_depth = np.uint8(normalized_depth)
-            depth_colormap = cv2.applyColorMap(normalized_depth, cv2.COLORMAP_JET)
-            cv2.imshow("Depth Image", depth_colormap)
-        except Exception as e:
-            self.get_logger().error(f"Error displaying depth image: {e}")
-
-    def process_images(self):
-        """Override in subclasses to implement specific processing."""
-        raise NotImplementedError("Subclasses must implement process_images")
-
     def cleanup(self):
         """Clean up resources."""
         try:
@@ -388,8 +390,8 @@ class FaceDetectionNode(Node):
             self.get_logger().error(f"Error during cleanup: {e}")
 
 class MediaPipe(FaceDetectionNode):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, config: Dict):
+        super().__init__(config)
         
         # Get MediaPipe specific configuration values with defaults
         mp_confidence = self.config.get('mpFacedetConfidence', 0.5)
@@ -409,7 +411,6 @@ class MediaPipe(FaceDetectionNode):
 
         # Initialize the CentroidTracker
         self.centroid_tracker = CentroidTracker(centroid_max_disappeared, centroid_max_distance)
-        self.latest_frame = None
 
         # Subscribe to the image topic
         self.subscribe_topics()
@@ -422,41 +423,16 @@ class MediaPipe(FaceDetectionNode):
 
         self.start_timeout_monitor()
 
-    def spin(self):
-        """Main loop to display processed frames and depth images."""
-        rate = self.create_rate(30)  # Adjust the rate as needed
-        try:
-            while rclpy.ok():
-                if self.latest_frame is not None:
-                    if self.verbose_mode:
-                        # Display the processed frame
-                        cv2.imshow("Face Detection & Mutual Gaze Estimation", self.latest_frame)
+    def process_images(self):
+        """Process synchronized RGB + depth images for MediaPipe."""
+        if self.color_image is None or self.depth_image is None:
+            return
 
-                if (self.get_clock().now() - self.timer_start).nanoseconds / 1e9 > 10:
-                    self.get_logger().info(f"{self.node_name}: running.")
-                    self.timer_start = self.get_clock().now()
+        frame = self.color_image
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        img_h, img_w = frame.shape[:2]
 
-                # Display the depth image if verbose mode is enabled
-                if self.verbose_mode:
-                    self.display_depth_image()
-
-                # Wait for GUI events
-                if cv2.waitKey(1) & 0xFF == ord("q"):
-                    rclpy.shutdown()
-                    break
-
-                try:
-                    rclpy.spin_once(self, timeout_sec=0.01)
-                except Exception as e:
-                    # Handle ROS2 context errors gracefully
-                    if rclpy.ok():
-                        self.get_logger().error(f"{self.node_name}: Error in spin_once: {e}")
-                    break
-        except Exception as e:
-            self.get_logger().error(f"{self.node_name}: Error in spin loop: {e}")
-        finally:
-            # Clean up OpenCV windows on shutdown
-            cv2.destroyAllWindows()
+        self.process_face_mesh(frame, rgb_frame, img_h, img_w)
 
     def process_face_mesh(self, frame, rgb_frame, img_h, img_w):
         results = self.face_mesh.process(rgb_frame)
@@ -466,9 +442,6 @@ class MediaPipe(FaceDetectionNode):
         face_heights = []
         face_boxes = []  # Store bounding boxes for each face
         tracking_data = []  # Initialize tracking_data here
-        
-        # Create a copy of the frame to draw on
-        display_frame = frame.copy()
         
         # Dictionary to store face ID colors
         if not hasattr(self, "face_colors"):
@@ -553,21 +526,20 @@ class MediaPipe(FaceDetectionNode):
                 x_min, y_min, x_max, y_max = box
                 
                 # Draw bounding box with assigned color
-                cv2.rectangle(display_frame, (x_min, y_min), (x_max, y_max), face_color, 2)
+                cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), face_color, 2)
                 
                 # Add label above bounding box
                 label = "Engaged" if mutualGaze_list[idx] else "Not Engaged"
-                cv2.putText(display_frame, label, (x_min, y_min - 10),
+                cv2.putText(frame, label, (x_min, y_min - 10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, face_color, 2)
-                cv2.putText(display_frame, f"Face: {face_id}", (x_min, y_min - 30),
+                cv2.putText(frame, f"Face: {face_id}", (x_min, y_min - 30),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, face_color, 2)
                 
                 # Draw depth information below the box
-                cv2.putText(display_frame, f"Depth: {cz:.2f}m", (x_min, y_max + 20),
+                cv2.putText(frame, f"Depth: {cz:.2f}m", (x_min, y_max + 20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, face_color, 2)
             
-        # Save the processed frame for display in spin()
-        self.latest_frame = display_frame
+        self.update_latest_frame(frame)
         
         # Publish the tracking data
         self.publish_face_detection(tracking_data)
@@ -621,8 +593,8 @@ class YOLOONNX:
         return np.array(result_boxes), np.array(result_scores)
 
 class SixDrepNet(FaceDetectionNode):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, config: Dict):
+        super().__init__(config)
         
         # Get SixDrepNet specific configuration values with defaults
         sixdrepnet_confidence = self.config.get('sixdrepnetConfidence', 0.65)
@@ -642,9 +614,7 @@ class SixDrepNet(FaceDetectionNode):
         except Exception as e:
             self.get_logger().error(f"{self.node_name}: Failed to get package path: {e}")
             return
-        
-        self.latest_frame = None
-        
+            
         # Initialize YOLOONNX model early and check success
         try:
             self.yolo_model = YOLOONNX(model_path=yolo_model_path, class_score_th=sixdrepnet_confidence)
@@ -719,6 +689,15 @@ class SixDrepNet(FaceDetectionNode):
         cv2.line(img, (int(tdx), int(tdy)), (int(x2), int(y2)), (0, 255, 0), 2)
         cv2.line(img, (int(tdx), int(tdy)), (int(x3), int(y3)), (255, 0, 0), 2)
 
+    def process_images(self):
+        """Process synchronized RGB + depth images for SixDrepNet."""
+        if self.color_image is None or self.depth_image is None:
+            return
+
+        frame = self.process_frame(self.color_image)
+        if frame is not None:
+            self.update_latest_frame(frame)
+            
     def process_frame(self, cv_image):
         """
         Process the input frame for face detection and head pose estimation using SORT.
@@ -818,38 +797,3 @@ class SixDrepNet(FaceDetectionNode):
         self.publish_face_detection(tracking_data)
         return debug_image
  
-    def spin(self):
-        """Main loop to display processed frames and depth images."""
-        rate = self.create_rate(30)  # Adjust the rate as needed
-        try:
-            while rclpy.ok():
-                if (self.get_clock().now() - self.timer_start).nanoseconds / 1e9 > 10:
-                    self.get_logger().info(f"{self.node_name}: running.")
-                    self.timer_start = self.get_clock().now()
-
-                if self.latest_frame is not None:
-                    if self.verbose_mode:
-                        # Display the processed frame
-                        cv2.imshow("Face Detection & Head Pose Estimation", self.latest_frame)
-
-                # Display the depth image if verbose mode is enabled
-                if self.verbose_mode:
-                    self.display_depth_image()
-
-                # Wait for GUI events
-                if cv2.waitKey(1) & 0xFF == ord("q"):
-                    rclpy.shutdown()
-                    break
-
-                try:
-                    rclpy.spin_once(self, timeout_sec=0.01)
-                except Exception as e:
-                    # Handle ROS2 context errors gracefully
-                    if rclpy.ok():
-                        self.get_logger().error(f"{self.node_name}: Error in spin_once: {e}")
-                    break
-        except Exception as e:
-            self.get_logger().error(f"{self.node_name}: Error in spin loop: {e}")
-        finally:
-            # Clean up OpenCV windows on shutdown
-            cv2.destroyAllWindows()
