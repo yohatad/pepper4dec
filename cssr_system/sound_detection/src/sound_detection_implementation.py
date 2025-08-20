@@ -17,22 +17,22 @@ This program comes with ABSOLUTELY NO WARRANTY.
 
 import math
 import os
-import json
-import rospy
+import yaml
+import rclpy
 import std_msgs.msg
 import webrtcvad
-import rospkg
 import numpy as np
 import threading
 import noisereduce as nr 
 import soundfile as sf 
 from datetime import datetime
-from cssr_system.msg import sound_detection_microphone_msg_file
+from rclpy.node import Node
+from naoqi_bridge_msgs.msg import AudioBuffer
 from threading import Lock
-from std_msgs.msg import Float32MultiArray
-from datetime import datetime
+from std_msgs.msg import Float32MultiArray, Float32
+from ament_index_python.packages import get_package_share_directory
 
-class SoundDetectionNode:
+class SoundDetectionNode(Node):
     """
     SoundDetectionNode processes audio data from a microphone topic, applies VAD to determine if speech is present,
     applies bandpass filtering and spectral subtraction on the left channel, and localizes the sound source by computing
@@ -43,14 +43,10 @@ class SoundDetectionNode:
         Initialize the SoundDetectionNode.
         Sets up ROS subscribers, publishers, and loads configuration parameters.
         """
-        # Set node name for consistent logging
-        self.node_name = rospy.get_name().lstrip('/')
+        super().__init__('sound_detection')
         
-        # Get configuration parameters from the ROS parameter server
-        self.config = rospy.get_param('/soundDetection', {})
-
-        # Get param for unit_tests
-        self.unit_tests = rospy.get_param('/soundDetection/unit_tests', False)
+        # Load configuration from YAML file
+        self.config = self.read_yaml_config('cssr_system', 'sound_detection_configuration.yaml')
         
         # Set parameters from config
         self.frequency_sample = 48000
@@ -79,7 +75,7 @@ class SoundDetectionNode:
         self.target_rms = self.config.get('targetRMS', 0.2)
 
         # Initialize timeout parameters
-        self.last_audio_time = rospy.get_time()
+        self.last_audio_time = self.get_clock().now()
         self.audio_timeout = self.config.get('audioTimeout', 2)  # Default 2 seconds timeout
         self.received_first_audio = False  # Flag to track if we've received any audio yet
 
@@ -90,52 +86,29 @@ class SoundDetectionNode:
         self.use_noise_reduction = self.config.get('useNoiseReduction', True)
         
         if self.use_noise_reduction and self.verbose_mode:
-            rospy.loginfo(f"{self.node_name}: Noise reduction enabled for left channel with {self.context_duration}s context window")
+            self.get_logger().info(f"Noise reduction enabled for left channel with {self.context_duration}s context window")
 
-        # Configurable time duration for saving the filtered audio
-        self.save_audio_duration = self.config.get('recordDuration', 10)  # seconds
-
-        # Add audio saving parameters for unit tests
-        if self.unit_tests:
-            self.save_audio = True
-            self.sample_count = 0
-            self.max_samples_to_save = self.save_audio_duration * self.frequency_sample 
-            self.saved_samples = 0
-            self.filtered_buffer = []
-            
-            # Create the output directory for the test data
-            try:
-                rospack = rospkg.RosPack()
-                self.unit_test_path = os.path.join(rospack.get_path('unit_tests'), 'sound_detection_test/data')
-                os.makedirs(self.unit_test_path, exist_ok=True)
-                if self.verbose_mode:
-                    rospy.loginfo(f"{self.node_name}: Will save filtered audio to {self.unit_test_path}")
-            except Exception as e:
-                rospy.logerr(f"{self.node_name}: Error setting up test directory: {e}")
-                self.save_audio = False
-        else:
-            self.save_audio = False
-
-        # Retrieve the microphone topic from the configuration file
+        # Retrieve the microphone topic from the YAML file
         microphone_topic = self.extract_topics('Microphone')
         if not microphone_topic:
-            rospy.logerr(f"{self.node_name}: Microphone topic not found in topic file.")
+            self.get_logger().error("Microphone topic not found in topic file.")
             raise ValueError("Missing microphone topic configuration.")
 
         # Initialize thread lock for shared resources
         self.lock = Lock()
         
         # Timer for periodic status message
-        self.last_status_time = rospy.get_time()
+        self.last_status_time = self.get_clock().now()
 
         # Set up ROS subscribers and publishers
-        self.audio_sub = rospy.Subscriber(microphone_topic, sound_detection_microphone_msg_file, self.audio_callback)
-        rospy.loginfo(f"{self.node_name}: Subscribed to {microphone_topic}")
-        self.signal_pub = rospy.Publisher('/soundDetection/signal', std_msgs.msg.Float32MultiArray, queue_size=10)
-        self.direction_pub = rospy.Publisher('/soundDetection/direction', std_msgs.msg.Float32, queue_size=10)
+        self.audio_sub = self.create_subscription(AudioBuffer, microphone_topic, self.audio_callback,10)
+        self.get_logger().info(f"Subscribed to {microphone_topic}")
+        
+        self.signal_pub = self.create_publisher(Float32MultiArray, '/soundDetection/signal', 10)
+        self.direction_pub = self.create_publisher(Float32, '/soundDetection/direction', 10)
 
-        if self.unit_tests:
-            self.start_timeout_monitor()
+        # Start timeout monitor
+        self.start_timeout_monitor()
 
     def start_timeout_monitor(self):
         """
@@ -144,67 +117,50 @@ class SoundDetectionNode:
         but only after at least one audio message has been received.
         """
         def monitor():
-            rate = rospy.Rate(1)  # Check once per second
-            while not rospy.is_shutdown():
+            while rclpy.ok():
                 # Only check for timeouts if we've received at least one audio message
                 if self.received_first_audio:
-                    time_since_last = rospy.get_time() - self.last_audio_time
+                    time_since_last = (self.get_clock().now() - self.last_audio_time).nanoseconds / 1e9
                     if time_since_last > self.audio_timeout:
-                        rospy.logwarn(f"{self.node_name}: No audio received for {self.audio_timeout} seconds. Shutting down.")
-                        rospy.signal_shutdown("No audio data.")
-                rate.sleep()
+                        self.get_logger().warn(f"No audio received for {self.audio_timeout} seconds. Shutting down.")
+                        rclpy.shutdown()
+                        break
+                threading.Event().wait(1.0)  # Wait 1 second
 
         threading.Thread(target=monitor, daemon=True).start()
         if self.verbose_mode:
-            rospy.loginfo(f"{self.node_name}: Audio timeout monitor started (timeout: {self.audio_timeout}s)")
+            self.get_logger().info(f"Audio timeout monitor started (timeout: {self.audio_timeout}s)")
 
-    @staticmethod
-    def read_json_file(package_name):
+    def read_yaml_config(self, package_name, config_file):
         """
-        Read and parse a JSON configuration file from the specified ROS package.
+        Read and parse a YAML configuration file from the specified ROS package.
         
         Args:
             package_name (str): Name of the ROS package containing the config file
+            config_file (str): Name of the YAML configuration file
             
         Returns:
-            dict: Configuration data from JSON file, or empty dict if file not found
+            dict: Configuration data from YAML file, or empty dict if file not found
         """
-        rospack = rospkg.RosPack()
         try:
-            package_path = rospack.get_path(package_name)
-            
-            # Determine the directory and file name based on the package name
-            if package_name == 'unit_tests':
-                directory = 'sound_detection_test/config'
-                config_file = 'sound_detection_test_configuration.json'
-            else:
-                directory = 'sound_detection/config'
-                config_file = 'sound_detection_configuration.json'
-            
-            config_path = os.path.join(package_path, directory, config_file)
+            package_path = get_package_share_directory(package_name)
+            config_path = os.path.join(package_path, 'config', config_file)
             
             if os.path.exists(config_path):
                 with open(config_path, 'r') as file:
-                    data = json.load(file)
-                    return data
+                    data = yaml.safe_load(file)
+                    return data if data is not None else {}
             else:
-                rospy.logerr(f"read_json_file: Configuration file not found at {config_path}")
+                self.get_logger().error(f"Configuration file not found at {config_path}")
                 return {}
                 
-        except rospkg.ResourceNotFound as e:
-            rospy.logerr(f"ROS package '{package_name}' not found: {e}")
-            return {}
-        except json.JSONDecodeError as e:
-            rospy.logerr(f"Error parsing JSON configuration file: {e}")
-            return {}
         except Exception as e:
-            rospy.logerr(f"Unexpected error reading configuration file: {e}")
+            self.get_logger().error(f"Error reading YAML configuration file: {e}")
             return {}
 
-    @staticmethod
-    def extract_topics(topic_key):
+    def extract_topics(self, topic_key):
         """
-        Extract the topic name for a given key from the topics data file.
+        Extract the topic name for a given key from the topics YAML file.
         
         Args:
             topic_key (str): Key to search for in the topics file
@@ -212,23 +168,18 @@ class SoundDetectionNode:
         Returns:
             str or None: The topic name if found, None otherwise
         """
-        rospack = rospkg.RosPack()
         try:
-            package_path = rospack.get_path('cssr_system')
-            config_path = os.path.join(package_path, 'sound_detection/data', 'pepper_topics.dat')
+            package_path = get_package_share_directory('cssr_system')
+            config_path = os.path.join(package_path, 'config', 'pepper_topics.yaml')
+            
             if os.path.exists(config_path):
                 with open(config_path, 'r') as file:
-                    for line in file:
-                        line = line.strip()
-                        if not line or line.startswith('#'):
-                            continue
-                        key, value = line.split(maxsplit=1)
-                        if key.lower() == topic_key.lower():
-                            return value
+                    topics_data = yaml.safe_load(file)
+                    return topics_data.get(topic_key)
             else:
-                rospy.logerr(f"Topics data file not found at {config_path}")
-        except rospkg.ResourceNotFound as e:
-            rospy.logerr(f"ROS package 'cssr_system' not found: {e}")
+                self.get_logger().error(f"Topics YAML file not found at {config_path}")
+        except Exception as e:
+            self.get_logger().error(f"Error reading topics YAML file: {e}")
         return None
     
     def normalize_rms(self, audio_data, target_rms=None, min_rms=1e-10):
@@ -252,7 +203,7 @@ class SoundDetectionNode:
         # Skip normalization if RMS is too low (silent)
         if rms_current < min_rms:
             if self.verbose_mode:
-                rospy.loginfo(f"{self.node_name}: Audio too quiet for normalization (RMS: {rms_current:.6f})")
+                self.get_logger().info(f"Audio too quiet for normalization (RMS: {rms_current:.6f})")
             return audio_data
         
         # Calculate scaling factor
@@ -265,42 +216,9 @@ class SoundDetectionNode:
         normalized_data = np.clip(normalized_data, -1.0, 1.0)
         
         if self.verbose_mode:
-            rospy.loginfo(f"{self.node_name}: Applied RMS normalization - Before RMS: {rms_current:.4f}, After RMS: {target_rms:.4f}, Factor: {scaling_factor:.4f}")
+            self.get_logger().info(f"Applied RMS normalization - Before RMS: {rms_current:.4f}, After RMS: {target_rms:.4f}, Factor: {scaling_factor:.4f}")
         
         return normalized_data
-    
-    def save_test_audio(self):
-        """
-        Save the collected filtered audio samples to a file for unit testing.
-        Applies RMS normalization before saving to ensure consistent volume levels.
-        Only called when unit_tests mode is enabled.
-        """
-        try:
-            if not self.save_audio or len(self.filtered_buffer) == 0:
-                return
-                
-            # Convert buffer to numpy array
-            audio_data = np.array(self.filtered_buffer, dtype=np.float32)
-            
-            # Apply RMS normalization
-            audio_data = self.normalize_rms(audio_data)
-            
-            # Generate filename with timestamp
-            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            filename = os.path.join(self.unit_test_path, f"sound_detection_test_noise_filtered_audio_{timestamp}.wav")
-            
-            # Save to WAV file
-            sf.write(filename, audio_data, self.frequency_sample)
-            
-            if self.verbose_mode:
-                rospy.loginfo(f"{self.node_name}: Saved normalized filtered audio test file to {filename}")
-            
-            # Reset buffer
-            self.filtered_buffer = []
-            self.saved_samples = 0
-            
-        except Exception as e:
-            rospy.logerr(f"{self.node_name}: Error saving test audio: {e}")
     
     def apply_noise_reduction(self, current_block):
         """
@@ -337,7 +255,7 @@ class SoundDetectionNode:
             return processed_block
             
         except Exception as e:
-            rospy.logerr(f"{self.node_name}: Error in noise reduction: {e}")
+            self.get_logger().error(f"Error in noise reduction: {e}")
             return current_block  # Return original block on error
     
     def voice_detected(self, audio_frame):
@@ -363,30 +281,29 @@ class SoundDetectionNode:
                     return True
             return False
         except Exception as e:
-            rospy.logwarn(f"{self.node_name}: Error in VAD processing: {e}")
+            self.get_logger().warn(f"Error in VAD processing: {e}")
             return False
 
     def audio_callback(self, msg):
         """
         Process incoming audio data from the microphone.
-        If in unit test mode, collects filtered audio for testing.
         
         Args:
-            msg (microphone_msg_file): The audio data message
+            msg (SoundDetectionMicrophoneMsgFile): The audio data message
         """
         try:
-            self.last_audio_time = rospy.get_time()
+            self.last_audio_time = self.get_clock().now()
     
             # If this is the first audio message, log it and set the flag
             if not self.received_first_audio:
                 self.received_first_audio = True
                 if self.verbose_mode:
-                    rospy.loginfo(f"{self.node_name}: First audio data received, timeout monitoring active")
+                    self.get_logger().info("First audio data received, timeout monitoring active")
             
             # Print a status message every 10 seconds
-            current_time = rospy.get_time()
-            if current_time - self.last_status_time >= 10:
-                rospy.loginfo(f"{self.node_name}: running.")
+            current_time = self.get_clock().now()
+            if (current_time - self.last_status_time).nanoseconds / 1e9 >= 10:
+                self.get_logger().info("running.")
                 self.last_status_time = current_time
                 
             # Process audio data
@@ -401,23 +318,6 @@ class SoundDetectionNode:
             
             # Check for voice activity in the left channel (using noise-reduced signal for better detection)
             self.speech_detected = self.voice_detected(sigIn_frontLeft_clean)
-            # Save filtered audio for unit tests if enabled and speech is detected
-            if self.unit_tests and self.save_audio:
-                # Add the filtered audio to the test buffer
-                if self.saved_samples < self.max_samples_to_save:
-                    self.filtered_buffer.extend(sigIn_frontLeft_clean)
-                    self.saved_samples += len(sigIn_frontLeft_clean)
-                    
-                    # Log progress periodically
-                    if self.saved_samples % (self.frequency_sample) == 0:  # Log every second
-                        seconds = self.saved_samples / self.frequency_sample
-                        total_seconds = self.max_samples_to_save / self.frequency_sample
-                        if self.verbose_mode:
-                            rospy.loginfo(f"{self.node_name}: Collected {seconds:.1f}/{total_seconds:.1f}s of audio for testing")
-  
-                # If we've collected enough samples, save the file
-                if self.saved_samples >= self.max_samples_to_save:
-                    self.save_test_audio()
 
             # If no speech detected, we can skip further processing
             if not self.speech_detected:
@@ -443,25 +343,25 @@ class SoundDetectionNode:
                     self.accumulated_samples = 0
 
         except Exception as e:
-            rospy.logerr(f"{self.node_name}: Error in audio_callback: {e}")
+            self.get_logger().error(f"Error in audio_callback: {e}")
 
     def process_audio_data(self, msg):
         """
         Extract and normalize audio data from the message.
         
         Args:
-            msg (microphone_msg_file): The audio data message
+            msg (SoundDetectionMicrophoneMsgFile): The audio data message
             
         Returns:
             tuple: (left_channel, right_channel) as normalized float32 arrays
         """
         try:
             # Convert int16 data to float32 and normalize to [-1.0, 1.0]
-            sigIn_frontLeft = np.array(msg.frontLeft, dtype=np.float32) / 32767.0
-            sigIn_frontRight = np.array(msg.frontRight, dtype=np.float32) / 32767.0
+            sigIn_frontLeft = np.array(msg.front_left, dtype=np.float32) / 32767.0
+            sigIn_frontRight = np.array(msg.front_right, dtype=np.float32) / 32767.0
             return sigIn_frontLeft, sigIn_frontRight
         except Exception as e:
-            rospy.logerr(f"{self.node_name}: Error processing audio data: {e}")
+            self.get_logger().error(f"Error processing audio data: {e}")
             return (np.zeros(self.localization_buffer_size, dtype=np.float32),
                     np.zeros(self.localization_buffer_size, dtype=np.float32))
 
@@ -521,7 +421,7 @@ class SoundDetectionNode:
             # Publish the calculated angle
             self.publish_angle(angle)
         except Exception as e:
-            rospy.logwarn(f"{self.node_name}: Error in localization: {e}")
+            self.get_logger().warn(f"Error in localization: {e}")
 
     def gcc_phat(self, sig, ref_sig, fs, max_tau=None, interp=16):
         """
@@ -568,8 +468,8 @@ class SoundDetectionNode:
             # Convert shift to time
             return shift / float(fs)
         except Exception as e:
-            rospy.logerr(f"{self.node_name}: Error in GCC-PHAT: {e}")
-            return 
+            self.get_logger().error(f"Error in GCC-PHAT: {e}")
+            return 0.0
 
     def calculate_angle(self, itd):
         """
@@ -591,14 +491,14 @@ class SoundDetectionNode:
             # Calculate angle in degrees
             angle = math.asin(z) * (180.0 / math.pi)
 
-            # If the angel is not in [-67 , 67], skip it 
+            # If the angle is not in [-67, 67], skip it 
             if angle < -67 or angle > 67:
-                return
+                return None
 
             return angle
         except ValueError as e:
-            rospy.logwarn(f"{self.node_name}: Invalid ITD for angle calculation: {e}")
-            return
+            self.get_logger().warn(f"Invalid ITD for angle calculation: {e}")
+            return None
 
     def publish_angle(self, angle):
         """
@@ -609,7 +509,7 @@ class SoundDetectionNode:
         """
         if angle is None:
             return
-        angle_msg = std_msgs.msg.Float32()
+        angle_msg = Float32()
         angle_msg.data = angle
         self.direction_pub.publish(angle_msg)
 
@@ -624,20 +524,8 @@ class SoundDetectionNode:
         signal_msg.data = signal_data.tolist()
         self.signal_pub.publish(signal_msg)
         
-    def on_shutdown(self):
+    def destroy_node(self):
         """
         Handle cleanup when the node is shutting down.
-        Saves any remaining test audio.
         """
-        if self.unit_tests and self.save_audio and len(self.filtered_buffer) > 0:
-            if self.verbose_mode:
-                rospy.loginfo(f"{self.node_name}: Saving remaining test audio before shutdown")
-            self.save_test_audio()
-
-    def spin(self):
-        """
-        Main processing loop for the node.
-        """
-        # Register shutdown handler
-        rospy.on_shutdown(self.on_shutdown)
-        rospy.spin()
+        super().destroy_node()
