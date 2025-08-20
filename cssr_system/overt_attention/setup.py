@@ -1,7 +1,7 @@
 from setuptools import setup
 from glob import glob
 
-pkg = "sound_detection"
+pkg = "overt_attention"
 
 setup(
     name=pkg,
@@ -11,19 +11,19 @@ setup(
     zip_safe=True,
     maintainer="Yohannes",
     maintainer_email="yohanneh@alumni.cmu.edu",
-    description="Sound detection node",
+    description="Face detection node",
     license="",
     entry_points={
         "console_scripts": [
-            "sound_detection = src.sound_detection_application:main",
+            "overt_attention = src.overt_attention_application:main",
         ],
     },
     data_files=[
         ("share/ament_index/resource_index/packages", [f"resource/{pkg}"]),
         (f"share/{pkg}", ["package.xml"]),
-        # (f"share/{pkg}/launch", glob("launch/*.launch.py")),
+        (f"share/{pkg}/launch", glob("launch/*.launch.py")),
         (f"share/{pkg}/config", glob("config/*")),
-        # (f"share/{pkg}/models", glob("models/*")),
+        (f"share/{pkg}/models", glob("models/*")),
         (f"share/{pkg}/data", glob("data/*")),
     ],
 )
