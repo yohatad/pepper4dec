@@ -15,6 +15,6 @@ topics:
   RobotPose: "/robotLocalization/pose"
   FaceDetection: "/faceDetection/data"
   SoundLocalization: "/soundDetection/direction"
+  OvertAttentionStatus: "/overtAttention/status"
 
   SetMode: "/overtAttention/set_mode"
-  GetMode: "/overtAttention/get_mode"

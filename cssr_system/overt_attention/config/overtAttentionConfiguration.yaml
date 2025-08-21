@@ -1,5 +1,5 @@
 # Overt Attention Configuration
-camera: "RealSenseCamera"
+camera: "realsense"  # Options: "realsense", "peppercamera"
 realignment_threshold: 50
 x_offset_to_head_yaw: 0
 y_offset_to_head_pitch: 0
