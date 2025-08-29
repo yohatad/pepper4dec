@@ -10,9 +10,8 @@ find_package(geometry_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/FaceDetection.msg"
-  "msg/OvertAttentionMode.msg"
   "msg/OvertAttentionStatus.msg"
-  "srv/OvertAttentionGetMode.srv"
+  "srv/OvertAttentionSetMode.srv"
   DEPENDENCIES builtin_interfaces std_msgs geometry_msgs
 )
 

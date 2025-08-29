@@ -18,14 +18,12 @@ import multiprocessing
 import yaml
 import random
 import threading
-import signal
-import sys
 import time
 from ament_index_python.packages import get_package_share_directory
 from rclpy.node import Node
 from math import cos, sin, pi
 from sensor_msgs.msg import Image, CompressedImage
-from cv_bridge import CvBridge, CvBridgeError
+from cv_bridge import CvBridge
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from geometry_msgs.msg import Point
 from typing import Tuple, List, Dict, Optional
@@ -82,6 +80,7 @@ class FaceDetectionNode(Node):
         self.config = config
         self.pub_gaze = self.create_publisher(FaceDetection, "/faceDetection/data", 10)
         self.debug_pub = self.create_publisher(Image, "/faceDetection/debug", 1)
+        self.depth_debug_pub = self.create_publisher(Image, "/faceDetection/depth_debug", 1)
 
         self.bridge = CvBridge()
         self.depth_image: Optional[np.ndarray] = None
@@ -111,23 +110,38 @@ class FaceDetectionNode(Node):
 
     def visualization_callback(self):
         """Timer callback for showing or publishing debug images."""
-        frame = None
+        color_frame = depth_vis = None
         with self.frame_lock:
             if self.latest_frame is not None:
-                frame = self.latest_frame.copy()
+                color_frame = self.latest_frame.copy()
+            # depth_image is updated in sync callback; safe to read without copy for view,
+            # but copy if you plan heavy ops
+            if self.depth_image is not None:
+                depth_vis = self._make_depth_vis(self.depth_image)
 
-        if frame is None:
+        if color_frame is None and depth_vis is None:
             return
 
         if self.config.get("verboseMode", False) and os.environ.get("DISPLAY", "") != "":
-            cv2.imshow("Face Detection Debug", frame)
-            cv2.waitKey(1)
+            try:
+                if color_frame is not None:
+                    cv2.imshow("Face Detection Debug (RGB)", color_frame)
+                if depth_vis is not None:
+                    cv2.imshow("Face Detection Debug (Depth)", depth_vis)
+                cv2.waitKey(1)
+            except Exception as e:
+                self.get_logger().warn(f"imshow failed (likely headless): {e}")
 
-        try:
-            msg = self.bridge.cv2_to_imgmsg(frame, encoding="bgr8")
-            self.debug_pub.publish(msg)
-        except Exception as e:
-            self.get_logger().error(f"Failed to publish debug image: {e}")
+            # Publish only when verboseMode=True (as per your intent)
+            try:
+                if color_frame is not None:
+                    msg = self.bridge.cv2_to_imgmsg(color_frame, encoding="bgr8")
+                    self.debug_pub.publish(msg)
+                if depth_vis is not None:
+                    dmsg = self.bridge.cv2_to_imgmsg(depth_vis, encoding="bgr8")
+                    self.depth_debug_pub.publish(dmsg)
+            except Exception as e:
+                self.get_logger().error(f"Failed to publish debug images: {e}")
 
     def get_topic_names(self) -> Tuple[str, str]:
         """Get RGB and depth topic names based on camera type."""
@@ -224,16 +238,16 @@ class FaceDetectionNode(Node):
                 return False
 
             # Create subscribers
-            color_sub = Subscriber(self, color_msg_type, color_topic)
-            depth_sub = Subscriber(self, depth_msg_type, depth_topic)
+            self.color_sub = Subscriber(self, color_msg_type, color_topic)
+            self.depth_sub = Subscriber(self, depth_msg_type, depth_topic)
             
             self.get_logger().info(f"Subscribed to {color_topic}")
             self.get_logger().info(f"Subscribed to {depth_topic}")
 
             # Set up synchronizer
             slop = 5.0 if self.camera_type == "pepper" else 0.1
-            ats = ApproximateTimeSynchronizer([color_sub, depth_sub], queue_size=10, slop=slop)
-            ats.registerCallback(self.synchronized_callback)
+            self.ats = ApproximateTimeSynchronizer([self.color_sub, self.depth_sub], queue_size=10, slop=slop)
+            self.ats.registerCallback(self.synchronized_callback)
             
             return True
             
@@ -246,6 +260,12 @@ class FaceDetectionNode(Node):
         self.last_image_time = self.get_clock().now().nanoseconds / 1e9
         
         try:
+            # check if the depth camera and color camera have the same resolution.
+            if self.depth_image is not None:
+                if not self.check_camera_resolution(self.color_image, self.depth_image) and self.camera_type != "pepper":
+                    self.get_logger().error(f"{self.node_name}: Color camera and depth camera have different resolutions.")
+                    rclpy.shutdown()
+                    
             # Process color image
             if isinstance(color_data, CompressedImage):
                 np_arr = np.frombuffer(color_data.data, np.uint8)
@@ -303,20 +323,32 @@ class FaceDetectionNode(Node):
             return False
         return color_image.shape[:2] == depth_image.shape[:2]
 
-    def display_depth_image(self):
-        """Display depth image for debugging."""
-        if self.depth_image is None:
-            return
-            
+    def _make_depth_vis(self, depth: np.ndarray) -> Optional[np.ndarray]:
+        """Convert raw depth to a colorized BGR8 image for debug viewing/publishing."""
+        if depth is None:
+            return None
         try:
-            depth_array = np.array(self.depth_image, dtype=np.float32)
-            depth_array = np.nan_to_num(depth_array, nan=0.0, posinf=0.0, neginf=0.0)
-            normalized_depth = cv2.normalize(depth_array, None, 0, 255, cv2.NORM_MINMAX)
-            normalized_depth = np.uint8(normalized_depth)
-            depth_colormap = cv2.applyColorMap(normalized_depth, cv2.COLORMAP_JET)
-            cv2.imshow("Depth Image", depth_colormap)
+            depth_f32 = np.array(depth, dtype=np.float32)
+            depth_f32 = np.nan_to_num(depth_f32, nan=0.0, posinf=0.0, neginf=0.0)
+
+            # Optional: clamp far distances to improve local contrast, e.g., 0..3m
+            # depth_f32 = np.clip(depth_f32, 0.0, 3.0)
+
+            # Normalize to 0..255; if your depth is in millimeters, scale first
+            # Detect likely units (heuristic): if max > 100, assume mm
+            m = float(np.max(depth_f32)) if depth_f32.size else 0.0
+            if m > 1000.0:             # looks like millimeters
+                depth_f32 = depth_f32 / 1000.0
+            m = float(np.max(depth_f32)) if depth_f32.size else 1.0
+            if m <= 0.0:
+                return None
+
+            norm = (depth_f32 / m * 255.0).astype(np.uint8)
+            return cv2.applyColorMap(norm, cv2.COLORMAP_JET)  # BGR8
         except Exception as e:
-            self.get_logger().error(f"Error displaying depth image: {e}")
+            self.get_logger().error(f"Depth visualization failed: {e}")
+            return None
+
 
     def get_depth_at_centroid(self, centroid_x: float, centroid_y: float) -> Optional[float]:
         """Get depth value at specific coordinates."""
@@ -403,23 +435,11 @@ class MediaPipe(FaceDetectionNode):
         self.mp_face_mesh = mp.solutions.face_mesh
         self.face_mesh = self.mp_face_mesh.FaceMesh(min_detection_confidence=mp_confidence, max_num_faces=10)
 
-        self.mp_face_detection = mp.solutions.face_detection
-        self.face_detection = self.mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5)
-        
-        self.mp_drawing = mp.solutions.drawing_utils
-        self.drawing_spec = self.mp_drawing.DrawingSpec(color=(128, 128, 128), thickness=1, circle_radius=1)
-
         # Initialize the CentroidTracker
         self.centroid_tracker = CentroidTracker(centroid_max_disappeared, centroid_max_distance)
 
         # Subscribe to the image topic
         self.subscribe_topics()
-
-        # check if the depth camera and color camera have the same resolution.
-        if self.depth_image is not None:
-            if not self.check_camera_resolution(self.color_image, self.depth_image) and self.camera_type != "pepper":
-                self.get_logger().error(f"{self.node_name}: Color camera and depth camera have different resolutions.")
-                rclpy.shutdown()
 
         self.start_timeout_monitor()
 
@@ -661,12 +681,6 @@ class SixDrepNet(FaceDetectionNode):
             self.get_logger().info(f"{self.node_name} SixDrepNet initialization complete.")
 
         self.subscribe_topics()
-
-        # check if the depth camera and color camera have the same resolution.
-        if self.depth_image is not None:
-            if not self.check_camera_resolution(self.color_image, self.depth_image) and self.camera_type != "pepper":
-                self.get_logger().error(f"{self.node_name}: Color camera and depth camera have different resolutions.")
-                rclpy.shutdown()
 
         self.start_timeout_monitor()
     

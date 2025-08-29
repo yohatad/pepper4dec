@@ -17,7 +17,7 @@ from sensor_msgs.msg import Image, JointState
 from std_msgs.msg import Float32
 from geometry_msgs.msg import Pose2D, Twist
 from naoqi_bridge_msgs.msg import JointAnglesWithSpeed
-from cssr_interfaces.srv import OvertAttentionGetMode    
+from cssr_interfaces.srv import OvertAttentionSetMode    
 from cssr_interfaces.msg import FaceDetection, OvertAttentionStatus      
 
 # -----------------------------------------------------------------------------
@@ -267,6 +267,7 @@ class SaliencyProcessor:
 
     def habituation(self, saliency_map: np.ndarray,wta_map: np.ndarray,
                     previous_locations: List[Tuple[float, float, int]]) -> Tuple[np.ndarray, List[Tuple[float, float, int]]]:
+        
         out_prev: List[Tuple[float, float, int]] = []
         for yaw, pitch, t in previous_locations:
             x, y = self.cam.angle_to_pixel(d_yaw=yaw, d_pitch=pitch)
@@ -295,7 +296,6 @@ class SaliencyProcessor:
 # -----------------------------------------------------------------------------
 # Main Node
 # -----------------------------------------------------------------------------
-
 class OvertAttentionSystem(Node):
     def __init__(self):
         super().__init__("overt_attention")
@@ -323,8 +323,8 @@ class OvertAttentionSystem(Node):
     def initialize(self) -> bool:
         self.get_logger().info("Initializing OvertAttentionSystem...")
 
-        pkg_share = get_package_share_directory("cssr_system")
-        cfg_path = os.path.join(pkg_share, "overt_attention", "config", "overtAttentionConfiguration.yaml")
+        pkg_share = get_package_share_directory("overt_attention")
+        cfg_path = os.path.join(pkg_share, "config", "overt_attention_configuration.yaml")
         cfg = self.load_yaml(cfg_path, CONFIG_DEFAULTS)
 
         self.verbose = bool(cfg.get("verbose_mode", False))
@@ -345,15 +345,15 @@ class OvertAttentionSystem(Node):
             self.get_logger().error(f"Unsupported camera type: {camera_key_raw}")
             return False
 
-        topics_path = os.path.join(pkg_share, "overt_attention", "data", "pepperTopics.yaml")
+        topics_path = os.path.join(pkg_share, "data", "pepper_topics.yaml")
         topics = self.load_yaml(topics_path, TOPIC_DEFAULTS)
 
         # pubs/subs
         self.image_subscription                 = self.create_subscription(Image, topics[camera_topic_key], self.camera_callback, 10)
         self.joint_state_subscription           = self.create_subscription(JointState, topics["JointStates"], self.joint_states_callback, 10)
+        
         self.robot_pose_subscription            = self.create_subscription(Pose2D, topics["RobotPose"], self.robot_pose_callback, 10)
         self.sound_localization_subscription    = self.create_subscription(Float32, topics["SoundLocalization"], self.sound_callback, 10)
-
         self.face_detection_subscription        = self.create_subscription(FaceDetection, topics["FaceDetection"], self.face_callback, 10)
 
         self.cmd_vel_publisher                  = self.create_publisher(Twist, topics["Wheels"], 10)
@@ -361,7 +361,7 @@ class OvertAttentionSystem(Node):
         self.overt_attention_publisher          = self.create_publisher(OvertAttentionStatus, topics["OvertAttentionStatus"], 10)
 
         # services (only register if srv types exist)
-        self.set_mode_service = self.create_service(SetMode, topics["SetMode"], self.set_mode_callback)
+        self.set_mode_service = self.create_service(OvertAttentionSetMode, topics["SetMode"], self.set_mode_callback)
 
         # camera spec & saliency
         self.cam_spec = CameraSpec.from_name(cam_name)
@@ -511,21 +511,26 @@ class OvertAttentionSystem(Node):
         msg.joint_angles = [float(pitch_cmd), float(yaw_cmd)]
         msg.speed = 0.2
         msg.relative = False
-        self.pub_head.publish(msg)
+        self.joint_angles_publisher.publish(msg)
 
     # Optional: basic saliency step (if you want to use the camera image)
     def saliency_step(self):
         if self.camera_image is None:
             return
         salmap = self.saliency.compute_saliency_map(self.camera_image)
+        
         wta = np.full_like(salmap, 255, dtype=np.float32)
+        
         salmap, self.saliency.previous_locations = self.saliency.habituation(
             salmap, wta, self.saliency.previous_locations
         )
+        
         salmap, self.saliency.previous_locations = self.saliency.inhibition_of_return(
             salmap, wta, self.saliency.previous_locations
         )
+        
         x, y = self.saliency.winner_takes_all(salmap)
+        
         # convert to angles and optionally use as a target
         ang = self.saliency.pixel_to_angle(x, y)
         

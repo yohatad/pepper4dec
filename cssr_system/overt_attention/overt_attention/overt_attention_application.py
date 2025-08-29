@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import rclpy
-from overt_attention_system import OvertAttentionSystem  # adjust import path as needed
+from .overt_attention_implementation import OvertAttentionSystem
 
 SOFTWARE_VERSION = "v1.0"
 

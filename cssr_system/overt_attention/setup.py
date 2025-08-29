@@ -6,16 +6,16 @@ pkg = "overt_attention"
 setup(
     name=pkg,
     version="0.1.0",
-    packages=["src"],
+    packages=["overt_attention"],
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="Yohannes",
     maintainer_email="yohanneh@alumni.cmu.edu",
-    description="Face detection node",
+    description="Overt Attention node",
     license="",
     entry_points={
         "console_scripts": [
-            "overt_attention = src.overt_attention_application:main",
+            "overt_attention = overt_attention.overt_attention_application:main",
         ],
     },
     data_files=[
@@ -23,7 +23,7 @@ setup(
         (f"share/{pkg}", ["package.xml"]),
         (f"share/{pkg}/launch", glob("launch/*.launch.py")),
         (f"share/{pkg}/config", glob("config/*")),
-        (f"share/{pkg}/models", glob("models/*")),
+        # (f"share/{pkg}/models", glob("models/*")),
         (f"share/{pkg}/data", glob("data/*")),
     ],
 )
