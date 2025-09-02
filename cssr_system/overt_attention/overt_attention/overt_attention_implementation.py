@@ -79,6 +79,9 @@ PATCH_RADIUS = 15
 HABITUATION_RATE = 0.1
 IOR_LIMIT = 50  # iterations
 
+def clamp(v: float, lo: float, hi: float) -> float:
+        return max(lo, min(v, hi))
+
 # -----------------------------------------------------------------------------
 # Data classes
 # -----------------------------------------------------------------------------
@@ -150,6 +153,8 @@ class AttentionState:
     seek_cooldown: int = 0
     seek_period: Tuple[int, int] = (8, 18)
 
+    
+    
     def set_mode(self, mode: Mode) -> None:
         self.mode = mode
 
@@ -171,7 +176,6 @@ class AttentionState:
         ny_ = cy + self.kp_head * (target_yaw   - cy)
         self.commanded_head = self.apply_limits(np_, ny_)
 
-    # Behavior stubs (you can extend as you wish)
     def location_attention(self, px: float, py: float, pz: float) -> int:
         xy = math.hypot(px, py)
         if xy == 0.0 and pz == 0.0: return 0
@@ -181,23 +185,30 @@ class AttentionState:
         self.nudge(target_pitch, target_yaw)
         return 1
 
-    def social_attention(self, realignment_threshold_deg: int, social_control: int) -> int:
+    def social_attention(self, realignment_threshold_deg: int, social_control: str) -> int:
         deadband = math.radians(realignment_threshold_deg)
+        
         if self.face_detected and self.face_within_range:
             tp, ty = 0.0, 0.0
+        
         elif self.sound_detected:
             tp, ty = 0.0, clamp(self.sound_angle, *self.yaw_limits)
+        
         else:
             return 0
+        
         cp, cy = self.commanded_head
+        
         if abs(tp - cp) < deadband and abs(ty - cy) < deadband:
             return 0
+        
         self.nudge(tp, ty)
         return 1
 
     def scanning_attention(self, center_yaw: float, center_pitch: float) -> int:
         center_yaw   = clamp(center_yaw,   *self.yaw_limits)
         center_pitch = clamp(center_pitch, *self.pitch_limits)
+        
         next_y = self.commanded_head[1] + self.scan_dir * self.scan_step
         if next_y >= self.yaw_limits[1] or next_y <= self.yaw_limits[0]:
             self.scan_dir *= -1
@@ -225,73 +236,109 @@ class AttentionState:
 # Saliency
 # -----------------------------------------------------------------------------
 class SaliencyProcessor:
-    def __init__(self, cam: CameraSpec):
+    def __init__(self, cam: CameraSpec, verbose: bool = False):
         self.cam = cam
-        self.faces_map: Optional[np.ndarray] = None
-        self.previous_locations: List[Tuple[float, float, int]] = []  # (yaw, pitch, t)
-        self.face_locations: List[Tuple[float, float, int]] = []
+        self.verbose = verbose
+        self.faces_map: Optional[np.ndarray] = None        # H×W float mask (0/1 or weights)
+        self.previous_locations: List[Tuple[float, float, int]] = []  # (abs_yaw, abs_pitch, t)
 
-    def compute_saliency_map(self, image: np.ndarray) -> np.ndarray:
-        # Placeholder: use OpenCV fine-grained saliency if available; else gradient magnitude
+    # ---- Base saliency (fine-grained if available; fallback Sobel magnitude) ----
+    def base_saliency(self, image_bgr: np.ndarray) -> np.ndarray:
         try:
             sal = cv2.saliency.StaticSaliencyFineGrained_create()
-            success, salmap = sal.computeSaliency(image)
-            if success:
-                salmap = (salmap * 255).astype(np.uint8)
-                return salmap.astype(np.float32)
+            ok, salmap = sal.computeSaliency(image_bgr)
+            if ok:
+                return salmap.astype(np.float32)   # OpenCV returns float32 in [0,1]
         except Exception:
             pass
-        
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
         gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
         gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
         mag = cv2.magnitude(gx, gy)
-        return mag
+        return mag.astype(np.float32)  # keep raw; no normalization (C++ parity)
 
+ 
     def winner_takes_all(self, saliency_map: np.ndarray) -> Tuple[int, int]:
-        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(saliency_map)
+        _, _, _, max_loc = cv2.minMaxLoc(saliency_map)
         return int(max_loc[0]), int(max_loc[1])
 
-    def pixel_to_angle(self, x: float, y: float) -> AngleChange:
-        return self.cam.pixel_to_angle(x, y)
-
-    def apply_gaussian(self, mat: np.ndarray, x: int, y: int, radius: int, delta: float):
-        h, w = mat.shape[:2]
-        xs, ys = np.meshgrid(
-            np.arange(max(0, x - radius), min(w, x + radius + 1)),
-            np.arange(max(0, y - radius), min(h, y + radius + 1))
-        )
-        cx = x; cy = y
-        g = np.exp(-((xs - cx) ** 2 + (ys - cy) ** 2) / (2 * (radius * 0.5) ** 2))
-        mat[ys, xs] = np.clip(mat[ys, xs] + delta * g, 0, np.max(mat) if mat.size else 255)
-
-    def habituation(self, saliency_map: np.ndarray,wta_map: np.ndarray,
-                    previous_locations: List[Tuple[float, float, int]]) -> Tuple[np.ndarray, List[Tuple[float, float, int]]]:
-        
-        out_prev: List[Tuple[float, float, int]] = []
-        for yaw, pitch, t in previous_locations:
-            x, y = self.cam.angle_to_pixel(d_yaw=yaw, d_pitch=pitch)
+    def habituation(self,
+                    saliency_map: np.ndarray,
+                    wta_map: np.ndarray,
+                    prev: List[Tuple[float, float, int]],
+                    head_pitch: float,
+                    head_yaw: float) -> List[Tuple[float, float, int]]:
+        out: List[Tuple[float, float, int]] = []
+        for abs_yaw, abs_pitch, t in prev:
+            d_yaw   = abs_yaw   - head_yaw
+            d_pitch = abs_pitch - head_pitch
+            x, y = self.cam.angle_to_pixel(d_yaw, d_pitch)
             if 0 <= x < self.cam.width and 0 <= y < self.cam.height:
-                # reduce saliency at previous winners
-                self.apply_gaussian(saliency_map, x, y, PATCH_RADIUS, -HABITUATION_RATE * 255.0)
-                cv2.circle(wta_map, (x, y), PATCH_RADIUS, int(0.3 * 255), -1)
-            out_prev.append((yaw, pitch, t + 1))
-        return saliency_map, out_prev
+                x0 = max(0, x - PATCH_RADIUS); x1 = min(self.cam.width,  x + PATCH_RADIUS + 1)
+                y0 = max(0, y - PATCH_RADIUS); y1 = min(self.cam.height, y + PATCH_RADIUS + 1)
+                saliency_map[y0:y1, x0:x1] = saliency_map[y0:y1, x0:x1] - (t * HABITUATION_RATE)
+                cv2.circle(wta_map, (x, y), PATCH_RADIUS, int(t * PATCH_RADIUS), -1)  # gray blob
+            out.append((abs_yaw, abs_pitch, t + 1))
+        return out
 
-    def inhibition_of_return(self, saliency_map: np.ndarray,
+    def inhibition_of_return(self,
+                             saliency_map: np.ndarray,
                              wta_map: np.ndarray,
-                             previous_locations: List[Tuple[float, float, int]]) -> Tuple[np.ndarray, List[Tuple[float, float, int]]]:
-        out_prev: List[Tuple[float, float, int]] = []
-        for yaw, pitch, t in previous_locations:
+                             prev: List[Tuple[float, float, int]],
+                             head_pitch: float,
+                             head_yaw: float) -> List[Tuple[float, float, int]]:
+        out: List[Tuple[float, float, int]] = []
+        for abs_yaw, abs_pitch, t in prev:
             if IOR_LIMIT < t < IOR_LIMIT + 50:
-                x, y = self.cam.angle_to_pixel(d_yaw=yaw, d_pitch=pitch)
+                d_yaw   = abs_yaw   - head_yaw
+                d_pitch = abs_pitch - head_pitch
+                x, y = self.cam.angle_to_pixel(d_yaw, d_pitch)
                 if 0 <= x < self.cam.width and 0 <= y < self.cam.height:
-                    # hard suppress region
-                    cv2.circle(saliency_map, (x, y), PATCH_RADIUS, 0, -1)
+                    x0 = max(0, x - PATCH_RADIUS); x1 = min(self.cam.width,  x + PATCH_RADIUS + 1)
+                    y0 = max(0, y - PATCH_RADIUS); y1 = min(self.cam.height, y + PATCH_RADIUS + 1)
+                    saliency_map[y0:y1, x0:x1] = 0.0
                     cv2.circle(wta_map, (x, y), PATCH_RADIUS, 0, -1)
+                # drop this entry
             else:
-                out_prev.append((yaw, pitch, t))
-        return saliency_map, out_prev
+                out.append((abs_yaw, abs_pitch, t))
+        return out
+
+    def compute_saliency_features(self,
+                                  camera_image: np.ndarray,
+                                  head_pitch: float,
+                                  head_yaw: float,
+                                  debug: bool = False) -> Tuple[int, int, int, np.ndarray]:
+        """
+        Return (status, centre_x, centre_y, wta_map)
+        status: 0 on success, -1 on failure (C++ parity)
+        """
+        wta = np.full_like(camera_image, 255, dtype=np.uint8)
+
+        saliency_map = self.base_saliency(camera_image)
+        if saliency_map is None or saliency_map.size == 0:
+            print("Error computing saliency map")
+            return -1, -1, -1, wta
+
+        # Face boost: for any positive faces_map pixel, force saliency to 2.0 (C++ parity)
+        if self.faces_map is not None:
+            ys, xs = np.where(self.faces_map > 0)
+            saliency_map[ys, xs] = 2.0
+
+        if debug or self.verbose:
+            cv2.imshow("Saliency Map", saliency_map); cv2.waitKey(1)
+
+        # Apply habituation then IOR using current head pose
+        self.previous_locations = self.habituation(saliency_map, wta, self.previous_locations, head_pitch, head_yaw)
+        self.previous_locations = self.inhibition_of_return(saliency_map, wta, self.previous_locations, head_pitch, head_yaw)
+
+        cx, cy = self.winner_takes_all(saliency_map)
+
+        if debug or self.verbose:
+            cv2.line(wta, (cx - 15, cy - 15), (cx + 15, cy + 15), (0, 255, 0), 5)
+            cv2.line(wta, (cx - 15, cy + 15), (cx + 15, cy - 15), (0, 255, 0), 5)
+            cv2.imshow("WTA", wta); cv2.waitKey(1)
+
+        return 0, int(cx), int(cy), wta
 
 # -----------------------------------------------------------------------------
 # Main Node
@@ -299,11 +346,18 @@ class SaliencyProcessor:
 class OvertAttentionSystem(Node):
     def __init__(self):
         super().__init__("overt_attention")
+        
+        self.pkg_share = get_package_share_directory("overt_attention")
+        self.cfg_path  = os.path.join(self.pkg_share, "config", "overt_attention_configuration.yaml")
         self.bridge = CvBridge()
         self.camera_image: Optional[np.ndarray] = None
 
+        self.cfg = self.load_yaml(self.cfg_path, CONFIG_DEFAULTS)
         self.state = AttentionState()
-        self.verbose = False
+        self.verbose = bool(self.cfg.get("verbose_mode", False))
+        
+        # Start in SCANNING mode for immediate visualization
+        self.state.set_mode(Mode.SCANNING)
 
         ok = self.initialize()
         if not ok:
@@ -323,29 +377,22 @@ class OvertAttentionSystem(Node):
     def initialize(self) -> bool:
         self.get_logger().info("Initializing OvertAttentionSystem...")
 
-        pkg_share = get_package_share_directory("overt_attention")
-        cfg_path = os.path.join(pkg_share, "config", "overt_attention_configuration.yaml")
-        cfg = self.load_yaml(cfg_path, CONFIG_DEFAULTS)
+        self.verbose = bool(self.cfg.get("verbose_mode", False))
+        camera_key_raw = str(self.cfg["camera"])
+        use_compr = bool(self.cfg["use_compressed_images"])
 
-        self.verbose = bool(cfg.get("verbose_mode", False))
-
-        camera_key_raw = str(cfg["camera"])
-        use_compr = bool(cfg["use_compressed_images"])
-        
         # normalize for topics map
         if camera_key_raw.lower() == "realsense":
             camera_topic_key = "RealSenseCameraCompressed" if use_compr else "RealSenseCamera"
             cam_name = "realsense"
-
         elif camera_key_raw.lower() == "peppercamera":
             camera_topic_key = "FrontCamera"
             cam_name = "peppercamera"
-        
         else:
             self.get_logger().error(f"Unsupported camera type: {camera_key_raw}")
             return False
 
-        topics_path = os.path.join(pkg_share, "data", "pepper_topics.yaml")
+        topics_path = os.path.join(self.pkg_share, "data", "pepper_topics.yaml")
         topics = self.load_yaml(topics_path, TOPIC_DEFAULTS)
 
         # pubs/subs
@@ -359,6 +406,7 @@ class OvertAttentionSystem(Node):
         self.cmd_vel_publisher                  = self.create_publisher(Twist, topics["Wheels"], 10)
         self.joint_angles_publisher             = self.create_publisher(JointAnglesWithSpeed, topics["JointAngles"], 10)
         self.overt_attention_publisher          = self.create_publisher(OvertAttentionStatus, topics["OvertAttentionStatus"], 10)
+        self.debug_image_publisher              = self.create_publisher(Image, "/overt_attention/debug_image", 10)
 
         # services (only register if srv types exist)
         self.set_mode_service = self.create_service(OvertAttentionSetMode, topics["SetMode"], self.set_mode_callback)
@@ -405,19 +453,21 @@ class OvertAttentionSystem(Node):
         self.state.set_pose(msg.x, msg.y, msg.theta)
 
     def sound_callback(self, msg: Float32):
-        if math.isnan(abs(msg.data)):
+        try:
+            val = float(msg.data)
+        except Exception:
+            return
+        if math.isnan(val):
             return
         self.state.sound_detected = True
-        self.state.sound_angle = math.radians(msg.data)  # incoming assumed degrees
+        self.state.sound_angle = math.radians(val)  # assuming degrees on the topic
         self.sound_count += 1
 
+
     def face_callback(self, msg: FaceDetection):
-        # This assumes msg has fields:
-        #   centroids: array of geometry_msgs/Point (x,y,z in pixels or meters?)
-        #   mutual_gaze: array<bool>
-        # Adjust to your actual FaceDetection definition.
         if not hasattr(msg, "centroids"):
             return
+        
         self.attention_head_pitch.clear()
         self.attention_head_yaw.clear()
         self.face_labels.clear()
@@ -434,6 +484,7 @@ class OvertAttentionSystem(Node):
             if 0 <= x < self.cam_spec.width and 0 <= y < self.cam_spec.height:
                 if hasattr(msg, "mutual_gaze") and i < len(msg.mutual_gaze):
                     gaze_any = gaze_any or bool(msg.mutual_gaze[i])
+                
                 # set face saliency (closer -> stronger if z is distance)
                 scale = 1.0 / max(1e-3, float(getattr(c, "z", 1.0)))
                 faces_map[y, x] = max(faces_map[y, x], 1.0 * scale)
@@ -488,21 +539,47 @@ class OvertAttentionSystem(Node):
 
         elif self.state.mode == Mode.SOCIAL:
             # choose random/saliency/etc. For now, prefer sound if fresh:
-            self.state.social_attention(realignment_threshold_deg=50, social_control=0)
+            self.state.social_attention(realignment_threshold_deg=self.cfg["realignment_threshold"], 
+                                        social_control=self.cfg["social_attention_mode"])
 
         elif self.state.mode == Mode.SCANNING:
-            # use scanning limits
             self.state.yaw_limits   = SCANNING_LIMITS["yaw"]
             self.state.pitch_limits = SCANNING_LIMITS["pitch"]
-            self.state.scanning_attention(center_yaw=0.0, center_pitch=DEFAULT_HEAD_PITCH)
+
+            if self.camera_image is not None:
+                hp, hy = self.state.head_joint_states
+                status, cx, cy, _ = self.saliency.compute_saliency_features(
+                    self.camera_image, head_pitch=hp, head_yaw=hy, debug=self.verbose
+                )
+                if status == 0:
+                    d = self.cam_spec.pixel_to_angle(cx, cy)  # radians
+                    control_pitch = d.d_pitch + hp
+                    control_yaw   = d.d_yaw   + hy
+                    self.saliency.previous_locations.append((control_yaw, control_pitch, 1))
+                    self.state.scanning_attention(center_yaw=control_yaw, center_pitch=control_pitch)
+                else:
+                    self.state.scanning_attention(center_yaw=0.0, center_pitch=DEFAULT_HEAD_PITCH)
+            else:
+                self.state.scanning_attention(center_yaw=0.0, center_pitch=DEFAULT_HEAD_PITCH)
+
         
         elif self.state.mode == Mode.SEEKING:
             self.state.yaw_limits   = HEAD_LIMITS["yaw"]
             self.state.pitch_limits = HEAD_LIMITS["pitch"]
             self.state.seeking_attention(realignment_threshold_deg=8)
-        else:
-            # disabled -> gently center
+
+        elif self.state.mode == Mode.DISABLED:
             self.state.nudge(DEFAULT_HEAD_PITCH, DEFAULT_HEAD_YAW)
+
+        else:
+            # ROS ERROR log
+            self.get_logger().error(f"Unknown state: {self.state.mode}")
+
+        status_msg = OvertAttentionStatus()
+        # pick one mapping that matches your .msg type
+        status_msg.state = self.state.mode.name.lower()   # or an int enum if your msg uses uint8
+        status_msg.mutual_gaze = bool(self.state.mutual_gaze_detected)
+        self.overt_attention_publisher.publish(status_msg)
 
         # Example: publish head angles using JointAnglesWithSpeed (Pepper/naoqi_bridge)
         pitch_cmd, yaw_cmd = self.state.commanded_head
@@ -513,27 +590,22 @@ class OvertAttentionSystem(Node):
         msg.relative = False
         self.joint_angles_publisher.publish(msg)
 
-    # Optional: basic saliency step (if you want to use the camera image)
-    def saliency_step(self):
+        # Publish debug visualization if camera image is available
+        if self.camera_image is not None and self.verbose:
+            self.publish_debug_visualization()
+
+    def publish_debug_visualization(self):
+        """Create visualization matching exactly the C++ implementation"""
         if self.camera_image is None:
             return
-        salmap = self.saliency.compute_saliency_map(self.camera_image)
+            
+        # Show the original camera image (matching C++ "Image" window)
+        cv2.imshow("Image", self.camera_image)
+        cv2.waitKey(1)
         
-        wta = np.full_like(salmap, 255, dtype=np.float32)
-        
-        salmap, self.saliency.previous_locations = self.saliency.habituation(
-            salmap, wta, self.saliency.previous_locations
-        )
-        
-        salmap, self.saliency.previous_locations = self.saliency.inhibition_of_return(
-            salmap, wta, self.saliency.previous_locations
-        )
-        
-        x, y = self.saliency.winner_takes_all(salmap)
-        
-        # convert to angles and optionally use as a target
-        ang = self.saliency.pixel_to_angle(x, y)
-        
-        # Example: set seeking target based on saliency peak
-        if self.state.mode in (Mode.SOCIAL, Mode.SEEKING):
-            self.state.nudge(ang.d_pitch, ang.d_yaw)
+        # Publish debug image as ROS topic for external tools
+        try:
+            debug_msg = self.bridge.cv2_to_imgmsg(self.camera_image, encoding="bgr8")
+            self.debug_image_publisher.publish(debug_msg)
+        except Exception as e:
+            self.get_logger().error(f"Failed to publish debug image: {e}")

@@ -1,2 +1,2 @@
 string      state
-int64       value
+int32       mutual_gaze
