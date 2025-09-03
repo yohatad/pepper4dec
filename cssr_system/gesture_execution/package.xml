@@ -1,0 +1,25 @@
+<package format="3">
+  <name>gesture_execution</name>
+  <version>0.1.0</version>
+  <description>Gesture execution node(s)</description>
+  <maintainer email="you@example.com">Yohannes</maintainer>
+  <license>BSD-3-Clause</license>
+
+  <buildtool_depend>setuptools</buildtool_depend>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>cssr_interfaces</exec_depend>
+  <exec_depend>naoqi_bridge_msgs</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
