@@ -1,13 +1,20 @@
-import os
+#!/usr/bin/env python3
+"""
+Overt Attention System Implementation
+Core implementation for robot head attention control system.
+"""
+
 import math
 import yaml
 import random
-import rclpy
+from pathlib import Path
+from typing import Dict, List, Tuple, Optional
+from dataclasses import dataclass
+from enum import Enum
 import numpy as np
 import cv2
-from dataclasses import dataclass, field
-from enum import Enum, auto
-from typing import List, Tuple, Dict, Optional
+
+import rclpy
 from rclpy.node import Node
 from ament_index_python.packages import get_package_share_directory
 from cv_bridge import CvBridge
@@ -15,597 +22,670 @@ from cv_bridge import CvBridge
 # ROS 2 messages / services
 from sensor_msgs.msg import Image, JointState
 from std_msgs.msg import Float32
-from geometry_msgs.msg import Pose2D, Twist
+from geometry_msgs.msg import Pose2D
 from naoqi_bridge_msgs.msg import JointAnglesWithSpeed
 from cssr_interfaces.srv import OvertAttentionSetMode    
-from cssr_interfaces.msg import FaceDetection, OvertAttentionStatus      
+from cssr_interfaces.msg import FaceDetection, OvertAttentionStatus
 
-# -----------------------------------------------------------------------------
-# Constants / Config
-# -----------------------------------------------------------------------------
 
-CONFIG_DEFAULTS: Dict = {
-    "camera":                 "RealSenseCamera",  # "RealSenseCamera" | "PepperCamera"
-    "realignment_threshold":  50,                 # degrees
-    "x_offset_to_head_yaw":   0.0,
-    "y_offset_to_head_pitch": 0.0,
-    "social_attention_mode":  "random",          # "random" | "saliency"
-    "num_faces_social_att":   3,
-    "engagement_timeout":     12.0,
-    "use_sound":              False,
-    "use_compressed_images":  False,
-    "verbose_mode":           False,
-}
+class AttentionMode(Enum):
+    """Robot attention modes"""
+    DISABLED = "disabled"
+    SOCIAL = "social"
+    SCANNING = "scanning"
+    SEEKING = "seeking"
+    LOCATION = "location"
 
-TOPIC_DEFAULTS: Dict = {
-    "RealSenseCamera":                "/camera/color/image_raw",
-    "RealSenseCameraCompressed":      "/camera/color/image_raw/compressed",
-    "RealSenseCameraDepth":           "/camera/depth/image_raw",
-    "RealSenseCameraDepthCompressed": "/camera/depth/image_raw/compressed",
-    
-    "FrontCamera":                    "/naoqi_driver/camera/front/image_raw",
-    "DepthCamera":                    "/naoqi_driver/camera/depth/image_raw",
-    
-    "JointAngles":                    "/joint_angles",
-    "Wheels":                         "/cmd_vel",
-    "JointStates":                    "/joint_states",
-    
-    "RobotPose":                      "/robotLocalization/pose",
-    "FaceDetection":                  "/faceDetection/data",
-    "SoundLocalization":              "/soundDetection/direction",
-    "OvertAttentionStatus":           "/overtAttention/mode",
-
-    "SetMode":                        "/overtAttention/set_mode",
-}
-
-HEAD_LIMITS = {
-    "yaw":   (-2.0857,  2.0857),
-    "pitch": (-0.7068,  0.6371),
-}
-SCANNING_LIMITS = {
-    "yaw":   (-0.58353, 0.58353),
-    "pitch": (-0.3,     0.0),
-}
-
-CAMERAS = {
-    "peppercamera": {"vfov": 44.30, "hfov": 55.20, "width": 640, "height": 480},
-    "realsense":    {"vfov": 42.50, "hfov": 69.50, "width": 640, "height": 480},
-}
-
-DEFAULT_HEAD_PITCH = -0.2
-DEFAULT_HEAD_YAW   =  0.0
-
-PATCH_RADIUS = 15
-HABITUATION_RATE = 0.1
-IOR_LIMIT = 50  # iterations
-
-def clamp(v: float, lo: float, hi: float) -> float:
-        return max(lo, min(v, hi))
-
-# -----------------------------------------------------------------------------
-# Data classes
-# -----------------------------------------------------------------------------
-class Mode(Enum):
-    DISABLED = auto()
-    SOCIAL   = auto()
-    SCANNING = auto()
-    SEEKING  = auto()
-    LOCATION = auto()
+    @classmethod
+    def from_string(cls, mode_str: str) -> 'AttentionMode':
+        """Convert string to AttentionMode, case-insensitive"""
+        for mode in cls:
+            if mode.value.lower() == mode_str.lower():
+                return mode
+        raise ValueError(f"Invalid attention mode: {mode_str}")
 
 @dataclass
-class AngleChange:
-    d_yaw: float
-    d_pitch: float
+class RobotLimits:
+    """Robot joint limits and constraints"""
+    HEAD_YAW_RANGE: Tuple[float, float] = (-2.0857, 2.0857)
+    HEAD_PITCH_RANGE: Tuple[float, float] = (-0.7068, 0.6371)
+    SCANNING_YAW_RANGE: Tuple[float, float] = (-0.58353, 0.58353)
+    SCANNING_PITCH_RANGE: Tuple[float, float] = (-0.3, 0.0)
+    
+    DEFAULT_HEAD_PITCH: float = -0.2
+    DEFAULT_HEAD_YAW: float = 0.0
+
+@dataclass
+class SaliencyConfig:
+    """Saliency computation parameters"""
+    PATCH_RADIUS: int = 15
+    HABITUATION_RATE: float = 0.1
+    IOR_LIMIT: int = 50  # iterations
+    FACE_BOOST_VALUE: float = 2.0
 
 @dataclass
 class CameraSpec:
+    """Camera specifications and pixel-to-angle conversion"""
     hfov_deg: float
     vfov_deg: float
     width: int
     height: int
 
     @classmethod
-    def from_name(cls, name: str) -> "CameraSpec":
-        if name.lower() == "peppercamera":
-            spec = CAMERAS["peppercamera"]
-        else:
-            spec = CAMERAS["realsense"]
-        return cls(hfov_deg=spec["hfov"], vfov_deg=spec["vfov"], width=spec["width"], height=spec["height"])
+    def create_realsense(cls) -> 'CameraSpec':
+        return cls(hfov_deg=69.50, vfov_deg=42.50, width=640, height=480)
+    
+    @classmethod
+    def create_pepper(cls) -> 'CameraSpec':
+        return cls(hfov_deg=55.20, vfov_deg=44.30, width=640, height=480)
 
-    def pixel_to_angle(self, x: float, y: float) -> AngleChange:
+    def pixel_to_angle(self, x: float, y: float) -> Tuple[float, float]:
+        """Convert pixel coordinates to angle changes (d_yaw, d_pitch)"""
         cx, cy = self.width / 2.0, self.height / 2.0
         x_prop = (x - cx) / self.width
         y_prop = (y - cy) / self.height
-        d_yaw   = x_prop * math.radians(self.hfov_deg) * -1.0
+        d_yaw = x_prop * math.radians(self.hfov_deg) * -1.0
         d_pitch = y_prop * math.radians(self.vfov_deg)
-        return AngleChange(d_yaw=d_yaw, d_pitch=d_pitch)
+        return d_yaw, d_pitch
 
     def angle_to_pixel(self, d_yaw: float, d_pitch: float) -> Tuple[int, int]:
+        """Convert angle changes to pixel coordinates"""
         x_prop = (-d_yaw) / math.radians(self.hfov_deg)
-        y_prop = ( d_pitch) / math.radians(self.vfov_deg)
-        x = int(self.width  / 2.0 + x_prop * self.width)
+        y_prop = (d_pitch) / math.radians(self.vfov_deg)
+        x = int(self.width / 2.0 + x_prop * self.width)
         y = int(self.height / 2.0 + y_prop * self.height)
         return x, y
 
-@dataclass(slots=True)
-class AttentionState:
-    mode: Mode = Mode.DISABLED
 
-    # flags / inputs
-    face_detected: bool = False
-    sound_detected: bool = False
-    mutual_gaze_detected: bool = False
-    face_within_range: bool = False
-    sound_angle: float = 0.0  # radians
-
-    # kinematics
-    robot_pose: Tuple[float, float, float] = (0.0, 0.0, 0.0)     # x, y, theta
-    head_joint_states: Tuple[float, float] = (0.0, 0.0)          # pitch, yaw
-    commanded_head: Tuple[float, float] = (DEFAULT_HEAD_PITCH, DEFAULT_HEAD_YAW)
-
-    yaw_limits: Tuple[float, float] = (HEAD_LIMITS["yaw"][0], HEAD_LIMITS["yaw"][1])
-    pitch_limits: Tuple[float, float] = (HEAD_LIMITS["pitch"][0], HEAD_LIMITS["pitch"][1])
-    kp_head: float = 0.5
-
-    rng: random.Random = field(default_factory=random.Random, repr=False, compare=False)
-    scan_dir: int = 1
-    scan_step: float = 0.08
-    seek_cooldown: int = 0
-    seek_period: Tuple[int, int] = (8, 18)
-
+class ConfigManager:
+    """Handles configuration loading and validation"""
     
+    DEFAULT_CONFIG = {
+        "camera": "RealSenseCamera",
+        "use_compressed_images": False,
+        "verbose_mode": False,
+    }
     
-    def set_mode(self, mode: Mode) -> None:
-        self.mode = mode
+    DEFAULT_TOPICS = {
+        "RealSenseCamera": "/camera/color/image_raw",
+        "RealSenseCameraCompressed": "/camera/color/image_raw/compressed",
+        "FrontCamera": "/naoqi_driver/camera/front/image_raw",
+        "JointAngles": "/joint_angles",
+        "JointStates": "/joint_states",
+        "FaceDetection": "/faceDetection/data",
+        "SoundLocalization": "/soundDetection/direction",
+        "OvertAttentionStatus": "/overtAttention/mode",
+        "SetMode": "/overtAttention/set_mode",
+    }
 
-    def set_pose(self, x: float, y: float, theta: float) -> None:
-        self.robot_pose = (x, y, theta)
+    def __init__(self, package_path: str):
+        self.package_path = Path(package_path)
+        self.config = self.load_config()
+        self.topics = self.load_topics()
+    
+    def load_config(self) -> Dict:
+        """Load configuration from YAML file"""
+        config_path = self.package_path / "config" / "overt_attention_configuration.yaml"
+        return self.load_yaml_with_defaults(config_path, self.DEFAULT_CONFIG)
+    
+    def load_topics(self) -> Dict:
+        """Load topic mappings from YAML file"""
+        topics_path = self.package_path / "data" / "pepper_topics.yaml"
+        return self.load_yaml_with_defaults(topics_path, self.DEFAULT_TOPICS)
+    
+    def load_yaml_with_defaults(self, path: Path, defaults: Dict) -> Dict:
+        """Load YAML file with fallback to defaults"""
+        data = defaults.copy()
+        try:
+            if path.exists():
+                with open(path, "r") as f:
+                    override = yaml.safe_load(f) or {}
+                data.update(override)
+        except Exception as e:
+            print(f"Warning: Could not load YAML {path}: {e}")
+        return data
 
-    def set_head(self, pitch: float, yaw: float) -> None:
-        self.head_joint_states = (pitch, yaw)
-
-    def apply_limits(self, pitch: float, yaw: float) -> Tuple[float, float]:
-        pmin, pmax = self.pitch_limits
-        ymin, ymax = self.yaw_limits
-        return (max(pmin, min(pitch, pmax)),
-                max(ymin, min(yaw,   ymax)))
-
-    def nudge(self, target_pitch: float, target_yaw: float) -> None:
-        cp, cy = self.commanded_head
-        np_ = cp + self.kp_head * (target_pitch - cp)
-        ny_ = cy + self.kp_head * (target_yaw   - cy)
-        self.commanded_head = self.apply_limits(np_, ny_)
-
-    def location_attention(self, px: float, py: float, pz: float) -> int:
-        xy = math.hypot(px, py)
-        if xy == 0.0 and pz == 0.0: return 0
-        target_yaw   = math.atan2(py, px)
-        target_pitch = math.atan2(-pz, max(1e-6, xy))
-        target_pitch, target_yaw = self.apply_limits(target_pitch, target_yaw)
-        self.nudge(target_pitch, target_yaw)
-        return 1
-
-    def social_attention(self, realignment_threshold_deg: int, social_control: str) -> int:
-        deadband = math.radians(realignment_threshold_deg)
+    def get_camera_topic(self) -> str:
+        """Get the appropriate camera topic based on configuration"""
+        camera_key = self.config["camera"].lower()
+        use_compressed = self.config["use_compressed_images"]
         
-        if self.face_detected and self.face_within_range:
-            tp, ty = 0.0, 0.0
-        
-        elif self.sound_detected:
-            tp, ty = 0.0, clamp(self.sound_angle, *self.yaw_limits)
-        
+        if camera_key == "realsense":
+            return self.topics["RealSenseCameraCompressed" if use_compressed else "RealSenseCamera"]
+        elif camera_key == "peppercamera":
+            return self.topics["FrontCamera"]
         else:
-            return 0
-        
-        cp, cy = self.commanded_head
-        
-        if abs(tp - cp) < deadband and abs(ty - cy) < deadband:
-            return 0
-        
-        self.nudge(tp, ty)
-        return 1
+            raise ValueError(f"Unsupported camera type: {camera_key}")
 
-    def scanning_attention(self, center_yaw: float, center_pitch: float) -> int:
-        center_yaw   = clamp(center_yaw,   *self.yaw_limits)
-        center_pitch = clamp(center_pitch, *self.pitch_limits)
-        
-        next_y = self.commanded_head[1] + self.scan_dir * self.scan_step
-        if next_y >= self.yaw_limits[1] or next_y <= self.yaw_limits[0]:
-            self.scan_dir *= -1
-            next_y = clamp(next_y, *self.yaw_limits)
-        self.nudge(center_pitch, next_y)
-        return 1
-
-    def seeking_attention(self, realignment_threshold_deg: int) -> int:
-        if self.seek_cooldown <= 0:
-            ty = self.rng.uniform(*self.yaw_limits)
-            tp = self.rng.uniform(*self.pitch_limits)
-            self.pending = (tp, ty)
-            self.seek_cooldown = self.rng.randint(*self.seek_period)
+    def get_camera_spec(self) -> CameraSpec:
+        """Get camera specifications based on configuration"""
+        camera_key = self.config["camera"].lower()
+        if camera_key == "realsense":
+            return CameraSpec.create_realsense()
+        elif camera_key == "peppercamera":
+            return CameraSpec.create_pepper()
         else:
-            self.seek_cooldown -= 1
-        tp, ty = getattr(self, "pending", self.commanded_head)
-        cp, cy = self.commanded_head
-        deadband = math.radians(realignment_threshold_deg)
-        if abs(tp - cp) < deadband and abs(ty - cy) < deadband:
-            return 0
-        self.nudge(tp, ty)
-        return 1
+            raise ValueError(f"Unsupported camera type: {camera_key}")
 
-# -----------------------------------------------------------------------------
-# Saliency
-# -----------------------------------------------------------------------------
+
+class HeadController:
+    """Manages robot head positioning and control"""
+    
+    def __init__(self, limits: RobotLimits, kp: float = 0.5):
+        self.limits = limits
+        self.kp = kp
+        self.current_pitch = limits.DEFAULT_HEAD_PITCH
+        self.current_yaw = limits.DEFAULT_HEAD_YAW
+        self.commanded_pitch = limits.DEFAULT_HEAD_PITCH
+        self.commanded_yaw = limits.DEFAULT_HEAD_YAW
+        
+        # Mode-specific limits
+        self.active_pitch_range = limits.HEAD_PITCH_RANGE
+        self.active_yaw_range = limits.HEAD_YAW_RANGE
+
+    def set_current_position(self, pitch: float, yaw: float):
+        """Update current head position from joint states"""
+        self.current_pitch = pitch
+        self.current_yaw = yaw
+
+    def set_limits_for_mode(self, mode: AttentionMode):
+        """Set joint limits based on attention mode"""
+        if mode == AttentionMode.SCANNING:
+            self.active_pitch_range = self.limits.SCANNING_PITCH_RANGE
+            self.active_yaw_range = self.limits.SCANNING_YAW_RANGE
+        else:
+            self.active_pitch_range = self.limits.HEAD_PITCH_RANGE
+            self.active_yaw_range = self.limits.HEAD_YAW_RANGE
+
+    def clamp_to_limits(self, pitch: float, yaw: float) -> Tuple[float, float]:
+        """Clamp joint angles to current limits"""
+        pitch = max(self.active_pitch_range[0], min(pitch, self.active_pitch_range[1]))
+        yaw = max(self.active_yaw_range[0], min(yaw, self.active_yaw_range[1]))
+        return pitch, yaw
+
+    def move_towards(self, target_pitch: float, target_yaw: float):
+        """Move head towards target using proportional control"""
+        # Apply proportional control
+        new_pitch = self.commanded_pitch + self.kp * (target_pitch - self.commanded_pitch)
+        new_yaw = self.commanded_yaw + self.kp * (target_yaw - self.commanded_yaw)
+        
+        # Apply limits
+        self.commanded_pitch, self.commanded_yaw = self.clamp_to_limits(new_pitch, new_yaw)
+
+    def get_command(self) -> Tuple[float, float]:
+        """Get current commanded position"""
+        return self.commanded_pitch, self.commanded_yaw
+
+
 class SaliencyProcessor:
-    def __init__(self, cam: CameraSpec, verbose: bool = False):
-        self.cam = cam
-        self.verbose = verbose
-        self.faces_map: Optional[np.ndarray] = None        # H×W float mask (0/1 or weights)
-        self.previous_locations: List[Tuple[float, float, int]] = []  # (abs_yaw, abs_pitch, t)
+    """Handles saliency computation with habituation and inhibition of return"""
+    
+    def __init__(self, camera_spec: CameraSpec, config: SaliencyConfig):
+        self.camera_spec = camera_spec
+        self.config = config
+        self.faces_map: Optional[np.ndarray] = None
+        self.previous_locations: List[Tuple[float, float, int]] = []
 
-    # ---- Base saliency (fine-grained if available; fallback Sobel magnitude) ----
-    def base_saliency(self, image_bgr: np.ndarray) -> np.ndarray:
+    def compute_base_saliency(self, image_bgr: np.ndarray) -> np.ndarray:
+        """Compute base saliency map using OpenCV or fallback to Sobel"""
         try:
             sal = cv2.saliency.StaticSaliencyFineGrained_create()
             ok, salmap = sal.computeSaliency(image_bgr)
             if ok:
-                return salmap.astype(np.float32)   # OpenCV returns float32 in [0,1]
+                return salmap.astype(np.float32)
         except Exception:
             pass
+        
+        # Fallback to Sobel magnitude
         gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
         gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
         gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
-        mag = cv2.magnitude(gx, gy)
-        return mag.astype(np.float32)  # keep raw; no normalization (C++ parity)
+        return cv2.magnitude(gx, gy).astype(np.float32)
 
- 
-    def winner_takes_all(self, saliency_map: np.ndarray) -> Tuple[int, int]:
-        _, _, _, max_loc = cv2.minMaxLoc(saliency_map)
-        return int(max_loc[0]), int(max_loc[1])
-
-    def habituation(self,
-                    saliency_map: np.ndarray,
-                    wta_map: np.ndarray,
-                    prev: List[Tuple[float, float, int]],
-                    head_pitch: float,
-                    head_yaw: float) -> List[Tuple[float, float, int]]:
-        out: List[Tuple[float, float, int]] = []
-        for abs_yaw, abs_pitch, t in prev:
-            d_yaw   = abs_yaw   - head_yaw
-            d_pitch = abs_pitch - head_pitch
-            x, y = self.cam.angle_to_pixel(d_yaw, d_pitch)
-            if 0 <= x < self.cam.width and 0 <= y < self.cam.height:
-                x0 = max(0, x - PATCH_RADIUS); x1 = min(self.cam.width,  x + PATCH_RADIUS + 1)
-                y0 = max(0, y - PATCH_RADIUS); y1 = min(self.cam.height, y + PATCH_RADIUS + 1)
-                saliency_map[y0:y1, x0:x1] = saliency_map[y0:y1, x0:x1] - (t * HABITUATION_RATE)
-                cv2.circle(wta_map, (x, y), PATCH_RADIUS, int(t * PATCH_RADIUS), -1)  # gray blob
-            out.append((abs_yaw, abs_pitch, t + 1))
-        return out
-
-    def inhibition_of_return(self,
-                             saliency_map: np.ndarray,
-                             wta_map: np.ndarray,
-                             prev: List[Tuple[float, float, int]],
-                             head_pitch: float,
-                             head_yaw: float) -> List[Tuple[float, float, int]]:
-        out: List[Tuple[float, float, int]] = []
-        for abs_yaw, abs_pitch, t in prev:
-            if IOR_LIMIT < t < IOR_LIMIT + 50:
-                d_yaw   = abs_yaw   - head_yaw
-                d_pitch = abs_pitch - head_pitch
-                x, y = self.cam.angle_to_pixel(d_yaw, d_pitch)
-                if 0 <= x < self.cam.width and 0 <= y < self.cam.height:
-                    x0 = max(0, x - PATCH_RADIUS); x1 = min(self.cam.width,  x + PATCH_RADIUS + 1)
-                    y0 = max(0, y - PATCH_RADIUS); y1 = min(self.cam.height, y + PATCH_RADIUS + 1)
-                    saliency_map[y0:y1, x0:x1] = 0.0
-                    cv2.circle(wta_map, (x, y), PATCH_RADIUS, 0, -1)
-                # drop this entry
-            else:
-                out.append((abs_yaw, abs_pitch, t))
-        return out
-
-    def compute_saliency_features(self,
-                                  camera_image: np.ndarray,
-                                  head_pitch: float,
-                                  head_yaw: float,
-                                  debug: bool = False) -> Tuple[int, int, int, np.ndarray]:
-        """
-        Return (status, centre_x, centre_y, wta_map)
-        status: 0 on success, -1 on failure (C++ parity)
-        """
-        wta = np.full_like(camera_image, 255, dtype=np.uint8)
-
-        saliency_map = self.base_saliency(camera_image)
-        if saliency_map is None or saliency_map.size == 0:
-            print("Error computing saliency map")
-            return -1, -1, -1, wta
-
-        # Face boost: for any positive faces_map pixel, force saliency to 2.0 (C++ parity)
+    def apply_face_boost(self, saliency_map: np.ndarray):
+        """Boost saliency at face locations"""
         if self.faces_map is not None:
-            ys, xs = np.where(self.faces_map > 0)
-            saliency_map[ys, xs] = 2.0
+            mask = self.faces_map > 0
+            saliency_map[mask] = self.config.FACE_BOOST_VALUE
 
-        if debug or self.verbose:
-            cv2.imshow("Saliency Map", saliency_map); cv2.waitKey(1)
+    def apply_habituation_and_ior(self, saliency_map: np.ndarray, wta_map: Optional[np.ndarray], head_pitch: float, head_yaw: float, debug: bool = False):
+        """Apply habituation and inhibition of return"""
+        updated_locations = []
+        
+        for abs_yaw, abs_pitch, age in self.previous_locations:
+            # Convert absolute angles to relative pixel coordinates
+            d_yaw = abs_yaw - head_yaw
+            d_pitch = abs_pitch - head_pitch
+            x, y = self.camera_spec.angle_to_pixel(d_yaw, d_pitch)
+            
+            if 0 <= x < self.camera_spec.width and 0 <= y < self.camera_spec.height:
+                # Apply habituation (gradual reduction)
+                if age <= self.config.IOR_LIMIT:
+                    self.apply_patch_modification(saliency_map, x, y, -age * self.config.HABITUATION_RATE)
+                    
+                    # Visualize habituation areas in gray
+                    if debug and wta_map is not None:
+                        intensity = int(255 * (1.0 - age / self.config.IOR_LIMIT))
+                        cv2.circle(wta_map, (x, y), self.config.PATCH_RADIUS, (intensity, intensity, intensity), -1)
+                
+                # Apply inhibition of return (complete suppression)
+                elif self.config.IOR_LIMIT < age < self.config.IOR_LIMIT + 50:
+                    self.apply_patch_modification(saliency_map, x, y, -saliency_map.max())
+                    
+                    # Visualize IOR areas in red
+                    if debug and wta_map is not None:
+                        cv2.circle(wta_map, (x, y), self.config.PATCH_RADIUS, (0, 0, 255), -1)
+                    continue  # Don't keep this location
+            
+            updated_locations.append((abs_yaw, abs_pitch, age + 1))
+        
+        self.previous_locations = updated_locations
 
-        # Apply habituation then IOR using current head pose
-        self.previous_locations = self.habituation(saliency_map, wta, self.previous_locations, head_pitch, head_yaw)
-        self.previous_locations = self.inhibition_of_return(saliency_map, wta, self.previous_locations, head_pitch, head_yaw)
+    def apply_patch_modification(self, saliency_map: np.ndarray, x: int, y: int, delta: float):
+        """Apply modification to a circular patch around (x, y)"""
+        r = self.config.PATCH_RADIUS
+        x0, x1 = max(0, x - r), min(self.camera_spec.width, x + r + 1)
+        y0, y1 = max(0, y - r), min(self.camera_spec.height, y + r + 1)
+        saliency_map[y0:y1, x0:x1] = np.maximum(0, saliency_map[y0:y1, x0:x1] + delta)
 
-        cx, cy = self.winner_takes_all(saliency_map)
+    def compute_attention_point(self, image: np.ndarray, head_pitch: float, head_yaw: float, debug: bool = False) -> Tuple[int, int, Optional[np.ndarray]]:
+        """Compute the most salient point for attention"""
+        # Create visualization image (copy of original for debugging)
+        wta_map = image.copy() if debug else None
+        
+        saliency_map = self.compute_base_saliency(image)
+        
+        # Show base saliency if debugging
+        if debug:
+            cv2.imshow("Base Saliency Map", saliency_map)
+            cv2.waitKey(1)
+        
+        self.apply_face_boost(saliency_map)
+        
+        # Show face-boosted saliency if debugging
+        if debug and self.faces_map is not None:
+            face_boosted = saliency_map.copy()
+            face_boosted[self.faces_map > 0] = 1.0  # Highlight face areas
+            cv2.imshow("Face Boosted Saliency", face_boosted)
+            cv2.waitKey(1)
+        
+        self.apply_habituation_and_ior(saliency_map, wta_map, head_pitch, head_yaw, debug)
+        
+        # Winner-takes-all
+        _, _, _, max_loc = cv2.minMaxLoc(saliency_map)
+        cx, cy = int(max_loc[0]), int(max_loc[1])
+        
+        # Draw attention point on visualization
+        if debug and wta_map is not None:
+            # Draw green cross at attention point
+            cv2.line(wta_map, (cx - 15, cy - 15), (cx + 15, cy + 15), (0, 255, 0), 3)
+            cv2.line(wta_map, (cx - 15, cy + 15), (cx + 15, cy - 15), (0, 255, 0), 3)
+            
+            # Show final result
+            cv2.imshow("Winner Takes All", wta_map)
+            cv2.waitKey(1)
+        
+        return cx, cy, wta_map
 
-        if debug or self.verbose:
-            cv2.line(wta, (cx - 15, cy - 15), (cx + 15, cy + 15), (0, 255, 0), 5)
-            cv2.line(wta, (cx - 15, cy + 15), (cx + 15, cy - 15), (0, 255, 0), 5)
-            cv2.imshow("WTA", wta); cv2.waitKey(1)
+    def update_faces(self, faces_map: np.ndarray):
+        """Update face locations for saliency boosting"""
+        self.faces_map = faces_map
 
-        return 0, int(cx), int(cy), wta
+    def add_attention_location(self, abs_yaw: float, abs_pitch: float):
+        """Add a new attention location to track"""
+        self.previous_locations.append((abs_yaw, abs_pitch, 1))
 
-# -----------------------------------------------------------------------------
-# Main Node
-# -----------------------------------------------------------------------------
+
+class AttentionBehaviors:
+    """Implements different attention behaviors"""
+    
+    def __init__(self, head_controller: HeadController, limits: RobotLimits):
+        self.head_controller = head_controller
+        self.limits = limits
+        self.rng = random.Random()
+        
+        # Scanning state
+        self.scan_direction = 1
+        self.scan_step = 0.08
+        
+        # Seeking state
+        self.seek_cooldown = 0
+        self.seek_period = (8, 18)
+        self.seek_target: Optional[Tuple[float, float]] = None
+
+    def location_attention(self, target_x: float, target_y: float, target_z: float):
+        """Point head towards a 3D location"""
+        distance_xy = math.hypot(target_x, target_y)
+        if distance_xy == 0.0 and target_z == 0.0:
+            return
+        
+        target_yaw = math.atan2(target_y, target_x)
+        target_pitch = math.atan2(-target_z, max(1e-6, distance_xy))
+        
+        self.head_controller.move_towards(target_pitch, target_yaw)
+
+    def social_attention(self, face_detected: bool, face_in_range: bool, sound_detected: bool, sound_angle: float):
+        """Social attention behavior - prioritize faces and sounds"""
+        if face_detected and face_in_range:
+            # Look at center when face is detected and in range
+            self.head_controller.move_towards(0.0, 0.0)
+        elif sound_detected:
+            # Look towards sound source
+            sound_yaw = max(self.head_controller.active_yaw_range[0], 
+                          min(sound_angle, self.head_controller.active_yaw_range[1]))
+            self.head_controller.move_towards(0.0, sound_yaw)
+
+    def scanning_attention(self, saliency_center_yaw: float = 0.0, saliency_center_pitch: float = None):
+        """Scanning behavior with saliency-guided center"""
+        if saliency_center_pitch is None:
+            saliency_center_pitch = self.limits.DEFAULT_HEAD_PITCH
+        
+        # Scan left-right around the saliency center
+        current_yaw = self.head_controller.commanded_yaw
+        next_yaw = current_yaw + self.scan_direction * self.scan_step
+        
+        # Reverse direction at limits
+        if next_yaw >= self.head_controller.active_yaw_range[1] or next_yaw <= self.head_controller.active_yaw_range[0]:
+            self.scan_direction *= -1
+            next_yaw = max(self.head_controller.active_yaw_range[0], 
+                          min(next_yaw, self.head_controller.active_yaw_range[1]))
+        
+        self.head_controller.move_towards(saliency_center_pitch, next_yaw)
+
+    def seeking_attention(self):
+        """Random seeking behavior"""
+        if self.seek_cooldown <= 0:
+            # Generate new random target
+            target_yaw = self.rng.uniform(*self.head_controller.active_yaw_range)
+            target_pitch = self.rng.uniform(*self.head_controller.active_pitch_range)
+            self.seek_target = (target_pitch, target_yaw)
+            self.seek_cooldown = self.rng.randint(*self.seek_period)
+        else:
+            self.seek_cooldown -= 1
+        
+        if self.seek_target:
+            target_pitch, target_yaw = self.seek_target
+            self.head_controller.move_towards(target_pitch, target_yaw)
+
+    def disabled_attention(self):
+        """Return to default position"""
+        self.head_controller.move_towards(self.limits.DEFAULT_HEAD_PITCH, self.limits.DEFAULT_HEAD_YAW)
+
+
 class OvertAttentionSystem(Node):
+    """Main ROS2 node for overt attention system"""
+    
     def __init__(self):
         super().__init__("overt_attention")
         
-        self.pkg_share = get_package_share_directory("overt_attention")
-        self.cfg_path  = os.path.join(self.pkg_share, "config", "overt_attention_configuration.yaml")
+        # Initialize components
         self.bridge = CvBridge()
+        package_path = get_package_share_directory("overt_attention")
+        self.config_manager = ConfigManager(package_path)
+        self.limits = RobotLimits()
+        self.head_controller = HeadController(self.limits)
+        
+        camera_spec = self.config_manager.get_camera_spec()
+        saliency_config = SaliencyConfig()
+        self.saliency_processor = SaliencyProcessor(camera_spec, saliency_config)
+        self.behaviors = AttentionBehaviors(self.head_controller, self.limits)
+        
+        # State
+        self.current_mode = AttentionMode.SCANNING  # Start in scanning mode
         self.camera_image: Optional[np.ndarray] = None
-
-        self.cfg = self.load_yaml(self.cfg_path, CONFIG_DEFAULTS)
-        self.state = AttentionState()
-        self.verbose = bool(self.cfg.get("verbose_mode", False))
+        self.wta_visualization: Optional[np.ndarray] = None  # For debug visualization
+        self.location_target: Tuple[float, float, float] = (0.0, 0.0, 0.0)
         
-        # Start in SCANNING mode for immediate visualization
-        self.state.set_mode(Mode.SCANNING)
-
-        ok = self.initialize()
-        if not ok:
-            self.get_logger().error("Initialization failed; shutting down.")
-            rclpy.shutdown()
-
-    def load_yaml(self, path: str, defaults: dict) -> dict:
-        data = defaults.copy()
-        try:
-            with open(path, "r") as f:
-                override = yaml.safe_load(f) or {}
-            data.update(override)
-        except Exception as e:
-            self.get_logger().error(f"Could not load YAML {path}: {e}")
-        return data
-
-    def initialize(self) -> bool:
-        self.get_logger().info("Initializing OvertAttentionSystem...")
-
-        self.verbose = bool(self.cfg.get("verbose_mode", False))
-        camera_key_raw = str(self.cfg["camera"])
-        use_compr = bool(self.cfg["use_compressed_images"])
-
-        # normalize for topics map
-        if camera_key_raw.lower() == "realsense":
-            camera_topic_key = "RealSenseCameraCompressed" if use_compr else "RealSenseCamera"
-            cam_name = "realsense"
-        elif camera_key_raw.lower() == "peppercamera":
-            camera_topic_key = "FrontCamera"
-            cam_name = "peppercamera"
-        else:
-            self.get_logger().error(f"Unsupported camera type: {camera_key_raw}")
-            return False
-
-        topics_path = os.path.join(self.pkg_share, "data", "pepper_topics.yaml")
-        topics = self.load_yaml(topics_path, TOPIC_DEFAULTS)
-
-        # pubs/subs
-        self.image_subscription                 = self.create_subscription(Image, topics[camera_topic_key], self.camera_callback, 10)
-        self.joint_state_subscription           = self.create_subscription(JointState, topics["JointStates"], self.joint_states_callback, 10)
+        # Sensor inputs
+        self.face_detected = False
+        self.face_in_range = False
+        self.mutual_gaze = False
+        self.sound_detected = False
+        self.sound_angle = 0.0
         
-        self.robot_pose_subscription            = self.create_subscription(Pose2D, topics["RobotPose"], self.robot_pose_callback, 10)
-        self.sound_localization_subscription    = self.create_subscription(Float32, topics["SoundLocalization"], self.sound_callback, 10)
-        self.face_detection_subscription        = self.create_subscription(FaceDetection, topics["FaceDetection"], self.face_callback, 10)
+        self.setup_ros_interfaces()
+        self.get_logger().info("OvertAttentionSystem initialized")
 
-        self.cmd_vel_publisher                  = self.create_publisher(Twist, topics["Wheels"], 10)
-        self.joint_angles_publisher             = self.create_publisher(JointAnglesWithSpeed, topics["JointAngles"], 10)
-        self.overt_attention_publisher          = self.create_publisher(OvertAttentionStatus, topics["OvertAttentionStatus"], 10)
-        self.debug_image_publisher              = self.create_publisher(Image, "/overt_attention/debug_image", 10)
+    def setup_ros_interfaces(self):
+        """Initialize ROS publishers, subscribers, and services"""
+        topics = self.config_manager.topics
+        
+        # Subscribers
+        camera_topic = self.config_manager.get_camera_topic()
+        self.create_subscription(Image, camera_topic, self.camera_callback, 10)
+        self.create_subscription(JointState, topics["JointStates"], self.joint_states_callback, 10)
+        self.create_subscription(Float32, topics["SoundLocalization"], self.sound_callback, 10)
+        self.create_subscription(FaceDetection, topics["FaceDetection"], self.face_callback, 10)
+        
+        # Publishers
+        self.joint_angles_pub = self.create_publisher(JointAnglesWithSpeed, topics["JointAngles"], 10)
+        self.status_pub = self.create_publisher(OvertAttentionStatus, topics["OvertAttentionStatus"], 10)
+        self.debug_image_pub = self.create_publisher(Image, "/overt_attention/debug_image", 10)
+        
+        # Services
+        self.create_service(OvertAttentionSetMode, topics["SetMode"], self.set_mode_callback)
 
-        # services (only register if srv types exist)
-        self.set_mode_service = self.create_service(OvertAttentionSetMode, topics["SetMode"], self.set_mode_callback)
-
-        # camera spec & saliency
-        self.cam_spec = CameraSpec.from_name(cam_name)
-        self.saliency = SaliencyProcessor(self.cam_spec)
-
-        # internal buffers
-        self.attention_head_pitch: List[float] = []
-        self.attention_head_yaw:   List[float] = []
-        self.face_labels:          List[int]   = []
-        self.sound_count: int = 0
-
-        self.get_logger().info("Initialization complete.")
-        return True
-
-    # ------------------ Callbacks ------------------
     def camera_callback(self, msg: Image):
+        """Handle camera image updates"""
         try:
-            img = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
-            if img is None or img.size == 0:
-                self.get_logger().error("Camera image is empty")
-                return
-            self.camera_image = img
+            self.camera_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
         except Exception as e:
-            self.get_logger().error(f"CV bridge conversion failed: {e}")
+            self.get_logger().error(f"Camera conversion failed: {e}")
 
     def joint_states_callback(self, msg: JointState):
+        """Handle joint state updates"""
         try:
-            idx_pitch = msg.name.index("HeadPitch")
-            idx_yaw   = msg.name.index("HeadYaw")
-            pitch = msg.position[idx_pitch]
-            yaw   = msg.position[idx_yaw]
-            self.state.set_head(pitch, yaw)
-        
-        except ValueError:
-            self.get_logger().warning("HeadPitch or HeadYaw not in JointState")
-        
-        except IndexError:
-            self.get_logger().error("JointState missing positions for head joints")
-
-    def robot_pose_callback(self, msg: Pose2D):
-        self.state.set_pose(msg.x, msg.y, msg.theta)
+            pitch_idx = msg.name.index("HeadPitch")
+            yaw_idx = msg.name.index("HeadYaw")
+            pitch = msg.position[pitch_idx]
+            yaw = msg.position[yaw_idx]
+            self.head_controller.set_current_position(pitch, yaw)
+        except (ValueError, IndexError) as e:
+            self.get_logger().warning(f"Joint state parsing error: {e}")
 
     def sound_callback(self, msg: Float32):
+        """Handle sound detection updates"""
         try:
-            val = float(msg.data)
+            angle_deg = float(msg.data)
+            if not math.isnan(angle_deg):
+                self.sound_detected = True
+                self.sound_angle = math.radians(angle_deg)
         except Exception:
-            return
-        if math.isnan(val):
-            return
-        self.state.sound_detected = True
-        self.state.sound_angle = math.radians(val)  # assuming degrees on the topic
-        self.sound_count += 1
-
+            pass
 
     def face_callback(self, msg: FaceDetection):
+        """Handle face detection updates"""
         if not hasattr(msg, "centroids"):
             return
         
-        self.attention_head_pitch.clear()
-        self.attention_head_yaw.clear()
-        self.face_labels.clear()
-
-        self.state.face_detected = len(msg.centroids) > 0
-        self.state.face_within_range = False
-        gaze_any = False
-
-        faces_map = np.zeros((self.cam_spec.height, self.cam_spec.width), dtype=np.float32)
-
-        for i, c in enumerate(msg.centroids):
-            # If c are in pixel units: use as-is; if in meters, convert to pixel via projection.
-            x = int(c.x); y = int(c.y)
-            if 0 <= x < self.cam_spec.width and 0 <= y < self.cam_spec.height:
-                if hasattr(msg, "mutual_gaze") and i < len(msg.mutual_gaze):
-                    gaze_any = gaze_any or bool(msg.mutual_gaze[i])
-                
-                # set face saliency (closer -> stronger if z is distance)
-                scale = 1.0 / max(1e-3, float(getattr(c, "z", 1.0)))
-                faces_map[y, x] = max(faces_map[y, x], 1.0 * scale)
-
-                # convert pixel to delta angles
-                ang = self.cam_spec.pixel_to_angle(x, y)
-                self.attention_head_pitch.append(ang.d_pitch)
-                self.attention_head_yaw.append(ang.d_yaw)
-                self.face_labels.append(i + 1)
-
-                if getattr(c, "z", 10.0) <= 2.0:
-                    self.state.face_within_range = True
-
-        self.saliency.faces_map = faces_map
-        self.state.mutual_gaze_detected = self.state.mutual_gaze_detected or gaze_any
-
-    # ------------------ Services ------------------
-    def set_mode_callback(self, request, response):
-        # Adjust to your SetMode.srv fields
-        # Expecting something like: string state; float64 location_x/y/z
-        try:
-            state_str: str = request.state.lower()
-            if   state_str == "disabled": self.state.set_mode(Mode.DISABLED)
-            elif state_str == "social":   self.state.set_mode(Mode.SOCIAL)
-            elif state_str == "scanning": self.state.set_mode(Mode.SCANNING)
-            elif state_str == "seeking":  self.state.set_mode(Mode.SEEKING)
-            elif state_str == "location":
-                self.state.set_mode(Mode.LOCATION)
-                # store desired 3D point (meters)
-                self.location_target = (request.location_x, request.location_y, request.location_z)
-            else:
-                raise ValueError(f"Invalid state: {request.state}")
+        self.face_detected = len(msg.centroids) > 0
+        self.face_in_range = False
+        self.mutual_gaze = False
+        
+        # Create face saliency map
+        camera_spec = self.config_manager.get_camera_spec()
+        faces_map = np.zeros((camera_spec.height, camera_spec.width), dtype=np.float32)
+        
+        for i, centroid in enumerate(msg.centroids):
+            x, y = int(centroid.x), int(centroid.y)
             
-            # If your response has a boolean/int `mode_set_success`
+            if 0 <= x < camera_spec.width and 0 <= y < camera_spec.height:
+                # Check distance for in-range determination
+                distance = getattr(centroid, "z", 10.0)
+                if distance <= 2.0:
+                    self.face_in_range = True
+                
+                # Check mutual gaze
+                if hasattr(msg, "mutual_gaze") and i < len(msg.mutual_gaze):
+                    self.mutual_gaze = self.mutual_gaze or bool(msg.mutual_gaze[i])
+                
+                # Add to saliency map
+                scale = 1.0 / max(1e-3, distance)
+                faces_map[y, x] = max(faces_map[y, x], scale)
+        
+        self.saliency_processor.update_faces(faces_map)
+
+    def set_mode_callback(self, request, response):
+        """Handle mode change requests"""
+        try:
+            new_mode = AttentionMode.from_string(request.state)
+            self.current_mode = new_mode
+            self.head_controller.set_limits_for_mode(new_mode)
+            
+            if new_mode == AttentionMode.LOCATION:
+                self.location_target = (request.location_x, request.location_y, request.location_z)
+            
             if hasattr(response, "mode_set_success"):
                 response.mode_set_success = 1
-        except Exception as e:
-            self.get_logger().error(f"set_mode failed: {e}")
+                
+            self.get_logger().info(f"Mode changed to: {new_mode.value}")
+            
+        except ValueError as e:
+            self.get_logger().error(f"Invalid mode request: {e}")
             if hasattr(response, "mode_set_success"):
                 response.mode_set_success = 0
+        
         return response
 
-    # ------------------ Control loop hook ------------------
     def run_once(self):
-        """
-        Call this periodically from a timer. Reads inputs and updates state.commanded_head.
-        You can publish a head command here.
-        """
-        if self.state.mode == Mode.LOCATION:
-            px, py, pz = getattr(self, "location_target", (0.0, 0.0, 0.0))
-            self.state.location_attention(px, py, pz)
-
-        elif self.state.mode == Mode.SOCIAL:
-            # choose random/saliency/etc. For now, prefer sound if fresh:
-            self.state.social_attention(realignment_threshold_deg=self.cfg["realignment_threshold"], 
-                                        social_control=self.cfg["social_attention_mode"])
-
-        elif self.state.mode == Mode.SCANNING:
-            self.state.yaw_limits   = SCANNING_LIMITS["yaw"]
-            self.state.pitch_limits = SCANNING_LIMITS["pitch"]
-
+        """Main control loop - called by timer from application"""
+        # Execute behavior based on current mode
+        if self.current_mode == AttentionMode.LOCATION:
+            self.behaviors.location_attention(*self.location_target)
+            
+        elif self.current_mode == AttentionMode.SOCIAL:
+            self.behaviors.social_attention(
+                self.face_detected, self.face_in_range, 
+                self.sound_detected, self.sound_angle
+            )
+            
+        elif self.current_mode == AttentionMode.SCANNING:
             if self.camera_image is not None:
-                hp, hy = self.state.head_joint_states
-                status, cx, cy, _ = self.saliency.compute_saliency_features(
-                    self.camera_image, head_pitch=hp, head_yaw=hy, debug=self.verbose
+                # Use saliency to guide scanning center
+                head_pitch, head_yaw = self.head_controller.current_pitch, self.head_controller.current_yaw
+                verbose = self.config_manager.config.get("verbose_mode", False)
+                
+                cx, cy, wta_visualization = self.saliency_processor.compute_attention_point(
+                    self.camera_image, head_pitch, head_yaw, debug=verbose
                 )
-                if status == 0:
-                    d = self.cam_spec.pixel_to_angle(cx, cy)  # radians
-                    control_pitch = d.d_pitch + hp
-                    control_yaw   = d.d_yaw   + hy
-                    self.saliency.previous_locations.append((control_yaw, control_pitch, 1))
-                    self.state.scanning_attention(center_yaw=control_yaw, center_pitch=control_pitch)
-                else:
-                    self.state.scanning_attention(center_yaw=0.0, center_pitch=DEFAULT_HEAD_PITCH)
+                
+                # Store visualization for debug publishing
+                if verbose and wta_visualization is not None:
+                    self.wta_visualization = wta_visualization
+                
+                # Convert to angle and add to tracking
+                camera_spec = self.config_manager.get_camera_spec()
+                d_yaw, d_pitch = camera_spec.pixel_to_angle(cx, cy)
+                abs_yaw = head_yaw + d_yaw
+                abs_pitch = head_pitch + d_pitch
+                self.saliency_processor.add_attention_location(abs_yaw, abs_pitch)
+                
+                self.behaviors.scanning_attention(abs_yaw, abs_pitch)
             else:
-                self.state.scanning_attention(center_yaw=0.0, center_pitch=DEFAULT_HEAD_PITCH)
-
+                self.behaviors.scanning_attention()
+                
+        elif self.current_mode == AttentionMode.SEEKING:
+            self.behaviors.seeking_attention()
+            
+        elif self.current_mode == AttentionMode.DISABLED:
+            self.behaviors.disabled_attention()
         
-        elif self.state.mode == Mode.SEEKING:
-            self.state.yaw_limits   = HEAD_LIMITS["yaw"]
-            self.state.pitch_limits = HEAD_LIMITS["pitch"]
-            self.state.seeking_attention(realignment_threshold_deg=8)
-
-        elif self.state.mode == Mode.DISABLED:
-            self.state.nudge(DEFAULT_HEAD_PITCH, DEFAULT_HEAD_YAW)
-
-        else:
-            # ROS ERROR log
-            self.get_logger().error(f"Unknown state: {self.state.mode}")
-
-        status_msg = OvertAttentionStatus()
-        # pick one mapping that matches your .msg type
-        status_msg.state = self.state.mode.name.lower()   # or an int enum if your msg uses uint8
-        status_msg.mutual_gaze = bool(self.state.mutual_gaze_detected)
-        self.overt_attention_publisher.publish(status_msg)
-
-        # Example: publish head angles using JointAnglesWithSpeed (Pepper/naoqi_bridge)
-        pitch_cmd, yaw_cmd = self.state.commanded_head
-        msg = JointAnglesWithSpeed()
-        msg.joint_names = ["HeadPitch", "HeadYaw"]
-        msg.joint_angles = [float(pitch_cmd), float(yaw_cmd)]
-        msg.speed = 0.2
-        msg.relative = False
-        self.joint_angles_publisher.publish(msg)
-
-        # Publish debug visualization if camera image is available
-        if self.camera_image is not None and self.verbose:
+        # Reset transient states
+        self.sound_detected = False
+        
+        # Publish commands and status
+        self.publish_head_command()
+        self.publish_status()
+        
+        # Debug visualization
+        if self.config_manager.config.get("verbose_mode", False):
             self.publish_debug_visualization()
 
+    def publish_head_command(self):
+        """Publish head joint commands"""
+        pitch, yaw = self.head_controller.get_command()
+        
+        msg = JointAnglesWithSpeed()
+        msg.joint_names = ["HeadPitch", "HeadYaw"]
+        msg.joint_angles = [float(pitch), float(yaw)]
+        msg.speed = 0.2
+        msg.relative = False
+        
+        self.joint_angles_pub.publish(msg)
+
+    def publish_status(self):
+        """Publish system status"""
+        msg = OvertAttentionStatus()
+        msg.state = self.current_mode.value
+        msg.mutual_gaze = self.mutual_gaze
+        self.status_pub.publish(msg)
+
     def publish_debug_visualization(self):
-        """Create visualization matching exactly the C++ implementation"""
+        """Publish debug visualization with rich saliency information"""
         if self.camera_image is None:
             return
             
-        # Show the original camera image (matching C++ "Image" window)
-        cv2.imshow("Image", self.camera_image)
-        cv2.waitKey(1)
-        
-        # Publish debug image as ROS topic for external tools
         try:
-            debug_msg = self.bridge.cv2_to_imgmsg(self.camera_image, encoding="bgr8")
-            self.debug_image_publisher.publish(debug_msg)
+            # Show original camera image
+            cv2.imshow("Camera Image", self.camera_image)
+            
+            # If we have WTA visualization from scanning mode, show it
+            if hasattr(self, 'wta_visualization') and self.wta_visualization is not None:
+                # Publish the WTA visualization as debug image
+                debug_msg = self.bridge.cv2_to_imgmsg(self.wta_visualization, encoding="bgr8")
+                self.debug_image_pub.publish(debug_msg)
+            else:
+                # Publish original camera image if no WTA available
+                debug_msg = self.bridge.cv2_to_imgmsg(self.camera_image, encoding="bgr8")
+                self.debug_image_pub.publish(debug_msg)
+                
+            # Show current head target as overlay on camera image
+            self.show_head_target_overlay()
+            
+            cv2.waitKey(1)
+            
         except Exception as e:
-            self.get_logger().error(f"Failed to publish debug image: {e}")
+            self.get_logger().error(f"Debug visualization failed: {e}")
+
+    def show_head_target_overlay(self):
+        """Show current head target as overlay on camera image"""
+        if self.camera_image is None:
+            return
+            
+        overlay = self.camera_image.copy()
+        
+        # Get current head position and target
+        current_pitch, current_yaw = self.head_controller.current_pitch, self.head_controller.current_yaw
+        target_pitch, target_yaw = self.head_controller.get_command()
+        
+        # Convert current and target positions to pixel coordinates (relative to current head pose)
+        camera_spec = self.config_manager.get_camera_spec()
+        
+        # Show center crosshair (current head direction)
+        center_x, center_y = self.camera_image.shape[1] // 2, self.camera_image.shape[0] // 2
+        cv2.line(overlay, (center_x - 20, center_y), (center_x + 20, center_y), (255, 255, 255), 2)
+        cv2.line(overlay, (center_x, center_y - 20), (center_x, center_y + 20), (255, 255, 255), 2)
+        
+        # Show target direction if different from current
+        d_pitch = target_pitch - current_pitch
+        d_yaw = target_yaw - current_yaw
+        
+        if abs(d_pitch) > 0.01 or abs(d_yaw) > 0.01:  # Only show if there's significant difference
+            target_x, target_y = camera_spec.angle_to_pixel(d_yaw, d_pitch)
+            if 0 <= target_x < self.camera_image.shape[1] and 0 <= target_y < self.camera_image.shape[0]:
+                cv2.circle(overlay, (target_x, target_y), 10, (0, 255, 255), 2)  # Yellow circle for target
+                cv2.line(overlay, (center_x, center_y), (target_x, target_y), (0, 255, 255), 1)  # Yellow line to target
+        
+        # Add mode information
+        mode_text = f"Mode: {self.current_mode.value.upper()}"
+        cv2.putText(overlay, mode_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        
+        # Add head position information
+        head_info = f"Head: P:{current_pitch:.2f} Y:{current_yaw:.2f}"
+        cv2.putText(overlay, head_info, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        
+        # Add face/sound status
+        status_info = f"Face:{self.face_detected} Sound:{self.sound_detected}"
+        cv2.putText(overlay, status_info, (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        
+        cv2.imshow("Head Control Overlay", overlay)
