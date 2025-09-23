@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 
 import rclpy
+import time
+import cv2
+import math
 from .overt_attention_implementation import OvertAttentionSystem
 
 SOFTWARE_VERSION = "v1.0"
@@ -20,31 +23,31 @@ def main(args=None):
     )
     
     try:
-        node = OvertAttentionSystem()
+        attention_system = OvertAttentionSystem()
         
-        # Print startup messages using ROS logging
-        node.get_logger().info(copyright_message)
-        node.get_logger().info(f"{node_name}: startup.")
+        # Create timer for main control loop
+        timer_period = 0.05  # 20 Hz for more responsive behavior
+        timer = attention_system.create_timer(timer_period, attention_system.run_once)
         
-        # Create control loop timer (20 Hz)
-        timer = node.create_timer(0.05, node.run_once)
+        # Log social control mode
+        social_mode = attention_system.behaviors.social_attention_system.control_mode
+        attention_system.get_logger().info(f"Social attention mode: {social_mode.value}")
         
-        rclpy.spin(node)
+        # Log movement filtering status
+        movement_config = attention_system.behaviors.social_attention_system.smooth_controller.config
+        attention_system.get_logger().info(f"Movement filtering - Min threshold: {math.degrees(movement_config.MIN_MOVEMENT_THRESHOLD):.1f}°, "
+                                         f"Stability time: {movement_config.STABILITY_TIME}s, "
+                                         f"Movement timeout: {movement_config.MOVEMENT_TIMEOUT}s")
+        
+        rclpy.spin(attention_system)
         
     except KeyboardInterrupt:
         pass
-    except Exception as e:
-        print(f"Error: {e}")
     finally:
-        try:
-            if 'timer' in locals():
-                node.destroy_timer(timer)
-            if 'node' in locals():
-                node.destroy_node()
-        except:
-            pass
-        if rclpy.ok():
-            rclpy.shutdown()
+        if 'attention_system' in locals():
+            attention_system.destroy_node()
+        rclpy.shutdown()
+        cv2.destroyAllWindows()
 
 if __name__ == '__main__':
     main()

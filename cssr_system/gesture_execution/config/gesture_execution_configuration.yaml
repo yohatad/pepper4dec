@@ -1,11 +1,4 @@
-# Overt Attention Configuration
-camera: "realsense"  # Options: "realsense", "peppercamera"
-realignment_threshold: 50
-x_offset_to_head_yaw: 0
-y_offset_to_head_pitch: 0
-social_attention_mode: "random"
-num_faces_social_att: 3
-engagement_timeout: 12.0
-use_sound: false
-use_compressed_images: false
-verbose_mode: true
+gestureDescriptors: gestureDescriptors.dat
+simulatorTopics: simulatorTopics.dat
+robotTopics: pepperTopics.dat
+verboseMode: false

@@ -1,20 +1,6 @@
 # Pepper Robot Topic Mappings
 topics:
-  RealSenseCamera: "/camera/color/image_raw"
-  RealSenseCameraCompressed: "/camera/color/image_raw/compressed"
-  RealSenseCameraDepth: "/camera/depth/image_raw"
-  RealSenseCameraDepthCompressed: "/camera/depth/image_raw/compressed"
-
-  FrontCamera: "/naoqi_driver/camera/front/image_raw"
-  DepthCamera: "/naoqi_driver/camera/depth/image_raw"
-
   JointAngles: "/joint_angles"
   Wheels: "/pepper_dcm/cmd_moveto"
   JointStates: "/joint_states"
-
   RobotPose: "/robotLocalization/pose"
-  FaceDetection: "/faceDetection/data"
-  SoundLocalization: "/soundDetection/direction"
-  OvertAttentionStatus: "/overtAttention/status"
-
-  SetMode: "/overtAttention/set_mode"

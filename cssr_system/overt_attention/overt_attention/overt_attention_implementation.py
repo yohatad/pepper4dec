@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """
-Overt Attention System Implementation
-Core implementation for robot head attention control system.
+Complete Enhanced Overt Attention System Implementation
+Core implementation for robot head attention control system with advanced social attention
+and smooth movement filtering.
 """
 
 import math
 import yaml
 import random
+import time
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
@@ -44,6 +46,12 @@ class AttentionMode(Enum):
                 return mode
         raise ValueError(f"Invalid attention mode: {mode_str}")
 
+
+class SocialControlMode(Enum):
+    """Social attention control modes"""
+    RANDOM = "random"
+    SALIENCY = "saliency"
+
 @dataclass
 class RobotLimits:
     """Robot joint limits and constraints"""
@@ -62,6 +70,38 @@ class SaliencyConfig:
     HABITUATION_RATE: float = 0.1
     IOR_LIMIT: int = 50  # iterations
     FACE_BOOST_VALUE: float = 2.0
+
+@dataclass
+class FaceInfo:
+    """Information about a detected face"""
+    x: int                    # Pixel x coordinate
+    y: int                    # Pixel y coordinate  
+    distance: float           # Distance from robot
+    confidence: float         # Detection confidence
+    label: int               # Face ID/label
+    mutual_gaze: bool = False # Whether mutual gaze detected
+    last_seen: float = 0.0   # Timestamp when last seen
+
+@dataclass
+class SocialAttentionConfig:
+    """Configuration for social attention behavior"""
+    SOUND_COUNT_THRESHOLD: int = 20      # Switch to sound after N detections
+    FACE_HABITUATION_RATE: float = 0.3  # How quickly faces become less interesting
+    SOUND_BOOST_VALUE: float = 2.0      # Saliency boost for sound locations
+    FACE_BOOST_BASE: float = 2.0        # Base saliency boost for faces
+    DISTANCE_SCALING: bool = True       # Scale attention by face distance
+    MAX_FACE_DISTANCE: float = 3.0      # Maximum distance to pay attention to faces
+    MIN_FACE_DISTANCE: float = 0.5      # Minimum face distance (avoid division by zero)
+
+@dataclass
+class MovementConfig:
+    """Configuration for smooth movement behavior"""
+    MIN_MOVEMENT_THRESHOLD: float = 0.1    # Minimum angle change to trigger movement (radians ~5.7 degrees)
+    STABILITY_TIME: float = 0.5             # Time target must be stable before moving (seconds)
+    MOVEMENT_TIMEOUT: float = 2.0           # Maximum time between movements (seconds)
+    MAX_MOVEMENT_SPEED: float = 0.3         # Maximum movement speed (rad/s)
+    CONFIDENCE_THRESHOLD: float = 0.7       # Minimum confidence to trigger movement
+    INTEREST_DECAY_TIME: float = 3.0        # Time after which interest in target decays
 
 @dataclass
 class CameraSpec:
@@ -96,25 +136,49 @@ class CameraSpec:
         y = int(self.height / 2.0 + y_prop * self.height)
         return x, y
 
-
 class ConfigManager:
     """Handles configuration loading and validation"""
     
     DEFAULT_CONFIG = {
-        "camera": "RealSenseCamera",
+        "camera": "realsense",  # Options: "realsense", "peppercamera"
+        "realignment_threshold": 50,
+        "x_offset_to_head_yaw": 0,
+        "y_offset_to_head_pitch": 0,
+        "social_attention_mode": "random",
+        "num_faces_social_att": 3,
+        "engagement_timeout": 12.0,
+        "use_sound": False,
         "use_compressed_images": False,
-        "verbose_mode": False,
+        "verbose_mode": True,
+
+        "movement_filtering": {
+            "min_movement_degrees": 5.0,
+            "movement_cooldown": 1.0,
+            "confidence_threshold": 0.8,
+            "stability_time": 0.5,
+            "focus_duration_min": 2.0,
+            "focus_duration_max": 8.0
+        }
     }
     
     DEFAULT_TOPICS = {
         "RealSenseCamera": "/camera/color/image_raw",
         "RealSenseCameraCompressed": "/camera/color/image_raw/compressed",
+        "RealSenseCameraDepth": "/camera/depth/image_raw",
+        "RealSenseCameraDepthCompressed": "/camera/depth/image_raw/compressed",
+        
         "FrontCamera": "/naoqi_driver/camera/front/image_raw",
+        "DepthCamera": "/naoqi_driver/camera/depth/image_raw",
+        
         "JointAngles": "/joint_angles",
+        "Wheels": "/cmd_vel",
         "JointStates": "/joint_states",
+        
+        "RobotPose": "/robotLocalization/pose",
         "FaceDetection": "/faceDetection/data",
         "SoundLocalization": "/soundDetection/direction",
         "OvertAttentionStatus": "/overtAttention/mode",
+        
         "SetMode": "/overtAttention/set_mode",
     }
 
@@ -140,10 +204,18 @@ class ConfigManager:
             if path.exists():
                 with open(path, "r") as f:
                     override = yaml.safe_load(f) or {}
-                data.update(override)
+                self._deep_update(data, override)
         except Exception as e:
             print(f"Warning: Could not load YAML {path}: {e}")
         return data
+    
+    def _deep_update(self, base_dict: dict, update_dict: dict):
+        """Deep update nested dictionaries"""
+        for key, value in update_dict.items():
+            if isinstance(value, dict) and key in base_dict and isinstance(base_dict[key], dict):
+                self._deep_update(base_dict[key], value)
+            else:
+                base_dict[key] = value
 
     def get_camera_topic(self) -> str:
         """Get the appropriate camera topic based on configuration"""
@@ -215,6 +287,263 @@ class HeadController:
     def get_command(self) -> Tuple[float, float]:
         """Get current commanded position"""
         return self.commanded_pitch, self.commanded_yaw
+
+class SmoothedHeadController:
+    """Head controller with movement filtering to avoid jerky behavior"""
+    
+    def __init__(self, base_controller, config: MovementConfig = None):
+        self.base_controller = base_controller
+        self.config = config or MovementConfig()
+        
+        # Movement state tracking
+        self.current_target: Optional[Tuple[float, float]] = None
+        self.target_first_seen: float = 0.0
+        self.target_confidence: float = 0.0
+        self.last_movement_time: float = 0.0
+        self.is_moving: bool = False
+        self.movement_start_time: float = 0.0
+        
+        # Target stability tracking
+        self.stable_target: Optional[Tuple[float, float]] = None
+        self.stable_since: float = 0.0
+        
+        # Interest tracking
+        self.current_interest_level: float = 0.0
+        self.interest_peak_time: float = 0.0
+    
+    def update_target(self, target_pitch: float, target_yaw: float, confidence: float = 1.0):
+        """Update target with confidence and stability filtering"""
+        current_time = time.time()
+        new_target = (target_pitch, target_yaw)
+        
+        # Check if target is significantly different from current
+        if self.current_target is None:
+            self.current_target = new_target
+            self.target_first_seen = current_time
+            self.target_confidence = confidence
+            self.stable_target = new_target
+            self.stable_since = current_time
+            return
+        
+        # Calculate distance from current target
+        distance = self._calculate_distance(self.current_target, new_target)
+        
+        if distance < self.config.MIN_MOVEMENT_THRESHOLD:
+            # Target is close to current - update stability
+            if self._calculate_distance(self.stable_target or new_target, new_target) < 0.05:
+                # Target is stable, update confidence
+                self.target_confidence = max(self.target_confidence, confidence)
+            else:
+                # New stable target
+                self.stable_target = new_target
+                self.stable_since = current_time
+        else:
+            # Significant new target
+            self.current_target = new_target
+            self.target_first_seen = current_time
+            self.target_confidence = confidence
+            self.stable_target = new_target
+            self.stable_since = current_time
+    
+    def should_move_to_target(self) -> bool:
+        """Determine if we should move to the current target"""
+        if not self.current_target or not self.stable_target:
+            return False
+        
+        current_time = time.time()
+        
+        # Check confidence threshold
+        if self.target_confidence < self.config.CONFIDENCE_THRESHOLD:
+            return False
+        
+        # Check if we're already moving
+        if self.is_moving:
+            return False
+        
+        # Check minimum time between movements
+        time_since_last_movement = current_time - self.last_movement_time
+        if time_since_last_movement < self.config.MOVEMENT_TIMEOUT:
+            return False
+        
+        # Check target stability
+        stability_time = current_time - self.stable_since
+        if stability_time < self.config.STABILITY_TIME:
+            return False
+        
+        # Check if movement is significant enough
+        current_pos = (self.base_controller.commanded_pitch, self.base_controller.commanded_yaw)
+        distance = self._calculate_distance(current_pos, self.stable_target)
+        
+        return distance >= self.config.MIN_MOVEMENT_THRESHOLD
+    
+    def update_interest_level(self, new_interest: float):
+        """Update interest level in current target"""
+        current_time = time.time()
+        
+        if new_interest > self.current_interest_level:
+            self.current_interest_level = new_interest
+            self.interest_peak_time = current_time
+        else:
+            # Decay interest over time
+            time_since_peak = current_time - self.interest_peak_time
+            decay_factor = max(0.0, 1.0 - (time_since_peak / self.config.INTEREST_DECAY_TIME))
+            self.current_interest_level *= decay_factor
+    
+    def execute_movement(self) -> bool:
+        """Execute movement if conditions are met"""
+        if not self.should_move_to_target():
+            return False
+        
+        current_time = time.time()
+        target_pitch, target_yaw = self.stable_target
+        
+        # Calculate movement speed based on distance and interest
+        current_pos = (self.base_controller.commanded_pitch, self.base_controller.commanded_yaw)
+        distance = self._calculate_distance(current_pos, self.stable_target)
+        
+        # Adjust speed based on interest level and distance
+        speed_factor = min(1.0, self.current_interest_level + 0.3)  # Minimum 30% speed
+        movement_speed = self.config.MAX_MOVEMENT_SPEED * speed_factor
+        
+        # Start smooth movement
+        self.is_moving = True
+        self.movement_start_time = current_time
+        self.last_movement_time = current_time
+        
+        # Use gradual movement instead of direct movement
+        self._start_gradual_movement(target_pitch, target_yaw, movement_speed)
+        
+        return True
+    
+    def _start_gradual_movement(self, target_pitch: float, target_yaw: float, speed: float):
+        """Start gradual movement to target"""
+        current_pitch = self.base_controller.commanded_pitch
+        current_yaw = self.base_controller.commanded_yaw
+        
+        # Calculate step size based on speed
+        pitch_diff = target_pitch - current_pitch
+        yaw_diff = target_yaw - current_yaw
+        total_diff = math.sqrt(pitch_diff**2 + yaw_diff**2)
+        
+        if total_diff > 0:
+            # Calculate step size for smooth movement
+            step_size = min(0.05, speed * 0.1)  # Small steps for smoothness
+            step_pitch = current_pitch + (pitch_diff / total_diff) * step_size
+            step_yaw = current_yaw + (yaw_diff / total_diff) * step_size
+            
+            self.base_controller.move_towards(step_pitch, step_yaw)
+    
+    def update_movement_state(self):
+        """Update movement state - call this in main loop"""
+        if not self.is_moving:
+            return
+        
+        current_time = time.time()
+        movement_duration = current_time - self.movement_start_time
+        
+        # Check if movement is complete
+        if self.stable_target:
+            current_pos = (self.base_controller.commanded_pitch, self.base_controller.commanded_yaw)
+            distance_to_target = self._calculate_distance(current_pos, self.stable_target)
+            
+            if distance_to_target < 0.02 or movement_duration > 3.0:  # Close enough or timeout
+                self.is_moving = False
+    
+    def _calculate_distance(self, pos1: Tuple[float, float], pos2: Tuple[float, float]) -> float:
+        """Calculate Euclidean distance between two positions"""
+        return math.sqrt((pos1[0] - pos2[0])**2 + (pos1[1] - pos2[1])**2)
+    
+    def get_movement_status(self) -> dict:
+        """Get current movement status for debugging"""
+        return {
+            'is_moving': self.is_moving,
+            'has_stable_target': self.stable_target is not None,
+            'target_confidence': self.target_confidence,
+            'interest_level': self.current_interest_level,
+            'time_since_last_movement': time.time() - self.last_movement_time,
+            'stability_time': time.time() - self.stable_since if self.stable_target else 0
+        }
+
+
+class SelectiveAttentionManager:
+    """Manages what deserves attention to avoid constant head movements"""
+    
+    def __init__(self):
+        self.attention_history: List[Tuple[float, float, float]] = []  # (yaw, pitch, timestamp)
+        self.current_focus: Optional[Tuple[str, float, float]] = None  # (type, yaw, pitch)
+        self.focus_start_time: float = 0.0
+        
+        # Attention parameters
+        self.min_focus_duration = 1.5  # Minimum time to focus on something
+        self.max_focus_duration = 5.0  # Maximum time to focus without new stimulus
+        self.attention_radius = 0.3    # Radius around current focus to ignore new targets
+    
+    def evaluate_attention_worthiness(self, target_type: str, yaw: float, pitch: float, 
+                                    confidence: float, novelty: float) -> float:
+        """
+        Evaluate if a target is worth attention
+        Returns attention score (0.0 to 1.0)
+        """
+        current_time = time.time()
+        base_score = confidence * 0.5 + novelty * 0.5
+        
+        # Check if we're currently focused on something
+        if self.current_focus:
+            focus_type, focus_yaw, focus_pitch = self.current_focus
+            focus_duration = current_time - self.focus_start_time
+            
+            # Calculate distance from current focus
+            distance = math.sqrt((yaw - focus_yaw)**2 + (pitch - focus_pitch)**2)
+            
+            # Reduce score if too close to current focus
+            if distance < self.attention_radius:
+                base_score *= 0.3
+            
+            # Require higher score to break current focus
+            if focus_duration < self.min_focus_duration:
+                base_score *= 0.5  # Much harder to break early focus
+            elif focus_duration < self.max_focus_duration:
+                base_score *= 0.8  # Somewhat harder to break established focus
+        
+        # Boost score for certain target types
+        type_multipliers = {
+            'face_with_gaze': 1.5,
+            'face_close': 1.3,
+            'face_familiar': 1.2,
+            'face_general': 1.0,
+            'sound_speech': 1.4,
+            'sound_general': 0.8,
+            'visual_salient': 0.7,
+            'motion': 0.9
+        }
+        
+        multiplier = type_multipliers.get(target_type, 1.0)
+        final_score = min(1.0, base_score * multiplier)
+        
+        return final_score
+    
+    def update_focus(self, target_type: str, yaw: float, pitch: float, attention_score: float):
+        """Update current focus if attention score is high enough"""
+        current_time = time.time()
+        
+        # Decision threshold - higher when already focused
+        threshold = 0.6 if self.current_focus is None else 0.8
+        
+        if attention_score >= threshold:
+            self.current_focus = (target_type, yaw, pitch)
+            self.focus_start_time = current_time
+            self.attention_history.append((yaw, pitch, current_time))
+            return True
+        
+        return False
+    
+    def should_break_focus(self) -> bool:
+        """Check if current focus should be broken due to timeout"""
+        if not self.current_focus:
+            return False
+        
+        focus_duration = time.time() - self.focus_start_time
+        return focus_duration > self.max_focus_duration
 
 
 class SaliencyProcessor:
@@ -336,13 +665,315 @@ class SaliencyProcessor:
         self.previous_locations.append((abs_yaw, abs_pitch, 1))
 
 
-class AttentionBehaviors:
-    """Implements different attention behaviors"""
+class EnhancedSocialAttention:
+    """Enhanced social attention with multi-modal fusion and smooth movement control"""
     
-    def __init__(self, head_controller: HeadController, limits: RobotLimits):
+    def __init__(self, head_controller, camera_spec, config: Optional[SocialAttentionConfig] = None):
+        self.head_controller = head_controller
+        self.camera_spec = camera_spec
+        self.config = config or SocialAttentionConfig()
+        
+        # Social control state
+        self.control_mode = SocialControlMode.SALIENCY
+        self.sound_count = 0
+        self.last_seen_face_label = -1
+        
+        # Face tracking
+        self.current_faces: List[FaceInfo] = []
+        self.face_attention_history: Dict[int, float] = {}  # label -> last attention time
+        
+        # Random number generator for random mode
+        self.rng = random.Random()
+        
+        # Saliency maps for fusion
+        self.social_saliency_map: Optional[np.ndarray] = None
+        
+        # Add smooth movement control
+        movement_config = MovementConfig()
+        self.smooth_controller = SmoothedHeadController(head_controller, movement_config)
+        self.attention_manager = SelectiveAttentionManager()
+        
+    def set_control_mode(self, mode: SocialControlMode):
+        """Set the social attention control mode"""
+        self.control_mode = mode
+        
+    def update_faces(self, faces: List[FaceInfo]):
+        """Update current face detections"""
+        self.current_faces = faces.copy()
+        
+        # Update last seen times
+        current_time = time.time()
+        for face in faces:
+            face.last_seen = current_time
+    
+    def create_social_saliency_map(self, sound_detected: bool, sound_angle: float) -> np.ndarray:
+        """Create combined saliency map from faces and sound"""
+        # Initialize saliency map
+        saliency_map = np.zeros((self.camera_spec.height, self.camera_spec.width), dtype=np.float32)
+        
+        # Add faces to saliency map
+        for face in self.current_faces:
+            if (0 <= face.x < self.camera_spec.width and 
+                0 <= face.y < self.camera_spec.height and
+                face.distance <= self.config.MAX_FACE_DISTANCE):
+                
+                # Calculate face saliency based on distance and other factors
+                face_saliency = self.calculate_face_saliency(face)
+                
+                # Apply habituation if this face was recently attended to
+                if face.label in self.face_attention_history:
+                    time_since_attention = time.time() - self.face_attention_history[face.label]
+                    habituation_factor = max(0.1, 1.0 - (self.config.FACE_HABITUATION_RATE * 
+                                                        max(0, 5.0 - time_since_attention)))
+                    face_saliency *= habituation_factor
+                
+                # Boost for mutual gaze
+                if face.mutual_gaze:
+                    face_saliency *= 1.5
+                
+                saliency_map[face.y, face.x] = max(saliency_map[face.y, face.x], face_saliency)
+        
+        # Add sound to saliency map if detected
+        if sound_detected:
+            # Convert sound angle to pixel coordinates (assuming sound at head level)
+            sound_x, sound_y = self.sound_angle_to_pixel(sound_angle)
+            if (0 <= sound_x < self.camera_spec.width and 
+                0 <= sound_y < self.camera_spec.height):
+                saliency_map[sound_y, sound_x] = max(saliency_map[sound_y, sound_x], 
+                                                   self.config.SOUND_BOOST_VALUE)
+        
+        self.social_saliency_map = saliency_map
+        return saliency_map
+    
+    def calculate_face_saliency(self, face: FaceInfo) -> float:
+        """Calculate saliency value for a face based on multiple factors"""
+        base_saliency = self.config.FACE_BOOST_BASE
+        
+        # Distance-based scaling (closer faces are more salient)
+        if self.config.DISTANCE_SCALING and face.distance > 0:
+            distance_factor = 1.0 / max(self.config.MIN_FACE_DISTANCE, face.distance)
+            base_saliency *= min(3.0, distance_factor)  # Cap the boost
+        
+        # Confidence-based scaling
+        base_saliency *= face.confidence
+        
+        return base_saliency
+    
+    def sound_angle_to_pixel(self, sound_angle: float) -> Tuple[int, int]:
+        """Convert sound angle to pixel coordinates"""
+        # Assume sound is at center height of image
+        center_y = self.camera_spec.height // 2
+        
+        # Convert angle to pixel x coordinate
+        # Assuming sound_angle is relative to current head yaw
+        d_yaw = sound_angle
+        d_pitch = 0.0  # Sound assumed at head level
+        
+        sound_x, sound_y = self.camera_spec.angle_to_pixel(d_yaw, d_pitch)
+        return sound_x, sound_y
+    
+    def select_face_randomly(self) -> Optional[FaceInfo]:
+        """Select a face randomly, avoiding the last seen face if possible"""
+        if not self.current_faces:
+            return None
+        
+        if len(self.current_faces) == 1:
+            self.last_seen_face_label = -1  # Reset if only one face
+            return self.current_faces[0]
+        
+        # Try to select a different face from the last one
+        available_faces = [f for f in self.current_faces if f.label != self.last_seen_face_label]
+        
+        if available_faces:
+            selected_face = self.rng.choice(available_faces)
+        else:
+            selected_face = self.rng.choice(self.current_faces)
+        
+        self.last_seen_face_label = selected_face.label
+        return selected_face
+    
+    def select_face_by_saliency(self, sound_detected: bool, sound_angle: float) -> Tuple[Optional[FaceInfo], Tuple[int, int]]:
+        """Select face/location using saliency-based winner-takes-all"""
+        # Create combined saliency map
+        saliency_map = self.create_social_saliency_map(sound_detected, sound_angle)
+        
+        # Find winner-takes-all location
+        _, _, _, max_loc = cv2.minMaxLoc(saliency_map)
+        winner_x, winner_y = int(max_loc[0]), int(max_loc[1])
+        
+        # Check if winner corresponds to a face
+        winner_face = None
+        for face in self.current_faces:
+            # Check if winner location is close to this face
+            distance = math.sqrt((face.x - winner_x)**2 + (face.y - winner_y)**2)
+            if distance < 50:  # Within 50 pixels
+                winner_face = face
+                break
+        
+        return winner_face, (winner_x, winner_y)
+    
+    def social_attention(self, face_detected: bool, face_in_range: bool, 
+                        sound_detected: bool, sound_angle: float) -> bool:
+        """
+        Enhanced social attention behavior with multi-modal fusion and smooth movement
+        Returns True if attention command was issued
+        """
+        
+        if not (face_detected or sound_detected):
+            return False
+        
+        # Determine best target using existing logic
+        target_info = self._evaluate_targets(face_detected, face_in_range, sound_detected, sound_angle)
+        
+        if not target_info:
+            return False
+        
+        target_type, target_pitch, target_yaw, confidence, novelty = target_info
+        
+        # Evaluate if this target deserves attention
+        attention_score = self.attention_manager.evaluate_attention_worthiness(
+            target_type, target_yaw, target_pitch, confidence, novelty
+        )
+        
+        # Update smooth controller
+        self.smooth_controller.update_target(target_pitch, target_yaw, confidence)
+        self.smooth_controller.update_interest_level(attention_score)
+        
+        # Update focus if score is high enough
+        focus_updated = self.attention_manager.update_focus(
+            target_type, target_yaw, target_pitch, attention_score
+        )
+        
+        # Execute movement only if conditions are met
+        movement_executed = self.smooth_controller.execute_movement()
+        
+        # Update movement state
+        self.smooth_controller.update_movement_state()
+        
+        return movement_executed or focus_updated
+    
+    def _evaluate_targets(self, face_detected, face_in_range, sound_detected, sound_angle):
+        """Evaluate and select the best target"""
+        best_target = None
+        best_score = 0.0
+        
+        # Increment sound count for mode switching logic
+        if sound_detected:
+            self.sound_count += 1
+        
+        if face_detected and sound_detected:
+            # Both face and sound detected - complex fusion logic
+            if self.control_mode == SocialControlMode.RANDOM:
+                if self.sound_count > self.config.SOUND_COUNT_THRESHOLD:
+                    # Switch to sound after threshold
+                    target_type = 'sound_general'
+                    target_pitch = 0.0  # Assume sound at head level
+                    target_yaw = sound_angle
+                    self.sound_count = 0  # Reset counter
+                    return (target_type, target_pitch, target_yaw, 0.8, 1.0)
+                else:
+                    # Look at randomly selected face
+                    selected_face = self.select_face_randomly()
+                    if selected_face:
+                        target_pitch, target_yaw = self.face_to_head_angles(selected_face)
+                        self.record_face_attention(selected_face)
+                        target_type = self._get_face_type(selected_face)
+                        return (target_type, target_pitch, target_yaw, selected_face.confidence, 0.8)
+            
+            else:  # SALIENCY mode
+                # Use saliency-based selection
+                winner_face, winner_location = self.select_face_by_saliency(sound_detected, sound_angle)
+                
+                if winner_face:
+                    target_pitch, target_yaw = self.face_to_head_angles(winner_face)
+                    self.record_face_attention(winner_face)
+                    target_type = self._get_face_type(winner_face)
+                    return (target_type, target_pitch, target_yaw, winner_face.confidence, 0.9)
+                else:
+                    # Winner was sound location or other salient point
+                    target_pitch, target_yaw = self.pixel_to_head_angles(winner_location[0], winner_location[1])
+                    return ('sound_general', target_pitch, target_yaw, 0.8, 1.0)
+        
+        elif face_detected and not sound_detected:
+            # Only face detected
+            if self.control_mode == SocialControlMode.RANDOM:
+                selected_face = self.select_face_randomly()
+            else:
+                # Use saliency without sound
+                winner_face, winner_location = self.select_face_by_saliency(False, 0.0)
+                selected_face = winner_face
+            
+            if selected_face:
+                target_pitch, target_yaw = self.face_to_head_angles(selected_face)
+                self.record_face_attention(selected_face)
+                target_type = self._get_face_type(selected_face)
+                return (target_type, target_pitch, target_yaw, selected_face.confidence, 0.7)
+        
+        elif not face_detected and sound_detected:
+            # Only sound detected
+            target_pitch = 0.0  # Assume sound at head level
+            target_yaw = sound_angle
+            self.sound_count = 0  # Reset counter
+            return ('sound_general', target_pitch, target_yaw, 0.8, 1.0)
+        
+        return None
+    
+    def _get_face_type(self, face: FaceInfo) -> str:
+        """Determine face type for attention evaluation"""
+        if face.mutual_gaze:
+            return 'face_with_gaze'
+        elif face.distance < 1.5:
+            return 'face_close'
+        else:
+            return 'face_general'
+    
+    def face_to_head_angles(self, face: FaceInfo) -> Tuple[float, float]:
+        """Convert face pixel location to head angles"""
+        return self.pixel_to_head_angles(face.x, face.y)
+    
+    def pixel_to_head_angles(self, x: int, y: int) -> Tuple[float, float]:
+        """Convert pixel coordinates to head angles"""
+        d_yaw, d_pitch = self.camera_spec.pixel_to_angle(x, y)
+        
+        # Convert relative angles to absolute head positions
+        current_pitch = self.head_controller.current_pitch
+        current_yaw = self.head_controller.current_yaw
+        
+        target_pitch = current_pitch + d_pitch
+        target_yaw = current_yaw + d_yaw
+        
+        return target_pitch, target_yaw
+    
+    def record_face_attention(self, face: FaceInfo):
+        """Record that we're paying attention to this face"""
+        self.face_attention_history[face.label] = time.time()
+    
+    def get_debug_info(self) -> Dict:
+        """Get debug information about social attention state"""
+        return {
+            'control_mode': self.control_mode.value,
+            'sound_count': self.sound_count,
+            'num_faces': len(self.current_faces),
+            'last_seen_face': self.last_seen_face_label,
+            'face_history_size': len(self.face_attention_history),
+            'has_saliency_map': self.social_saliency_map is not None,
+            'movement_status': self.smooth_controller.get_movement_status()
+        }
+
+
+class AttentionBehaviors:
+    """Implements different attention behaviors with enhanced social attention"""
+    
+    def __init__(self, head_controller: HeadController, limits: RobotLimits, camera_spec: CameraSpec):
         self.head_controller = head_controller
         self.limits = limits
+        self.camera_spec = camera_spec
         self.rng = random.Random()
+        
+        # Enhanced social attention system
+        self.social_attention_system = EnhancedSocialAttention(
+            head_controller, camera_spec
+        )
         
         # Scanning state
         self.scan_direction = 1
@@ -352,6 +983,14 @@ class AttentionBehaviors:
         self.seek_cooldown = 0
         self.seek_period = (8, 18)
         self.seek_target: Optional[Tuple[float, float]] = None
+
+    def update_face_detections(self, faces: List[FaceInfo]):
+        """Update face detections for social attention"""
+        self.social_attention_system.update_faces(faces)
+    
+    def set_social_control_mode(self, mode: SocialControlMode):
+        """Set social attention control mode"""
+        self.social_attention_system.set_control_mode(mode)
 
     def location_attention(self, target_x: float, target_y: float, target_z: float):
         """Point head towards a 3D location"""
@@ -364,16 +1003,11 @@ class AttentionBehaviors:
         
         self.head_controller.move_towards(target_pitch, target_yaw)
 
-    def social_attention(self, face_detected: bool, face_in_range: bool, sound_detected: bool, sound_angle: float):
-        """Social attention behavior - prioritize faces and sounds"""
-        if face_detected and face_in_range:
-            # Look at center when face is detected and in range
-            self.head_controller.move_towards(0.0, 0.0)
-        elif sound_detected:
-            # Look towards sound source
-            sound_yaw = max(self.head_controller.active_yaw_range[0], 
-                          min(sound_angle, self.head_controller.active_yaw_range[1]))
-            self.head_controller.move_towards(0.0, sound_yaw)
+    def social_attention(self, face_detected: bool, face_in_range: bool, sound_detected: bool, sound_angle: float) -> bool:
+        """Enhanced social attention using the new system"""
+        return self.social_attention_system.social_attention(
+            face_detected, face_in_range, sound_detected, sound_angle
+        )
 
     def scanning_attention(self, saliency_center_yaw: float = 0.0, saliency_center_pitch: float = None):
         """Scanning behavior with saliency-guided center"""
@@ -413,7 +1047,7 @@ class AttentionBehaviors:
 
 
 class OvertAttentionSystem(Node):
-    """Main ROS2 node for overt attention system"""
+    """Main ROS2 node for enhanced overt attention system"""
     
     def __init__(self):
         super().__init__("overt_attention")
@@ -428,7 +1062,16 @@ class OvertAttentionSystem(Node):
         camera_spec = self.config_manager.get_camera_spec()
         saliency_config = SaliencyConfig()
         self.saliency_processor = SaliencyProcessor(camera_spec, saliency_config)
-        self.behaviors = AttentionBehaviors(self.head_controller, self.limits)
+        
+        # Use enhanced behaviors
+        self.behaviors = AttentionBehaviors(self.head_controller, self.limits, camera_spec)
+        
+        # Set default social mode from config
+        social_mode = self.config_manager.config.get("social_mode", "saliency")
+        if social_mode.lower() == "random":
+            self.behaviors.set_social_control_mode(SocialControlMode.RANDOM)
+        else:
+            self.behaviors.set_social_control_mode(SocialControlMode.SALIENCY)
         
         # State
         self.current_mode = AttentionMode.SCANNING  # Start in scanning mode
@@ -444,7 +1087,7 @@ class OvertAttentionSystem(Node):
         self.sound_angle = 0.0
         
         self.setup_ros_interfaces()
-        self.get_logger().info("OvertAttentionSystem initialized")
+        self.get_logger().info("Enhanced OvertAttentionSystem initialized")
 
     def setup_ros_interfaces(self):
         """Initialize ROS publishers, subscribers, and services"""
@@ -494,7 +1137,7 @@ class OvertAttentionSystem(Node):
             pass
 
     def face_callback(self, msg: FaceDetection):
-        """Handle face detection updates"""
+        """Enhanced face callback with detailed face information"""
         if not hasattr(msg, "centroids"):
             return
         
@@ -502,28 +1145,50 @@ class OvertAttentionSystem(Node):
         self.face_in_range = False
         self.mutual_gaze = False
         
-        # Create face saliency map
+        # Create face saliency map (for backward compatibility with existing saliency processor)
         camera_spec = self.config_manager.get_camera_spec()
         faces_map = np.zeros((camera_spec.height, camera_spec.width), dtype=np.float32)
+        
+        # Create enhanced face information list
+        enhanced_faces = []
         
         for i, centroid in enumerate(msg.centroids):
             x, y = int(centroid.x), int(centroid.y)
             
             if 0 <= x < camera_spec.width and 0 <= y < camera_spec.height:
-                # Check distance for in-range determination
+                # Extract face information
                 distance = getattr(centroid, "z", 10.0)
+                confidence = getattr(centroid, "confidence", 1.0)
+                
+                # Check if face is in range
                 if distance <= 2.0:
                     self.face_in_range = True
                 
-                # Check mutual gaze
+                # Check mutual gaze for this face
+                face_mutual_gaze = False
                 if hasattr(msg, "mutual_gaze") and i < len(msg.mutual_gaze):
-                    self.mutual_gaze = self.mutual_gaze or bool(msg.mutual_gaze[i])
+                    face_mutual_gaze = bool(msg.mutual_gaze[i])
+                    self.mutual_gaze = self.mutual_gaze or face_mutual_gaze
                 
-                # Add to saliency map
+                # Create FaceInfo object
+                face_info = FaceInfo(
+                    x=x,
+                    y=y,
+                    distance=distance,
+                    confidence=confidence,
+                    label=i + 1,  # Simple labeling (could be more sophisticated)
+                    mutual_gaze=face_mutual_gaze,
+                    last_seen=time.time()
+                )
+                enhanced_faces.append(face_info)
+                
+                # Add to saliency map for backward compatibility
                 scale = 1.0 / max(1e-3, distance)
                 faces_map[y, x] = max(faces_map[y, x], scale)
         
-        self.saliency_processor.update_faces(faces_map)
+        # Update both systems
+        self.saliency_processor.update_faces(faces_map)  # Existing system
+        self.behaviors.update_face_detections(enhanced_faces)  # New enhanced system
 
     def set_mode_callback(self, request, response):
         """Handle mode change requests"""
@@ -548,13 +1213,14 @@ class OvertAttentionSystem(Node):
         return response
 
     def run_once(self):
-        """Main control loop - called by timer from application"""
+        """Main control loop with enhanced social attention"""
         # Execute behavior based on current mode
         if self.current_mode == AttentionMode.LOCATION:
             self.behaviors.location_attention(*self.location_target)
             
         elif self.current_mode == AttentionMode.SOCIAL:
-            self.behaviors.social_attention(
+            # Use enhanced social attention
+            attention_issued = self.behaviors.social_attention(
                 self.face_detected, self.face_in_range, 
                 self.sound_detected, self.sound_angle
             )
@@ -621,7 +1287,7 @@ class OvertAttentionSystem(Node):
         self.status_pub.publish(msg)
 
     def publish_debug_visualization(self):
-        """Publish debug visualization with rich saliency information"""
+        """Enhanced debug visualization with social attention info"""
         if self.camera_image is None:
             return
             
@@ -631,14 +1297,16 @@ class OvertAttentionSystem(Node):
             
             # If we have WTA visualization from scanning mode, show it
             if hasattr(self, 'wta_visualization') and self.wta_visualization is not None:
-                # Publish the WTA visualization as debug image
                 debug_msg = self.bridge.cv2_to_imgmsg(self.wta_visualization, encoding="bgr8")
                 self.debug_image_pub.publish(debug_msg)
             else:
-                # Publish original camera image if no WTA available
                 debug_msg = self.bridge.cv2_to_imgmsg(self.camera_image, encoding="bgr8")
                 self.debug_image_pub.publish(debug_msg)
-                
+            
+            # Show social attention debug info
+            if self.current_mode == AttentionMode.SOCIAL:
+                self.show_social_attention_debug()
+            
             # Show current head target as overlay on camera image
             self.show_head_target_overlay()
             
@@ -646,6 +1314,31 @@ class OvertAttentionSystem(Node):
             
         except Exception as e:
             self.get_logger().error(f"Debug visualization failed: {e}")
+
+    def show_social_attention_debug(self):
+        """Show debug information for social attention system"""
+        if self.behaviors.social_attention_system.social_saliency_map is not None:
+            # Show social saliency map
+            saliency_map = self.behaviors.social_attention_system.social_saliency_map
+            # Normalize for display
+            normalized = cv2.normalize(saliency_map, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+            colored_saliency = cv2.applyColorMap(normalized, cv2.COLORMAP_JET)
+            cv2.imshow("Social Saliency Map", colored_saliency)
+        
+        # Get debug info
+        debug_info = self.behaviors.social_attention_system.get_debug_info()
+        debug_text = f"Social Mode: {debug_info['control_mode']}, Faces: {debug_info['num_faces']}, Sound Count: {debug_info['sound_count']}"
+        
+        # Overlay debug text on camera image
+        overlay = self.camera_image.copy()
+        cv2.putText(overlay, debug_text, (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+        
+        # Add movement status
+        movement_status = debug_info['movement_status']
+        movement_text = f"Moving: {movement_status['is_moving']}, Confidence: {movement_status['target_confidence']:.2f}"
+        cv2.putText(overlay, movement_text, (10, 140), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
+        
+        cv2.imshow("Social Debug", overlay)
 
     def show_head_target_overlay(self):
         """Show current head target as overlay on camera image"""

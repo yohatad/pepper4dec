@@ -6,7 +6,7 @@ pkg = "sound_detection"
 setup(
     name=pkg,
     version="0.1.0",
-    packages=["src"],
+    packages=["sound_detection"],
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="Yohannes",
@@ -15,7 +15,7 @@ setup(
     license="",
     entry_points={
         "console_scripts": [
-            "sound_detection = src.sound_detection_application:main",
+            "sound_detection = sound_detection.sound_detection_application:main",
         ],
     },
     data_files=[

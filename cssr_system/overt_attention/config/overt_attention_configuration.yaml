@@ -9,3 +9,11 @@ engagement_timeout: 12.0
 use_sound: false
 use_compressed_images: false
 verbose_mode: true
+
+movement_filtering:
+  min_movement_degrees: 5.0        # Minimum movement to trigger
+  movement_cooldown: 1.0           # Seconds between movements  
+  confidence_threshold: 0.8        # Minimum confidence to move
+  stability_time: 0.5              # Time target must be stable
+  focus_duration_min: 2.0          # Minimum focus time on targets
+  focus_duration_max: 8.0          # Maximum focus time before seeking new targets
