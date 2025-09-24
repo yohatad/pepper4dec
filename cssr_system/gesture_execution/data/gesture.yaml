@@ -1,0 +1,70 @@
+# Robot Gesture Descriptors for ROS2
+# Joint angles are in radians for each waypoint
+
+gestures:
+  welcome_left:
+    id: 1
+    type: "iconic"
+    arm: "LArm"
+    waypoints: 3
+    joint_angles:
+      - [1.7625, 0.09970, -1.7150, -0.1334, 0.06592]   # Start position
+      - [1.047197, 0.2618, -1.5708, -0.0087, -1.047198] # Welcome gesture
+      - [1.7625, 0.09970, -1.7150, -0.1334, 0.06592]   # Return to start
+
+  welcome_right:
+    id: 2
+    type: "iconic"
+    arm: "RArm"
+    waypoints: 3
+    joint_angles:
+      - [1.7410, -0.09664, 1.6981, 0.09664, -0.05679]  # Start position
+      - [1.047197, -0.2618, 1.5708, 0.0087, 1.047198]  # Welcome gesture
+      - [1.7410, -0.09664, 1.6981, 0.09664, -0.05679]  # Return to start
+
+  wave:
+    id: 3
+    type: "iconic"
+    arm: "RArm"
+    waypoints: 10
+    joint_angles:
+      - [1.7410, -0.09664, 1.6981, 0.09664, -0.05679]           # Start position
+      - [0.04139658848768486, -0.7725247646974353, 1.4899726916768, 0.5236, 0.0]      # Wave position 1
+      - [0.04139658848768486, -0.7725247646974353, 1.4899726916768, 1.308996, 0.0]    # Wave position 2
+      - [0.04139658848768486, -0.7725247646974353, 1.4899726916768, 0.5236, 0.0]      # Wave position 3
+      - [0.04139658848768486, -0.7725247646974353, 1.4899726916768, 1.308996, 0.0]    # Wave position 4
+      - [0.04139658848768486, -0.7725247646974353, 1.4899726916768, 0.5236, 0.0]      # Wave position 5
+      - [0.04139658848768486, -0.7725247646974353, 1.4899726916768, 1.308996, 0.0]    # Wave position 6
+      - [0.04139658848768486, -0.7725247646974353, 1.4899726916768, 0.5236, 0.0]      # Wave position 7
+      - [0.04139658848768486, -0.7725247646974353, 1.4899726916768, 1.308996, 0.0]    # Wave position 8
+      - [1.7410, -0.09664, 1.6981, 0.09664, -0.05679]           # Return to start
+
+  shake_left:
+    id: 4
+    type: "iconic"
+    arm: "LArm"
+    waypoints: 4
+    joint_angles:
+      - [1.7625, 0.09970, -1.7150, -0.1334, 0.06592]   # Start position
+      - [0.358, 0.15, 0.066, -1.333, -1.8]             # Shake position 1
+      - [0.358, 0.15, 0.066, -1.333, -1.8]             # Shake position 2 (repeat)
+      - [1.7625, 0.09970, -1.7150, -0.1334, 0.06592]   # Return to start
+
+  shake_right:
+    id: 5
+    type: "iconic"
+    arm: "RArm"
+    waypoints: 4
+    joint_angles:
+      - [1.7410, -0.09664, 1.6981, 0.09664, -0.05679]  # Start position
+      - [0.183, -0.02, -0.082, 0.5, 1.634]             # Shake position 1
+      - [0.183, -0.02, -0.082, 0.5, 1.634]             # Shake position 2 (repeat)
+      - [1.7410, -0.09664, 1.6981, 0.09664, -0.05679]  # Return to start
+
+# Joint names mapping (adjust based on your robot configuration)
+joint_names:
+  - "shoulder_pitch"
+  - "shoulder_roll"
+  - "elbow_pitch"
+  - "elbow_roll"
+  - "wrist_pitch"

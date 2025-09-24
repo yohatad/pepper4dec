@@ -1,6 +1,6 @@
 # Pepper Robot Topic Mappings
 topics:
   JointAngles: "/joint_angles"
-  Wheels: "/pepper_dcm/cmd_moveto"
+  Wheels: "/cmd_vel"
   JointStates: "/joint_states"
   RobotPose: "/robotLocalization/pose"
