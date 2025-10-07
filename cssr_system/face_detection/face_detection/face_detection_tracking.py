@@ -295,6 +295,7 @@ class Sort:
                 ret.append(np.concatenate((trk.get_state()[0], [trk.id + 1])).reshape(1, -1))
 
         return np.concatenate(ret) if ret else np.empty((0, 5))
+
 class CentroidTracker:
     """
     CentroidTracker: A simple object tracker based on centroids.
