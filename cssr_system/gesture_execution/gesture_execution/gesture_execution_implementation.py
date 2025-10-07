@@ -578,31 +578,3 @@ class GestureExecutionSystem(Node):
                     
         except Exception as e:
             self.get_logger().error(f"Joint movement failed: {e}")
-
-
-def main(args=None):
-    """Main function to run the gesture execution system"""
-    rclpy.init(args=args)
-    
-    try:
-        gesture_system = GestureExecutionSystem()
-        
-        gesture_system.get_logger().info("Gesture Execution System started - waiting for service calls")
-        
-        # Spin to handle service calls
-        rclpy.spin(gesture_system)
-        
-    except KeyboardInterrupt:
-        pass
-    except Exception as e:
-        print(f"Error running gesture execution system: {e}")
-    finally:
-        try:
-            gesture_system.destroy_node()
-        except:
-            pass
-        rclpy.shutdown()
-
-
-if __name__ == '__main__':
-    main()
