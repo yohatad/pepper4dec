@@ -1,11 +1,11 @@
 #!/home/yoha/face_detection_env/bin/python3
 
 """
-face_detection_application.py
-ROS2 Node for Face and Mutual Gaze Detection and Localization.
+text_to_speech_application.py
+ROS2 Node for Text-to-Speech Synthesis.
 
-Implements face detection using either MediaPipe or SixDrepNet (YOLO + SixDrepNet).
-Configuration is loaded from face_detection_configuration.yaml.
+Implements text-to-speech synthesis using a pre-trained model.
+Configuration is loaded from text_to_speech_configuration.yaml.
 
 Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
 Email: yohanneh@andrew.cmu.edu

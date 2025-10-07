@@ -1,5 +1,5 @@
 """
-face_detection_implementation.py Implementation code for running the Face and Mutual Gaze Detection and Localization ROS2 node.
+text_to_speech_implementation.py Implementation code for running the Text-to-Speech Synthesis ROS2 node.
 
 Author: Yohannes Tadesse Haile
 Date: April 18, 2025
