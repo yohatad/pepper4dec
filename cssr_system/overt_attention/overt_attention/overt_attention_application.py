@@ -33,12 +33,6 @@ def main(args=None):
         social_mode = attention_system.behaviors.social_attention_system.control_mode
         attention_system.get_logger().info(f"Social attention mode: {social_mode.value}")
         
-        # Log movement filtering status
-        movement_config = attention_system.behaviors.social_attention_system.smooth_controller.config
-        attention_system.get_logger().info(f"Movement filtering - Min threshold: {math.degrees(movement_config.MIN_MOVEMENT_THRESHOLD):.1f}°, "
-                                         f"Stability time: {movement_config.STABILITY_TIME}s, "
-                                         f"Movement timeout: {movement_config.MOVEMENT_TIMEOUT}s")
-        
         rclpy.spin(attention_system)
         
     except KeyboardInterrupt:
