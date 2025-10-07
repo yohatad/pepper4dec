@@ -1,246 +1,274 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<root BTCPP_format="4"
-      main_tree_to_execute="TourGuide">
-  <BehaviorTree ID="I. DetectVisitor">
-    <Sequence>
-      <Parallel failure_count="2"
-                success_count="2">
-        <Fallback>
-          <SetAnimateBehavior name="enabled"/>
-          <HandleFallBack/>
-        </Fallback>
-        <Fallback>
-          <SetOvertAttentionMode name="scanning"/>
-          <HandleFallBack/>
-        </Fallback>
+<root BTCPP_format="4" main_tree_to_execute="TourGuide">
+  
+  <!-- Main Tour Guide Behavior Tree -->
+  <BehaviorTree ID="TourGuide">
+    <Sequence name="MainTourSequence">
+      <Action ID="StartOfTree" name="initialize_tour"/>
+      <SubTree ID="DetectVisitor"/>
+      <SubTree ID="EngageVisitor"/>
+      <SubTree ID="QueryVisitorResponse"/>
+      <SubTree ID="VisitExhibit"/>
+      <SubTree ID="EndTour"/>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- I. Detect Visitor -->
+  <BehaviorTree ID="DetectVisitor">
+    <Sequence name="DetectVisitorSequence">
+      <Parallel success_count="2" failure_count="1" name="SetupDetection">
+        <Action ID="SetAnimateBehavior" animate_enabled="true"/>
+        <Action ID="SetOvertAttentionMode" mode="scanning"/>
       </Parallel>
-      <IsVisitorDiscovered/>
+      <Condition ID="IsVisitorDiscovered" timeout="30.0"/>
     </Sequence>
   </BehaviorTree>
 
-  <BehaviorTree ID="II. EngageVisitor">
-    <Sequence>
-      <Fallback>
-        <Sequence>
-          <SetAnimateBehavior name="disabled"/>
-          <PerformIconicGesture name="welcome"/>
-          <SetAnimateBehavior name="enabled"/>
+  <!-- II. Engage Visitor -->
+  <BehaviorTree ID="EngageVisitor">
+    <Sequence name="EngageVisitorSequence">
+      <!-- Welcome gesture -->
+      <ReactiveSequence name="PerformWelcomeGesture">
+        <Action ID="SetAnimateBehavior" animate_enabled="false"/>
+        <Action ID="PerformIconicGesture" gesture_type="welcome" duration="2.0"/>
+        <Action ID="SetAnimateBehavior" animate_enabled="true"/>
+      </ReactiveSequence>
+      
+      <!-- Welcome speech -->
+      <Action ID="SayText" 
+              text_id="welcome_speech" 
+              speech_file="welcome.wav"
+              wait_for_completion="true"/>
+      
+      <!-- Establish mutual gaze -->
+      <Action ID="SetOvertAttentionMode" mode="seeking"/>
+      <Condition ID="IsMutualGazeDiscovered" timeout="10.0"/>
+      <Action ID="SetOvertAttentionMode" mode="social"/>
+      
+      <!-- Query for tour -->
+      <Action ID="SayText" 
+              text_id="query_tour_speech"
+              speech_file="query_tour.wav"
+              wait_for_completion="true"/>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- III. Query Visitor Response -->
+  <BehaviorTree ID="QueryVisitorResponse">
+    <Sequence name="QueryResponseSequence">
+      <!-- Check if ASR is available, otherwise use button interface -->
+      <Fallback name="GetResponseMethod">
+        <!-- Try ASR first -->
+        <Sequence name="ASRResponse">
+          <Condition ID="IsASREnabled"/>
+          <Action ID="SetSpeechEvent" event_enabled="true"/>
+          <Action ID="GetVisitorResponse" timeout="10.0" response_type="asr"/>
+          <Action ID="SetSpeechEvent" event_enabled="false"/>
         </Sequence>
-        <HandleFallBack/>
-      </Fallback>
-      <Fallback>
-        <SayText name="4"
-                 _description="Welcome speech"/>
-        <HandleFallBack/>
-      </Fallback>
-      <Fallback>
-        <SetOvertAttentionMode name="seeking"/>
-        <HandleFallBack/>
-      </Fallback>
-      <IsMutualGazeDiscovered/>
-      <Fallback>
-        <SetOvertAttentionMode name="social"/>
-        <HandleFallBack/>
-      </Fallback>
-      <Fallback>
-        <SayText name="5"
-                 _description="Query Tour Speech"/>
-        <HandleFallBack/>
-      </Fallback>
-    </Sequence>
-  </BehaviorTree>
-
-  <BehaviorTree ID="III. QueryVisitorResponse">
-    <Sequence>
-      <Fallback>
-        <IsASREnabled/>
-        <RetryUntilSuccessful num_attempts="3">
+        
+        <!-- Fallback to button interface -->
+        <RetryUntilSuccessful num_attempts="3" name="ButtonResponse">
           <Sequence>
-            <Fallback>
-              <SayText name="1"
-                       _description="Press &quot;yes&quot; or &quot;no&quot; speech"/>
-              <HandleFallBack/>
-            </Fallback>
-            <Fallback>
-              <PressYesNoDialogue/>
-              <HandleFallBack/>
-            </Fallback>
+            <Action ID="SayText" 
+                    text_id="press_yes_no_speech"
+                    speech_file="press_button.wav"
+                    wait_for_completion="true"/>
+            <Action ID="PressYesNoDialogue" timeout="15.0"/>
           </Sequence>
         </RetryUntilSuccessful>
       </Fallback>
-      <Sequence>
-        <IsASREnabled/>
-        <Fallback>
-          <SetSpeechEvent name="enabled"/>
-          <HandleFallBack/>
-        </Fallback>
-        <Fallback>
-          <GetVisitorResponse/>
-          <HandleFallBack/>
-        </Fallback>
-        <Fallback>
-          <SetSpeechEvent name="disabled"/>
-          <HandleFallBack/>
-        </Fallback>
-      </Sequence>
-      <Fallback>
-        <IsVisitorResponseYes/>
-        <ForceFailure>
-          <Fallback>
-            <SayText name="3"
-                     _description="Maybe another time speech"/>
-            <HandleFallBack/>
-          </Fallback>
-        </ForceFailure>
+      
+      <!-- Process response -->
+      <Fallback name="ProcessResponse">
+        <Condition ID="IsVisitorResponseYes"/>
+        <Sequence name="DeclineTour">
+          <Action ID="SayText" 
+                  text_id="maybe_another_time_speech"
+                  speech_file="decline.wav"
+                  wait_for_completion="true"/>
+          <AlwaysFailure/>
+        </Sequence>
       </Fallback>
     </Sequence>
   </BehaviorTree>
 
-  <BehaviorTree ID="IV. VisitExhibit">
-    <Sequence>
-      <Fallback>
-        <RetrieveListOfExhibits/>
-        <HandleFallBack/>
-      </Fallback>
-      <Fallback>
-        <ResetRobotPose/>
-        <HandleFallBack/>
-      </Fallback>
-      <Inverter>
-        <KeepRunningUntilFailure>
-          <Sequence>
-            <IsListWithExhibit/>
-            <Sequence>
-              <Fallback>
-                <SelectExhibit/>
-                <HandleFallBack/>
-              </Fallback>
-              <Fallback>
-                <SayText name="2"
-                         _description="Follow me speech"/>
-                <HandleFallBack/>
-              </Fallback>
-              <SubTree ID="_NavigateToLocation"/>
-              <Fallback>
-                <SetOvertAttentionMode name="social"/>
-                <HandleFallBack/>
-              </Fallback>
-              <Fallback>
-                <DescribeExhibitSpeech name="1"/>
-                <HandleFallBack/>
-              </Fallback>
-              <Fallback>
-                <SetOvertAttentionMode name="location"/>
-                <HandleFallBack/>
-              </Fallback>
-              <Fallback>
-                <PerformDeicticGesture/>
-                <HandleFallBack/>
-              </Fallback>
-              <Fallback>
-                <SetOvertAttentionMode name="social"/>
-                <HandleFallBack/>
-              </Fallback>
-              <Fallback>
-                <DescribeExhibitSpeech name="2"/>
-                <HandleFallBack/>
-              </Fallback>
-            </Sequence>
+  <!-- IV. Visit Exhibit -->
+  <BehaviorTree ID="VisitExhibit">
+    <Sequence name="VisitExhibitSequence">
+      <Action ID="RetrieveListOfExhibits" 
+              exhibit_list_topic="/tour_guide/exhibits"
+              timeout="5.0"/>
+      <Action ID="ResetRobotPose" 
+              pose_topic="/robot_pose"
+              timeout="3.0"/>
+      
+      <!-- Loop through exhibits -->
+      <RepeatUntilFailure name="ExhibitLoop">
+        <Sequence name="SingleExhibitVisit">
+          <Condition ID="IsListWithExhibit"/>
+          
+          <!-- Select and navigate to exhibit -->
+          <Action ID="SelectExhibit" 
+                  selection_strategy="sequential"
+                  exhibit_param="/current_exhibit"/>
+          <Action ID="SayText" 
+                  text_id="follow_me_speech"
+                  speech_file="follow_me.wav"
+                  wait_for_completion="true"/>
+          
+          <!-- Navigate to location -->
+          <SubTree ID="NavigateToLocation"/>
+          
+          <!-- Present exhibit -->
+          <Sequence name="PresentExhibit">
+            <Action ID="SetOvertAttentionMode" mode="social"/>
+            <Action ID="DescribeExhibitSpeech" 
+                    speech_part="introduction"
+                    wait_for_completion="true"/>
+            
+            <!-- Point to exhibit -->
+            <Action ID="SetOvertAttentionMode" mode="location"/>
+            <Action ID="PerformDeicticGesture" 
+                    gesture_target="exhibit_location"
+                    duration="2.0"/>
+            
+            <!-- Continue description -->
+            <Action ID="SetOvertAttentionMode" mode="social"/>
+            <Action ID="DescribeExhibitSpeech" 
+                    speech_part="details"
+                    wait_for_completion="true"/>
           </Sequence>
-        </KeepRunningUntilFailure>
-      </Inverter>
+        </Sequence>
+      </RepeatUntilFailure>
     </Sequence>
   </BehaviorTree>
 
-  <BehaviorTree ID="TourGuide">
-    <Sequence>
-      <StartOfTree/>
-      <SubTree ID="I. DetectVisitor"/>
-      <SubTree ID="II. EngageVisitor"/>
-      <SubTree ID="III. QueryVisitorResponse"/>
-      <SubTree ID="IV. VisitExhibit"/>
-      <SubTree ID="V. EndTour"/>
+  <!-- V. End Tour -->
+  <BehaviorTree ID="EndTour">
+    <Sequence name="EndTourSequence">
+      <Action ID="SayText" 
+              text_id="goodbye_speech"
+              speech_file="goodbye.wav"
+              wait_for_completion="true"/>
+      <Action ID="PerformIconicGesture" 
+              gesture_type="goodbye"
+              duration="2.0"/>
+      <Action ID="ResetRobotPose" 
+              pose_topic="/robot_pose"
+              timeout="3.0"/>
     </Sequence>
   </BehaviorTree>
 
-  <BehaviorTree ID="V. EndTour">
-    <Sequence>
-      <Fallback>
-        <SayText name="7"
-                 _description="Say Goodbye speech"/>
-        <HandleFallBack/>
-      </Fallback>
-      <Fallback>
-        <PerformIconicGesture name="goodbye"/>
-        <HandleFallBack/>
-      </Fallback>
+  <!-- Navigation Subtree -->
+  <BehaviorTree ID="NavigateToLocation">
+    <Sequence name="NavigationSequence">
+      <Action ID="SetOvertAttentionMode" mode="disabled"/>
+      <Action ID="SetAnimateBehavior" animate_enabled="false"/>
+      
+      <Action ID="Navigate" 
+              goal_topic="/navigate_to_pose"
+              feedback_topic="/navigation_feedback"
+              timeout="60.0"
+              distance_tolerance="0.2"
+              angle_tolerance="0.1"/>
+      
+      <Action ID="SetOvertAttentionMode" mode="seeking"/>
+      <Condition ID="IsMutualGazeDiscovered" timeout="10.0"/>
     </Sequence>
   </BehaviorTree>
 
-  <BehaviorTree ID="_NavigateToLocation">
-    <Sequence>
-      <Fallback>
-        <SetOvertAttentionMode name="disabled"/>
-        <HandleFallBack/>
-      </Fallback>
-      <Fallback>
-        <SetAnimateBehavior name="disabled"/>
-        <HandleFallBack/>
-      </Fallback>
-      <Fallback>
-        <Navigate/>
-        <HandleFallBack/>
-      </Fallback>
-      <Fallback>
-        <SetOvertAttentionMode name="seeking"/>
-        <HandleFallBack/>
-      </Fallback>
-      <IsMutualGazeDiscovered/>
-    </Sequence>
-  </BehaviorTree>
-
-  <!-- Description of Node Models (used by Groot) -->
+  <!-- Node Models for BehaviorTree.CPP -->
   <TreeNodesModel>
-    <Action ID="DescribeExhibitSpeech"
-            editable="true"/>
-    <Action ID="GetVisitorResponse"
-            editable="true"/>
-    <Action ID="HandleFallBack"
-            editable="true"/>
-    <Condition ID="IsASREnabled"
-               editable="true"/>
-    <Condition ID="IsListWithExhibit"
-               editable="true"/>
-    <Condition ID="IsMutualGazeDiscovered"
-               editable="true"/>
-    <Condition ID="IsVisitorDiscovered"
-               editable="true"/>
-    <Condition ID="IsVisitorResponseYes"
-               editable="true"/>
-    <Action ID="Navigate"
-            editable="true"/>
-    <Action ID="PerformDeicticGesture"
-            editable="true"/>
-    <Action ID="PerformIconicGesture"
-            editable="true"/>
-    <Action ID="PressYesNoDialogue"
-            editable="true"/>
-    <Action ID="ResetRobotPose"
-            editable="true"/>
-    <Action ID="RetrieveListOfExhibits"
-            editable="true"/>
-    <Action ID="StartOfTree"
-            editable="true"/>
-    <Action ID="SayText"
-            editable="true"/>
-    <Action ID="SelectExhibit"
-            editable="true"/>
-    <Action ID="SetAnimateBehavior"
-            editable="true"/>
-    <Action ID="SetOvertAttentionMode"
-            editable="true"/>
-    <Action ID="SetSpeechEvent"
-            editable="true"/>
+    <!-- Actions -->
+    <Action ID="StartOfTree">
+      <output_port name="tour_id" default="tour_{timestamp}"/>
+    </Action>
+    
+    <Action ID="SetAnimateBehavior">
+      <input_port name="animate_enabled" default="true">Enable/disable animation</input_port>
+    </Action>
+    
+    <Action ID="SetOvertAttentionMode">
+      <input_port name="mode" default="social">Attention mode: scanning, seeking, social, location, disabled</input_port>
+    </Action>
+    
+    <Action ID="PerformIconicGesture">
+      <input_port name="gesture_type" default="wave">Gesture type: welcome, goodbye, wave</input_port>
+      <input_port name="duration" default="2.0">Duration in seconds</input_port>
+    </Action>
+    
+    <Action ID="PerformDeicticGesture">
+      <input_port name="gesture_target" default="exhibit_location">Target to point at</input_port>
+      <input_port name="duration" default="2.0">Duration in seconds</input_port>
+    </Action>
+    
+    <Action ID="SayText">
+      <input_port name="text_id">Unique identifier for speech</input_port>
+      <input_port name="speech_file">Path to audio file</input_port>
+      <input_port name="wait_for_completion" default="true">Wait for speech to complete</input_port>
+    </Action>
+    
+    <Action ID="Navigate">
+      <input_port name="goal_topic" default="/navigate_to_pose">Navigation goal topic</input_port>
+      <input_port name="feedback_topic" default="/navigation_feedback">Navigation feedback topic</input_port>
+      <input_port name="timeout" default="60.0">Navigation timeout in seconds</input_port>
+      <input_port name="distance_tolerance" default="0.2">Distance tolerance in meters</input_port>
+      <input_port name="angle_tolerance" default="0.1">Angle tolerance in radians</input_port>
+      <output_port name="navigation_result">Result of navigation</output_port>
+    </Action>
+    
+    <Action ID="SelectExhibit">
+      <input_port name="selection_strategy" default="sequential">Selection strategy: sequential, random, priority</input_port>
+      <input_port name="exhibit_param" default="/current_exhibit">Parameter to store selected exhibit</input_port>
+      <output_port name="exhibit_id">Selected exhibit ID</output_port>
+      <output_port name="exhibit_pose">Selected exhibit pose</output_port>
+    </Action>
+    
+    <Action ID="DescribeExhibitSpeech">
+      <input_port name="speech_part" default="full">Speech part: introduction, details, full</input_port>
+      <input_port name="wait_for_completion" default="true">Wait for speech completion</input_port>
+    </Action>
+    
+    <Action ID="RetrieveListOfExhibits">
+      <input_port name="exhibit_list_topic" default="/tour_guide/exhibits">Topic for exhibit list</input_port>
+      <input_port name="timeout" default="5.0">Timeout for retrieval</input_port>
+      <output_port name="exhibit_list">List of available exhibits</output_port>
+    </Action>
+    
+    <Action ID="ResetRobotPose">
+      <input_port name="pose_topic" default="/robot_pose">Robot pose topic</input_port>
+      <input_port name="timeout" default="3.0">Timeout for pose reset</input_port>
+    </Action>
+    
+    <Action ID="GetVisitorResponse">
+      <input_port name="timeout" default="10.0">Response timeout</input_port>
+      <input_port name="response_type" default="asr">Response type: asr, button</input_port>
+      <output_port name="response">Visitor response</output_port>
+    </Action>
+    
+    <Action ID="PressYesNoDialogue">
+      <input_port name="timeout" default="15.0">Button press timeout</input_port>
+      <output_port name="button_response">Button response: yes, no</output_port>
+    </Action>
+    
+    <Action ID="SetSpeechEvent">
+      <input_port name="event_enabled" default="true">Enable/disable speech event</input_port>
+    </Action>
+    
+    <!-- Conditions -->
+    <Condition ID="IsVisitorDiscovered">
+      <input_port name="timeout" default="30.0">Discovery timeout</input_port>
+    </Condition>
+    
+    <Condition ID="IsMutualGazeDiscovered">
+      <input_port name="timeout" default="10.0">Mutual gaze timeout</input_port>
+    </Condition>
+    
+    <Condition ID="IsASREnabled"/>
+    
+    <Condition ID="IsListWithExhibit"/>
+    
+    <Condition ID="IsVisitorResponseYes"/>
   </TreeNodesModel>
 
 </root>
