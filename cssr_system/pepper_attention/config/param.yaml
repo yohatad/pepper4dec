@@ -1,0 +1,81 @@
+# Jetson Nano depth server params
+depth_query_server:
+  ros__parameters:
+    depth_scale: 0.001  # meters per unit for 16UC1
+
+# Laptop saliency node params
+saliency_node:
+  ros__parameters:
+    image_topic: "/camera/color/image_raw/compressed"
+    publish_map: true
+    down_w: 160
+    down_h: 120
+    alpha_static: 0.6
+    beta_motion: 0.4
+    gamma_center: 0.1
+    min_peak: 0.25
+    flow_method: "farneback"  # or "dis"
+
+# Laptop unified attention node params
+unified_attention_node:
+  ros__parameters:
+    face_topic: "/faces"
+    saliency_topic: "/attn/saliency_peak"
+    audio_topic: "/audio/azimuth_rad"
+    camera_info_topic: "/camera/color/camera_info"
+    depth_service: "/get_depth_at_pixel"
+    
+    command_mode: "joint_state"  # or "trajectory"
+    joint_names: ["HeadYaw", "HeadPitch"]
+    joint_state_topic: "/head_cmd/joint_states"
+    trajectory_topic: "/head_controller/joint_trajectory"
+    traj_time_sec: 0.18
+    
+    # Attention parameters
+    bias_face: 2.0
+    mutual_gaze_bonus: 0.6
+    saliency_min_score: 0.30
+    
+    depth_lo: 0.6
+    depth_hi: 1.8
+    depth_min: 0.35
+    depth_max: 4.0
+    depth_roi_px: 5
+    depth_req_every_n_frames_face: 3
+    depth_req_every_n_frames_sal: 4
+    
+    hysteresis_delta: 0.3
+    hysteresis_hold_ms: 200
+    dwell_cap_s: 4.0
+    
+    ior_px_radius: 40.0
+    ior_penalty: 1.0
+    ior_decay_s: 2.5
+    
+    audio_hold_s: 2.0
+    
+    home_yaw: 0.0
+    home_pitch: -0.05
+    idle_scan_period_min: 3.0
+    idle_scan_period_max: 6.0
+    idle_scan_yaw_deg: 20.0
+    idle_scan_pitch_deg: 8.0
+    micro_saccade_deg: 0.4
+    micro_saccade_period_min: 3.0
+    micro_saccade_period_max: 5.0
+    
+    yaw_lim: 1.8
+    pitch_up: 0.45
+    pitch_dn: -0.45
+
+# Visualization node params
+attention_visualization:
+  ros__parameters:
+    image_topic: "/camera/color/image_raw/compressed"
+    face_topic: "/faces"
+    saliency_topic: "/attn/saliency_peak"
+    target_topic: "/attn/target_angles"
+    camera_info_topic: "/camera/color/camera_info"
+    publish_overlay: true
+    publish_markers: true
+    show_metrics: true
