@@ -1,0 +1,15 @@
+# GetDepthAtPixel.srv
+# Query depth at pixel coordinate with ROI averaging
+
+# Request
+int32 u                         # Pixel x-coordinate
+int32 v                         # Pixel y-coordinate  
+int32 roi                       # Region of interest radius (pixels)
+builtin_interfaces/Time t       # Timestamp for frame selection (0,0 = latest)
+
+---
+
+# Response
+bool valid                      # True if depth data is available and valid
+float32 z_mean                  # Mean depth in ROI (meters)
+float32 z_median                # Median depth in ROI (meters)
