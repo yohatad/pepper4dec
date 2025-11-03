@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-gesture_execution_ros2.py
+gesture_execution.py
 
 ROS2 Python implementation of Pepper robot gesture execution system
 Simplified version using direct joint control with JointAnglesWithSpeed messages
 
-Author: Converted from C++ (Adedayo Akinade)
-Date: September 24, 2025
-Version: v2.0
+Author: Yohannes Haile
+Date: October 11, 2025
+Version: v1.0
 """
 
 import os
@@ -25,9 +25,9 @@ from ament_index_python.packages import get_package_share_directory
 # ROS2 messages and services
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import Pose2D, Twist
-from naoqi_bridge_msgs.msg import JointAnglesWithSpeed
+from naoqi_bridge_msgs.msg import JointAngleTrajectory
 from cssr_interfaces.srv import PerformGesture
-from pepper_kinematics_utilities import PepperKinematicsUtilities, RIGHT_ARM, LEFT_ARM
+from .pepper_kinematics_utilities import PepperKinematicsUtilities, RIGHT_ARM, LEFT_ARM
 
 # Constants
 MIN_GESTURE_DURATION = 1000  # milliseconds
@@ -132,7 +132,6 @@ class ConfigManager:
 
 class GestureDescriptorManager:
     """Manages gesture descriptor files using YAML format"""
-    
     def __init__(self, package_path: Path, config: Dict):
         self.package_path = package_path
         self.config = config
@@ -226,20 +225,20 @@ class GestureExecutionSystem(Node):
         self.create_subscription(Pose2D, topics["RobotPose"], self.robot_pose_callback, 10)
         
         # Publishers
-        self.joint_angles_pub = self.create_publisher(JointAnglesWithSpeed, topics["JointAngles"], 10)
+        self.joint_traj_pub = self.create_publisher(JointAngleTrajectory,'/naoqi_driver/joint_angle_traj', 10)
         self.cmd_vel_pub = self.create_publisher(Twist, topics["Wheels"], 10)
         
         # Services
         self.create_service(PerformGesture, "/gestureExecution/perform_gesture", self.perform_gesture_callback)
     
     def joint_states_callback(self, msg: JointState):
-        """Handle joint state updates"""
+        """Handle joint state"""
         for name, position in zip(msg.name, msg.position):
             if name in self.joint_states:
                 self.joint_states[name] = position
     
     def robot_pose_callback(self, msg: Pose2D):
-        """Handle robot pose updates"""
+        """Handle robot pose"""
         self.robot_pose.x = msg.x
         self.robot_pose.y = msg.y
         self.robot_pose.theta = msg.theta
@@ -250,7 +249,7 @@ class GestureExecutionSystem(Node):
             success = self.execute_gesture(
                 gesture_type=request.gesture_type,
                 gesture_id=request.gesture_id,
-                gesture_duration=request.gesture_duration,
+                speed=request.speed,
                 bow_nod_angle=request.bow_nod_angle,
                 location_x=request.location_x,
                 location_y=request.location_y,
@@ -399,26 +398,26 @@ class GestureExecutionSystem(Node):
             return False
     
     def execute_pointing_motion(self, arm: int, shoulder_pitch: float, shoulder_roll: float, duration: int) -> bool:
-        """Execute the actual pointing motion"""
+        """Execute the actual pointing motion with smooth Bezier interpolation"""
         try:
             duration_sec = duration / 1000.0
             
             # Set fixed values for other joints during pointing
             if arm == RIGHT_ARM:
                 joint_names = ['RShoulderPitch', 'RShoulderRoll', 'RElbowRoll', 'RElbowYaw', 'RWristYaw']
-                joint_angles = [shoulder_pitch, shoulder_roll, 0.0, 2.0857, -0.05679]
+                pointing_angles = [shoulder_pitch, shoulder_roll, 0.0, 2.0857, -0.05679]
+                home_position = self.descriptor_manager.home_positions['RArm']
             else:
                 joint_names = ['LShoulderPitch', 'LShoulderRoll', 'LElbowRoll', 'LElbowYaw', 'LWristYaw']
-                joint_angles = [shoulder_pitch, shoulder_roll, -0.0, -1.5620, 0.06592]
+                pointing_angles = [shoulder_pitch, shoulder_roll, -0.0, -1.5620, 0.06592]
+                home_position = self.descriptor_manager.home_positions['LArm']
             
-            # Move to pointing position
-            self.move_joints(joint_names, joint_angles, 0.2)
-            time.sleep(duration_sec)
+            # Create smooth trajectory: home -> pointing -> home
+            waypoints = [home_position, pointing_angles, home_position]
             
-            # Return to home position
-            home_position = self.descriptor_manager.home_positions['RArm' if arm == RIGHT_ARM else 'LArm']
-            self.move_joints(joint_names, home_position, 0.2)
-            time.sleep(duration_sec)
+            # Execute smooth pointing gesture
+            self.move_joints_bezier(joint_names, waypoints, duration_sec * 2, use_bezier=True)
+            time.sleep(duration_sec * 2)
             
             return True
             
@@ -459,22 +458,28 @@ class GestureExecutionSystem(Node):
             return False
     
     def execute_iconic_motion(self, joint_names: List[str], joint_angles_list: List[List[float]], 
-                             arm_name: str, duration: int) -> bool:
-        """Execute the iconic gesture motion"""
+                         arm_name: str, duration: int) -> bool:
+        """Execute the iconic gesture motion with smooth Bezier interpolation"""
         try:
             duration_sec = duration / 1000.0
             num_waypoints = len(joint_angles_list)
-            waypoint_duration = duration_sec / num_waypoints
             
-            # Execute waypoints sequentially
-            for waypoint in joint_angles_list:
-                self.move_joints(joint_names, waypoint, 0.2)
-                time.sleep(waypoint_duration)
+            if self.verbose_mode:
+                self.get_logger().info(
+                    f"Executing iconic gesture on {arm_name} with {num_waypoints} waypoints "
+                    f"over {duration_sec}s using Bezier interpolation"
+                )
             
-            # Return to home position
+            # Use Bezier for smooth biological motion
+            self.move_joints_bezier(joint_names, joint_angles_list, duration_sec, use_bezier=True)
+            
+            # Wait for gesture to complete
+            time.sleep(duration_sec)
+            
+            # Return to home position smoothly
             home_position = self.descriptor_manager.home_positions[arm_name]
-            self.move_joints(joint_names, home_position, 0.2)
-            time.sleep(waypoint_duration)
+            self.move_joints_bezier(joint_names, [home_position], duration_sec * 0.5, use_bezier=True)
+            time.sleep(duration_sec * 0.5)
             
             return True
             
@@ -483,34 +488,31 @@ class GestureExecutionSystem(Node):
             return False
     
     def execute_bowing_gesture(self, bow_angle: int, duration: int) -> bool:
-        """Execute bowing gesture"""
+        """Execute bowing gesture with smooth Bezier interpolation"""
         try:
             duration_sec = duration / 1000.0
             
             # Clamp bow angle to limits
             bow_angle = max(MIN_BOW_ANGLE, min(bow_angle, MAX_BOW_ANGLE))
-            bow_angle_rad = -math.radians(bow_angle)  # Negative for forward bow
+            bow_angle_rad = -math.radians(bow_angle)
             
             joint_names = ['HipPitch', 'HipRoll', 'KneePitch']
+            home_position = self.descriptor_manager.home_positions['Leg']
             bow_position = [bow_angle_rad, -0.00766, 0.03221]
             
-            # Move to bow position
-            self.move_joints(joint_names, bow_position, 0.2)
-            time.sleep(duration_sec)
-            
-            # Return to home position
-            home_position = self.descriptor_manager.home_positions['Leg']
-            self.move_joints(joint_names, home_position, 0.2)
-            time.sleep(duration_sec)
+            # Smooth bow: home -> bow -> home
+            waypoints = [home_position, bow_position, home_position]
+            self.move_joints_bezier(joint_names, waypoints, duration_sec * 2, use_bezier=True)
+            time.sleep(duration_sec * 2)
             
             return True
             
         except Exception as e:
             self.get_logger().error(f"Bowing gesture failed: {e}")
             return False
-    
+
     def execute_nodding_gesture(self, nod_angle: int, duration: int) -> bool:
-        """Execute nodding gesture"""
+        """Execute nodding gesture with smooth Bezier interpolation"""
         try:
             duration_sec = duration / 1000.0
             
@@ -519,16 +521,13 @@ class GestureExecutionSystem(Node):
             nod_angle_rad = math.radians(nod_angle)
             
             joint_names = ['HeadPitch', 'HeadYaw']
+            home_position = self.descriptor_manager.home_positions['Head']
             nod_position = [nod_angle_rad, 0.012271]
             
-            # Move to nod position
-            self.move_joints(joint_names, nod_position, 0.2)
-            time.sleep(duration_sec)
-            
-            # Return to home position
-            home_position = self.descriptor_manager.home_positions['Head']
-            self.move_joints(joint_names, home_position, 0.2)
-            time.sleep(duration_sec)
+            # Smooth nod: home -> nod -> home
+            waypoints = [home_position, nod_position, home_position]
+            self.move_joints_bezier(joint_names, waypoints, duration_sec * 2, use_bezier=True)
+            time.sleep(duration_sec * 2)
             
             return True
             
@@ -560,21 +559,70 @@ class GestureExecutionSystem(Node):
         except Exception as e:
             self.get_logger().error(f"Robot rotation failed: {e}")
     
-    def move_joints(self, joint_names: List[str], joint_angles: List[float], speed: float = 0.2):
-        """Move specified joints to target angles using JointAnglesWithSpeed"""
+    def move_joints_bezier(self, joint_names: List[str], joint_angles_waypoints: List[List[float]], 
+                       total_duration: float, use_bezier: bool = True):
+        """
+        Move joints through multiple waypoints using trajectory control
+        
+        Args:
+            joint_names: List of joint names
+            joint_angles_waypoints: List of waypoint angles [waypoint1, waypoint2, ...]
+            total_duration: Total duration in seconds
+            use_bezier: If True, use Bezier interpolation for smooth motion
+        """
         try:
-            msg = JointAnglesWithSpeed()
-            msg.joint_names = joint_names
-            msg.joint_angles = [float(angle) for angle in joint_angles]
-            msg.speed = speed
-            msg.relative = False
+            num_waypoints = len(joint_angles_waypoints)
+            if num_waypoints == 0:
+                self.get_logger().error("No waypoints provided")
+                return
             
-            self.joint_angles_pub.publish(msg)
+            # For single joint with multiple waypoints
+            if len(joint_names) == 1:
+                # Flatten waypoints into single list
+                angles = [wp[0] for wp in joint_angles_waypoints]
+                
+                # Create evenly spaced time points
+                times = [total_duration * (i + 1) / num_waypoints for i in range(num_waypoints)]
+                
+                msg = JointAngleTrajectory()
+                msg.header.stamp = self.get_clock().now().to_msg()
+                msg.joint_names = joint_names
+                msg.joint_angles = [float(angle) for angle in angles]
+                msg.times = [float(t) for t in times]
+                msg.relative = 0  # Absolute angles
+                msg.use_bezier = use_bezier
+                
+                self.joint_traj_pub.publish(msg)
+                
+                if self.verbose_mode:
+                    self.get_logger().info(
+                        f"Published {'Bezier' if use_bezier else 'linear'} trajectory: "
+                        f"{joint_names[0]} with {num_waypoints} waypoints over {total_duration}s"
+                    )
             
-            # Update internal joint state tracking
-            for name, angle in zip(joint_names, joint_angles):
-                if name in self.joint_states:
-                    self.joint_states[name] = angle
+            # For multiple joints moving together
+            elif len(joint_names) == len(joint_angles_waypoints[0]):
+                # Each waypoint should be executed sequentially
+                waypoint_duration = total_duration / num_waypoints
+                
+                for i, waypoint in enumerate(joint_angles_waypoints):
+                    msg = JointAngleTrajectory()
+                    msg.header.stamp = self.get_clock().now().to_msg()
+                    msg.joint_names = joint_names
+                    msg.joint_angles = [float(angle) for angle in waypoint]
+                    msg.times = [float(waypoint_duration) for _ in joint_names]
+                    msg.relative = 0
+                    msg.use_bezier = use_bezier
                     
+                    self.joint_traj_pub.publish(msg)
+                    
+                    if i < num_waypoints - 1:  # Don't sleep after last waypoint
+                        time.sleep(waypoint_duration)
+            
+            else:
+                self.get_logger().error(
+                    f"Mismatch: {len(joint_names)} joints but waypoint has {len(joint_angles_waypoints[0])} angles"
+                )
+                
         except Exception as e:
-            self.get_logger().error(f"Joint movement failed: {e}")
+            self.get_logger().error(f"Bezier trajectory failed: {e}")
