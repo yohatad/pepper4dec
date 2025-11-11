@@ -13,6 +13,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/OvertAttentionStatus.msg"
   "srv/OvertAttentionSetMode.srv"
   "srv/GetDepthAtPixel.srv"
+  "srv/PerformGesture.srv"
   DEPENDENCIES builtin_interfaces std_msgs geometry_msgs
 )
 

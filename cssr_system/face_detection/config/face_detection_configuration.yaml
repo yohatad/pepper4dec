@@ -17,7 +17,7 @@ centroidMaxDisappeared: 15   # Max frames a centroid can disappear before remova
 centroidMaxDistance: 100     # Max distance for centroid matching (pixels)
 
 # SixDrepNet Algorithm Settings
-sixdrepnetConfidence: 0.65   # Face detection confidence threshold (0.0-1.0)
+sixdrepnetConfidence: 0.80   # Face detection confidence threshold (0.0-1.0)
 sixdrepnetHeadposeAngle: 10  # Head pose angle threshold for mutual gaze (degrees)
 sortMaxDisappeared: 5        # Max age for SORT tracker
 sortMinHits: 3               # Min hits required for SORT tracker

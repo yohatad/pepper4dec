@@ -10,16 +10,16 @@ saliency_node:
     publish_map: true
     down_w: 160
     down_h: 120
-    alpha_static: 0.6
-    beta_motion: 0.4
+    alpha_static: 0.3
+    beta_motion: 0.6
     gamma_center: 0.1
-    min_peak: 0.25
+    min_peak: 0.5
     flow_method: "farneback"  # or "dis"
 
 # Laptop unified attention node params
 unified_attention_node:
   ros__parameters:
-    face_topic: "/faces"
+    face_topic: "/faceDetection/data"
     saliency_topic: "/attn/saliency_peak"
     audio_topic: "/audio/azimuth_rad"
     camera_info_topic: "/camera/color/camera_info"
@@ -29,7 +29,6 @@ unified_attention_node:
     joint_names: ["HeadYaw", "HeadPitch"]
     joint_state_topic: "/head_cmd/joint_states"
     trajectory_topic: "/head_controller/joint_trajectory"
-    traj_time_sec: 0.18
     
     # Attention parameters
     bias_face: 2.0
@@ -72,7 +71,7 @@ unified_attention_node:
 attention_visualization:
   ros__parameters:
     image_topic: "/camera/color/image_raw/compressed"
-    face_topic: "/faces"
+    face_topic: "/faceDetection/data"
     saliency_topic: "/attn/saliency_peak"
     target_topic: "/attn/target_angles"
     camera_info_topic: "/camera/color/camera_info"
