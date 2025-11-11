@@ -1,82 +1,61 @@
-#!/home/yoha/face_detection_env/bin/python3
+#!/home/yoha/sound/bin/python3
 
 """
-face_detection_application.py
-ROS2 Node for Face and Mutual Gaze Detection and Localization.
+speech_event_applications.py
+Implementation of 4-microphone sound localization with beamforming and Whisper ASR
 
-Implements face detection using either MediaPipe or SixDrepNet (YOLO + SixDrepNet).
-Configuration is loaded from face_detection_configuration.yaml.
+Author: Yohannes Tadesse Haile
+Date: November 8, 2025
+Version: v2.0
 
-Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
-Email: yohanneh@andrew.cmu.edu
-Date: April 18, 2025
-Version: v1.0
+Copyright (C) 2023 CSSR4Africa Consortium
+
+This program comes with ABSOLUTELY NO WARRANTY.
 """
 
 import sys
 import rclpy
-from .face_detection_implementation import MediaPipe, SixDrepNet, load_configuration
+from rclpy.node import Node
 
-
-BANNER = """faceDetection v1.0
-This program comes with ABSOLUTELY NO WARRANTY.
-"""
-
-def main():
-    print(BANNER)
-
-    # Load configuration
-    config = load_configuration()
-    algo_name = config.get("algorithm", "sixdrep").lower()
-
-    print(f"Using algorithm: {algo_name}")
-
-    rclpy.init()
-
-    node = None
+def main(args=None):
+    """Initialize and run the speech event node."""
+    rclpy_inited = False
     try:
-        # Directly choose algorithm class
-        if algo_name == "mediapipe":
-            node = MediaPipe(config)
-        elif algo_name == "sixdrep":
-            node = SixDrepNet(config)
-        else:
-            print(f"Error: Invalid algorithm '{algo_name}'. Choose 'mediapipe' or 'sixdrep'.")
-            sys.exit(1)
+        rclpy.init(args=args)
+        rclpy_inited = True
 
-        # Setup subscriptions
-        if not node.subscribe_topics():
-            node.get_logger().error("Failed to setup subscribers")
-            sys.exit(1)
+        # Import AFTER init for cleaner error reporting
+        from .speech_event_implementation import SpeechRecognitionNode
 
-        # Start monitoring for timeouts
-        node.start_timeout_monitor()
+        node_name = "speechEvent"
+        software_version = "v1.0"
 
-        # Verify camera resolution compatibility (except Pepper)
-        if (node.depth_image is not None and not node.check_camera_resolution(node.color_image, node.depth_image) and node.camera_type != "pepper"):
-            node.get_logger().error("Color and depth camera resolutions don't match")
-            sys.exit(1)
+        node = SpeechRecognitionNode()
+        node.get_logger().info(
+            f"{node_name} {software_version}\n"
+            "\t\t\t    This program comes with ABSOLUTELY NO WARRANTY."
+        )
+        node.get_logger().info(f"{node_name}: startup.")
 
-        # Spin until shutdown
         rclpy.spin(node)
 
     except KeyboardInterrupt:
-        print("\nShutdown requested by user")
+        # Graceful exit on Ctrl-C
+        pass
 
     except Exception as e:
-        print(f"Error during execution: {e}")
-        sys.exit(1)
-        
-    finally:
-        if node is not None:
-            try:
-                node.cleanup()
-                node.destroy_node()
-            except Exception as e:
-                print(f"Error during cleanup: {e}")
-        if rclpy.ok():
-            rclpy.shutdown()
+        # If node exists, use ROS logging; else print to stderr
+        try:
+            node.get_logger().error(f"Unhandled exception: {e}")
+        except Exception:
+            print(f"[speech_event] Unhandled exception: {e}", file=sys.stderr)
 
+    finally:
+        if rclpy_inited:
+            try:
+                rclpy.shutdown()
+            except Exception:
+                pass
 
 if __name__ == "__main__":
     main()
