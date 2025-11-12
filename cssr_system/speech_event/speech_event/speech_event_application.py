@@ -16,6 +16,7 @@ This program comes with ABSOLUTELY NO WARRANTY.
 import sys
 import rclpy
 from rclpy.node import Node
+from .speech_event_implementation import SpeechRecognitionNode
 
 def main(args=None):
     """Initialize and run the speech event node."""
@@ -23,9 +24,6 @@ def main(args=None):
     try:
         rclpy.init(args=args)
         rclpy_inited = True
-
-        # Import AFTER init for cleaner error reporting
-        from .speech_event_implementation import SpeechRecognitionNode
 
         node_name = "speechEvent"
         software_version = "v1.0"

@@ -21,7 +21,7 @@ import threading
 import webrtcvad
 import numpy as np
 import noisereduce as nr
-import whisper
+from faster_whisper import WhisperModel
 from datetime import datetime
 from rclpy.node import Node
 from naoqi_bridge_msgs.msg import AudioBuffer
@@ -29,17 +29,17 @@ from std_msgs.msg import Float32, String
 from geometry_msgs.msg import Vector3Stamped
 from threading import Lock
 from ament_index_python.packages import get_package_share_directory
-
+from collections import deque
 
 class SpeechRecognitionNode(Node):
     """
     SpeechRecognitionNode performs 4-microphone sound localization using GCC-PHAT,
     applies beamforming to enhance audio from the detected direction, and uses
-    Whisper for robust automatic speech recognition.
+    faster-whisper with streaming for real-time automatic speech recognition.
     """
 
     def __init__(self):
-        """Initialize the SpeechRecognitionNode with 4-mic localization and Whisper ASR."""
+        """Initialize the SpeechRecognitionNode with 4-mic localization and streaming ASR."""
         super().__init__('speech_recognition')
 
         # Load configuration
@@ -82,18 +82,62 @@ class SpeechRecognitionNode(Node):
         self.nr_stationary = bool(self.config.get('stationary', True))
         self.nr_prop_decrease = float(self.config.get('propDecrease', 0.9))
 
-        # Whisper ASR parameters
-        self.whisper_model_size = str(self.config.get('whisperModelSize', 'base'))  # tiny, base, small, medium, large
+        # faster-whisper ASR parameters
+        self.whisper_model_size = str(self.config.get('whisperModelSize', 'tiny'))  # Use tiny for streaming
         self.whisper_language = str(self.config.get('whisperLanguage', 'en'))
-        self.asr_buffer_duration = float(self.config.get('asrBufferDuration', 3.0))  # seconds
-        self.asr_buffer_size = int(self.sample_rate * self.asr_buffer_duration)
-        self.asr_buffer = np.zeros(self.asr_buffer_size, dtype=np.float32)
-        self.asr_samples_accumulated = 0
+        self.whisper_device = str(self.config.get('whisperDevice', 'auto'))
+        self.whisper_compute_type = str(self.config.get('whisperComputeType', 'auto'))
+        self.beam_size = int(self.config.get('beamSize', 1))  # Lower beam size for streaming
+        
+        # Streaming ASR parameters
+        self.streaming_chunk_duration = float(self.config.get('streamingChunkDuration', 1.0))  # seconds
+        self.streaming_chunk_size = int(16000 * self.streaming_chunk_duration)  # 16kHz for Whisper
+        self.overlap_duration = float(self.config.get('overlapDuration', 0.5))  # seconds
+        self.overlap_size = int(16000 * self.overlap_duration)
+        self.min_speech_duration = float(self.config.get('minSpeechDuration', 0.3))  # seconds
+        self.silence_threshold = float(self.config.get('silenceThreshold', 0.5))  # seconds before finalizing
+        
+        # Streaming buffers
+        self.streaming_buffer = deque(maxlen=int(16000 * 10))  # Max 10 seconds
+        self.speech_buffer = []
+        self.is_speaking = False
+        self.silence_duration = 0.0
+        self.last_speech_time = time.time()
+        
+        # Partial transcript tracking
+        self.current_transcript = ""
+        self.finalized_transcript = ""
+        self.streaming_lock = Lock()
 
-        # Load Whisper model
-        self.get_logger().info(f"Loading Whisper model: {self.whisper_model_size}")
-        self.whisper_model = whisper.load_model(self.whisper_model_size)
-        self.get_logger().info("Whisper model loaded successfully")
+        # Determine device and compute type automatically if set to 'auto'
+        if self.whisper_device == 'auto':
+            try:
+                import torch
+                self.whisper_device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            except ImportError:
+                self.whisper_device = 'cpu'
+            self.get_logger().info(f"Auto-detected device: {self.whisper_device}")
+        
+        if self.whisper_compute_type == 'auto':
+            if self.whisper_device == 'cuda':
+                self.whisper_compute_type = 'float16'
+            else:
+                self.whisper_compute_type = 'int8'
+            self.get_logger().info(f"Auto-selected compute type: {self.whisper_compute_type}")
+
+        # Load faster-whisper model
+        self.get_logger().info(f"Loading faster-whisper model: {self.whisper_model_size} on {self.whisper_device}")
+        try:
+            self.whisper_model = WhisperModel(
+                self.whisper_model_size,
+                device=self.whisper_device,
+                compute_type=self.whisper_compute_type,
+                num_workers=1
+            )
+            self.get_logger().info("faster-whisper model loaded successfully")
+        except Exception as e:
+            self.get_logger().error(f"Failed to load faster-whisper model: {e}")
+            raise
 
         # Current sound direction (for beamforming)
         self.current_azimuth = 0.0
@@ -127,12 +171,14 @@ class SpeechRecognitionNode(Node):
         self.direction_pub = self.create_publisher(Vector3Stamped, '/speech/sound_direction', 10)
         self.azimuth_pub = self.create_publisher(Float32, '/speech/azimuth', 10)
         self.transcript_pub = self.create_publisher(String, '/speech/transcript', 10)
+        self.partial_transcript_pub = self.create_publisher(String, '/speech/partial_transcript', 10)
         self.confidence_pub = self.create_publisher(Float32, '/speech/confidence', 10)
 
         # Start monitoring threads
         self.start_timeout_monitor()
+        self.start_streaming_asr_thread()
 
-        self.get_logger().info("Speech Recognition Node initialized with 4-mic localization and Whisper ASR")
+        self.get_logger().info("Speech Recognition Node initialized with streaming ASR")
 
     # ------------------------ I/O + config helpers ------------------------
 
@@ -156,7 +202,6 @@ class SpeechRecognitionNode(Node):
         """Extract topic name from topics YAML file."""
         try:
             package_path = get_package_share_directory('speech_event')
-            # If your file lives in 'data', change 'config' -> 'data' here:
             config_path = os.path.join(package_path, 'data', 'pepper_topics.yaml')
             if os.path.exists(config_path):
                 with open(config_path, 'r') as file:
@@ -222,7 +267,7 @@ class SpeechRecognitionNode(Node):
             # Use constants from the message class
             FL = get_chan(AudioBuffer.CHANNEL_FRONT_LEFT)
             FR = get_chan(AudioBuffer.CHANNEL_FRONT_RIGHT)
-            RL = get_chan(AudioBuffer.CHANNEL_REAR_LEFT,  FL)  # fallback duplicate if missing
+            RL = get_chan(AudioBuffer.CHANNEL_REAR_LEFT,  FL)
             RR = get_chan(AudioBuffer.CHANNEL_REAR_RIGHT, FR)
 
             # Reorder to match mic_positions: [back_left, back_right, front_left, front_right]
@@ -244,7 +289,6 @@ class SpeechRecognitionNode(Node):
                         mic_signals = [scipy_signal.resample(sig, tgt_len).astype(np.float32) for sig in mic_signals]
                     except Exception as e2:
                         self.get_logger().error(f"Resample fallback failed: {e2}")
-                        # proceed with original rate (VAD still OK at 48/16/32/8 kHz)
             return mic_signals
 
         except Exception as e:
@@ -254,13 +298,18 @@ class SpeechRecognitionNode(Node):
     def voice_detected(self, audio_frame):
         """Use VAD to detect speech presence."""
         try:
-            # 10/20/30 ms frames are valid; we use self.vad_frame_size (20 ms)
+            speech_frames = 0
+            total_frames = 0
+            
             for start in range(0, len(audio_frame) - self.vad_frame_size + 1, self.vad_frame_size):
                 frame = audio_frame[start:start + self.vad_frame_size]
                 frame_bytes = (frame * 32767).astype(np.int16).tobytes()
                 if self.vad.is_speech(frame_bytes, self.sample_rate):
-                    return True
-            return False
+                    speech_frames += 1
+                total_frames += 1
+            
+            # Return True if at least 30% of frames contain speech
+            return total_frames > 0 and (speech_frames / total_frames) > 0.3
         except Exception as e:
             self.get_logger().warning(f"VAD error: {e}")
             return False
@@ -282,7 +331,6 @@ class SpeechRecognitionNode(Node):
 
             # Roll and append current block into context
             if block_size > self.context_size:
-                # If an unusually large block arrives, resize context to accommodate
                 self.context_size = block_size
                 self.context_window = np.zeros(self.context_size, dtype=np.float32)
 
@@ -304,15 +352,7 @@ class SpeechRecognitionNode(Node):
     # ------------------------ Localization + beamforming ------------------------
 
     def gcc_phat(self, sig1, sig2):
-        """
-        GCC-PHAT algorithm for time delay estimation.
-
-        Args:
-            sig1, sig2: Audio signals from two microphones
-
-        Returns:
-            float: Time delay in seconds
-        """
+        """GCC-PHAT algorithm for time delay estimation."""
         try:
             n = sig1.shape[0] + sig2.shape[0]
 
@@ -340,15 +380,7 @@ class SpeechRecognitionNode(Node):
             return 0.0
 
     def localize_4mic(self, mic_signals):
-        """
-        Perform 4-microphone sound source localization using TDOA.
-
-        Args:
-            mic_signals: List of 4 audio signals [back_left, back_right, front_left, front_right]
-
-        Returns:
-            tuple: (azimuth, elevation, confidence) in radians
-        """
+        """Perform 4-microphone sound source localization using TDOA."""
         try:
             num_mics = 4
             tdoa_matrix = np.zeros((num_mics, num_mics), dtype=np.float32)
@@ -372,15 +404,7 @@ class SpeechRecognitionNode(Node):
             return 0.0, 0.0, 0.0
 
     def estimate_direction_from_tdoa(self, tdoa_matrix):
-        """
-        Estimate sound direction from TDOA measurements using least squares.
-
-        Args:
-            tdoa_matrix: 4x4 matrix of time delays
-
-        Returns:
-            tuple: (azimuth, elevation) in radians
-        """
+        """Estimate sound direction from TDOA measurements using least squares."""
         from scipy.optimize import minimize
 
         def cost_function(angles):
@@ -419,18 +443,7 @@ class SpeechRecognitionNode(Node):
         return float(result.x[0]), float(result.x[1])
 
     def apply_beamforming(self, mic_signals, azimuth, elevation):
-        """
-        Apply delay-and-sum beamforming to enhance audio from target direction.
-
-        Args:
-            mic_signals: List of 4 microphone signals in order [back_left, back_right, front_left, front_right]
-            azimuth: Target azimuth in radians
-            elevation: Target elevation in radians
-
-        Returns:
-            np.ndarray: Beamformed audio signal
-        """
-        # If beamforming disabled, return front-left (index 2 in our ordering)
+        """Apply delay-and-sum beamforming to enhance audio from target direction."""
         if not self.use_beamforming:
             return mic_signals[2]
 
@@ -471,42 +484,172 @@ class SpeechRecognitionNode(Node):
 
         except Exception as e:
             self.get_logger().error(f"Beamforming error: {e}")
-            return mic_signals[2]  # Fallback to front-left
+            return mic_signals[2]
 
-    # ------------------------ ASR + publishing ------------------------
+    # ------------------------ Streaming ASR ------------------------
 
-    def transcribe_audio(self, audio_signal):
-        """
-        Transcribe audio using Whisper ASR.
+    def start_streaming_asr_thread(self):
+        """Start background thread for streaming ASR processing."""
+        def streaming_worker():
+            while rclpy.ok():
+                try:
+                    self.process_streaming_asr()
+                    time.sleep(0.1)  # Check every 100ms
+                except Exception as e:
+                    self.get_logger().error(f"Streaming ASR thread error: {e}")
+        
+        threading.Thread(target=streaming_worker, daemon=True).start()
+        self.get_logger().info("Streaming ASR thread started")
 
-        Args:
-            audio_signal: Audio signal to transcribe (normalized float32)
+    def process_streaming_asr(self):
+        """Process audio buffer for streaming transcription."""
+        with self.streaming_lock:
+            buffer_length = len(self.streaming_buffer)
+            
+            if buffer_length < self.streaming_chunk_size:
+                return
+            
+            # Get chunk with overlap
+            chunk_start = max(0, buffer_length - self.streaming_chunk_size - self.overlap_size)
+            audio_chunk = np.array(list(self.streaming_buffer)[chunk_start:])
+            
+            # Check if we have speech
+            has_speech = self.voice_detected(audio_chunk)
+            current_time = time.time()
+            
+            if has_speech:
+                self.is_speaking = True
+                self.last_speech_time = current_time
+                self.silence_duration = 0.0
+                
+                # Add to speech buffer
+                if len(self.speech_buffer) == 0:
+                    self.speech_buffer = audio_chunk.tolist()
+                else:
+                    # Avoid duplicates from overlap
+                    new_samples = audio_chunk[self.overlap_size:]
+                    self.speech_buffer.extend(new_samples.tolist())
+                
+                # Transcribe if we have enough speech
+                if len(self.speech_buffer) >= self.streaming_chunk_size:
+                    self.transcribe_partial()
+            
+            elif self.is_speaking:
+                # Track silence
+                self.silence_duration = current_time - self.last_speech_time
+                
+                # Finalize if silence threshold exceeded
+                if self.silence_duration >= self.silence_threshold:
+                    if len(self.speech_buffer) >= int(16000 * self.min_speech_duration):
+                        self.finalize_transcript()
+                    
+                    # Reset
+                    self.is_speaking = False
+                    self.speech_buffer = []
+                    self.current_transcript = ""
 
-        Returns:
-            dict: Whisper result with 'text' and metadata
-        """
+    def transcribe_partial(self):
+        """Transcribe current speech buffer (partial result)."""
         try:
-            # Whisper expects 16kHz audio
-            if self.sample_rate != 16000:
-                from scipy import signal as scipy_signal
-                num_samples = int(len(audio_signal) * 16000 / self.sample_rate)
-                audio_16k = scipy_signal.resample(audio_signal, num_samples).astype(np.float32)
-            else:
-                audio_16k = audio_signal.astype(np.float32)
-
-            result = self.whisper_model.transcribe(
-                audio_16k,
+            if len(self.speech_buffer) == 0:
+                return
+            
+            audio_array = np.array(self.speech_buffer, dtype=np.float32)
+            
+            # Transcribe
+            segments, info = self.whisper_model.transcribe(
+                audio_array,
                 language=self.whisper_language,
-                fp16=False
+                beam_size=self.beam_size,
+                vad_filter=False,  # We already did VAD
+                task='transcribe',
+                condition_on_previous_text=True,
+                initial_prompt=self.finalized_transcript  # Use context
             )
-            return result
-
+            
+            # Collect text
+            text_parts = []
+            for segment in segments:
+                text_parts.append(segment.text)
+            
+            partial_text = ' '.join(text_parts).strip()
+            
+            if partial_text and partial_text != self.current_transcript:
+                self.current_transcript = partial_text
+                
+                # Publish partial transcript
+                msg = String()
+                msg.data = partial_text
+                self.partial_transcript_pub.publish(msg)
+                
+                if self.verbose_mode:
+                    self.get_logger().info(f"Partial: {partial_text}")
+        
         except Exception as e:
-            self.get_logger().error(f"Whisper transcription error: {e}")
-            return {'text': '', 'segments': []}
+            self.get_logger().error(f"Partial transcription error: {e}")
+
+    def finalize_transcript(self):
+        """Finalize and publish complete transcript."""
+        try:
+            if len(self.speech_buffer) == 0:
+                return
+            
+            audio_array = np.array(self.speech_buffer, dtype=np.float32)
+            
+            # Final transcription with higher quality settings
+            segments, info = self.whisper_model.transcribe(
+                audio_array,
+                language=self.whisper_language,
+                beam_size=5,  # Higher for final
+                vad_filter=False,
+                task='transcribe',
+                condition_on_previous_text=True,
+                initial_prompt=self.finalized_transcript
+            )
+            
+            # Collect segments
+            text_parts = []
+            confidences = []
+            
+            for segment in segments:
+                text_parts.append(segment.text)
+                confidence = np.exp(segment.avg_logprob)
+                confidences.append(confidence)
+            
+            final_text = ' '.join(text_parts).strip()
+            
+            if final_text:
+                self.get_logger().info(f"Final: {final_text}")
+                
+                # Update finalized transcript for context
+                self.finalized_transcript = (self.finalized_transcript + " " + final_text).strip()
+                
+                # Keep only last 100 words for context
+                words = self.finalized_transcript.split()
+                if len(words) > 100:
+                    self.finalized_transcript = ' '.join(words[-100:])
+                
+                # Publish final transcript
+                msg = String()
+                msg.data = final_text
+                self.transcript_pub.publish(msg)
+                
+                # Publish confidence
+                avg_confidence = float(np.mean(confidences)) if confidences else 0.5
+                conf_msg = Float32()
+                conf_msg.data = avg_confidence
+                self.confidence_pub.publish(conf_msg)
+                
+                if self.verbose_mode:
+                    self.get_logger().info(f"Confidence: {avg_confidence:.2f}")
+        
+        except Exception as e:
+            self.get_logger().error(f"Final transcription error: {e}")
+
+    # ------------------------ Audio callback ------------------------
 
     def audio_callback(self, msg):
-        """Process incoming AudioBuffer message (interleaved int16 with channel_map)."""
+        """Process incoming AudioBuffer message."""
         try:
             self.last_audio_time = self.get_clock().now()
 
@@ -514,23 +657,18 @@ class SpeechRecognitionNode(Node):
                 self.received_first_audio = True
                 self.get_logger().info("First audio received")
 
-            # Parse AudioBuffer -> 4 channels: [back_left, back_right, front_left, front_right]
+            # Parse AudioBuffer -> 4 channels
             mic_signals = self._parse_audio_buffer(msg)
             if mic_signals is None:
                 return
 
             back_left, back_right, front_left, front_right = mic_signals
 
-            # Intensity gate (use front-left for quick gate)
+            # Intensity gate
             if not self.is_intense_enough(front_left):
                 return
 
-            # VAD on denoised front-left
-            fl_clean = self.apply_noise_reduction(front_left) if self.use_noise_reduction else front_left
-            if not self.voice_detected(fl_clean):
-                return
-
-            # Update localization buffers with all 4 mics
+            # Update localization buffers
             with self.lock:
                 data_length = int(len(front_left))
                 if self.accumulated_samples + data_length <= self.localization_buffer_size:
@@ -550,7 +688,7 @@ class SpeechRecognitionNode(Node):
                         self.mic_buffers[3][self.accumulated_samples:] = front_right[:remaining]
                         self.accumulated_samples = self.localization_buffer_size
 
-            # Perform 4-mic localization when buffer is full
+            # Perform localization when buffer is full
             if self.accumulated_samples >= self.localization_buffer_size:
                 azimuth, elevation, confidence = self.localize_4mic(self.mic_buffers)
 
@@ -565,11 +703,13 @@ class SpeechRecognitionNode(Node):
                 # Beamforming
                 beamformed_audio = self.apply_beamforming(self.mic_buffers, azimuth, elevation)
 
-                # Noise reduction on beamformed signal
+                # Noise reduction
                 beamformed_clean = self.apply_noise_reduction(beamformed_audio)
 
-                # Accumulate for ASR
-                self.accumulate_for_asr(beamformed_clean)
+                # Resample to 16kHz for Whisper and add to streaming buffer
+                audio_16k = self.resample_to_16k(beamformed_clean)
+                with self.streaming_lock:
+                    self.streaming_buffer.extend(audio_16k.tolist())
 
                 # Reset localization buffers
                 with self.lock:
@@ -579,60 +719,20 @@ class SpeechRecognitionNode(Node):
         except Exception as e:
             self.get_logger().error(f"Audio callback error: {e}")
 
-    def accumulate_for_asr(self, audio_signal):
-        """Accumulate beamformed audio for ASR processing."""
-        signal_length = int(len(audio_signal))
-
-        if self.asr_samples_accumulated + signal_length <= self.asr_buffer_size:
-            start = self.asr_samples_accumulated
-            end = start + signal_length
-            self.asr_buffer[start:end] = audio_signal
-            self.asr_samples_accumulated += signal_length
-        else:
-            remaining = self.asr_buffer_size - self.asr_samples_accumulated
-            if remaining > 0:
-                self.asr_buffer[self.asr_samples_accumulated:] = audio_signal[:remaining]
-                self.asr_samples_accumulated = self.asr_buffer_size
-
-        # If ASR buffer is full, transcribe
-        if self.asr_samples_accumulated >= self.asr_buffer_size:
-            self.process_asr()
-            # Reset ASR buffer
-            self.asr_buffer = np.zeros(self.asr_buffer_size, dtype=np.float32)
-            self.asr_samples_accumulated = 0
-
-    def process_asr(self):
-        """Process accumulated audio with Whisper ASR."""
+    def resample_to_16k(self, audio_signal):
+        """Resample audio to 16kHz for Whisper."""
         try:
-            self.get_logger().info("Transcribing speech...")
-
-            result = self.transcribe_audio(self.asr_buffer)
-
-            # Extract text and confidence
-            text = result.get('text', '').strip()
-
-            if text:
-                self.get_logger().info(f"Transcription: {text}")
-
-                # Publish transcript
-                transcript_msg = String()
-                transcript_msg.data = text
-                self.transcript_pub.publish(transcript_msg)
-
-                # Calculate average confidence from segments (invert no_speech_prob)
-                segments = result.get('segments', [])
-                if segments:
-                    avg_no_speech = float(np.mean([seg.get('no_speech_prob', 1.0) for seg in segments]))
-                    confidence = 1.0 - avg_no_speech
-                else:
-                    confidence = 0.5
-
-                confidence_msg = Float32()
-                confidence_msg.data = float(confidence)
-                self.confidence_pub.publish(confidence_msg)
-
+            if self.sample_rate == 16000:
+                return audio_signal
+            
+            from scipy.signal import resample_poly
+            gcd = math.gcd(self.sample_rate, 16000)
+            up = 16000 // gcd
+            down = self.sample_rate // gcd
+            return resample_poly(audio_signal, up, down).astype(np.float32)
         except Exception as e:
-            self.get_logger().error(f"ASR processing error: {e}")
+            self.get_logger().error(f"Resampling error: {e}")
+            return audio_signal
 
     def publish_direction(self, azimuth, elevation, confidence):
         """Publish sound source direction."""
@@ -648,7 +748,7 @@ class SpeechRecognitionNode(Node):
             direction_msg.vector.z = float(np.sin(elevation))
             self.direction_pub.publish(direction_msg)
 
-            # Publish azimuth (rad)
+            # Publish azimuth
             azimuth_msg = Float32()
             azimuth_msg.data = float(azimuth)
             self.azimuth_pub.publish(azimuth_msg)

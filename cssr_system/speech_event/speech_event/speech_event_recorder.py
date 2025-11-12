@@ -117,7 +117,6 @@ class AudioRecorderNode(Node):
         rclpy.shutdown()
 
     # ---------- callback ----------
-
     def on_audio(self, msg: AudioBuffer):
         if self.shutting_down:
             return

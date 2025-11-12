@@ -10,7 +10,7 @@ audioTimeout: 2
 verboseMode: true
 
 # keep your existing fields too, e.g.:
-whisperModelSize: base
+whisperModelSize: medium
 whisperLanguage: en
 asrBufferDuration: 3.0
 useBeamforming: true
