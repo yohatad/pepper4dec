@@ -45,48 +45,26 @@ class AttentionVisualization(Node):
         self.show_metrics = self.get_parameter('show_metrics').value
         
         # QoS
-        qos = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
-            history=HistoryPolicy.KEEP_LAST,
-            depth=1
-        )
+        qos = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST, depth=1)
         
         # Subscribers
         if self.image_topic.endswith('/compressed'):
-            self.sub_img = self.create_subscription(
-                CompressedImage, self.image_topic, self.on_image, qos
-            )
+            self.sub_img = self.create_subscription(CompressedImage, self.image_topic, self.on_image, qos)
         else:
-            self.sub_img = self.create_subscription(
-                Image, self.image_topic, self.on_image_raw, qos
-            )
+            self.sub_img = self.create_subscription(Image, self.image_topic, self.on_image_raw, qos)
         
-        self.sub_faces = self.create_subscription(
-            FaceDetection, self.face_topic, self.on_faces, 10
-        )
-        self.sub_sal = self.create_subscription(
-            Float32MultiArray, self.saliency_topic, self.on_saliency, 10
-        )
-        self.sub_target = self.create_subscription(
-            Vector3, self.target_topic, self.on_target, 10
-        )
-        self.sub_caminfo = self.create_subscription(
-            CameraInfo, self.camera_info_topic, self.on_caminfo, qos
-        )
+        self.sub_faces = self.create_subscription(FaceDetection, self.face_topic, self.on_faces, 10)
+        self.sub_sal = self.create_subscription(Float32MultiArray, self.saliency_topic, self.on_saliency, 10)
+        self.sub_target = self.create_subscription(Vector3, self.target_topic, self.on_target, 10)
+        self.sub_caminfo = self.create_subscription(CameraInfo, self.camera_info_topic, self.on_caminfo, qos)
         
         # Publishers
         if self.publish_overlay:
-            self.pub_overlay = self.create_publisher(
-                CompressedImage, '/attn/visualization/compressed', 10
-            )
+            self.pub_overlay = self.create_publisher(CompressedImage, '/attn/visualization/compressed', 10)
         
         if self.publish_markers:
-            self.pub_markers = self.create_publisher(
-                MarkerArray, '/attn/markers', 10
-            )
-            self.pub_target_pose = self.create_publisher(
-                PoseStamped, '/attn/target_pose', 10
-            )
+            self.pub_markers = self.create_publisher(MarkerArray, '/attn/markers', 10)
+            self.pub_target_pose = self.create_publisher(PoseStamped, '/attn/target_pose', 10)
         
         # State
         self.bridge = CvBridge()

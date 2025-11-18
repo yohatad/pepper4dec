@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 """
 Saliency Node - Computes bottom-up visual attention
 Uses Boolean Map Saliency (BMS) + motion (optical flow)
@@ -90,7 +91,6 @@ class BooleanMapSaliency:
         # Normalize to [0, 1]
         return (attention - attention.min()) / (attention.max() - attention.min() + 1e-6)
 
-
 class SaliencyNode(Node):
     def __init__(self):
         super().__init__('saliency_node')
@@ -168,11 +168,9 @@ class SaliencyNode(Node):
         
         # Subscriber for images
         if self.image_topic.endswith('/compressed'):
-            self.sub = self.create_subscription(CompressedImage, self.image_topic, 
-                                               self.on_img_compressed, qos)
+            self.sub = self.create_subscription(CompressedImage, self.image_topic, self.on_img_compressed, qos)
         else:
-            self.sub = self.create_subscription(Image, self.image_topic, 
-                                               self.on_img_raw, qos)
+            self.sub = self.create_subscription(Image, self.image_topic,self.on_img_raw, qos)
         
         # Subscribe to joint states for motion gating
         self.create_subscription(JointState, '/joint_states', self.on_joint_states, 10)
