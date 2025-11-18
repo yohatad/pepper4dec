@@ -24,7 +24,7 @@ setup(
         (f"share/{pkg}", ["package.xml"]),
         # (f"share/{pkg}/launch", glob("launch/*.launch.py")),
         (f"share/{pkg}/config", glob("config/*")),
-        # (f"share/{pkg}/models", glob("models/*")),
+        (f"share/{pkg}/models", glob("models/*")),
         (f"share/{pkg}/data", glob("data/*")),
     ],
 )

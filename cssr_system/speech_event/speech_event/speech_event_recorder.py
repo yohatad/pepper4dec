@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 """
 ROS2 Audio Recorder for naoqi_bridge_msgs/AudioBuffer
 
@@ -11,6 +12,7 @@ Params (ros2 params):
   output_base   (string) : file path prefix without extension (default: "./pepper_audio")
   max_seconds   (int)    : stop after N seconds (0 = run until Ctrl-C)
   split_channels(bool)   : also save per-channel WAVs (default: false)
+
 """
 
 import os
@@ -22,16 +24,16 @@ from rclpy.node import Node
 from naoqi_bridge_msgs.msg import AudioBuffer
 
 CHANNEL_LABELS = {
-    AudioBuffer.CHANNEL_FRONT_LEFT:   "front_left",
-    AudioBuffer.CHANNEL_FRONT_CENTER: "front_center",
-    AudioBuffer.CHANNEL_FRONT_RIGHT:  "front_right",
-    AudioBuffer.CHANNEL_REAR_LEFT:    "rear_left",
-    AudioBuffer.CHANNEL_REAR_CENTER:  "rear_center",
-    AudioBuffer.CHANNEL_REAR_RIGHT:   "rear_right",
-    AudioBuffer.CHANNEL_SURROUND_LEFT:  "surround_left",
-    AudioBuffer.CHANNEL_SURROUND_RIGHT: "surround_right",
-    AudioBuffer.CHANNEL_SUBWOOFER:    "subwoofer",
-    AudioBuffer.CHANNEL_LFE:          "lfe",
+    AudioBuffer.CHANNEL_FRONT_LEFT:         "front_left",
+    AudioBuffer.CHANNEL_FRONT_CENTER:       "front_center",
+    AudioBuffer.CHANNEL_FRONT_RIGHT:        "front_right",
+    AudioBuffer.CHANNEL_REAR_LEFT:          "rear_left",
+    AudioBuffer.CHANNEL_REAR_CENTER:        "rear_center",
+    AudioBuffer.CHANNEL_REAR_RIGHT:         "rear_right",
+    AudioBuffer.CHANNEL_SURROUND_LEFT:      "surround_left",
+    AudioBuffer.CHANNEL_SURROUND_RIGHT:     "surround_right",
+    AudioBuffer.CHANNEL_SUBWOOFER:          "subwoofer",
+    AudioBuffer.CHANNEL_LFE:                "lfe",
 }
 
 class AudioRecorderNode(Node):
@@ -39,7 +41,7 @@ class AudioRecorderNode(Node):
         super().__init__('audio_recorder')
 
         # Declare params
-        self.declare_parameter('mic_topic', '/pepper_robot/audio')
+        self.declare_parameter('mic_topic', '/audio')
         self.declare_parameter('output_base', './pepper_audio')
         self.declare_parameter('max_seconds', 0)
         self.declare_parameter('split_channels', False)
@@ -58,9 +60,7 @@ class AudioRecorderNode(Node):
         self.shutting_down = False
 
         # Subscribe
-        self.sub = self.create_subscription(
-            AudioBuffer, self.mic_topic, self.on_audio, 10
-        )
+        self.sub = self.create_subscription(AudioBuffer, self.mic_topic, self.on_audio, 10)
         self.get_logger().info(f"Recording from: {self.mic_topic}")
         self.get_logger().info(f"Saving to base: {self.output_base}  split_channels={self.split_channels}  max_seconds={self.max_seconds or '∞'}")
 
@@ -68,7 +68,6 @@ class AudioRecorderNode(Node):
         signal.signal(signal.SIGINT, self._sigint)
 
     # ---------- helpers ----------
-
     def _open_main(self, freq: int, channels: int, channel_map):
         """Open the multichannel WAV file."""
         base = self.output_base
