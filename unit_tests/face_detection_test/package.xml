@@ -1,5 +1,5 @@
 <package format="3">
-  <name>face_detection</name>
+  <name>face_detection_test</name>
   <version>0.1.0</version>
   <description>Face detection node(s)</description>
   <maintainer email="you@example.com">Yohannes</maintainer>

@@ -1,12 +1,12 @@
 from setuptools import setup
 from glob import glob
 
-pkg = "face_detection"
+pkg = "face_detection_test"
 
 setup(
     name=pkg,
     version="0.1.0",
-    packages=["face_detection"],  
+    packages=["face_detection_test"],  
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="Yohannes",
@@ -15,7 +15,7 @@ setup(
     license="",
     entry_points={
         "console_scripts": [
-            "face_detection = face_detection.face_detection_application:main",
+            "face_detection_test = face_detection_test.face_detection_test_application:main",
         ],
     },
     data_files=[
