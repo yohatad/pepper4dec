@@ -165,7 +165,6 @@ class RobotLocalization(Node):
             f"Position reset to ({x:.3f}, {y:.3f}, {math.degrees(theta):.1f}°)"
         )
 
-
 def main(args=None):
     rclpy.init(args=args)
     
