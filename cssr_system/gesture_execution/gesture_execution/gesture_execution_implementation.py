@@ -14,8 +14,9 @@ import os
 import math
 import time
 import yaml
+import traceback
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Tuple, Optional, Any, Union
 from dataclasses import dataclass
 
 import rclpy
@@ -34,11 +35,11 @@ MIN_GESTURE_DURATION = 1000  # milliseconds
 MAX_GESTURE_DURATION = 10000  # milliseconds
 
 # Gesture types
-DIECTIC_GESTURES = "diectic"
-ICONIC_GESTURES = "iconic"
-SYMBOLIC_GESTURES = "symbolic"
-BOWING_GESTURE = "bow"
-NODDING_GESTURE = "nod"
+DEICTIC_GESTURES    = "deictic"
+ICONIC_GESTURES     = "iconic"
+SYMBOLIC_GESTURES   = "symbolic"
+BOWING_GESTURE      = "bow"
+NODDING_GESTURE     = "nod"
 
 # Robot physical constants (in millimeters)
 UPPER_ARM_LENGTH = 150.0
@@ -94,7 +95,7 @@ class ConfigManager:
         config = {
             "gestureDescriptors": "gestureDescriptors.dat",
             "robotTopics": "pepperTopics.dat", 
-            "verboseMode": False
+            "verboseMode": True  # Changed to True for debugging
         }
         
         try:
@@ -141,11 +142,12 @@ class GestureDescriptorManager:
         self.gestures_data = self.load_gestures_yaml()
         
         # Home positions for each actuator
+        # Joint order - ShoulderPitch, ShoulderRoll, ElbowYaw, ElbowRoll, WristYaw
         self.home_positions = {
-            'RArm': [1.7410, -0.09664, 0.09664, 1.6981, -0.05679],
-            'LArm': [1.7625, 0.09970, -0.1334, -1.7150, 0.06592],
+            'RArm': [1.7410, -0.09664, 1.6981, 0.09664, -0.05679],
+            'LArm': [1.7625, 0.09970, -1.7150, -0.1334, 0.06592],
             'Head': [-0.2, 0.0],
-            'Leg': [0.0, 0.0, 0.0]
+            'Leg' : [0.0, 0.0, 0.0]
         }
     
     def load_gestures_yaml(self) -> Dict:
@@ -173,8 +175,7 @@ class GestureDescriptorManager:
         return None
 
 class GestureExecutionSystem(Node):
-    """Main ROS2 node for gesture execution"""
-    
+    """Main ROS2 node for gesture execution"""  
     def __init__(self):
         super().__init__("gesture_execution")
         
@@ -195,21 +196,23 @@ class GestureExecutionSystem(Node):
         
         self.setup_ros_interfaces()
         self.get_logger().info("Gesture Execution System initialized")
+        self.get_logger().info("Gesture Execution System started - waiting for service calls")
     
     def init_joint_states(self):
         """Initialize joint state storage"""
+        # FIXED: Consistent joint order matching home_positions
         self.joint_states = {
             'HeadPitch': self.joint_limits.DEFAULT_HEAD_PITCH,
             'HeadYaw': self.joint_limits.DEFAULT_HEAD_YAW,
             'RShoulderPitch': self.descriptor_manager.home_positions['RArm'][0],
             'RShoulderRoll': self.descriptor_manager.home_positions['RArm'][1], 
-            'RElbowRoll': self.descriptor_manager.home_positions['RArm'][2],
-            'RElbowYaw': self.descriptor_manager.home_positions['RArm'][3],
+            'RElbowYaw': self.descriptor_manager.home_positions['RArm'][2],
+            'RElbowRoll': self.descriptor_manager.home_positions['RArm'][3],
             'RWristYaw': self.descriptor_manager.home_positions['RArm'][4],
             'LShoulderPitch': self.descriptor_manager.home_positions['LArm'][0],
             'LShoulderRoll': self.descriptor_manager.home_positions['LArm'][1],
-            'LElbowRoll': self.descriptor_manager.home_positions['LArm'][2],
-            'LElbowYaw': self.descriptor_manager.home_positions['LArm'][3],
+            'LElbowYaw': self.descriptor_manager.home_positions['LArm'][2],
+            'LElbowRoll': self.descriptor_manager.home_positions['LArm'][3],
             'LWristYaw': self.descriptor_manager.home_positions['LArm'][4],
             'HipPitch': self.descriptor_manager.home_positions['Leg'][0],
             'HipRoll': self.descriptor_manager.home_positions['Leg'][1],
@@ -224,12 +227,12 @@ class GestureExecutionSystem(Node):
         self.create_subscription(JointState, topics["JointStates"], self.joint_states_callback, 10)
         self.create_subscription(Pose2D, topics["RobotPose"], self.robot_pose_callback, 10)
         
-        # Publishers
-        self.joint_traj_pub = self.create_publisher(JointAngleTrajectory,'/naoqi_driver/joint_angle_traj', 10)
+        # Publishers - FIXED: Correct topic name
+        self.joint_traj_pub = self.create_publisher(JointAngleTrajectory, '/joint_angle_trajectory', 10)
         self.cmd_vel_pub = self.create_publisher(Twist, topics["Wheels"], 10)
         
         # Services
-        self.create_service(PerformGesture, "/gestureExecution/perform_gesture", self.perform_gesture_callback)
+        self.create_service(PerformGesture, "/gesture_execution/perform_gesture", self.perform_gesture_callback)
     
     def joint_states_callback(self, msg: JointState):
         """Handle joint state"""
@@ -243,13 +246,14 @@ class GestureExecutionSystem(Node):
         self.robot_pose.y = msg.y
         self.robot_pose.theta = msg.theta
     
-    def perform_gesture_callback(self, request, response):
+    def perform_gesture_callback(self, request: PerformGesture.Request,
+                             response: PerformGesture.Response):
         """Handle gesture execution requests"""
         try:
             success = self.execute_gesture(
                 gesture_type=request.gesture_type,
                 gesture_id=request.gesture_id,
-                speed=request.speed,
+                gesture_duration=request.speed,
                 bow_nod_angle=request.bow_nod_angle,
                 location_x=request.location_x,
                 location_y=request.location_y,
@@ -265,17 +269,21 @@ class GestureExecutionSystem(Node):
                 
         except Exception as e:
             self.get_logger().error(f"Gesture execution error: {e}")
+            self.get_logger().error(traceback.format_exc())
             response.gesture_success = 0
         
         return response
     
     def execute_gesture(self, gesture_type: str, gesture_id: int, gesture_duration: int,
-                       bow_nod_angle: int, location_x: float, location_y: float, location_z: float) -> bool:
+                   bow_nod_angle: int, location_x: float, location_y: float, location_z: float) -> bool:
         """Main gesture execution logic"""
+        
+        # FIXED: Normalize gesture type - strip whitespace and convert to lowercase
+        gesture_type = gesture_type.strip().lower()
         
         if self.verbose_mode:
             self.get_logger().info(
-                f"Gesture request - Type: {gesture_type}, ID: {gesture_id}, "
+                f"Gesture request - Type: '{gesture_type}', ID: {gesture_id}, "
                 f"Duration: {gesture_duration}ms, Angle: {bow_nod_angle}°, "
                 f"Location: ({location_x:.2f}, {location_y:.2f}, {location_z:.2f})"
             )
@@ -283,25 +291,25 @@ class GestureExecutionSystem(Node):
         # Clamp gesture duration to limits
         gesture_duration = max(MIN_GESTURE_DURATION, min(gesture_duration, MAX_GESTURE_DURATION))
         
-        # Execute based on gesture type
-        if gesture_type == DIECTIC_GESTURES:
+        # Execute based on gesture type - Use normalized lowercase
+        if gesture_type in ["deictic", "pointing"]:
             return self.execute_deictic_gesture(location_x, location_y, location_z, gesture_duration)
         
-        elif gesture_type == ICONIC_GESTURES:
+        elif gesture_type == "iconic":
             return self.execute_iconic_gesture(gesture_id, gesture_duration)
         
-        elif gesture_type == SYMBOLIC_GESTURES:
+        elif gesture_type == "symbolic":
             self.get_logger().warning("Symbolic gestures not implemented yet")
             return False
         
-        elif gesture_type == BOWING_GESTURE:
+        elif gesture_type in ["bow", "bowing"]:
             return self.execute_bowing_gesture(bow_nod_angle, gesture_duration)
         
-        elif gesture_type == NODDING_GESTURE:
+        elif gesture_type in ["nod", "nodding"]:
             return self.execute_nodding_gesture(bow_nod_angle, gesture_duration)
         
         else:
-            self.get_logger().warning(f"Unsupported gesture type: {gesture_type}")
+            self.get_logger().warning(f"Unsupported gesture type: '{gesture_type}'")
             return False
     
     def execute_deictic_gesture(self, point_x: float, point_y: float, point_z: float, duration: int) -> bool:
@@ -395,6 +403,7 @@ class GestureExecutionSystem(Node):
             
         except Exception as e:
             self.get_logger().error(f"Deictic gesture execution failed: {e}")
+            self.get_logger().error(traceback.format_exc())
             return False
     
     def execute_pointing_motion(self, arm: int, shoulder_pitch: float, shoulder_roll: float, duration: int) -> bool:
@@ -402,14 +411,14 @@ class GestureExecutionSystem(Node):
         try:
             duration_sec = duration / 1000.0
             
-            # Set fixed values for other joints during pointing
+            # FIXED: Consistent joint order - ShoulderPitch, ShoulderRoll, ElbowYaw, ElbowRoll, WristYaw
             if arm == RIGHT_ARM:
-                joint_names = ['RShoulderPitch', 'RShoulderRoll', 'RElbowRoll', 'RElbowYaw', 'RWristYaw']
-                pointing_angles = [shoulder_pitch, shoulder_roll, 0.0, 2.0857, -0.05679]
+                joint_names = ['RShoulderPitch', 'RShoulderRoll', 'RElbowYaw', 'RElbowRoll', 'RWristYaw']
+                pointing_angles = [shoulder_pitch, shoulder_roll, 2.0857, 0.0, -0.05679]
                 home_position = self.descriptor_manager.home_positions['RArm']
             else:
-                joint_names = ['LShoulderPitch', 'LShoulderRoll', 'LElbowRoll', 'LElbowYaw', 'LWristYaw']
-                pointing_angles = [shoulder_pitch, shoulder_roll, -0.0, -1.5620, 0.06592]
+                joint_names = ['LShoulderPitch', 'LShoulderRoll', 'LElbowYaw', 'LElbowRoll', 'LWristYaw']
+                pointing_angles = [shoulder_pitch, shoulder_roll, -1.5620, -0.0, 0.06592]
                 home_position = self.descriptor_manager.home_positions['LArm']
             
             # Create smooth trajectory: home -> pointing -> home
@@ -423,10 +432,17 @@ class GestureExecutionSystem(Node):
             
         except Exception as e:
             self.get_logger().error(f"Pointing motion failed: {e}")
+            self.get_logger().error(traceback.format_exc())
             return False
     
     def execute_iconic_gesture(self, gesture_id: int, duration: int) -> bool:
-        """Execute iconic gesture from YAML configuration"""
+        """
+        Execute iconic gesture from YAML configuration with independent arm timing
+        
+        Args:
+            gesture_id: ID of the gesture to execute
+            duration: Duration in milliseconds (fallback if no times specified)
+        """
         try:
             gesture_info = self.descriptor_manager.get_gesture_by_id(gesture_id)
             if not gesture_info:
@@ -434,62 +450,91 @@ class GestureExecutionSystem(Node):
                 return False
             
             gesture_data = gesture_info["data"]
-            arm_name = gesture_data.get("arm")
-            joint_angles_list = gesture_data.get("joint_angles", [])
+            arms_to_execute = gesture_data.get("joints", [])
+            joint_angles_dict = gesture_data.get("joint_angles", {})
+            times_dict = gesture_data.get("times", {})  # Dictionary per arm
             
-            if not joint_angles_list:
+            if not joint_angles_dict:
                 self.get_logger().error("No joint angles found in gesture data")
                 return False
             
-            # Determine joint names based on arm
-            if arm_name == "RArm":
-                joint_names = ['RShoulderPitch', 'RShoulderRoll', 'RElbowYaw', 'RElbowRoll', 'RWristYaw']
-            elif arm_name == "LArm":
-                joint_names = ['LShoulderPitch', 'LShoulderRoll', 'LElbowYaw', 'LElbowRoll', 'LWristYaw']
-            else:
-                self.get_logger().error(f"Unknown arm: {arm_name}")
+            if not arms_to_execute:
+                self.get_logger().error("No arms specified in gesture data")
                 return False
-            
-            # Execute gesture motion
-            return self.execute_iconic_motion(joint_names, joint_angles_list, arm_name, duration)
-            
-        except Exception as e:
-            self.get_logger().error(f"Iconic gesture execution failed: {e}")
-            return False
-    
-    def execute_iconic_motion(self, joint_names: List[str], joint_angles_list: List[List[float]], 
-                         arm_name: str, duration: int) -> bool:
-        """Execute the iconic gesture motion with smooth Bezier interpolation"""
-        try:
-            duration_sec = duration / 1000.0
-            num_waypoints = len(joint_angles_list)
             
             if self.verbose_mode:
                 self.get_logger().info(
-                    f"Executing iconic gesture on {arm_name} with {num_waypoints} waypoints "
-                    f"over {duration_sec}s using Bezier interpolation"
+                    f"Executing gesture '{gesture_info['name']}' on arms: {arms_to_execute}"
                 )
             
-            # Use Bezier for smooth biological motion
-            self.move_joints_bezier(joint_names, joint_angles_list, duration_sec, use_bezier=True)
+            # Collect all joint names and trajectories for simultaneous execution
+            all_joint_names = []
+            all_joint_angles = []
+            all_times = []
             
-            # Wait for gesture to complete
-            time.sleep(duration_sec)
+            for arm_name in arms_to_execute:
+                if arm_name not in joint_angles_dict:
+                    self.get_logger().warning(f"No angles defined for {arm_name}")
+                    continue
+                
+                joint_angles_list = joint_angles_dict[arm_name]
+                
+                # Get joint names for this arm
+                if arm_name == "RArm":
+                    joint_names = ['RShoulderPitch', 'RShoulderRoll', 'RElbowYaw', 'RElbowRoll', 'RWristYaw']
+                elif arm_name == "LArm":
+                    joint_names = ['LShoulderPitch', 'LShoulderRoll', 'LElbowYaw', 'LElbowRoll', 'LWristYaw']
+                else:
+                    self.get_logger().warning(f"Unknown arm: {arm_name}")
+                    continue
+                
+                # Get timing for this specific arm
+                arm_times = times_dict.get(arm_name, None)
+                
+                # Calculate duration for this arm
+                if arm_times:
+                    arm_duration = arm_times[-1]
+                else:
+                    arm_duration = duration / 1000.0
+                    # Generate evenly spaced times
+                    num_waypoints = len(joint_angles_list)
+                    arm_times = [arm_duration * (i + 1) / num_waypoints for i in range(num_waypoints)]
+                
+                if self.verbose_mode:
+                    self.get_logger().info(
+                        f"  {arm_name}: {len(joint_angles_list)} waypoints, "
+                        f"duration: {arm_duration:.2f}s"
+                    )
+                
+                # Add this arm's data to the combined lists
+                all_joint_names.extend(joint_names)
+                
+                # Flatten the waypoints for this arm: [j1_wp1, j1_wp2, ..., j2_wp1, j2_wp2, ...]
+                num_joints = len(joint_names)
+                num_waypoints = len(joint_angles_list)
+                
+                for joint_idx in range(num_joints):
+                    for waypoint_idx in range(num_waypoints):
+                        all_joint_angles.append(float(joint_angles_list[waypoint_idx][joint_idx]))
+                        all_times.append(float(arm_times[waypoint_idx]))
             
-            # Return to home position smoothly
-            home_position = self.descriptor_manager.home_positions[arm_name]
-            self.move_joints_bezier(joint_names, [home_position], duration_sec * 0.5, use_bezier=True)
-            time.sleep(duration_sec * 0.5)
+            if not all_joint_names:
+                self.get_logger().error("No valid joints to execute")
+                return False
+            
+            # Execute all arms simultaneously in one call
+            self.move_joints_bezier(all_joint_names, all_joint_angles,all_times,use_bezier=True)
             
             return True
             
         except Exception as e:
-            self.get_logger().error(f"Iconic motion execution failed: {e}")
+            self.get_logger().error(f"Iconic gesture execution failed: {e}")
+            self.get_logger().error(traceback.format_exc())
             return False
     
     def execute_bowing_gesture(self, bow_angle: int, duration: int) -> bool:
         """Execute bowing gesture with smooth Bezier interpolation"""
-        try:
+        try:    
             duration_sec = duration / 1000.0
             
             # Clamp bow angle to limits
@@ -509,6 +554,7 @@ class GestureExecutionSystem(Node):
             
         except Exception as e:
             self.get_logger().error(f"Bowing gesture failed: {e}")
+            self.get_logger().error(traceback.format_exc())
             return False
 
     def execute_nodding_gesture(self, nod_angle: int, duration: int) -> bool:
@@ -527,12 +573,12 @@ class GestureExecutionSystem(Node):
             # Smooth nod: home -> nod -> home
             waypoints = [home_position, nod_position, home_position]
             self.move_joints_bezier(joint_names, waypoints, duration_sec * 2, use_bezier=True)
-            time.sleep(duration_sec * 2)
             
             return True
             
         except Exception as e:
             self.get_logger().error(f"Nodding gesture failed: {e}")
+            self.get_logger().error(traceback.format_exc())
             return False
     
     def rotate_robot(self, angle_degrees: float):
@@ -559,70 +605,97 @@ class GestureExecutionSystem(Node):
         except Exception as e:
             self.get_logger().error(f"Robot rotation failed: {e}")
     
-    def move_joints_bezier(self, joint_names: List[str], joint_angles_waypoints: List[List[float]], 
-                       total_duration: float, use_bezier: bool = True):
+    def move_joints_bezier(self, joint_names: List[str], 
+                   joint_angles: Union[List[List[float]], List[float]], 
+                   times: Union[List[float], float],
+                   use_bezier: bool = True):
         """
         Move joints through multiple waypoints using trajectory control
         
         Args:
             joint_names: List of joint names
-            joint_angles_waypoints: List of waypoint angles [waypoint1, waypoint2, ...]
-            total_duration: Total duration in seconds
+            joint_angles: Flat list of angles [j1_wp1, j1_wp2, ..., j2_wp1, ...] OR list of waypoints
+            times: Flat list of times [t1, t2, ...] OR single duration
             use_bezier: If True, use Bezier interpolation for smooth motion
         """
         try:
-            num_waypoints = len(joint_angles_waypoints)
-            if num_waypoints == 0:
-                self.get_logger().error("No waypoints provided")
+            num_joints = len(joint_names)
+            
+            # Handle different input formats
+            if isinstance(joint_angles, list) and len(joint_angles) > 0:
+                # Check if it's a flat list or list of lists
+                if isinstance(joint_angles[0], (list, tuple)):
+                    # List of waypoints format: [[wp1], [wp2], ...]
+                    num_waypoints = len(joint_angles)
+                    
+                    if not all(len(wp) == num_joints for wp in joint_angles):
+                        self.get_logger().error(
+                            f"Waypoint dimension mismatch: expected {num_joints} joints"
+                        )
+                        return
+                    
+                    # Convert to flat format for message
+                    msg_joint_angles = []
+                    msg_times = []
+                    
+                    # Handle times parameter
+                    if isinstance(times, (int, float)):
+                        # Generate evenly spaced times
+                        times_list = [float(times * (i + 1) / num_waypoints) 
+                                    for i in range(num_waypoints)]
+                    elif isinstance(times, list):
+                        times_list = times
+                        if len(times_list) != num_waypoints:
+                            self.get_logger().error(
+                                f"Times list length ({len(times_list)}) doesn't match waypoints ({num_waypoints})"
+                            )
+                            return
+                    else:
+                        self.get_logger().error("Invalid times type")
+                        return
+                    
+                    # NAOqi format: [j1_wp1, j1_wp2, ..., j2_wp1, j2_wp2, ...]
+                    for joint_idx in range(num_joints):
+                        for waypoint_idx in range(num_waypoints):
+                            msg_joint_angles.append(float(joint_angles[waypoint_idx][joint_idx]))
+                            msg_times.append(float(times_list[waypoint_idx]))
+                else:
+                    # Already flat format: [j1_wp1, j1_wp2, ..., j2_wp1, j2_wp2, ...]
+                    msg_joint_angles = [float(a) for a in joint_angles]
+                    
+                    if isinstance(times, list):
+                        msg_times = [float(t) for t in times]
+                    else:
+                        self.get_logger().error("Times must be a list for flat angle format")
+                        return
+                    
+                    if len(msg_joint_angles) != len(msg_times):
+                        self.get_logger().error(
+                            f"Angles length ({len(msg_joint_angles)}) != times length ({len(msg_times)})"
+                        )
+                        return
+            else:
+                self.get_logger().error("No joint angles provided")
                 return
             
-            # For single joint with multiple waypoints
-            if len(joint_names) == 1:
-                # Flatten waypoints into single list
-                angles = [wp[0] for wp in joint_angles_waypoints]
-                
-                # Create evenly spaced time points
-                times = [total_duration * (i + 1) / num_waypoints for i in range(num_waypoints)]
-                
-                msg = JointAngleTrajectory()
-                msg.header.stamp = self.get_clock().now().to_msg()
-                msg.joint_names = joint_names
-                msg.joint_angles = [float(angle) for angle in angles]
-                msg.times = [float(t) for t in times]
-                msg.relative = 0  # Absolute angles
-                msg.use_bezier = use_bezier
-                
-                self.joint_traj_pub.publish(msg)
-                
-                if self.verbose_mode:
-                    self.get_logger().info(
-                        f"Published {'Bezier' if use_bezier else 'linear'} trajectory: "
-                        f"{joint_names[0]} with {num_waypoints} waypoints over {total_duration}s"
-                    )
+            msg = JointAngleTrajectory()
+            msg.header.stamp = self.get_clock().now().to_msg()
+            msg.joint_names = joint_names
+            msg.relative = 0
+            msg.use_bezier = use_bezier
+            msg.joint_angles = msg_joint_angles
+            msg.times = msg_times
             
-            # For multiple joints moving together
-            elif len(joint_names) == len(joint_angles_waypoints[0]):
-                # Each waypoint should be executed sequentially
-                waypoint_duration = total_duration / num_waypoints
-                
-                for i, waypoint in enumerate(joint_angles_waypoints):
-                    msg = JointAngleTrajectory()
-                    msg.header.stamp = self.get_clock().now().to_msg()
-                    msg.joint_names = joint_names
-                    msg.joint_angles = [float(angle) for angle in waypoint]
-                    msg.times = [float(waypoint_duration) for _ in joint_names]
-                    msg.relative = 0
-                    msg.use_bezier = use_bezier
-                    
-                    self.joint_traj_pub.publish(msg)
-                    
-                    if i < num_waypoints - 1:  # Don't sleep after last waypoint
-                        time.sleep(waypoint_duration)
+            self.joint_traj_pub.publish(msg)
             
-            else:
-                self.get_logger().error(
-                    f"Mismatch: {len(joint_names)} joints but waypoint has {len(joint_angles_waypoints[0])} angles"
+            if self.verbose_mode:
+                num_waypoints = len(msg_joint_angles) // num_joints if num_joints > 0 else 0
+                total_time = msg_times[-1] if msg_times else 0.0
+                self.get_logger().info(
+                    f"Published {'Bezier' if use_bezier else 'linear'} trajectory: "
+                    f"{num_joints} joints, {num_waypoints} waypoints over {total_time:.2f}s"
                 )
                 
         except Exception as e:
             self.get_logger().error(f"Bezier trajectory failed: {e}")
+            self.get_logger().error(traceback.format_exc())

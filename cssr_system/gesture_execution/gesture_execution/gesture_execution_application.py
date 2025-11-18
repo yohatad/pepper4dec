@@ -11,7 +11,7 @@ def main(args=None):
     """
     rclpy.init(args=args)
     
-    node_name = "overtAttention"
+    node_name = "gesture_execution"
     
     # Construct the copyright message
     copyright_message = (
@@ -23,7 +23,6 @@ def main(args=None):
 
     try:
         gesture_system = GestureExecutionSystem()
-        
         gesture_system.get_logger().info("Gesture Execution System started - waiting for service calls")
         
         # Spin to handle service calls

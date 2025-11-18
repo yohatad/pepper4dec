@@ -2,9 +2,9 @@
 """
 pepper_kinematics_utilities.py
 
-Author: Yohannes Haile (Converted to Python)
+Author: Yohannes Haile
 Date: September 24, 2025
-Version: v2.0
+Version: v1.0
 
 Pure Python implementation of Pepper robot kinematics utilities
 """
