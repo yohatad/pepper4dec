@@ -13,22 +13,22 @@ def generate_launch_description():
     
     return LaunchDescription([
         # Map Server
-        Node(
-            package='nav2_map_server',
-            executable='map_server',
-            name='map_server',
-            output='screen',
-            parameters=[{'yaml_filename': map_file}]
-        ),
+        # Node(
+        #     package='nav2_map_server',
+        #     executable='map_server',
+        #     name='map_server',
+        #     output='screen',
+        #     parameters=[{'yaml_filename': map_file}]
+        # ),
         
-        # AMCL (Localization)
-        Node(
-            package='nav2_amcl',
-            executable='amcl',
-            name='amcl',
-            output='screen',
-            parameters=[params_file]
-        ),
+        # # AMCL (Localization)
+        # Node(
+        #     package='nav2_amcl',
+        #     executable='amcl',
+        #     name='amcl',
+        #     output='screen',
+        #     parameters=[params_file]
+        # ),
         
         # Nav2 Controller
         Node(
@@ -75,8 +75,8 @@ def generate_launch_description():
             parameters=[{
                 'autostart': True,
                 'node_names': [
-                    'map_server',
-                    'amcl',
+                    # 'map_server',
+                    # 'amcl',
                     'controller_server',
                     'planner_server',
                     'behavior_server',
