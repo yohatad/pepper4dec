@@ -64,8 +64,6 @@ class AudioRecorderNode(Node):
         self.get_logger().info(f"Recording from: {self.mic_topic}")
         self.get_logger().info(f"Saving to base: {self.output_base}  split_channels={self.split_channels}  max_seconds={self.max_seconds or '∞'}")
 
-        # SIGINT-friendly
-        signal.signal(signal.SIGINT, self._sigint)
 
     # ---------- helpers ----------
     def _open_main(self, freq: int, channels: int, channel_map):
@@ -113,7 +111,6 @@ class AudioRecorderNode(Node):
         self.get_logger().info("Ctrl-C received. Stopping recording...")
         self.shutting_down = True
         self._close_all()
-        rclpy.shutdown()
 
     # ---------- callback ----------
     def on_audio(self, msg: AudioBuffer):
@@ -174,6 +171,8 @@ def main():
     node = AudioRecorderNode()
     try:
         rclpy.spin(node)
+    except KeyboardInterrupt:
+        node.get_logger().info("Ctrl-C received. Stopping recording...")
     finally:
         node._close_all()
         node.destroy_node()
