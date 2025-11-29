@@ -352,7 +352,6 @@ class SelectExhibit(py_trees.behaviour.Behaviour):
         self.node.get_logger().info(f"Selected exhibit: {selected}")
         return Status.SUCCESS
 
-
 class DescribeExhibitSpeech(py_trees.behaviour.Behaviour):
     """Describe the current exhibit."""
     def __init__(self, name="DescribeExhibitSpeech", node: Node=None, speech_part="full", duration=4.0):
@@ -384,7 +383,6 @@ class DescribeExhibitSpeech(py_trees.behaviour.Behaviour):
             return Status.SUCCESS
         return Status.RUNNING
 
-
 class ResetRobotPose(py_trees.behaviour.Behaviour):
     """Reset robot to home position (stub)."""
     def __init__(self, name="ResetRobotPose", node: Node=None):
@@ -395,7 +393,6 @@ class ResetRobotPose(py_trees.behaviour.Behaviour):
         self.node.get_logger().info("Resetting robot pose")
         # TODO: call a service / publish to reset pose in your stack
         return Status.SUCCESS
-
 
 class GetVisitorResponse(py_trees.behaviour.Behaviour):
     """Get yes/no response from visitor via ASR."""
@@ -431,7 +428,6 @@ class GetVisitorResponse(py_trees.behaviour.Behaviour):
             self.node.get_logger().info(f"Got response: {self.latest}")
             return Status.SUCCESS
         return Status.RUNNING
-
 
 class PressYesNoDialogue(py_trees.behaviour.Behaviour):
     """Wait for yes/no via button press."""

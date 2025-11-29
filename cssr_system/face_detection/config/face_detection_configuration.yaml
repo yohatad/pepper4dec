@@ -5,9 +5,9 @@
 algorithm: "sixdrep"         # Choose algorithm: "mediapipe" or "sixdrep"
 
 # General Settings
-useCompressed: false         # Use compressed image topics
+useCompressed: true         # Use compressed image topics
 camera: "realsense"          # Camera type: "realsense", "pepper", or "video"
-verboseMode: true            # Enable verbose logging and display
+verboseMode: false            # Enable verbose logging and display
 imageTimeout: 2.0            # Timeout in seconds for image reception
 
 # MediaPipe Algorithm Settings
@@ -22,3 +22,7 @@ sixdrepnetHeadposeAngle: 10  # Head pose angle threshold for mutual gaze (degree
 sortMaxDisappeared: 5        # Max age for SORT tracker
 sortMinHits: 3               # Min hits required for SORT tracker
 sortIouThreshold: 0.3        # IoU threshold for SORT tracker (0.0-1.0)
+
+# DEPTH QUERY MODE CONFIGURATION
+useDepthService: false
+depthServiceTimeout: 0.1
