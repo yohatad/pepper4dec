@@ -290,17 +290,34 @@ class FaceDetectionNode(Node):
         """Process depth image data."""
         try:
             if isinstance(depth_data, CompressedImage):
-                if hasattr(depth_data, "format") and depth_data.format and "compressedDepth png" in depth_data.format:
-                    # Handle PNG compression
-                    depth_header_size = 12
-                    depth_img_data = depth_data.data[depth_header_size:]
-                    np_arr = np.frombuffer(depth_img_data, np.uint8)
-                    return cv2.imdecode(np_arr, cv2.IMREAD_ANYDEPTH)
-                else:
-                    # Regular compressed image
-                    np_arr = np.frombuffer(depth_data.data, np.uint8)
-                    return cv2.imdecode(np_arr, cv2.IMREAD_UNCHANGED)
+                # Check if this is a compressedDepth format (ROS2 standard)
+                if hasattr(depth_data, "format") and depth_data.format:
+                    if "compressedDepth" in depth_data.format:
+                        depth_header_size = 12
+                        
+                        # Extract header values if needed
+                        header_data = np.frombuffer(depth_data.data[:depth_header_size], np.float32)
+     
+                        # Extract actual image data
+                        depth_img_data = depth_data.data[depth_header_size:]
+                        np_arr = np.frombuffer(depth_img_data, np.uint8)
+                        
+                        # Decode as 16-bit depth image
+                        depth_image = cv2.imdecode(np_arr, cv2.IMREAD_ANYDEPTH)
+                        
+                        if depth_image is None:
+                            self.get_logger().warn(f"Failed to decode compressedDepth image, format: {depth_data.format}")
+                        return depth_image
+                    else:
+                        # Regular compressed image (JPEG/PNG)
+                        np_arr = np.frombuffer(depth_data.data, np.uint8)
+                        depth_image = cv2.imdecode(np_arr, cv2.IMREAD_UNCHANGED)
+                        
+                        if depth_image is None:
+                            self.get_logger().warn(f"Failed to decode compressed image, format: {depth_data.format}")
+                        return depth_image
             else:
+                # Handle uncompressed Image message
                 return self.bridge.imgmsg_to_cv2(depth_data, desired_encoding="passthrough")
         except Exception as e:
             self.get_logger().error(f"Depth image processing error: {e}")
