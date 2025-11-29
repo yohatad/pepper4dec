@@ -1,13 +1,3 @@
-"""
-face_detection_implementation.py Implementation code for running the Face and Mutual Gaze Detection and Localization ROS2 node.
-
-Author: Yohannes Tadesse Haile
-Date: April 18, 2025
-Version: v1.0
-
-This program comes with ABSOLUTELY NO WARRANTY.
-"""
-
 import cv2
 import numpy as np
 import rclpy
@@ -70,7 +60,10 @@ class FaceDetectionNode(Node):
         self.config = config
         self.pub_gaze = self.create_publisher(FaceDetection, "/faceDetection/data", 10)
         self.debug_pub = self.create_publisher(Image, "/faceDetection/debug", 1)
-        self.depth_debug_pub = self.create_publisher(Image, "/faceDetection/depth_debug", 1)
+        
+        # Only publish depth debug if not using service mode
+        if not config.get('useDepthService', False):
+            self.depth_debug_pub = self.create_publisher(Image, "/faceDetection/depth_debug", 1)
 
         self.bridge = CvBridge()
         self.depth_image: Optional[np.ndarray] = None
@@ -81,6 +74,8 @@ class FaceDetectionNode(Node):
         self.camera_type = config['camera']
         self.verbose_mode = config['verboseMode']
         self.image_timeout = config['imageTimeout']
+        self.use_depth_service = config.get('useDepthService', False)
+        self.depth_service_timeout = config.get('depthServiceTimeout', 0.1)
         
         self.node_name = self.get_name()
         self.timer_start = self.get_clock().now()
@@ -103,6 +98,15 @@ class FaceDetectionNode(Node):
         # Start visualization timer (30 Hz)
         self.vis_timer = self.create_timer(1.0 / 30.0, self.visualization_callback)
 
+    def _get_depth_service_name(self) -> str:
+        """Get the depth service name based on camera type."""
+        if self.camera_type == "realsense":
+            return "/realsense/depth_query"
+        elif self.camera_type == "pepper":
+            return "/pepper/depth_query"
+        else:
+            return "/depth_query"  # Default service name
+
     def update_latest_frame(self, frame: np.ndarray):
         """Update the latest frame safely for visualization."""
         with self.frame_lock:
@@ -119,25 +123,25 @@ class FaceDetectionNode(Node):
             if self.depth_image is not None:
                 depth_vis = self.make_depth_vis(self.depth_image)
 
-        if color_frame is None and depth_vis is None:
+        if color_frame is None and (not self.use_depth_service and depth_vis is None):
             return
 
         if self.config.get("verboseMode", False) and os.environ.get("DISPLAY", "") != "":
             try:
                 if color_frame is not None:
                     cv2.imshow("Face Detection Debug (RGB)", color_frame)
-                if depth_vis is not None:
+                if depth_vis is not None and not self.use_depth_service:
                     cv2.imshow("Face Detection Debug (Depth)", depth_vis)
                 cv2.waitKey(1)
             except Exception as e:
                 self.get_logger().warn(f"imshow failed (likely headless): {e}")
 
-            # Publish only when verboseMode=True (as per your intent)
+            # Publish only when verboseMode=True
             try:
                 if color_frame is not None:
                     msg = self.bridge.cv2_to_imgmsg(color_frame, encoding="bgr8")
                     self.debug_pub.publish(msg)
-                if depth_vis is not None:
+                if depth_vis is not None and not self.use_depth_service:
                     dmsg = self.bridge.cv2_to_imgmsg(depth_vis, encoding="bgr8")
                     self.depth_debug_pub.publish(dmsg)
             except Exception as e:
@@ -155,10 +159,14 @@ class FaceDetectionNode(Node):
             
         rgb_key, depth_key = topic_mapping[self.camera_type]
         rgb_topic = self.extract_topic(rgb_key)
-        depth_topic = self.extract_topic(depth_key)
         
-        if not rgb_topic or not depth_topic:
-            raise ValueError("Failed to extract camera topics")
+        # Only get depth topic if not using service mode
+        depth_topic = None if self.use_depth_service else self.extract_topic(depth_key)
+        
+        if not rgb_topic:
+            raise ValueError("Failed to extract RGB camera topic")
+        if not self.use_depth_service and not depth_topic:
+            raise ValueError("Failed to extract depth camera topic")
             
         return rgb_topic, depth_topic
 
@@ -221,20 +229,22 @@ class FaceDetectionNode(Node):
             # Determine final topic names based on compression
             if self.use_compressed and self.camera_type == "realsense":
                 color_topic = rgb_topic + "/compressed"
-                depth_topic = depth_topic + "/compressedDepth"
                 color_msg_type = CompressedImage
-                depth_msg_type = CompressedImage
+                
+                if not self.use_depth_service:
+                    depth_topic = depth_topic + "/compressedDepth"
+                    depth_msg_type = CompressedImage
             elif self.use_compressed and self.camera_type == "pepper":
                 self.get_logger().warn("Compressed images not available for Pepper cameras")
                 color_topic = rgb_topic
-                depth_topic = depth_topic
                 color_msg_type = Image
-                depth_msg_type = Image
+                if not self.use_depth_service:
+                    depth_msg_type = Image
             else:
                 color_topic = rgb_topic
-                depth_topic = depth_topic
                 color_msg_type = Image
-                depth_msg_type = Image
+                if not self.use_depth_service:
+                    depth_msg_type = Image
 
             # Wait for topics including object detection
             object_detection_topic = "/objectDetection/data"
@@ -249,10 +259,10 @@ class FaceDetectionNode(Node):
             self.get_logger().info(f"Subscribed to {depth_topic}")
             self.get_logger().info(f"Subscribed to {object_detection_topic}")
 
-            # Set up synchronizer
-            slop = 5.0 if self.camera_type == "pepper" else 0.1
-            self.ats = ApproximateTimeSynchronizer([self.color_sub, self.depth_sub], queue_size=10, slop=slop)
-            self.ats.registerCallback(self.synchronized_callback)
+                # Set up synchronizer
+                slop = 5.0 if self.camera_type == "pepper" else 0.1
+                self.ats = ApproximateTimeSynchronizer([self.color_sub, self.depth_sub], queue_size=10, slop=slop)
+                self.ats.registerCallback(self.synchronized_callback)
             
             return True
             
@@ -260,17 +270,33 @@ class FaceDetectionNode(Node):
             self.get_logger().error(f"Failed to setup subscribers: {e}")
             return False
 
+    def color_only_callback(self, color_data):
+        """Process color image only (when using depth service)."""
+        self.last_image_time = self.get_clock().now().nanoseconds / 1e9
+        
+        try:
+            # Process color image
+            if isinstance(color_data, CompressedImage):
+                np_arr = np.frombuffer(color_data.data, np.uint8)
+                self.color_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            else:
+                self.color_image = self.bridge.imgmsg_to_cv2(color_data, desired_encoding="bgr8")
+
+            if self.color_image is None:
+                self.get_logger().warn("Failed to decode color image")
+                return
+
+            # Process the images (depth will be queried via service as needed)
+            self.process_images()
+            
+        except Exception as e:
+            self.get_logger().error(f"Error in color_only_callback: {e}")
+
     def synchronized_callback(self, color_data, depth_data):
         """Process synchronized color and depth images."""
         self.last_image_time = self.get_clock().now().nanoseconds / 1e9
         
         try:
-            # check if the depth camera and color camera have the same resolution.
-            if self.depth_image is not None:
-                if not self.check_camera_resolution(self.color_image, self.depth_image) and self.camera_type != "pepper":
-                    self.get_logger().error(f"{self.node_name}: Color camera and depth camera have different resolutions.")
-                    rclpy.shutdown()
-                    
             # Process color image
             if isinstance(color_data, CompressedImage):
                 np_arr = np.frombuffer(color_data.data, np.uint8)
@@ -284,6 +310,11 @@ class FaceDetectionNode(Node):
             if self.color_image is None or self.depth_image is None:
                 self.get_logger().warn("Failed to decode images")
                 return
+
+            # Check resolution match
+            if not self.check_camera_resolution(self.color_image, self.depth_image) and self.camera_type != "pepper":
+                self.get_logger().error(f"{self.node_name}: Color camera and depth camera have different resolutions.")
+                rclpy.shutdown()
 
             # Process the images
             self.process_images()
@@ -328,6 +359,52 @@ class FaceDetectionNode(Node):
             self.get_logger().error(f"Depth image processing error: {e}")
             return None
 
+    def query_depth_service(self, points: List[Tuple[float, float]], radii: Optional[List[int]] = None) -> Optional[List[float]]:
+        """
+        Query depth values using the depth service.
+        
+        Args:
+            points: List of (x, y) coordinates
+            radii: Optional list of radii for each point (0 for single point)
+            
+        Returns:
+            List of depth values in meters, or None if service call fails
+        """
+        if not self.depth_client:
+            return None
+            
+        request = GetDepthAtPixel.Request()
+        
+        # Handle multiple points
+        request.centers_x = [int(x) for x, y in points]
+        request.centers_y = [int(y) for x, y in points]
+        
+        if radii:
+            request.radii = radii
+        else:
+            request.radii = [0] * len(points)  # Single point queries
+        
+        try:
+            # Make synchronous service call with timeout
+            future = self.depth_client.call_async(request)
+            rclpy.spin_until_future_complete(self, future, timeout_sec=self.depth_service_timeout)
+            
+            if future.done():
+                response = future.result()
+                if response and response.success:
+                    return list(response.depths)
+                else:
+                    if response:
+                        self.get_logger().warn(f"Depth service failed: {response.message}")
+                    return None
+            else:
+                self.get_logger().warn("Depth service call timed out")
+                return None
+                
+        except Exception as e:
+            self.get_logger().error(f"Depth service call failed: {e}")
+            return None
+
     def start_timeout_monitor(self):
         self.create_timer(1.0, self.check_timeout)
 
@@ -353,10 +430,6 @@ class FaceDetectionNode(Node):
             depth_f32 = np.array(depth, dtype=np.float32)
             depth_f32 = np.nan_to_num(depth_f32, nan=0.0, posinf=0.0, neginf=0.0)
 
-            # Optional: clamp far distances to improve local contrast, e.g., 0..3m
-            # depth_f32 = np.clip(depth_f32, 0.0, 3.0)
-
-            # Normalize to 0..255; if your depth is in millimeters, scale first
             # Detect likely units (heuristic): if max > 100, assume mm
             m = float(np.max(depth_f32)) if depth_f32.size else 0.0
             if m > 1000.0:             # looks like millimeters
@@ -375,27 +448,69 @@ class FaceDetectionNode(Node):
                            box_width: float, box_height: float, 
                            region_scale: float = 0.1) -> Optional[float]:
         """Get median depth value in a region around the centroid."""
-        if self.depth_image is None:
-            return None
+        if self.use_depth_service:
+            # Calculate radius based on region size
+            radius = max(5, int(min(box_width, box_height) * region_scale / 2))
+            depths = self.query_depth_service([(centroid_x, centroid_y)], [radius])
+            return depths[0] if depths else None
+        else:
+            # Use depth image directly
+            if self.depth_image is None:
+                return None
 
-        # Calculate region dimensions
-        region_width = max(5, int(box_width * region_scale))
-        region_height = max(5, int(box_height * region_scale))
+            # Calculate region dimensions
+            region_width = max(5, int(box_width * region_scale))
+            region_height = max(5, int(box_height * region_scale))
 
-        # Calculate region bounds
-        x_start = max(0, int(centroid_x - region_width / 2))
-        y_start = max(0, int(centroid_y - region_height / 2))
-        x_end = min(self.depth_image.shape[1], x_start + region_width)
-        y_end = min(self.depth_image.shape[0], y_start + region_height)
+            # Calculate region bounds
+            x_start = max(0, int(centroid_x - region_width / 2))
+            y_start = max(0, int(centroid_y - region_height / 2))
+            x_end = min(self.depth_image.shape[1], x_start + region_width)
+            y_end = min(self.depth_image.shape[0], y_start + region_height)
 
-        if x_start >= x_end or y_start >= y_end:
-            return None
+            if x_start >= x_end or y_start >= y_end:
+                return None
 
-        # Extract region and get valid depth values
-        depth_roi = self.depth_image[y_start:y_end, x_start:x_end]
-        valid_depths = depth_roi[np.isfinite(depth_roi) & (depth_roi > 0)]
+            # Extract region and get valid depth values
+            depth_roi = self.depth_image[y_start:y_end, x_start:x_end]
+            valid_depths = depth_roi[np.isfinite(depth_roi) & (depth_roi > 0)]
 
-        return np.median(valid_depths) / 1000.0 if valid_depths.size > 0 else None
+            return np.median(valid_depths) / 1000.0 if valid_depths.size > 0 else None
+
+    def get_batch_depths(self, face_centroids: List[Tuple[float, float]], 
+                        face_sizes: Optional[List[Tuple[float, float]]] = None) -> List[Optional[float]]:
+        """
+        Get depth values for multiple faces in a single service call (if using service mode).
+        
+        Args:
+            face_centroids: List of (x, y) centroid coordinates
+            face_sizes: Optional list of (width, height) for each face
+            
+        Returns:
+            List of depth values in meters (None for failed queries)
+        """
+        if self.use_depth_service:
+            # Calculate radii based on face sizes if provided
+            if face_sizes:
+                radii = [max(5, int(min(w, h) * 0.1 / 2)) for w, h in face_sizes]
+            else:
+                radii = [10] * len(face_centroids)  # Default radius
+            
+            depths = self.query_depth_service(face_centroids, radii)
+            if depths:
+                return depths
+            else:
+                return [None] * len(face_centroids)
+        else:
+            # Fall back to individual queries for non-service mode
+            result = []
+            for i, (cx, cy) in enumerate(face_centroids):
+                if face_sizes and i < len(face_sizes):
+                    depth = self.get_depth_in_region(cx, cy, face_sizes[i][0], face_sizes[i][1])
+                else:
+                    depth = self.get_depth_at_centroid(cx, cy)
+                result.append(depth)
+            return result
 
     def generate_dark_color(self) -> Tuple[int, int, int]:
         """Generate a dark color for visualization."""
@@ -479,6 +594,7 @@ class YOLOONNX:
                 result_boxes.append([x_min, y_min, x_max, y_max])
                 result_scores.append(box[6])
         return np.array(result_boxes), np.array(result_scores)
+
 
 class SixDrepNet(FaceDetectionNode):
     def __init__(self, config: Dict):
@@ -571,7 +687,7 @@ class SixDrepNet(FaceDetectionNode):
 
     def process_images(self):
         """Process synchronized RGB + depth images for SixDrepNet."""
-        if self.color_image is None or self.depth_image is None:
+        if self.color_image is None:
             return
 
         frame = self.process_frame(self.color_image)
