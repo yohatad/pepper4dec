@@ -1,12 +1,16 @@
-# Jetson Nano depth server params
-depth_query_server:
+# ===========================================
+# Shared parameters (used by multiple nodes)
+# ===========================================
+/**:
   ros__parameters:
-    depth_scale: 0.001  # meters per unit for 16UC1
+    use_compressed: true
 
+# ===========================================
 # Laptop saliency node params
+# ===========================================
 saliency_node:
   ros__parameters:
-    image_topic: "/camera/color/image_raw/compressed"
+    image_topic_base: "/camera/color/image_raw"  # Adds /compressed if use_compressed: true
     publish_map: true
     down_w: 160
     down_h: 120
@@ -16,43 +20,65 @@ saliency_node:
     min_peak: 0.5
     flow_method: "farneback"  # or "dis"
 
+# ===========================================
 # Laptop unified attention node params
+# ===========================================
 unified_attention_node:
   ros__parameters:
+    # Depth image configuration
+    depth_image_topic: "/camera/depth/image_rect_raw"  # Adds /compressedDepth if use_compressed: true
+    depth_scale: 0.001  # Scale to convert depth values to meters (0.001 for mm, 1.0 for meters)
+    
+    # Input topics
     face_topic: "/faceDetection/data"
     saliency_topic: "/attn/saliency_peak"
     audio_topic: "/audio/azimuth_rad"
     camera_info_topic: "/camera/color/camera_info"
-    depth_service: "/get_depth_at_pixel"
     
+    # Output configuration
     command_mode: "joint_state"  # or "trajectory"
     joint_names: ["HeadYaw", "HeadPitch"]
     joint_state_topic: "/head_cmd/joint_states"
     trajectory_topic: "/head_controller/joint_trajectory"
     
-    # Attention parameters
+    # Face scoring
     bias_face: 2.0
     mutual_gaze_bonus: 0.6
     saliency_min_score: 0.30
     
-    depth_lo: 0.6
-    depth_hi: 1.8
-    depth_min: 0.35
-    depth_max: 4.0
-    depth_roi_px: 5
-    depth_req_every_n_frames_face: 3
-    depth_req_every_n_frames_sal: 4
+    # Depth filtering
+    depth_lo: 0.6       # Preferred depth range lower (meters)
+    depth_hi: 1.8       # Preferred depth range upper (meters)
+    depth_min: 0.35     # Minimum valid depth (meters)
+    depth_max: 4.0      # Maximum valid depth (meters)
+    depth_roi_px: 5     # ROI size for median filtering
+    track_timeout_s: 5.0  # Remove tracks not seen for this long
     
-    hysteresis_delta: 0.3
-    hysteresis_hold_ms: 200
-    dwell_cap_s: 4.0
+    # Target selection hysteresis
+    hysteresis_delta: 1.2
+    hysteresis_hold_ms: 1200
+    dwell_cap_s: 8.0
     
-    ior_px_radius: 40.0
-    ior_penalty: 1.0
-    ior_decay_s: 2.5
+    # Inhibition of Return (IOR)
+    ior_px_radius: 60.0
+    ior_penalty: 2.0
     
+    # Scene change detection
+    head_move_reset_threshold: 0.5  # radians (~30 degrees)
+    
+    # Audio
     audio_hold_s: 2.0
     
+    # Motion gating
+    head_velocity_threshold: 0.08
+    head_settle_time: 5.0
+    deadband_yaw: 0.06
+    deadband_pitch: 0.06
+    
+    # Saliency dwell
+    saliency_dwell_time: 2.5
+    
+    # Idle behavior
     home_yaw: 0.0
     home_pitch: -0.05
     idle_scan_period_min: 3.0
@@ -63,14 +89,17 @@ unified_attention_node:
     micro_saccade_period_min: 3.0
     micro_saccade_period_max: 5.0
     
+    # Joint limits
     yaw_lim: 1.8
-    pitch_up: 0.45
-    pitch_dn: -0.45
+    pitch_up: 0.4
+    pitch_dn: -0.7
 
+# ===========================================
 # Visualization node params
+# ===========================================
 attention_visualization:
   ros__parameters:
-    image_topic: "/camera/color/image_raw/compressed"
+    image_topic_base: "/camera/color/image_raw"  # Adds /compressed if use_compressed: true
     face_topic: "/faceDetection/data"
     saliency_topic: "/attn/saliency_peak"
     target_topic: "/attn/target_angles"

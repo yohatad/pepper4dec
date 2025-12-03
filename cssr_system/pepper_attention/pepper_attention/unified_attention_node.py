@@ -4,26 +4,59 @@ Unified Attention Controller for Pepper Robot
 Priority: Faces → Saliency → Audio → Idle/Home
 Fair exploration with unified IOR and scene change detection
 """
+
 import math
 import time
 import random
 import collections
+from threading import Lock
 import numpy as np
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from builtin_interfaces.msg import Time, Duration
 from std_msgs.msg import Float32, Float32MultiArray
-from sensor_msgs.msg import CameraInfo, JointState
+from sensor_msgs.msg import CameraInfo, JointState, Image, CompressedImage
 
 from naoqi_bridge_msgs.msg import JointAnglesWithSpeed
 from geometry_msgs.msg import Vector3
 
 from cssr_interfaces.msg import FaceDetection
-from cssr_interfaces.srv import GetDepthAtPixel
+
+# For decompressing depth images
+from cv_bridge import CvBridge
+import cv2
 
 
 # ============ Helper Functions ============
+def get_image_topic(base_topic: str, use_compressed: bool, is_depth: bool = False) -> str:
+    """
+    Construct the full topic name based on compression setting.
+    
+    Args:
+        base_topic: Base topic name (e.g., "/camera/depth/image_rect_raw")
+        use_compressed: Whether to use compressed transport
+        is_depth: Whether this is a depth image (uses /compressedDepth instead of /compressed)
+    
+    Returns:
+        Full topic name with appropriate suffix
+    """
+    if use_compressed:
+        suffix = "/compressedDepth" if is_depth else "/compressed"
+        return base_topic + suffix
+    return base_topic
+
+
+def get_image_qos() -> QoSProfile:
+    """Get QoS profile suitable for image transport over WiFi."""
+    return QoSProfile(
+        reliability=ReliabilityPolicy.BEST_EFFORT,
+        durability=DurabilityPolicy.VOLATILE,
+        history=HistoryPolicy.KEEP_LAST,
+        depth=1
+    )
+
+
 def clamp(x, lo, hi):
     return max(lo, min(hi, x))
 
@@ -122,17 +155,15 @@ class UnifiedAttention(Node):
     def __init__(self):
         super().__init__("pepper_unified_attention")
         
+        # CV Bridge for image conversion
+        self.cv_bridge = CvBridge()
+        
         # Declare all parameters
         self.declare_all_parameters()  
         self.load_parameters()
         
-        # QoS for camera info over Wi-Fi
-        qos_img = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
-            durability=DurabilityPolicy.VOLATILE,
-            history=HistoryPolicy.KEEP_LAST,
-            depth=1
-        )
+        # QoS for camera/depth over Wi-Fi
+        qos_img = get_image_qos()
         
         # Subscriptions
         self.create_subscription(FaceDetection, self.face_topic, self.on_faces, 10)
@@ -141,19 +172,27 @@ class UnifiedAttention(Node):
         self.create_subscription(CameraInfo, self.camera_info_topic, self.on_caminfo, qos_img)
         self.create_subscription(JointState, '/joint_states', self.on_joint_states, 10)
         
+        # Depth image subscription (compressed or raw) using utility
+        depth_topic = get_image_topic(self.depth_image_topic, self.use_compressed, is_depth=True)
+        if self.use_compressed:
+            self.create_subscription(CompressedImage, depth_topic, self.on_depth_compressed, qos_img)
+        else:
+            self.create_subscription(Image, depth_topic, self.on_depth_raw, qos_img)
+        self.get_logger().info(f"Subscribing to depth: {depth_topic}")
+        
         # Publishers
         self.pub_js = self.create_publisher(JointAnglesWithSpeed, self.js_topic, 10)
         self.pub_dbg = self.create_publisher(Vector3, "/attn/target_angles", 10)
         
-        # Depth service client
-        self.depth_cli = self.create_client(GetDepthAtPixel, self.depth_service)
-
-        while not self.depth_cli.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info("Waiting for depth service...")
+        # Depth image state (thread-safe)
+        self.depth_image = None
+        self.depth_image_stamp = None
+        self.depth_lock = Lock()
         
         # State variables
         self.fx = self.fy = self.cx = self.cy = None
         self.tracks = {}
+        self.tracks_lock = Lock()  # Thread safety for tracks
         self.prev_id = None
         self.prev_since = time.time()
         
@@ -166,7 +205,6 @@ class UnifiedAttention(Node):
         # Saliency state
         self.saliency_peaks = []
         self.saliency_peak = None
-        self.sal_last_query_frame = -1
         self.sal_depth_Z = None
         
         # Saliency tracking
@@ -198,21 +236,28 @@ class UnifiedAttention(Node):
         
         # Timers
         self.create_timer(1.0/20.0, self.tick)
-        self.create_timer(0.02, self.poll_depth)
+        self.create_timer(2.0, self.cleanup_stale_tracks)  # Track cleanup every 2s
         
         self.get_logger().info(
             f"Unified attention ready (mode={self.cmd_mode}, "
             f"unified IOR with scene change reset, "
-            f"head_move_threshold={self.head_move_reset_threshold:.2f} rad)"
+            f"head_move_threshold={self.head_move_reset_threshold:.2f} rad, "
+            f"depth_source={'compressed' if self.use_compressed else 'raw'})"
         )
 
     def declare_all_parameters(self):
         """Declare all ROS parameters with defaults"""
+        # Global parameter (shared across nodes via /**:)
+        self.declare_parameter("use_compressed", True)
+        
+        # Depth configuration
+        self.declare_parameter("depth_image_topic", "/camera/depth/image_rect_raw")  # Base topic
+        self.declare_parameter("depth_scale", 0.001)  # Scale factor to convert to meters
+        
         self.declare_parameter("face_topic", "/faceDetection/data") 
         self.declare_parameter("saliency_topic", "/attn/saliency_peak")
         self.declare_parameter("audio_topic", "/audio/azimuth_rad")
         self.declare_parameter("camera_info_topic", "/camera/color/camera_info")
-        self.declare_parameter("depth_service", "/get_depth_at_pixel")
         
         self.declare_parameter("command_mode", "joint_state")
         self.declare_parameter("joint_names", ["HeadYaw", "HeadPitch"])
@@ -227,8 +272,7 @@ class UnifiedAttention(Node):
         self.declare_parameter("depth_min", 0.35)
         self.declare_parameter("depth_max", 4.0)
         self.declare_parameter("depth_roi_px", 5)
-        self.declare_parameter("depth_req_every_n_frames_face", 3)
-        self.declare_parameter("depth_req_every_n_frames_sal", 4)
+        self.declare_parameter("track_timeout_s", 5.0)  # Stale track cleanup timeout
 
         self.declare_parameter("hysteresis_delta", 1.2)
         self.declare_parameter("hysteresis_hold_ms", 1200)
@@ -268,11 +312,14 @@ class UnifiedAttention(Node):
 
     def load_parameters(self):
         """Load all parameters into instance variables"""
+        self.use_compressed = self.get_parameter("use_compressed").value
+        self.depth_image_topic = self.get_parameter("depth_image_topic").value
+        self.depth_scale = self.get_parameter("depth_scale").value
+        
         self.face_topic = self.get_parameter("face_topic").value
         self.saliency_topic = self.get_parameter("saliency_topic").value
         self.audio_topic = self.get_parameter("audio_topic").value
         self.camera_info_topic = self.get_parameter("camera_info_topic").value
-        self.depth_service = self.get_parameter("depth_service").value
         
         self.cmd_mode = self.get_parameter("command_mode").value
         self.joint_names = list(self.get_parameter("joint_names").value)
@@ -287,8 +334,7 @@ class UnifiedAttention(Node):
         self.depth_min = self.get_parameter("depth_min").value
         self.depth_max = self.get_parameter("depth_max").value
         self.depth_roi_px = self.get_parameter("depth_roi_px").value
-        self.depth_req_face = self.get_parameter("depth_req_every_n_frames_face").value
-        self.depth_req_sal = self.get_parameter("depth_req_every_n_frames_sal").value
+        self.track_timeout_s = self.get_parameter("track_timeout_s").value
         
         self.hysteresis_delta = self.get_parameter("hysteresis_delta").value
         self.hysteresis_hold_ms = self.get_parameter("hysteresis_hold_ms").value
@@ -323,6 +369,139 @@ class UnifiedAttention(Node):
         self.yaw_lim = self.get_parameter("yaw_lim").value
         self.pitch_up = self.get_parameter("pitch_up").value
         self.pitch_dn = self.get_parameter("pitch_dn").value
+
+    # ============ Depth Image Callbacks ============
+    def on_depth_raw(self, msg: Image):
+        """Handle raw depth image"""
+        try:
+            # Convert to numpy array
+            if msg.encoding == '16UC1':
+                depth_img = self.cv_bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
+            elif msg.encoding == '32FC1':
+                depth_img = self.cv_bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
+            else:
+                depth_img = self.cv_bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
+            
+            with self.depth_lock:
+                self.depth_image = depth_img
+                self.depth_image_stamp = msg.header.stamp
+            
+        except Exception as e:
+            self.get_logger().warn(f"Failed to process raw depth image: {e}")
+
+    def on_depth_compressed(self, msg: CompressedImage):
+        """Handle compressed depth image (compressedDepth format)"""
+        try:
+            if 'compressedDepth' in msg.format:
+                # compressedDepth format has a 12-byte header before the PNG data
+                header_size = 12
+                
+                if len(msg.data) <= header_size:
+                    self.get_logger().warn("Compressed depth data too short")
+                    return
+                
+                # Decode the PNG/image data after header
+                raw_data = np.frombuffer(msg.data[header_size:], dtype=np.uint8)
+                depth_img = cv2.imdecode(raw_data, cv2.IMREAD_UNCHANGED)
+                
+                if depth_img is None:
+                    self.get_logger().warn("Failed to decode compressed depth image")
+                    return
+                
+            else:
+                # Standard compressed image (not compressedDepth)
+                raw_data = np.frombuffer(msg.data, dtype=np.uint8)
+                depth_img = cv2.imdecode(raw_data, cv2.IMREAD_UNCHANGED)
+                
+                if depth_img is None:
+                    self.get_logger().warn("Failed to decode compressed image")
+                    return
+            
+            with self.depth_lock:
+                self.depth_image = depth_img
+                self.depth_image_stamp = msg.header.stamp
+                
+        except Exception as e:
+            self.get_logger().warn(f"Failed to process compressed depth image: {e}")
+
+    def get_depth_at_pixel(self, u, v, roi=None):
+        """
+        Get depth at pixel location with ROI median filtering.
+        Returns depth in meters, or None if invalid.
+        """
+        if roi is None:
+            roi = self.depth_roi_px
+        
+        # Thread-safe copy
+        with self.depth_lock:
+            if self.depth_image is None:
+                return None
+            depth_copy = self.depth_image.copy()
+            stamp = self.depth_image_stamp
+        
+        # Check staleness (0.5s threshold)
+        if stamp is not None:
+            try:
+                import rclpy.time
+                age = (self.get_clock().now() - rclpy.time.Time.from_msg(stamp)).nanoseconds / 1e9
+                if age > 0.5:
+                    return None
+            except Exception:
+                pass
+        
+        h, w = depth_copy.shape[:2]
+        
+        # Clamp coordinates
+        u_int = int(round(u))
+        v_int = int(round(v))
+        
+        if u_int < 0 or u_int >= w or v_int < 0 or v_int >= h:
+            return None
+        
+        # Extract ROI
+        half_roi = roi // 2
+        u_min = max(0, u_int - half_roi)
+        u_max = min(w, u_int + half_roi + 1)
+        v_min = max(0, v_int - half_roi)
+        v_max = min(h, v_int + half_roi + 1)
+        
+        roi_data = depth_copy[v_min:v_max, u_min:u_max]
+        
+        # Filter out invalid values (0 typically means no reading)
+        if roi_data.dtype == np.float32 or roi_data.dtype == np.float64:
+            valid_mask = np.isfinite(roi_data) & (roi_data > 0)
+        else:
+            valid_mask = roi_data > 0
+        
+        valid_depths = roi_data[valid_mask]
+        
+        if len(valid_depths) == 0:
+            return None
+        
+        # Compute median and convert to meters
+        median_depth = float(np.median(valid_depths))
+        depth_meters = median_depth * self.depth_scale
+        
+        # Sanity check
+        if depth_meters < self.depth_min or depth_meters > self.depth_max:
+            return None
+        
+        return depth_meters
+
+    # ============ Track Management ============
+    def cleanup_stale_tracks(self):
+        """Remove tracks not seen recently"""
+        now = time.time()
+        with self.tracks_lock:
+            stale_ids = [
+                tid for tid, t in self.tracks.items() 
+                if (now - t.last_seen) > self.track_timeout_s
+            ]
+            for tid in stale_ids:
+                del self.tracks[tid]
+        
+        if stale_ids:
+            self.get_logger().debug(f"Cleaned up {len(stale_ids)} stale tracks")
 
     # ============ IOR Management ============
     def add_ior_site(self, u, v, source):
@@ -504,8 +683,17 @@ class UnifiedAttention(Node):
         if not cand:
             return
         
-        # Score faces with IOR suppression
+        # Score faces with IOR suppression and update depth
         for T in cand:
+            # Query depth from cached image
+            depth_z = self.get_depth_at_pixel(T.u, T.v, self.depth_roi_px)
+            if depth_z is not None:
+                T.Z = depth_z
+                T.validZ = True
+            else:
+                T.validZ = False
+                T.Z = None
+            
             s = self.bias_face
             
             if T.mutual:
@@ -543,10 +731,6 @@ class UnifiedAttention(Node):
             self.last_saliency_u = None
             self.last_saliency_v = None
             self.saliency_dwell_start = None
-        
-        # Depth query policy
-        if (self.frame_idx % self.depth_req_face == 0) or changed:
-            self.request_depth(target.id, target.u, target.v, self.depth_roi_px)
         
         # Compute angles (KF prediction for pursuit)
         u_cmd, v_cmd = target.kf.predict(0.05)
@@ -621,12 +805,8 @@ class UnifiedAttention(Node):
             self.last_saliency_u = u
             self.last_saliency_v = v
             
-            # Query depth
-            if (self.sal_last_query_frame < 0 or
-                (self.frame_idx - self.sal_last_query_frame) >= self.depth_req_sal or
-                is_new_target):
-                self.request_depth("__saliency__", u, v, self.depth_roi_px)
-                self.sal_last_query_frame = self.frame_idx
+            # Query depth from cached image
+            self.sal_depth_Z = self.get_depth_at_pixel(u, v, self.depth_roi_px)
             
             # Compute angles
             if self.sal_depth_Z and (self.depth_min <= self.sal_depth_Z <= self.depth_max):
@@ -708,56 +888,6 @@ class UnifiedAttention(Node):
         self.prev_since = now
         
         return best, changed
-
-    # ============ Depth Service ============
-    def request_depth(self, tid, u, v, roi):
-        """Async depth query"""
-        req = GetDepthAtPixel.Request()
-        req.u, req.v, req.roi = int(u), int(v), int(roi)
-        req.t = Time()
-        
-        fut = self.depth_cli.call_async(req)
-        fut.add_done_callback(lambda f, _tid=tid: self._on_depth(_tid, f))
-
-    def _on_depth(self, tid, fut):
-        """Handle depth service response"""
-        try:
-            res = fut.result()
-            ok = bool(res.valid)
-            
-            if not ok:
-                if tid == "__saliency__":
-                    self.sal_depth_Z = None
-                else:
-                    tr = self.tracks.get(tid)
-                    if tr:
-                        tr.validZ = False
-                        tr.Z = None
-                return
-            
-            z = float(res.z_median)
-            
-            if tid == "__saliency__":
-                self.sal_depth_Z = z
-            else:
-                tr = self.tracks.get(tid)
-                if tr:
-                    tr.Z = z
-                    tr.validZ = True
-        
-        except Exception as e:
-            self.get_logger().warn(f"Depth query failed: {e}")
-            if tid == "__saliency__":
-                self.sal_depth_Z = None
-            else:
-                tr = self.tracks.get(tid)
-                if tr:
-                    tr.validZ = False
-                    tr.Z = None
-
-    def poll_depth(self):
-        """Timer callback"""
-        pass
 
     # ============ Idle Behavior ============
     def idle_behavior(self):

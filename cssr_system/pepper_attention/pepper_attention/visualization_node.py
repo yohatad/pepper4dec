@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
+
 """
 Visualization Node for Pepper Attention System
 - Overlays attention targets on camera feed
 - Publishes RViz markers for 3D visualization
 - Real-time metrics dashboard
 """
+
 import cv2
 import numpy as np
 import time
 import collections
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from sensor_msgs.msg import CompressedImage, Image, CameraInfo
 from geometry_msgs.msg import Vector3, Point, Pose, PoseStamped
 from std_msgs.msg import Float32MultiArray, ColorRGBA
@@ -21,37 +23,54 @@ from cv_bridge import CvBridge
 from cssr_interfaces.msg import FaceDetection
 
 
+# ============ Helper Functions ============
+def get_image_topic(base_topic: str, use_compressed: bool, is_depth: bool = False) -> str:
+    """
+    Construct the full topic name based on compression setting.
+    
+    Args:
+        base_topic: Base topic name (e.g., "/camera/color/image_raw")
+        use_compressed: Whether to use compressed transport
+        is_depth: Whether this is a depth image (uses /compressedDepth instead of /compressed)
+    
+    Returns:
+        Full topic name with appropriate suffix
+    """
+    if use_compressed:
+        suffix = "/compressedDepth" if is_depth else "/compressed"
+        return base_topic + suffix
+    return base_topic
+
+
+def get_image_qos() -> QoSProfile:
+    """Get QoS profile suitable for image transport over WiFi."""
+    return QoSProfile(
+        reliability=ReliabilityPolicy.BEST_EFFORT,
+        durability=DurabilityPolicy.VOLATILE,
+        history=HistoryPolicy.KEEP_LAST,
+        depth=1
+    )
+
+
 class AttentionVisualization(Node):
     def __init__(self):
         super().__init__('attention_visualization')
         
-        # Parameters
-        self.declare_parameter('image_topic', '/camera/color/image_raw/compressed')
-        self.declare_parameter('face_topic', '/faceDetection/data')
-        self.declare_parameter('saliency_topic', '/attn/saliency_peak')
-        self.declare_parameter('target_topic', '/attn/target_angles')
-        self.declare_parameter('camera_info_topic', '/camera/color/camera_info')
-        self.declare_parameter('publish_overlay', True)
-        self.declare_parameter('publish_markers', True)
-        self.declare_parameter('show_metrics', True)
-        
-        self.image_topic = self.get_parameter('image_topic').value
-        self.face_topic = self.get_parameter('face_topic').value
-        self.saliency_topic = self.get_parameter('saliency_topic').value
-        self.target_topic = self.get_parameter('target_topic').value
-        self.camera_info_topic = self.get_parameter('camera_info_topic').value
-        self.publish_overlay = self.get_parameter('publish_overlay').value
-        self.publish_markers = self.get_parameter('publish_markers').value
-        self.show_metrics = self.get_parameter('show_metrics').value
+        # Declare and load parameters
+        self.declare_all_parameters()
+        self.load_parameters()
         
         # QoS
-        qos = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST, depth=1)
+        qos = get_image_qos()
         
-        # Subscribers
-        if self.image_topic.endswith('/compressed'):
-            self.sub_img = self.create_subscription(CompressedImage, self.image_topic, self.on_image, qos)
+        # Subscribers - image topic uses shared use_compressed
+        image_topic = get_image_topic(self.image_topic_base, self.use_compressed, is_depth=False)
+        if self.use_compressed:
+            self.sub_img = self.create_subscription(CompressedImage, image_topic, self.on_image, qos)
         else:
-            self.sub_img = self.create_subscription(Image, self.image_topic, self.on_image_raw, qos)
+            self.sub_img = self.create_subscription(Image, image_topic, self.on_image_raw, qos)
+        
+        self.get_logger().info(f"Subscribing to image: {image_topic}")
         
         self.sub_faces = self.create_subscription(FaceDetection, self.face_topic, self.on_faces, 10)
         self.sub_sal = self.create_subscription(Float32MultiArray, self.saliency_topic, self.on_saliency, 10)
@@ -70,7 +89,7 @@ class AttentionVisualization(Node):
         self.bridge = CvBridge()
         self.current_frame = None
         self.faces = []
-        self.saliency_peak = None
+        self.saliency_peaks = []  # Support multiple peaks
         self.current_target = None  # (yaw, pitch, score)
         self.fx = self.fy = self.cx = self.cy = None
         
@@ -81,7 +100,46 @@ class AttentionVisualization(Node):
         self.switch_times = []
         self.last_target_id = None
         
-        self.get_logger().info('Attention visualization ready')
+        self.get_logger().info(
+            f"Attention visualization ready "
+            f"(use_compressed={self.use_compressed})"
+        )
+
+    def declare_all_parameters(self):
+        """Declare all ROS parameters with defaults"""
+        # Global shared parameter
+        self.declare_parameter('use_compressed', True)
+        
+        # Image topic (base, without /compressed suffix)
+        self.declare_parameter('image_topic_base', '/camera/color/image_raw')
+        
+        # Other topic parameters
+        self.declare_parameter('face_topic', '/faceDetection/data')
+        self.declare_parameter('saliency_topic', '/attn/saliency_peak')
+        self.declare_parameter('target_topic', '/attn/target_angles')
+        self.declare_parameter('camera_info_topic', '/camera/color/camera_info')
+        
+        # Feature flags
+        self.declare_parameter('publish_overlay', True)
+        self.declare_parameter('publish_markers', True)
+        self.declare_parameter('show_metrics', True)
+
+    def load_parameters(self):
+        """Load all parameters into instance variables"""
+        # Global shared parameter
+        self.use_compressed = self.get_parameter('use_compressed').value
+        
+        # Topics
+        self.image_topic_base = self.get_parameter('image_topic_base').value
+        self.face_topic = self.get_parameter('face_topic').value
+        self.saliency_topic = self.get_parameter('saliency_topic').value
+        self.target_topic = self.get_parameter('target_topic').value
+        self.camera_info_topic = self.get_parameter('camera_info_topic').value
+        
+        # Feature flags
+        self.publish_overlay = self.get_parameter('publish_overlay').value
+        self.publish_markers = self.get_parameter('publish_markers').value
+        self.show_metrics = self.get_parameter('show_metrics').value
 
     def on_caminfo(self, msg: CameraInfo):
         self.fx, self.fy = msg.k[0], msg.k[4]
@@ -117,12 +175,17 @@ class AttentionVisualization(Node):
             })
 
     def on_saliency(self, msg: Float32MultiArray):
+        """Handle multiple saliency peaks: [u1, v1, s1, u2, v2, s2, ...]"""
+        self.saliency_peaks = []
+        
         if len(msg.data) >= 3:
-            self.saliency_peak = {
-                'u': int(msg.data[0]),
-                'v': int(msg.data[1]),
-                'score': msg.data[2]
-            }
+            for i in range(0, len(msg.data), 3):
+                if i + 2 < len(msg.data):
+                    self.saliency_peaks.append({
+                        'u': int(msg.data[i]),
+                        'v': int(msg.data[i + 1]),
+                        'score': msg.data[i + 2]
+                    })
 
     def on_target(self, msg: Vector3):
         self.current_target = {
@@ -156,9 +219,9 @@ class AttentionVisualization(Node):
         for face in self.faces:
             self._draw_face(vis, face)
         
-        # Draw saliency
-        if self.saliency_peak:
-            self._draw_saliency(vis, self.saliency_peak)
+        # Draw all saliency peaks
+        for idx, sal in enumerate(self.saliency_peaks):
+            self._draw_saliency(vis, sal, idx)
         
         # Draw current target
         if self.current_target and self.fx:
@@ -223,29 +286,41 @@ class AttentionVisualization(Node):
             (0, 0, 0), 1, cv2.LINE_AA
         )
 
-    def _draw_saliency(self, vis, sal):
-        """Draw saliency peak"""
+    def _draw_saliency(self, vis, sal, rank=0):
+        """Draw saliency peak with rank indicator"""
         u, v = sal['u'], sal['v']
         score = sal['score']
         
-        # Circle with score-based alpha
-        color = (0, 255, 255)
-        radius = int(20 + score * 30)
+        # Colors by rank (top peak is brightest)
+        colors = [
+            (0, 255, 255),    # Yellow - highest
+            (0, 200, 200),    # Darker yellow
+            (0, 150, 150),    # Even darker
+            (0, 100, 100),    # Dim
+            (0, 80, 80)       # Dimmest
+        ]
+        color = colors[rank] if rank < len(colors) else (0, 60, 60)
+        
+        # Circle with score-based size
+        radius = int(15 + score * 25) if rank == 0 else int(10 + score * 15)
         
         overlay = vis.copy()
         cv2.circle(overlay, (u, v), radius, color, 2)
         cv2.circle(overlay, (u, v), 3, color, -1)
-        alpha = 0.3 + score * 0.4
+        
+        # Alpha decreases with rank
+        alpha = max(0.2, 0.5 - rank * 0.1)
         cv2.addWeighted(overlay, alpha, vis, 1 - alpha, 0, vis)
         
-        # Label
-        label = f"SAL: {score:.2f}"
-        cv2.putText(
-            vis, label,
-            (u + 25, v),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-            color, 2, cv2.LINE_AA
-        )
+        # Label (only for top peak or if high score)
+        if rank == 0 or score > 0.5:
+            label = f"SAL{rank+1}: {score:.2f}"
+            cv2.putText(
+                vis, label,
+                (u + 20, v + rank * 15),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4,
+                color, 1, cv2.LINE_AA
+            )
 
     def _draw_target(self, vis, target, W, H):
         """Draw current attention target"""
@@ -268,7 +343,7 @@ class AttentionVisualization(Node):
             cv2.circle(vis, (u, v), size, color, 2)
             
             # Label
-            label = f"TARGET ({yaw*180/np.pi:.1f}°, {pitch*180/np.pi:.1f}°)"
+            label = f"TARGET ({yaw*180/np.pi:.1f}, {pitch*180/np.pi:.1f})"
             cv2.putText(
                 vis, label,
                 (u + 35, v - 35),
@@ -297,7 +372,7 @@ class AttentionVisualization(Node):
         
         # Semi-transparent background
         overlay = vis.copy()
-        cv2.rectangle(overlay, (10, 10), (300, 150), (0, 0, 0), -1)
+        cv2.rectangle(overlay, (10, 10), (300, 170), (0, 0, 0), -1)
         cv2.addWeighted(overlay, 0.6, vis, 0.4, 0, vis)
         
         # FPS
@@ -311,8 +386,9 @@ class AttentionVisualization(Node):
         metrics = [
             f"FPS: {fps:.1f}",
             f"Faces: {len(self.faces)}",
+            f"Saliency peaks: {len(self.saliency_peaks)}",
             f"Switches/min: {switch_rate}",
-            f"Target: {self.current_target['yaw']*180/np.pi:.1f}°, {self.current_target['pitch']*180/np.pi:.1f}°" if self.current_target else "Target: None"
+            f"Target: {self.current_target['yaw']*180/np.pi:.1f}, {self.current_target['pitch']*180/np.pi:.1f}" if self.current_target else "Target: None"
         ]
         
         for text in metrics:
@@ -358,29 +434,35 @@ class AttentionVisualization(Node):
             
             markers.markers.append(marker)
         
-        # Saliency marker
-        if self.saliency_peak and self.fx:
-            marker = Marker()
-            marker.header.frame_id = "camera_color_optical_frame"
-            marker.header.stamp = stamp
-            marker.ns = "saliency"
-            marker.id = 0
-            marker.type = Marker.CYLINDER
-            marker.action = Marker.ADD
-            
-            Z = 2.0
-            X = (self.saliency_peak['u'] - self.cx) / self.fx * Z
-            Y = (self.saliency_peak['v'] - self.cy) / self.fy * Z
-            
-            marker.pose.position.x = Z
-            marker.pose.position.y = -X
-            marker.pose.position.z = -Y
-            
-            marker.scale.x = marker.scale.y = 0.3
-            marker.scale.z = 0.1
-            marker.color = ColorRGBA(r=1.0, g=1.0, b=0.0, a=0.5)
-            
-            markers.markers.append(marker)
+        # Saliency markers (all peaks)
+        for i, sal in enumerate(self.saliency_peaks):
+            if self.fx:
+                marker = Marker()
+                marker.header.frame_id = "camera_color_optical_frame"
+                marker.header.stamp = stamp
+                marker.ns = "saliency"
+                marker.id = i
+                marker.type = Marker.CYLINDER
+                marker.action = Marker.ADD
+                
+                Z = 2.0
+                X = (sal['u'] - self.cx) / self.fx * Z
+                Y = (sal['v'] - self.cy) / self.fy * Z
+                
+                marker.pose.position.x = Z
+                marker.pose.position.y = -X
+                marker.pose.position.z = -Y
+                
+                # Size decreases with rank
+                scale = 0.3 - i * 0.05
+                marker.scale.x = marker.scale.y = max(0.1, scale)
+                marker.scale.z = 0.1
+                
+                # Alpha decreases with rank
+                alpha = max(0.2, 0.6 - i * 0.1)
+                marker.color = ColorRGBA(r=1.0, g=1.0, b=0.0, a=alpha)
+                
+                markers.markers.append(marker)
         
         # Target marker (arrow)
         if self.current_target:

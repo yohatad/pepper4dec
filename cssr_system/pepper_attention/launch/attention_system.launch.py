@@ -19,24 +19,9 @@ def generate_launch_description():
         ),
         
         DeclareLaunchArgument(
-            'run_on_nano',
-            default_value='false',
-            description='Set to true if running on Jetson Nano'
-        ),
-        
-        DeclareLaunchArgument(
             'enable_viz',
             default_value='true',
             description='Enable visualization'
-        ),
-        
-        # Depth query server (Jetson Nano)
-        Node(
-            package='pepper_attention',
-            executable='depth_query_server',
-            name='depth_query_server',
-            parameters=[LaunchConfiguration('params_file')],
-            output='screen'
         ),
         
         # Saliency node (Laptop)

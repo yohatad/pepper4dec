@@ -14,6 +14,36 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 from sensor_msgs.msg import CompressedImage, Image, CameraInfo, JointState
 from std_msgs.msg import Float32MultiArray
 
+
+# ============ Helper Functions ============
+def get_image_topic(base_topic: str, use_compressed: bool, is_depth: bool = False) -> str:
+    """
+    Construct the full topic name based on compression setting.
+    
+    Args:
+        base_topic: Base topic name (e.g., "/camera/color/image_raw")
+        use_compressed: Whether to use compressed transport
+        is_depth: Whether this is a depth image (uses /compressedDepth instead of /compressed)
+    
+    Returns:
+        Full topic name with appropriate suffix
+    """
+    if use_compressed:
+        suffix = "/compressedDepth" if is_depth else "/compressed"
+        return base_topic + suffix
+    return base_topic
+
+
+def get_image_qos() -> QoSProfile:
+    """Get QoS profile suitable for image transport over WiFi."""
+    return QoSProfile(
+        reliability=ReliabilityPolicy.BEST_EFFORT,
+        durability=DurabilityPolicy.VOLATILE,
+        history=HistoryPolicy.KEEP_LAST,
+        depth=1
+    )
+
+
 class BooleanMapSaliency:
     """BMS - Fast boolean map based saliency with temporal filtering"""
     def __init__(self, quantization_level=12):
@@ -91,62 +121,17 @@ class BooleanMapSaliency:
         # Normalize to [0, 1]
         return (attention - attention.min()) / (attention.max() - attention.min() + 1e-6)
 
+
 class SaliencyNode(Node):
     def __init__(self):
         super().__init__('saliency_node')
         
-        # Parameters
-        self.declare_parameter('image_topic', '/camera/color/image_raw/compressed')
-        self.declare_parameter('publish_map', True)
-        self.declare_parameter('down_w', 160)
-        self.declare_parameter('down_h', 120)
-        self.declare_parameter('alpha_static', 0.6)
-        self.declare_parameter('beta_motion', 0.3)
-        self.declare_parameter('gamma_center', 0.1)
-        self.declare_parameter('min_peak', 0.25)
-        self.declare_parameter('flow_method', 'farneback')
+        # Declare all parameters
+        self.declare_all_parameters()
+        self.load_parameters()
         
-        # BMS-specific parameters
-        self.declare_parameter('bms_quantization', 12)
-        
-        # Motion gating parameters
-        self.declare_parameter('head_motion_threshold', 0.08)
-        self.declare_parameter('skip_during_motion', True)
-        
-        # Visualization parameters
-        self.declare_parameter('overlay_alpha', 0.4)
-        self.declare_parameter('visualize_components', True)
-        
-        self.visualize_components = self.get_parameter('visualize_components').value
-        
-        # Multi-peak parameters
-        self.declare_parameter('num_peaks', 5)
-        self.declare_parameter('peak_min_distance_px', 40)
-
-        # Load parameters
-        self.image_topic = self.get_parameter('image_topic').value
-        self.publish_map_flag = self.get_parameter('publish_map').value
-        self.down_w = self.get_parameter('down_w').value
-        self.down_h = self.get_parameter('down_h').value
-        self.ALPHA = self.get_parameter('alpha_static').value
-        self.BETA = self.get_parameter('beta_motion').value
-        self.GAMMA = self.get_parameter('gamma_center').value
-        self.MIN_PEAK = self.get_parameter('min_peak').value
-        self.flow_method = self.get_parameter('flow_method').value.lower()
-        self.declare_parameter('motion_focus_threshold', 0.3)
-        
-        self.bms_quantization = self.get_parameter('bms_quantization').value
-        
-        self.head_threshold = self.get_parameter('head_motion_threshold').value
-        self.skip_during_motion = self.get_parameter('skip_during_motion').value
-        
-        self.overlay_alpha = self.get_parameter('overlay_alpha').value
-
-        # Multi-peak parameters
-        self.num_peaks = self.get_parameter('num_peaks').value
-        self.peak_min_dist = self.get_parameter('peak_min_distance_px').value
-
-        self.motion_focus_threshold = self.get_parameter('motion_focus_threshold').value
+        # QoS for Wi-Fi
+        qos = get_image_qos()
         
         # Publishers
         if self.visualize_components:
@@ -155,22 +140,20 @@ class SaliencyNode(Node):
             self.pub_center = self.create_publisher(CompressedImage, '/attn/saliency_center/compressed', 1)
             self.pub_combined = self.create_publisher(CompressedImage, '/attn/saliency_combined/compressed', 1)
         
-        # QoS for Wi-Fi
-        qos = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT, 
-                        durability=DurabilityPolicy.VOLATILE, 
-                        history=HistoryPolicy.KEEP_LAST, depth=1)
-        
         self.pub_peak = self.create_publisher(Float32MultiArray, '/attn/saliency_peak', 10)
         
         self.pub_map = None
         if self.publish_map_flag:
             self.pub_map = self.create_publisher(CompressedImage, '/attn/saliency_map/compressed', 1)
         
-        # Subscriber for images
-        if self.image_topic.endswith('/compressed'):
-            self.sub = self.create_subscription(CompressedImage, self.image_topic, self.on_img_compressed, qos)
+        # Subscriber for images (using shared use_compressed parameter)
+        image_topic = get_image_topic(self.image_topic_base, self.use_compressed, is_depth=False)
+        if self.use_compressed:
+            self.sub = self.create_subscription(CompressedImage, image_topic, self.on_img_compressed, qos)
         else:
-            self.sub = self.create_subscription(Image, self.image_topic,self.on_img_raw, qos)
+            self.sub = self.create_subscription(Image, image_topic, self.on_img_raw, qos)
+        
+        self.get_logger().info(f"Subscribing to image: {image_topic}")
         
         # Subscribe to joint states for motion gating
         self.create_subscription(JointState, '/joint_states', self.on_joint_states, 10)
@@ -193,11 +176,84 @@ class SaliencyNode(Node):
         self.head_velocity = 0.0
         
         self.get_logger().info(
-            f"Saliency node ready (BMS) on {self.image_topic} "
-            f"(motion_gating={'ON' if self.skip_during_motion else 'OFF'}, "
+            f"Saliency node ready (BMS) "
+            f"(use_compressed={self.use_compressed}, "
+            f"motion_gating={'ON' if self.skip_during_motion else 'OFF'}, "
             f"thresh={self.head_threshold:.3f} rad/s, "
             f"bms_quantization={self.bms_quantization})"
         )
+
+    def declare_all_parameters(self):
+        """Declare all ROS parameters with defaults"""
+        # Global shared parameter
+        self.declare_parameter('use_compressed', True)
+        
+        # Image topic (base, without /compressed suffix)
+        self.declare_parameter('image_topic_base', '/camera/color/image_raw')
+        
+        # Processing parameters
+        self.declare_parameter('publish_map', True)
+        self.declare_parameter('down_w', 160)
+        self.declare_parameter('down_h', 120)
+        self.declare_parameter('alpha_static', 0.6)
+        self.declare_parameter('beta_motion', 0.3)
+        self.declare_parameter('gamma_center', 0.1)
+        self.declare_parameter('min_peak', 0.25)
+        self.declare_parameter('flow_method', 'farneback')
+        
+        # BMS-specific parameters
+        self.declare_parameter('bms_quantization', 12)
+        
+        # Motion gating parameters
+        self.declare_parameter('head_motion_threshold', 0.08)
+        self.declare_parameter('skip_during_motion', True)
+        
+        # Visualization parameters
+        self.declare_parameter('overlay_alpha', 0.4)
+        self.declare_parameter('visualize_components', True)
+        
+        # Multi-peak parameters
+        self.declare_parameter('num_peaks', 5)
+        self.declare_parameter('peak_min_distance_px', 40)
+        
+        # Motion focus threshold
+        self.declare_parameter('motion_focus_threshold', 0.3)
+
+    def load_parameters(self):
+        """Load all parameters into instance variables"""
+        # Global shared parameter
+        self.use_compressed = self.get_parameter('use_compressed').value
+        
+        # Image topic base
+        self.image_topic_base = self.get_parameter('image_topic_base').value
+        
+        # Processing parameters
+        self.publish_map_flag = self.get_parameter('publish_map').value
+        self.down_w = self.get_parameter('down_w').value
+        self.down_h = self.get_parameter('down_h').value
+        self.ALPHA = self.get_parameter('alpha_static').value
+        self.BETA = self.get_parameter('beta_motion').value
+        self.GAMMA = self.get_parameter('gamma_center').value
+        self.MIN_PEAK = self.get_parameter('min_peak').value
+        self.flow_method = self.get_parameter('flow_method').value.lower()
+        
+        # BMS parameters
+        self.bms_quantization = self.get_parameter('bms_quantization').value
+        
+        # Motion gating
+        self.head_threshold = self.get_parameter('head_motion_threshold').value
+        self.skip_during_motion = self.get_parameter('skip_during_motion').value
+        
+        # Visualization
+        self.overlay_alpha = self.get_parameter('overlay_alpha').value
+        self.visualize_components = self.get_parameter('visualize_components').value
+        
+        # Multi-peak
+        self.num_peaks = self.get_parameter('num_peaks').value
+        self.peak_min_dist = self.get_parameter('peak_min_distance_px').value
+        
+        # Motion focus
+        self.motion_focus_threshold = self.get_parameter('motion_focus_threshold').value
 
     def publish_simple_visualization(self, bgr, S, peaks, W, H, stamp):
         """Simple saliency visualization with all peaks marked"""
@@ -255,7 +311,6 @@ class SaliencyNode(Node):
         out.header.stamp = stamp
         out.data = enc
         self.pub_map.publish(out)
-
 
     def publish_component_visualization(self, S_static, S_motion, C, S_final, W, H, stamp, bgr_full):
         """Publish visualization of individual saliency components"""
@@ -518,7 +573,7 @@ class SaliencyNode(Node):
         
         # Check if there's significant motion
         motion_score = S_motion.max()
-        has_significant_motion = motion_score > 0.3  # Threshold for "something is moving"
+        has_significant_motion = motion_score > self.motion_focus_threshold
         
         # Fuse components
         S = self.ALPHA*S_static + self.BETA*S_motion + self.GAMMA*C
@@ -577,6 +632,7 @@ class SaliencyNode(Node):
         self.prev_small = small
         self.prev_small_bgr = small_bgr
     
+
 def main(args=None):
     rclpy.init(args=args)
     node = SaliencyNode()
