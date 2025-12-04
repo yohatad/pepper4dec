@@ -9,7 +9,6 @@ Version: v1.0
 This program comes with ABSOLUTELY NO WARRANTY.
 """
 
-
 import math
 import time
 import numpy as np
@@ -18,24 +17,21 @@ import rclpy
 import os
 import onnxruntime
 import threading
-import noisereduce as nr
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from scipy.optimize import minimize
 
 from ament_index_python.packages import get_package_share_directory
 from rclpy.node import Node
-from std_msgs.msg import Float32, String
+from std_msgs.msg import Bool, Float32, String
 from geometry_msgs.msg import Vector3Stamped
 from naoqi_bridge_msgs.msg import AudioBuffer
 from faster_whisper import WhisperModel
+from scipy import signal as scipy_signal
 from scipy.signal import resample_poly
 
 
-# =============================================================================
-# Silero VAD ONNX Wrapper
-# =============================================================================
-class OnnxWrapper:
+class OnnxWrapper():
     def __init__(self, path, force_onnx_cpu=False):
         opts = onnxruntime.SessionOptions()
         opts.inter_op_num_threads = 1
@@ -46,28 +42,43 @@ class OnnxWrapper:
         else:
             self.session = onnxruntime.InferenceSession(path, sess_options=opts)
 
+        # Always work with 16kHz (since we resample from 48kHz)
         self.sample_rate = 16000
         self.reset_states()
 
     def reset_states(self, batch_size=1):
         self._state = torch.zeros((2, batch_size, 128)).float()
-        self._context = torch.zeros(batch_size, 64)
+        self._context = torch.zeros(batch_size, 64)  # context_size = 64 for 16kHz
         self._last_batch_size = batch_size
 
     def __call__(self, x: np.ndarray) -> float:
+        """
+        Process a single 512-sample chunk at 16kHz.
+        
+        Args:
+            x: np.ndarray of shape (512,) at 16kHz
+            
+        Returns:
+            float: Speech probability [0, 1]
+        """
+        # Convert to torch tensor
         if not torch.is_tensor(x):
             x = torch.from_numpy(x).float()
         
+        # Ensure 2D: (batch_size, samples)
         if x.dim() == 1:
             x = x.unsqueeze(0)
         
         batch_size = x.shape[0]
         
+        # Reset states if batch size changed
         if batch_size != self._last_batch_size:
             self.reset_states(batch_size)
         
+        # Prepend context (64 samples for 16kHz)
         x_with_context = torch.cat([self._context, x], dim=1)
         
+        # Run ONNX inference
         ort_inputs = {
             'input': x_with_context.numpy(),
             'state': self._state.numpy(),
@@ -76,32 +87,27 @@ class OnnxWrapper:
         ort_outs = self.session.run(None, ort_inputs)
         out, state = ort_outs
         
+        # Update state and context for next call
         self._state = torch.from_numpy(state)
-        self._context = x_with_context[:, -64:]
+        self._context = x_with_context[:, -64:]  # Keep last 64 samples
         self._last_batch_size = batch_size
         
+        # Return speech probability as scalar
         return float(out.squeeze())
 
 
-# =============================================================================
-# Main Speech Recognition Node
-# =============================================================================
 class SpeechRecognitionNode(Node):
     def __init__(self):
         super().__init__("speech_recognition")
 
-        # =====================================================
         # Parameters
-        # =====================================================
-        # Audio
+        self.declare_parameter("sample_rate", 16000)
         self.declare_parameter("input_sample_rate", 48000)  # Pepper's native rate
-        self.declare_parameter("vad_sample_rate", 16000)    # Silero/Whisper rate
         self.declare_parameter("device", "cuda")
         self.declare_parameter("compute_type", "float16")
         self.declare_parameter("language", "en")
         self.declare_parameter("whisper_model_id", "deepdml/faster-whisper-large-v3-turbo-ct2")
         
-        # VAD thresholds
         self.declare_parameter("speech_threshold", 0.7)
         self.declare_parameter("neg_threshold", 0.35)
         self.declare_parameter("min_silence_duration_ms", 300)
@@ -109,26 +115,16 @@ class SpeechRecognitionNode(Node):
         self.declare_parameter("min_speech_duration", 0.3)
         self.declare_parameter("pre_speech_buffer_ms", 200)
         
-        # Localization & beamforming
-        self.declare_parameter("use_beamforming", True)
+        # Localization parameters
         self.declare_parameter("use_localization", True)
+        self.declare_parameter("use_beamforming", True)
         self.declare_parameter("speed_of_sound", 343.0)
-        
-        # Noise reduction
-        self.declare_parameter("use_noise_reduction", True)
-        self.declare_parameter("noise_context_duration", 2.0)
-        self.declare_parameter("nr_stationary", True)
-        self.declare_parameter("nr_prop_decrease", 0.9)
-        
-        # Intensity gate
         self.declare_parameter("intensity_threshold", 0.004)
         
-        # Topics
         self.declare_parameter("microphone_topic", "/audio")
 
-        # Load parameters
+        self.sample_rate = int(self.get_parameter("sample_rate").value)
         self.input_sample_rate = int(self.get_parameter("input_sample_rate").value)
-        self.vad_sample_rate = int(self.get_parameter("vad_sample_rate").value)
         self.device = self.get_parameter("device").value
         self.compute_type = self.get_parameter("compute_type").value
         self.language = self.get_parameter("language").value
@@ -141,21 +137,16 @@ class SpeechRecognitionNode(Node):
         self.min_speech_duration = float(self.get_parameter("min_speech_duration").value)
         self.pre_speech_buffer_ms = int(self.get_parameter("pre_speech_buffer_ms").value)
         
-        self.use_beamforming = bool(self.get_parameter("use_beamforming").value)
         self.use_localization = bool(self.get_parameter("use_localization").value)
+        self.use_beamforming = bool(self.get_parameter("use_beamforming").value)
         self.speed_of_sound = float(self.get_parameter("speed_of_sound").value)
-        
-        self.use_noise_reduction = bool(self.get_parameter("use_noise_reduction").value)
-        self.noise_context_duration = float(self.get_parameter("noise_context_duration").value)
-        self.nr_stationary = bool(self.get_parameter("nr_stationary").value)
-        self.nr_prop_decrease = float(self.get_parameter("nr_prop_decrease").value)
-        
         self.intensity_threshold = float(self.get_parameter("intensity_threshold").value)
+        
         self.microphone_topic = self.get_parameter("microphone_topic").value
 
         # =====================================================
         # Microphone array geometry (Pepper head frame, meters)
-        # Order: [back_left, back_right, front_left, front_right]
+        # Order: [back_left (RL), back_right (RR), front_left (FL), front_right (FR)]
         # =====================================================
         self.mic_positions = np.array([
             [-0.0267,  0.0343, 0.2066],  # Back-left  (RL)
@@ -164,69 +155,70 @@ class SpeechRecognitionNode(Node):
             [ 0.0313, -0.0343, 0.2066]   # Front-right(FR)
         ])
 
-        # =====================================================
-        # Load models
-        # =====================================================
-        package_path = get_package_share_directory('speech_event')
-        silero_path = os.path.join(package_path, 'models', 'silero_vad.onnx')
-
-        self.silero_model = OnnxWrapper(silero_path)
-        self.get_logger().info(f"Silero VAD loaded for {self.vad_sample_rate}Hz")
-
-        self.get_logger().info("Loading Whisper model...")
-        self.whisper = WhisperModel(self.whisper_model_id, device=self.device, compute_type=self.compute_type)
-        self.get_logger().info("Whisper model loaded.")
-        
-        self._warmup_whisper()
-
-        # =====================================================
-        # VAD chunk processing (at 16kHz)
-        # =====================================================
-        self.vad_chunk_size = 512  # Silero requirement
-        self.vad_pending_buffer = np.zeros(0, dtype=np.float32)
-        
-        # Pre-speech ring buffer (16kHz)
-        self.pre_speech_samples = int((self.pre_speech_buffer_ms / 1000.0) * self.vad_sample_rate)
-        self.pre_speech_ring = deque(maxlen=self.pre_speech_samples)
-        
-        # =====================================================
-        # Speech collection (16kHz for Whisper)
-        # =====================================================
-        self.speech_buffer_16k = []
-        self.speech_active = False
-        self.speech_start_time = None
-        
-        # Silence tracking
-        self.silence_chunks = 0
-        self.min_silence_chunks = int((self.min_silence_duration_ms / 1000.0) * self.vad_sample_rate / self.vad_chunk_size)
-        self.max_speech_chunks = int(self.max_speech_duration_s * self.vad_sample_rate / self.vad_chunk_size)
-        self.speech_chunk_count = 0
-
-        # =====================================================
-        # Noise reduction context (48kHz - before resampling)
-        # =====================================================
-        self.noise_context_size = int(self.input_sample_rate * self.noise_context_duration)
-        self.noise_context_window = np.zeros(self.noise_context_size, dtype=np.float32)
-
-        # =====================================================
-        # Localization state
-        # =====================================================
+        # Current direction (updated by localization)
         self.current_azimuth = 0.0
         self.current_elevation = 0.0
         self.direction_lock = threading.Lock()
 
+        package_path = get_package_share_directory('speech_event')
+        silero_path = os.path.join(package_path, 'models', 'silero_vad.onnx')
+
+        # Load Silero VAD
+        self.silero_model = OnnxWrapper(silero_path)
+        self.get_logger().info(f"Silero VAD loaded for {self.sample_rate}Hz")
+
+        # Load Whisper
+        self.get_logger().info("Loading Whisper model...")
+        self.whisper = WhisperModel(self.whisper_model_id, device=self.device, compute_type=self.compute_type)
+        self.get_logger().info("Whisper model loaded.")
+        
+        # Warmup Whisper to avoid first-inference latency
+        self._warmup_whisper()
+
         # =====================================================
-        # Async transcription
+        # IMPROVED: Proper chunk-aligned VAD processing
+        # =====================================================
+        # Input: 4096 samples @ 48kHz -> 1365 samples @ 16kHz (after resampling)
+        # VAD needs: 512 samples per chunk
+        # We'll accumulate resampled audio and process in 512-sample chunks
+        
+        self.vad_chunk_size = 512  # Silero VAD requirement
+        self.vad_pending_buffer = np.zeros(0, dtype=np.float32)  # Accumulates until we have 512 samples
+        
+        # =====================================================
+        # IMPROVED: Pre-speech lookback buffer (ring buffer)
+        # =====================================================
+        # Keep last N ms of audio to prepend when speech starts
+        self.pre_speech_samples = int((self.pre_speech_buffer_ms / 1000.0) * self.sample_rate)
+        self.pre_speech_ring = deque(maxlen=self.pre_speech_samples)
+        
+        # =====================================================
+        # Speech collection buffers
+        # =====================================================
+        self.speech_buffer = []
+        self.speech_active = False
+        self.speech_start_time = None
+        
+        # Silence tracking (chunk-based)
+        self.silence_chunks = 0
+        self.min_silence_chunks = int((self.min_silence_duration_ms / 1000.0) * self.sample_rate / self.vad_chunk_size)
+        
+        # Max speech duration in chunks
+        self.max_speech_chunks = int(self.max_speech_duration_s * self.sample_rate / self.vad_chunk_size)
+        self.speech_chunk_count = 0
+
+        # =====================================================
+        # IMPROVED: Async transcription with thread pool
         # =====================================================
         self.transcription_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="whisper")
         self.transcription_lock = threading.Lock()
         self.is_transcribing = False
 
-        # =====================================================
         # Publishers
-        # =====================================================
         self.vad_prob_pub = self.create_publisher(Float32, "/vad/speech_prob", 10)
         self.asr_pub = self.create_publisher(String, "/asr/text", 10)
+        
+        # Localization publishers
         self.direction_pub = self.create_publisher(Vector3Stamped, "/speech/sound_direction", 10)
         self.azimuth_pub = self.create_publisher(Float32, "/speech/azimuth", 10)
 
@@ -234,15 +226,16 @@ class SpeechRecognitionNode(Node):
         self.audio_sub = self.create_subscription(AudioBuffer, self.microphone_topic, self.audio_callback, 10)
 
         self.get_logger().info("speech_recognition ready.")
-        self.get_logger().info(f"VAD: thresh={self.speech_threshold}/{self.neg_threshold}, "
-                              f"silence={self.min_silence_duration_ms}ms, max={self.max_speech_duration_s}s")
-        self.get_logger().info(f"Localization: {self.use_localization}, Beamforming: {self.use_beamforming}, "
-                              f"Noise reduction: {self.use_noise_reduction}")
+        self.get_logger().info(f"VAD config: speech_thresh={self.speech_threshold}, neg_thresh={self.neg_threshold}, "
+                              f"min_silence={self.min_silence_duration_ms}ms ({self.min_silence_chunks} chunks), "
+                              f"min_speech={self.min_speech_duration}s, max_speech={self.max_speech_duration_s}s")
+        self.get_logger().info(f"Pre-speech buffer: {self.pre_speech_buffer_ms}ms ({self.pre_speech_samples} samples)")
+        self.get_logger().info(f"Localization: {self.use_localization}, Beamforming: {self.use_beamforming}")
 
     def _warmup_whisper(self):
-        """Warm up Whisper to avoid first-inference latency."""
+        """Run a dummy transcription to warm up CUDA kernels."""
         self.get_logger().info("Warming up Whisper...")
-        dummy_audio = np.zeros(self.vad_sample_rate, dtype=np.float32)
+        dummy_audio = np.zeros(self.sample_rate, dtype=np.float32)  # 1 second of silence
         try:
             segments, _ = self.whisper.transcribe(
                 dummy_audio,
@@ -251,6 +244,7 @@ class SpeechRecognitionNode(Node):
                 beam_size=1,
                 vad_filter=False
             )
+            # Consume the generator
             _ = list(segments)
             self.get_logger().info("Whisper warmup complete.")
         except Exception as e:
@@ -261,8 +255,12 @@ class SpeechRecognitionNode(Node):
     # =========================================================================
     def parse_audio_buffer(self, msg):
         """
-        Parse AudioBuffer to 4 channels at native 48kHz.
-        Returns [back_left, back_right, front_left, front_right] or None.
+        Convert naoqi_bridge_msgs/AudioBuffer to 4 float32 channel arrays at 48kHz.
+        Does NOT resample - returns native 48kHz for localization.
+        
+        Returns:
+            tuple: (mic_signals_48k, freq_in) or (None, None) on failure
+            mic_signals_48k order: [RL, RR, FL, FR]
         """
         try:
             freq_in = int(msg.frequency)
@@ -271,14 +269,16 @@ class SpeechRecognitionNode(Node):
             data = np.asarray(msg.data, dtype=np.int16)
 
             if channels == 0 or data.size == 0:
-                return None
+                return None, None
 
+            # De-interleave
             num_frames = data.size // channels
             if num_frames <= 0:
-                return None
+                return None, None
             
             frames = data[:num_frames * channels].reshape(num_frames, channels).astype(np.float32) / 32767.0
 
+            # Extract channels
             def get_chan(enum_val, fallback=None):
                 if enum_val in channel_map:
                     idx = channel_map.index(enum_val)
@@ -293,23 +293,25 @@ class SpeechRecognitionNode(Node):
             # Order: [back_left, back_right, front_left, front_right]
             mic_signals = [RL, RR, FL, FR]
 
-            # Resample if input isn't 48kHz (shouldn't happen with Pepper)
-            if freq_in != self.input_sample_rate:
-                gcd = math.gcd(freq_in, self.input_sample_rate)
-                up = self.input_sample_rate // gcd
-                down = freq_in // gcd
-                mic_signals = [resample_poly(sig, up, down).astype(np.float32) for sig in mic_signals]
-
-            return mic_signals
+            return mic_signals, freq_in
 
         except Exception as e:
             self.get_logger().error(f"AudioBuffer parse error: {e}")
-            return None
+            return None, None
 
-    def resample_48k_to_16k(self, audio_48k: np.ndarray) -> np.ndarray:
-        """Resample 48kHz audio to 16kHz for VAD/Whisper."""
-        # 48000 / 16000 = 3, so down=3, up=1
-        return resample_poly(audio_48k, 1, 3).astype(np.float32)
+    def resample_to_16k(self, audio_48k: np.ndarray, freq_in: int) -> np.ndarray:
+        """Resample audio to 16kHz for VAD/Whisper."""
+        if freq_in == self.sample_rate:
+            return audio_48k
+        
+        try:
+            gcd = math.gcd(freq_in, self.sample_rate)
+            up = self.sample_rate // gcd
+            down = freq_in // gcd
+            return resample_poly(audio_48k, up, down).astype(np.float32)
+        except Exception as e:
+            self.get_logger().error(f"Resample failed ({freq_in}->{self.sample_rate}): {e}")
+            return audio_48k
 
     # =========================================================================
     # Intensity Gate
@@ -320,39 +322,10 @@ class SpeechRecognitionNode(Node):
         return rms >= self.intensity_threshold
 
     # =========================================================================
-    # Noise Reduction (operates at 48kHz)
-    # =========================================================================
-    def apply_noise_reduction(self, signal_48k: np.ndarray) -> np.ndarray:
-        """Apply noise reduction using rolling context window at 48kHz."""
-        if not self.use_noise_reduction:
-            return signal_48k
-
-        try:
-            block_size = len(signal_48k)
-            if block_size <= 0:
-                return signal_48k
-
-            # Roll context and append new block
-            self.noise_context_window = np.roll(self.noise_context_window, -block_size)
-            self.noise_context_window[-block_size:] = signal_48k
-
-            reduced_context = nr.reduce_noise(
-                y=self.noise_context_window,
-                sr=self.input_sample_rate,
-                stationary=self.nr_stationary,
-                prop_decrease=self.nr_prop_decrease
-            )
-
-            return reduced_context[-block_size:].astype(np.float32)
-        except Exception as e:
-            self.get_logger().error(f"Noise reduction error: {e}")
-            return signal_48k
-
-    # =========================================================================
     # GCC-PHAT Localization (operates at 48kHz for precision)
     # =========================================================================
-    def gcc_phat(self, sig1: np.ndarray, sig2: np.ndarray) -> float:
-        """GCC-PHAT for time delay estimation."""
+    def gcc_phat(self, sig1: np.ndarray, sig2: np.ndarray, sample_rate: int) -> float:
+        """GCC-PHAT for time delay estimation at native sample rate."""
         try:
             n = sig1.shape[0] + sig2.shape[0]
 
@@ -368,14 +341,14 @@ class SpeechRecognitionNode(Node):
             cc = np.concatenate((cc[-max_shift:], cc[:max_shift + 1]))
             shift = int(np.argmax(np.abs(cc)) - max_shift)
 
-            return shift / float(self.input_sample_rate)
+            return shift / float(sample_rate)
         except Exception as e:
             self.get_logger().error(f"GCC-PHAT error: {e}")
             return 0.0
 
-    def localize_4mic(self, mic_signals: list) -> tuple:
+    def localize_4mic(self, mic_signals: list, sample_rate: int) -> tuple:
         """
-        4-mic sound source localization using TDOA at 48kHz.
+        4-mic sound source localization using TDOA at native sample rate (48kHz).
         Returns (azimuth, elevation, confidence).
         """
         try:
@@ -384,7 +357,7 @@ class SpeechRecognitionNode(Node):
 
             for i in range(num_mics):
                 for j in range(i + 1, num_mics):
-                    tdoa = self.gcc_phat(mic_signals[i], mic_signals[j])
+                    tdoa = self.gcc_phat(mic_signals[i], mic_signals[j], sample_rate)
                     tdoa_matrix[i, j] = tdoa
                     tdoa_matrix[j, i] = -tdoa
 
@@ -433,8 +406,8 @@ class SpeechRecognitionNode(Node):
     # =========================================================================
     # Beamforming (operates at 48kHz)
     # =========================================================================
-    def apply_beamforming(self, mic_signals: list, azimuth: float, elevation: float) -> np.ndarray:
-        """Delay-and-sum beamforming at 48kHz."""
+    def apply_beamforming(self, mic_signals: list, azimuth: float, elevation: float, sample_rate: int) -> np.ndarray:
+        """Delay-and-sum beamforming at native sample rate (48kHz)."""
         if not self.use_beamforming:
             return mic_signals[2]  # Default to front-left
 
@@ -451,7 +424,7 @@ class SpeechRecognitionNode(Node):
                 delays[i] = distance / self.speed_of_sound
 
             delays -= delays.min()
-            delay_samples = (delays * self.input_sample_rate).astype(int)
+            delay_samples = (delays * sample_rate).astype(int)
 
             signal_length = min(len(sig) for sig in mic_signals)
             beamformed = np.zeros(signal_length, dtype=np.float32)
@@ -475,6 +448,7 @@ class SpeechRecognitionNode(Node):
         """Publish sound source direction."""
         stamp = self.get_clock().now().to_msg()
 
+        # Publish direction as unit vector
         direction_msg = Vector3Stamped()
         direction_msg.header.stamp = stamp
         direction_msg.header.frame_id = 'Head'
@@ -483,6 +457,7 @@ class SpeechRecognitionNode(Node):
         direction_msg.vector.z = float(np.sin(elevation))
         self.direction_pub.publish(direction_msg)
 
+        # Publish azimuth
         azimuth_msg = Float32()
         azimuth_msg.data = float(azimuth)
         self.azimuth_pub.publish(azimuth_msg)
@@ -492,21 +467,20 @@ class SpeechRecognitionNode(Node):
     # =========================================================================
     def audio_callback(self, msg: AudioBuffer):
         """
-        Main audio processing pipeline:
-        1. Parse 4-channel 48kHz audio
+        Process incoming audio:
+        1. Parse 4-channel audio at 48kHz
         2. Intensity gate
-        3. Localization at 48kHz
+        3. Localization at 48kHz (high precision)
         4. Beamforming at 48kHz
-        5. Noise reduction at 48kHz
-        6. Resample to 16kHz
-        7. VAD + speech collection
+        5. Resample to 16kHz
+        6. VAD + speech collection
         """
-        # Parse multi-channel audio (48kHz)
-        mic_signals_48k = self.parse_audio_buffer(msg)
+        # Parse multi-channel audio (keep at 48kHz)
+        mic_signals_48k, freq_in = self.parse_audio_buffer(msg)
         if mic_signals_48k is None:
             return
 
-        # Use front-left for intensity check
+        # Intensity gate using front-left mic
         if not self.is_intense_enough(mic_signals_48k[2]):
             return
 
@@ -514,7 +488,7 @@ class SpeechRecognitionNode(Node):
         # Localization at 48kHz (full precision)
         # =====================================================
         if self.use_localization:
-            azimuth, elevation, confidence = self.localize_4mic(mic_signals_48k)
+            azimuth, elevation, confidence = self.localize_4mic(mic_signals_48k, freq_in)
             
             with self.direction_lock:
                 self.current_azimuth = azimuth
@@ -528,151 +502,174 @@ class SpeechRecognitionNode(Node):
         # Beamforming at 48kHz
         # =====================================================
         if self.use_beamforming and self.use_localization:
-            audio_48k = self.apply_beamforming(mic_signals_48k, azimuth, elevation)
+            audio_48k = self.apply_beamforming(mic_signals_48k, azimuth, elevation, freq_in)
         else:
             audio_48k = mic_signals_48k[2]  # Front-left
 
         # =====================================================
-        # Noise reduction at 48kHz
-        # =====================================================
-        audio_48k_clean = self.apply_noise_reduction(audio_48k)
-
-        # =====================================================
         # Resample to 16kHz for VAD/Whisper
         # =====================================================
-        audio_16k = self.resample_48k_to_16k(audio_48k_clean)
+        resampled_audio = self.resample_to_16k(audio_48k, freq_in)
 
-        # Update pre-speech ring buffer
-        for sample in audio_16k:
+        # =====================================================
+        # Update pre-speech ring buffer (always, before VAD)
+        # =====================================================
+        for sample in resampled_audio:
             self.pre_speech_ring.append(sample)
-
-        # Accumulate for chunk-aligned VAD
-        self.vad_pending_buffer = np.concatenate([self.vad_pending_buffer, audio_16k])
-
-        # Process complete 512-sample chunks
+        
+        # =====================================================
+        # Accumulate for chunk-aligned VAD processing
+        # =====================================================
+        self.vad_pending_buffer = np.concatenate([self.vad_pending_buffer, resampled_audio])
+        
+        # Process all complete 512-sample chunks
         while len(self.vad_pending_buffer) >= self.vad_chunk_size:
+            # Extract exactly 512 samples
             vad_chunk = self.vad_pending_buffer[:self.vad_chunk_size]
             self.vad_pending_buffer = self.vad_pending_buffer[self.vad_chunk_size:]
+            
+            # Run VAD on this chunk
             self._process_vad_chunk(vad_chunk)
 
-    # =========================================================================
-    # VAD State Machine
-    # =========================================================================
     def _process_vad_chunk(self, vad_chunk: np.ndarray):
-        """Process 512-sample VAD chunk through state machine."""
-        speech_prob = self._run_silero_vad(vad_chunk)
-
+        """
+        Process a single 512-sample VAD chunk through the state machine.
+        """
+        # Run VAD
+        speech_prob = self.run_silero_vad(vad_chunk)
+        
+        # Publish probability
         prob_msg = Float32()
         prob_msg.data = float(speech_prob)
         self.vad_prob_pub.publish(prob_msg)
-
+        
+        # Two-threshold system
         vad_is_speech = speech_prob >= self.speech_threshold
         vad_is_silence = speech_prob < self.neg_threshold
-
+        
+        # =====================================================
+        # State machine with chunk-based tracking
+        # =====================================================
+        
         if not self.speech_active and vad_is_speech:
-            # START: Include pre-speech buffer
+            # =====================================================
+            # START: Speech detected - include pre-speech buffer
+            # =====================================================
             self.speech_active = True
             self.speech_start_time = time.time()
             self.silence_chunks = 0
             self.speech_chunk_count = 1
-
+            
+            # Prepend pre-speech buffer (captures the onset)
             pre_speech_audio = np.array(list(self.pre_speech_ring), dtype=np.float32)
-            self.speech_buffer_16k = [pre_speech_audio, vad_chunk.copy()]
-
+            self.speech_buffer = [pre_speech_audio, vad_chunk.copy()]
+            
             self.get_logger().info(f"VAD: speech START (prob={speech_prob:.3f}, "
                                   f"pre-buffer={len(pre_speech_audio)} samples)")
-
+        
         elif self.speech_active and vad_is_speech:
-            self.speech_buffer_16k.append(vad_chunk.copy())
+            # CONTINUE: Still speaking - reset silence counter
+            self.speech_buffer.append(vad_chunk.copy())
             self.silence_chunks = 0
             self.speech_chunk_count += 1
-
+            
+            # =====================================================
+            # CHECK: Max duration cutoff
+            # =====================================================
             if self.speech_chunk_count >= self.max_speech_chunks:
                 self._finalize_speech(speech_prob, reason="max_duration")
-
+        
         elif self.speech_active and vad_is_silence:
-            self.speech_buffer_16k.append(vad_chunk.copy())
+            # POSSIBLE END: Below negative threshold
+            self.speech_buffer.append(vad_chunk.copy())
             self.silence_chunks += 1
             self.speech_chunk_count += 1
-
+            
+            # Check if silence duration exceeded threshold
             if self.silence_chunks >= self.min_silence_chunks:
                 self._finalize_speech(speech_prob, reason="silence")
+            
+            # Also check max duration during silence
             elif self.speech_chunk_count >= self.max_speech_chunks:
                 self._finalize_speech(speech_prob, reason="max_duration")
-
+        
         elif self.speech_active:
-            self.speech_buffer_16k.append(vad_chunk.copy())
+            # In between thresholds - continue collecting, don't increment silence counter
+            self.speech_buffer.append(vad_chunk.copy())
             self.speech_chunk_count += 1
-
+            
+            # Check max duration
             if self.speech_chunk_count >= self.max_speech_chunks:
                 self._finalize_speech(speech_prob, reason="max_duration")
 
-    def _run_silero_vad(self, audio_chunk: np.ndarray) -> float:
-        """Run Silero VAD on 512-sample chunk."""
-        try:
-            if len(audio_chunk) != 512:
-                return 0.0
-            return self.silero_model(audio_chunk)
-        except Exception as e:
-            self.get_logger().error(f"Silero VAD error: {e}")
-            return 0.0
-
-    def _reset_vad_state(self):
-        """Reset VAD internal state."""
-        self.silero_model.reset_states()
-
-    # =========================================================================
-    # Speech Finalization & Transcription
-    # =========================================================================
     def _finalize_speech(self, speech_prob: float, reason: str):
-        """Finalize speech segment and trigger async transcription."""
+        """
+        Finalize speech segment and trigger async transcription.
+        
+        Args:
+            speech_prob: Current VAD probability
+            reason: "silence" or "max_duration"
+        """
         self.speech_active = False
-
+        
         if reason == "silence":
-            silence_duration_s = self.silence_chunks * self.vad_chunk_size / self.vad_sample_rate
-            self.get_logger().info(f"VAD: speech END (prob={speech_prob:.3f}, silence={silence_duration_s:.2f}s)")
+            silence_duration_s = self.silence_chunks * self.vad_chunk_size / self.sample_rate
+            self.get_logger().info(f"VAD: speech END (prob={speech_prob:.3f}, "
+                                  f"silence={silence_duration_s:.2f}s)")
         else:
             self.get_logger().info(f"VAD: speech END (max duration {self.max_speech_duration_s}s reached)")
-
-        self._reset_vad_state()
-
-        if not self.speech_buffer_16k:
+        
+        # Reset VAD state
+        self.reset_vad_state()
+        
+        # Concatenate speech
+        if not self.speech_buffer:
+            self.get_logger().warning("Empty speech buffer at finalization")
             self._reset_speech_state()
             return
-
-        speech_audio = np.concatenate(self.speech_buffer_16k).astype(np.float32)
-        duration_s = len(speech_audio) / self.vad_sample_rate
-
+        
+        speech_audio = np.concatenate(self.speech_buffer).astype(np.float32)
+        duration_s = len(speech_audio) / self.sample_rate
+        
+        # Filter short segments
         if duration_s < self.min_speech_duration:
             self.get_logger().info(f"Ignoring short segment ({duration_s:.2f}s)")
             self._reset_speech_state()
             return
-
+        
+        # =====================================================
+        # ASYNC: Submit transcription to thread pool
+        # =====================================================
         with self.transcription_lock:
             if self.is_transcribing:
                 self.get_logger().warning("Previous transcription still running, queuing...")
             self.is_transcribing = True
-
+        
         self.transcription_executor.submit(self._transcribe_async, speech_audio, duration_s)
+        
         self._reset_speech_state()
 
     def _reset_speech_state(self):
         """Reset speech collection state."""
-        self.speech_buffer_16k = []
+        self.speech_buffer = []
         self.silence_chunks = 0
         self.speech_chunk_count = 0
         self.speech_start_time = None
 
     def _transcribe_async(self, audio: np.ndarray, duration_s: float):
-        """Async Whisper transcription."""
+        """
+        Transcribe speech segment with Whisper (runs in thread pool).
+        
+        This doesn't block the audio callback, allowing continuous VAD processing.
+        """
         try:
             self.get_logger().info(f"[Async] Running Whisper on {duration_s:.2f}s segment...")
             start_time = time.time()
 
             segments, info = self.whisper.transcribe(
-                audio,
-                language=self.language,
-                task="transcribe",
+                audio, 
+                language=self.language, 
+                task="transcribe", 
                 beam_size=1,
                 vad_filter=False
             )
@@ -684,19 +681,38 @@ class SpeechRecognitionNode(Node):
             self.get_logger().info(f"[Async] ASR done. elapsed={elapsed:.3f}s, RTF={rtf:.3f}")
             self.get_logger().info(f"[Async] Transcript: '{text}'")
 
+            # Only publish non-empty transcripts
             if text:
                 out = String()
                 out.data = text
                 self.asr_pub.publish(out)
-
+                
         except Exception as e:
             self.get_logger().error(f"[Async] Transcription error: {e}")
         finally:
             with self.transcription_lock:
                 self.is_transcribing = False
 
+    def run_silero_vad(self, audio_chunk: np.ndarray) -> float:
+        """Run Silero VAD on 512-sample chunk."""
+        try:
+            if len(audio_chunk) != 512:
+                self.get_logger().warning(f"VAD frame size mismatch: {len(audio_chunk)}")
+                return 0.0
+            
+            speech_prob = self.silero_model(audio_chunk)
+            return speech_prob
+        
+        except Exception as e:
+            self.get_logger().error(f"Silero VAD error: {e}")
+            return 0.0
+
+    def reset_vad_state(self):
+        """Reset VAD state."""
+        self.silero_model.reset_states()
+
     def destroy_node(self):
         """Clean shutdown."""
-        self.get_logger().info("Shutting down...")
+        self.get_logger().info("Shutting down transcription executor...")
         self.transcription_executor.shutdown(wait=True)
         super().destroy_node()
