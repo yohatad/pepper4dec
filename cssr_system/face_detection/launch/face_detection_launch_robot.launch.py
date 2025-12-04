@@ -58,8 +58,13 @@ def launch_setup(context, *args, **kwargs):
                     "enable_sync": True,
                     "enable_infra1": False,
                     "enable_infra2": False,
-                    "enable_accel": False,
-                    "enable_gyro": False,
+                    "enable_accel": True,
+                    "enable_gyro": True,
+
+                    # Set QoS to BEST_EFFORT
+                    'qos_overrides./camera.aligned_depth_to_color.image_raw.publisher.reliability': 'best_effort',
+                    'qos_overrides./camera.color.image_raw.publisher.reliability': 'best_effort',
+                    'qos_overrides./camera.depth.image_rect_raw.publisher.reliability': 'best_effort',
                 }],
                 output="screen",
             )
