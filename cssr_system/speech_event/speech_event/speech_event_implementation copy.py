@@ -76,7 +76,6 @@ class SpeechRecognitionNode(Node):
         self.nr_stationary = bool(self.config.get('stationary', True))
         self.nr_prop_decrease = float(self.config.get('propDecrease', 0.9))
 
-        
         # faster-whisper ASR parameters
         self.whisper_model_size = str(self.config.get('whisperModelSize', 'tiny'))  # Use tiny for streaming
         self.whisper_language = str(self.config.get('whisperLanguage', 'en'))
