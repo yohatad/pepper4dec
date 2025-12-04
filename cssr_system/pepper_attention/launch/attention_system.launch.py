@@ -9,7 +9,7 @@ import os
 
 def generate_launch_description():
     pkg_dir = get_package_share_directory('pepper_attention')
-    params_file = os.path.join(pkg_dir, 'config', 'param.yaml')
+    params_file = os.path.join(pkg_dir, 'config', 'pepper_attention_configuration.yaml')
     
     return LaunchDescription([
         DeclareLaunchArgument(

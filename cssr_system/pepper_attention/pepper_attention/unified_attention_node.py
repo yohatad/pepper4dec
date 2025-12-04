@@ -9,7 +9,6 @@ import math
 import time
 import random
 import collections
-from threading import Lock
 import numpy as np
 import rclpy
 from rclpy.node import Node
@@ -17,6 +16,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 from builtin_interfaces.msg import Time, Duration
 from std_msgs.msg import Float32, Float32MultiArray
 from sensor_msgs.msg import CameraInfo, JointState, Image, CompressedImage
+from threading import Lock
 
 from naoqi_bridge_msgs.msg import JointAnglesWithSpeed
 from geometry_msgs.msg import Vector3

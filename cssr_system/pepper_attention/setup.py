@@ -26,7 +26,6 @@ setup(
     tests_require=['pytest'],
    entry_points={
         'console_scripts': [
-            'depth_query_server = pepper_attention.depth_query_server:main',
             'saliency_node = pepper_attention.saliency_node:main',
             'unified_attention_node = pepper_attention.unified_attention_node:main',
             'visualization_node = pepper_attention.visualization_node:main',  # NEW
