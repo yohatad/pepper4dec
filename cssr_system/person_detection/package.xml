@@ -1,0 +1,44 @@
+<package format="3">
+  <name>person_detection</name>
+  <version>0.1.0</version>
+  <description>Person detection node(s)</description>
+  <maintainer email="you@example.com">Yohannes</maintainer>
+  <license>BSD-3-Clause</license>
+
+  <buildtool_depend>setuptools</buildtool_depend>
+
+  <build_depend>rclcpp</build_depend>
+  <build_depend>rclcpp_action</build_depend>
+  <build_depend>std_msgs</build_depend>
+  <build_depend>geometry_msgs</build_depend>
+  <build_depend>sensor_msgs</build_depend>
+  <build_depend>trajectory_msgs</build_depend>
+  <build_depend>control_msgs</build_depend>
+  <build_depend>cv_bridge</build_depend>
+  <build_depend>image_transport</build_depend>
+  <build_depend>yaml-cpp</build_depend>
+  <build_depend>opencv</build_depend>
+  <build_depend>rclcpp_action</build_depend>
+  <build_depend>control_msgs</build_depend>
+
+  <exec_depend>control_msgs</exec_depend>
+  <exec_depend>rclcpp_action</exec_depend>
+  <exec_depend>rclcpp</exec_depend>
+  <exec_depend>rclcpp_action</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>trajectory_msgs</exec_depend>
+  <exec_depend>control_msgs</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>image_transport</exec_depend>
+  <exec_depend>yaml-cpp</exec_depend>
+  <exec_depend>opencv</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>ament_index_python</exec_depend> 
+  <exec_depend>cssr_interfaces</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
