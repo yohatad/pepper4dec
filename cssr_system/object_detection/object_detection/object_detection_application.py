@@ -1,24 +1,24 @@
 #!/home/yoha/face_detection_env/bin/python3
 
 """
-person_detection_application.py
-ROS2 Node for Face and Mutual Gaze Detection and Localization.
+object_detection_application.py
+ROS2 Node for Object Detection and Localization.
 
-Implements face detection using either MediaPipe or SixDrepNet (YOLO + SixDrepNet).
-Configuration is loaded from face_detection_configuration.yaml.
+Implements object detection using YOLOv8.
+Configuration is loaded from object_detection_configuration.yaml.
 
 Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
 Email: yohanneh@andrew.cmu.edu
-Date: April 18, 2025
+Date: December 07, 2025
 Version: v1.0
 """
 
 import sys
 import rclpy
-from .face_detection_implementation import MediaPipe, SixDrepNet, load_configuration
+from .object_detection_implementation import YOLOv8, load_configuration
 
 
-BANNER = """faceDetection v1.0
+BANNER = """objectDetection v1.0
 This program comes with ABSOLUTELY NO WARRANTY.
 """
 
@@ -27,22 +27,13 @@ def main():
 
     # Load configuration
     config = load_configuration()
-    algo_name = config.get("algorithm", "sixdrep").lower()
-
-    print(f"Using algorithm: {algo_name}")
 
     rclpy.init()
 
     node = None
     try:
-        # Directly choose algorithm class
-        if algo_name == "mediapipe":
-            node = MediaPipe(config)
-        elif algo_name == "sixdrep":
-            node = SixDrepNet(config)
-        else:
-            print(f"Error: Invalid algorithm '{algo_name}'. Choose 'mediapipe' or 'sixdrep'.")
-            sys.exit(1)
+        # Create YOLOv8 object detection node
+        node = YOLOv8(config)
 
         # Setup subscriptions
         if not node.subscribe_topics():

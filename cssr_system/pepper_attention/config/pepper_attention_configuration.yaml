@@ -26,7 +26,7 @@ saliency_node:
 unified_attention_node:
   ros__parameters:
     # Depth image configuration
-    depth_image_topic: "/camera/depth/image_rect_raw"  # Adds /compressedDepth if use_compressed: true
+    depth_image_topic: "/camera/aligned_depth_to_color/image_raw"  # Adds /compressedDepth if use_compressed: true
     depth_scale: 0.001  # Scale to convert depth values to meters (0.001 for mm, 1.0 for meters)
     
     # Input topics
@@ -47,12 +47,12 @@ unified_attention_node:
     saliency_min_score: 0.30
     
     # Depth filtering
-    depth_lo: 0.6       # Preferred depth range lower (meters)
-    depth_hi: 1.8       # Preferred depth range upper (meters)
-    depth_min: 0.35     # Minimum valid depth (meters)
-    depth_max: 4.0      # Maximum valid depth (meters)
-    depth_roi_px: 5     # ROI size for median filtering
-    track_timeout_s: 5.0  # Remove tracks not seen for this long
+    depth_lo: 0.6             # Preferred depth range lower (meters)
+    depth_hi: 1.8             # Preferred depth range upper (meters)
+    depth_min: 0.35           # Minimum valid depth (meters)
+    depth_max: 4.0            # Maximum valid depth (meters)
+    depth_roi_px: 5           # ROI size for median filtering
+    track_timeout_s: 5.0      # Remove tracks not seen for this long
     
     # Target selection hysteresis
     hysteresis_delta: 1.2

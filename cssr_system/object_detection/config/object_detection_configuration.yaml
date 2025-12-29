@@ -1,0 +1,15 @@
+# Object Detection Configuration File
+# This file contains all configurable parameters for the object detection node
+
+# General Settings
+useCompressed: false         # Use compressed image topics
+confidenceThreshold: 0.8     # General confidence threshold (0.0-1.0)
+camera: "realsense"          # Camera type: "realsense", "pepper", or "video"
+
+verboseMode: false           # Enable verbose logging and display
+imageTimeout: 2.0            # Timeout in seconds for image reception
+
+# Sort Algorithm Settings
+sortMaxDisappeared: 5        # Max age for SORT tracker
+sortMinHits: 3               # Min hits required for SORT tracker
+sortIouThreshold: 0.3        # IoU threshold for SORT tracker (0.0-1.0)

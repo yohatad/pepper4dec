@@ -1,5 +1,5 @@
 """"
-face_detection_tracking.py Functionality for tracking faces using SORT(simple online and realtime tracking) and Centroid Tracking.
+object_detection_tracking.py Functionality for tracking objects using SORT(simple online and realtime tracking) and Centroid Tracking.
 
 Author: Yohannes Tadesse Haile
 Date: March 30, 2025
@@ -414,8 +414,8 @@ class CentroidTracker:
         Returns:
             dict: Mapping of input centroids to tracked object IDs.
         """
-        tracked_faces = self.update(centroids)
+        tracked_objects = self.update(centroids)
         centroid_to_object_id = {}
-        for object_id, tracked_centroid in tracked_faces.items():
+        for object_id, tracked_centroid in tracked_objects.items():
             centroid_to_object_id[tuple(tracked_centroid)] = object_id
         return centroid_to_object_id

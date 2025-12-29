@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 """
-face_detection_launch_robot.launch.py
-ROS2 Launch file for Face Detection Robot
+object_detection_launch_robot.launch.py
+ROS2 Launch file for Object Detection Robot
 """
 
 from launch import LaunchDescription
@@ -20,7 +20,7 @@ def launch_setup(context, *args, **kwargs):
     # Load the camera type from the YAML file
     config_file = os.path.join(
         os.getenv("COLCON_PREFIX_PATH").split(":")[0],  # first install dir
-        "face_detection", "share", "face_detection", "config", "face_detection_configuration.yaml"
+        "object_detection", "share", "object_detection", "config", "object_detection_configuration.yaml"
     )
     with open(config_file, "r") as f:
         params = yaml.safe_load(f)

@@ -1,7 +1,7 @@
 <package format="3">
-  <name>person_detection</name>
+  <name>object_detection</name>
   <version>0.1.0</version>
-  <description>Person detection node(s)</description>
+  <description>Object detection node(s)</description>
   <maintainer email="you@example.com">Yohannes</maintainer>
   <license>BSD-3-Clause</license>
 

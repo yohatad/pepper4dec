@@ -1,5 +1,5 @@
 """
-person_detection_implementation.py Implementation code for running the Person Detection and Localization ROS2 node.
+object_detection_implementation.py Implementation code for running the Object Detection and Localization ROS2 node.
 
 Author: Yohannes Tadesse Haile
 Date: December 07, 2025
@@ -32,7 +32,7 @@ from message_filters import ApproximateTimeSynchronizer, Subscriber
 from geometry_msgs.msg import Point
 from typing import Tuple, List, Dict, Optional
 from cssr_interfaces.msg import PersonDetection
-from .person_detection_tracking import Sort
+from .object_detection_tracking import Sort
 
 
 def load_configuration() -> Dict:
@@ -55,8 +55,8 @@ def load_configuration() -> Dict:
     }
     
     try:
-        package_path = get_package_share_directory('person_detection')
-        config_file = os.path.join(package_path, 'config', 'person_detection_configuration.yaml')
+        package_path = get_package_share_directory('object_detection')
+        config_file = os.path.join(package_path, 'config', 'object_detection_configuration.yaml')
         
         if os.path.exists(config_file):
             with open(config_file, 'r') as file:
@@ -73,14 +73,14 @@ def load_configuration() -> Dict:
     return config
 
 
-class PersonDetectionNode(Node):
-    def __init__(self, config: Dict, node_name: str = 'personDetection'):
+class ObjectDetectionNode(Node):
+    def __init__(self, config: Dict, node_name: str = 'objectDetection'):
         super().__init__(node_name)
         
         self.config = config
-        self.pub_people = self.create_publisher(PersonDetection, "/personDetection/data", 10)
-        self.debug_pub = self.create_publisher(Image, "/personDetection/debug", 1)
-        self.depth_debug_pub = self.create_publisher(Image, "/personDetection/depth_debug", 1)
+        self.pub_objects = self.create_publisher(PersonDetection, "/objectDetection/data", 10)
+        self.debug_pub = self.create_publisher(Image, "/objectDetection/debug", 1)
+        self.depth_debug_pub = self.create_publisher(Image, "/objectDetection/depth_debug", 1)
 
         self.bridge = CvBridge()
         self.depth_image: Optional[np.ndarray] = None
@@ -177,7 +177,7 @@ class PersonDetectionNode(Node):
     def extract_topic(self, image_topic: str) -> Optional[str]:
         """Extract topic name from configuration file."""
         try:
-            package = get_package_share_directory('person_detection')
+            package = get_package_share_directory('object_detection')
             config_path = os.path.join(package, 'data', 'pepper_topics.yaml')
 
             with open(config_path, 'r') as file:
@@ -443,7 +443,7 @@ class PersonDetectionNode(Node):
                     self.update_latest_frame(self.latest_frame)
                     
                     # Publish tracking data
-                    self.publish_person_detection(tracking_data)
+                    self.publish_object_detection(tracking_data)
                 else:
                     self.update_latest_frame(frame)
             else:
@@ -473,18 +473,18 @@ class PersonDetectionNode(Node):
         
         return tracking_data
 
-    def publish_person_detection(self, tracking_data: List[Dict]):
-        """Publish the detected people to the topic."""
+    def publish_object_detection(self, tracking_data: List[Dict]):
+        """Publish the detected objects to the topic."""
         if not tracking_data:
             return
             
-        person_msg = PersonDetection()
-        person_msg.person_label_id = [data['track_id'] for data in tracking_data]
-        person_msg.centroids = [data['centroid'] for data in tracking_data]
-        person_msg.width = [data['width'] for data in tracking_data]
-        person_msg.height = [data['height'] for data in tracking_data]
+        object_msg = PersonDetection()
+        object_msg.person_label_id = [data['track_id'] for data in tracking_data]
+        object_msg.centroids = [data['centroid'] for data in tracking_data]
+        object_msg.width = [data['width'] for data in tracking_data]
+        object_msg.height = [data['height'] for data in tracking_data]
         
-        self.pub_people.publish(person_msg)
+        self.pub_objects.publish(object_msg)
 
     def draw_tracked_objects(self, frame: np.ndarray, tracked_objects, tracking_data: List[Dict]) -> np.ndarray:
         """Draw bounding boxes for each tracked object."""
@@ -533,7 +533,7 @@ class PersonDetectionNode(Node):
             self.get_logger().error(f"Error during cleanup: {e}")
 
 
-class YOLOv8(PersonDetectionNode):
+class YOLOv8(ObjectDetectionNode):
     def __init__(self, config: Dict):
         """
         Initializes the ROS2 node, loads configuration, and subscribes to necessary topics.
@@ -560,7 +560,7 @@ class YOLOv8(PersonDetectionNode):
         )
 
         if self.verbose_mode:
-            self.get_logger().info(f"{self.node_name}: Person Detection YOLOv8 node initialized")
+            self.get_logger().info(f"{self.node_name}: Object Detection YOLOv8 node initialized")
         
         # Subscribe to topics
         if not self.subscribe_topics():
@@ -578,8 +578,8 @@ class YOLOv8(PersonDetectionNode):
             so.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
 
             try:
-                package_path = get_package_share_directory('person_detection')
-                model_path = os.path.join(package_path, 'models', 'person_detection_yolov8s.onnx')
+                package_path = get_package_share_directory('object_detection')
+                model_path = os.path.join(package_path, 'models', 'object_detection_yolov8s.onnx')
             except Exception as e:
                 self.get_logger().error(f"Failed to get package path: {e}")
                 return False
