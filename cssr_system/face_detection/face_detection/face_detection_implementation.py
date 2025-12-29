@@ -18,7 +18,6 @@ import multiprocessing
 import yaml
 import random
 import threading
-import time
 from ament_index_python.packages import get_package_share_directory
 from rclpy.node import Node
 from math import cos, sin, pi
@@ -94,7 +93,7 @@ class FaceDetectionNode(Node):
         
         self.node_name = self.get_name()
         self.timer_start = self.get_clock().now()
-        self.last_image_time = None   # timestamp of the last received imag
+        self.last_image_time = None   # timestamp of the last received image
 
         # Thread safety for visualization
         self.frame_lock = threading.Lock()
@@ -117,7 +116,7 @@ class FaceDetectionNode(Node):
             # depth_image is updated in sync callback; safe to read without copy for view,
             # but copy if you plan heavy ops
             if self.depth_image is not None:
-                depth_vis = self._make_depth_vis(self.depth_image)
+                depth_vis = self.make_depth_vis(self.depth_image)
 
         if color_frame is None and depth_vis is None:
             return
@@ -340,7 +339,7 @@ class FaceDetectionNode(Node):
             return False
         return color_image.shape[:2] == depth_image.shape[:2]
 
-    def _make_depth_vis(self, depth: np.ndarray) -> Optional[np.ndarray]:
+    def make_depth_vis(self, depth: np.ndarray) -> Optional[np.ndarray]:
         """Convert raw depth to a colorized BGR8 image for debug viewing/publishing."""
         if depth is None:
             return None

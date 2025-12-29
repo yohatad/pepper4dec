@@ -60,6 +60,7 @@ def launch_setup(context, *args, **kwargs):
                     "enable_infra2": False,
                     "enable_accel": True,
                     "enable_gyro": True,
+                    "publish_tf": True,
 
                     # Set QoS to BEST_EFFORT
                     'qos_overrides./camera.aligned_depth_to_color.image_raw.publisher.reliability': 'best_effort',
