@@ -1,0 +1,15 @@
+rag:
+  top_k: 3
+  verbose: true
+
+llm:
+  provider: local   # local | openai
+
+  local:
+    base_url: "http://localhost:8080/v1"
+    model: "HuggingFaceTB/SmolLM3-3B"
+    api_key: "sk-no-key-required"
+
+  openai:
+    api_key: "sk-xxxx"
+    model: "gpt-4o-mini"
