@@ -4,7 +4,7 @@
 face_detection_application.py
 ROS2 Node for Face and Mutual Gaze Detection and Localization.
 
-Implements face detection using either MediaPipe or SixDrepNet (YOLO + SixDrepNet).
+Implements face detection using SixDrepNet (YOLO + SixDrepNet).
 Configuration is loaded from face_detection_configuration.yaml.
 
 Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
@@ -15,7 +15,7 @@ Version: v1.0
 
 import sys
 import rclpy
-from .face_detection_implementation import MediaPipe, SixDrepNet, load_configuration
+from .face_detection_implementation import SixDrepNet, load_configuration
 
 
 BANNER = """faceDetection v1.0
@@ -36,12 +36,10 @@ def main():
     node = None
     try:
         # Directly choose algorithm class
-        if algo_name == "mediapipe":
-            node = MediaPipe(config)
-        elif algo_name == "sixdrep":
+        if algo_name == "sixdrep":
             node = SixDrepNet(config)
         else:
-            print(f"Error: Invalid algorithm '{algo_name}'. Choose 'mediapipe' or 'sixdrep'.")
+            print(f"Error: Invalid algorithm '{algo_name}'. Only 'sixdrep' is supported.")
             sys.exit(1)
 
         # Setup subscriptions

@@ -66,12 +66,8 @@ The following table provides the key-value pairs used in the configuration file:
 
 | Parameter                   | Description                                                      | Range/Values            | Default Value |
 |-----------------------------|------------------------------------------------------------------|-------------------------|---------------|
-| `algorithm`                 | Algorithm selected for face detection                            | `mediapipe`, `sixdrep`  | `sixdrep`     |
+| `algorithm`                 | Algorithm selected for face detection                            | `sixdrep`               | `sixdrep`     |
 | `useCompressed`             | Use compressed ROS image topics                                  | `True`, `False`         | `True`        |
-| `mpFacedetConfidence`       | Face detection confidence threshold (MediaPipe)                  | `[0.0 - 1.0]`           | `0.5`         |
-| `mpHeadposeAngle`           | Head pose angle threshold in degrees (MediaPipe)                 | Positive integer        | `8`           |
-| `centroidMaxDistance`       | Maximum centroid distance for centroid tracking                  | Positive integer        | `15`          |
-| `centroidMaxDisappeared`    | Frames allowed before centroid tracker deregisters an object     | Positive integer        | `100`         |
 | `sixdrepnetConfidence`      | Confidence threshold for face detection (SixDRepNet)             | `[0.0 - 1.0]`           | `0.65`        |
 | `sixdrepnetHeadposeAngle`   | Head pose angle threshold in degrees (SixDRepNet)                | Positive integer        | `10`          |
 | `sortMaxDisappeared`        | Maximum frames allowed for disappearance in SORT tracking        | Positive integer        | `30`          |

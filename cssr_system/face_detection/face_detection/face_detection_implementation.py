@@ -9,7 +9,6 @@ This program comes with ABSOLUTELY NO WARRANTY.
 """
 
 import cv2
-import mediapipe as mp
 import numpy as np
 import rclpy
 import os
@@ -26,8 +25,7 @@ from cv_bridge import CvBridge
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from geometry_msgs.msg import Point
 from typing import Tuple, List, Dict, Optional
-from cssr_interfaces.msg import FaceDetection
-from .face_detection_tracking import Sort, CentroidTracker
+from cssr_interfaces.msg import FaceDetection, ObjectDetection
 
 def load_configuration() -> Dict:
     """
@@ -43,15 +41,8 @@ def load_configuration() -> Dict:
         'camera': 'realsense',
         'verboseMode': True,
         'imageTimeout': 2.0,
-        'mpFacedetConfidence': 0.5,
-        'mpHeadposeAngle': 8,
-        'centroidMaxDisappeared': 15,
-        'centroidMaxDistance': 100,
         'sixdrepnetConfidence': 0.65,
-        'sixdrepnetHeadposeAngle': 10,
-        'sortMaxDisappeared': 5,
-        'sortMinHits': 3,
-        'sortIouThreshold': 0.3
+        'sixdrepnetHeadposeAngle': 10
     }
     
     try:
@@ -365,22 +356,6 @@ class FaceDetectionNode(Node):
             self.get_logger().error(f"Depth visualization failed: {e}")
             return None
 
-
-    def get_depth_at_centroid(self, centroid_x: float, centroid_y: float) -> Optional[float]:
-        """Get depth value at specific coordinates."""
-        if self.depth_image is None:
-            return None
-
-        height, width = self.depth_image.shape[:2]
-        x, y = int(round(centroid_x)), int(round(centroid_y))
-
-        if 0 <= x < width and 0 <= y < height:
-            depth_value = self.depth_image[y, x]
-            if np.isfinite(depth_value) and depth_value > 0:
-                return depth_value / 1000.0  # Convert to meters
-        
-        return None
-
     def get_depth_in_region(self, centroid_x: float, centroid_y: float, 
                            box_width: float, box_height: float, 
                            region_scale: float = 0.1) -> Optional[float]:
@@ -437,149 +412,6 @@ class FaceDetectionNode(Node):
         except Exception as e:
             self.get_logger().error(f"Error during cleanup: {e}")
 
-class MediaPipe(FaceDetectionNode):
-    def __init__(self, config: Dict):
-        super().__init__(config)
-        
-        # Get MediaPipe specific configuration values with defaults
-        mp_confidence = self.config.get('mpFacedetConfidence', 0.5)
-        self.mp_angle = self.config.get('mpHeadposeAngle', 8)
-        centroid_max_disappeared = self.config.get('centroidMaxDisappeared', 15)
-        centroid_max_distance = self.config.get('centroidMaxDistance', 100)
-        
-        # Initialize MediaPipe components
-        self.mp_face_mesh = mp.solutions.face_mesh
-        self.face_mesh = self.mp_face_mesh.FaceMesh(min_detection_confidence=mp_confidence, max_num_faces=10)
-
-        # Initialize the CentroidTracker
-        self.centroid_tracker = CentroidTracker(centroid_max_disappeared, centroid_max_distance)
-
-        # Subscribe to the image topic
-        self.subscribe_topics()
-
-        self.start_timeout_monitor()
-
-    def process_images(self):
-        """Process synchronized RGB + depth images for MediaPipe."""
-        if self.color_image is None or self.depth_image is None:
-            return
-
-        frame = self.color_image
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        img_h, img_w = frame.shape[:2]
-
-        self.process_face_mesh(frame, rgb_frame, img_h, img_w)
-
-    def process_face_mesh(self, frame, rgb_frame, img_h, img_w):
-        results = self.face_mesh.process(rgb_frame)
-        centroids = []
-        mutualGaze_list = []
-        face_widths = []
-        face_heights = []
-        face_boxes = []  # Store bounding boxes for each face
-        tracking_data = []  # Initialize tracking_data here
-        
-        # Dictionary to store face ID colors
-        if not hasattr(self, "face_colors"):
-            self.face_colors = {}
-            
-        if results.multi_face_landmarks:
-            for face_id, face_landmarks in enumerate(results.multi_face_landmarks):
-                face_2d, face_3d = [], []
-                x_min, y_min, x_max, y_max = img_w, img_h, 0, 0  # Bounding box coordinates
-                
-                for idx, lm in enumerate(face_landmarks.landmark):
-                    x, y = int(lm.x * img_w), int(lm.y * img_h)
-                    face_2d.append([x, y])
-                    face_3d.append([x, y, lm.z])
-                    # Expand bounding box
-                    x_min = min(x_min, x)
-                    y_min = min(y_min, y)
-                    x_max = max(x_max, x)
-                    y_max = max(y_max, y)
-                
-                # Calculate width and height
-                width = x_max - x_min
-                height = y_max - y_min
-                
-                # Store bounding box
-                face_boxes.append((x_min, y_min, x_max, y_max))
-                face_widths.append(width)
-                face_heights.append(height)
-                
-                centroid_x = np.mean([pt[0] for pt in face_2d])
-                centroid_y = np.mean([pt[1] for pt in face_2d])
-                centroids.append((centroid_x, centroid_y))
-                
-                face_2d = np.array(face_2d, dtype=np.float64)
-                face_3d = np.array(face_3d, dtype=np.float64)
-                
-                focal_length = 1 * img_w
-                cam_matrix = np.array([[focal_length, 0, img_w / 2],
-                                    [0, focal_length, img_h / 2],
-                                    [0, 0, 1]])
-                distortion_matrix = np.zeros((4, 1), dtype=np.float64)
-                
-                success, rotation_vec, translation_vec = cv2.solvePnP(
-                    face_3d, face_2d, cam_matrix, distortion_matrix)
-                
-                rmat, jac = cv2.Rodrigues(rotation_vec)
-                angles, mtxR, mtxQ, Qx, Qy, Qz = cv2.RQDecomp3x3(rmat)
-                
-                x_angle = angles[0] * 360
-                y_angle = angles[1] * 360
-                
-                mutualGaze = abs(x_angle) <= self.mp_angle and abs(y_angle) <= self.mp_angle
-                mutualGaze_list.append(mutualGaze)
-            
-            # Use the centroid tracker to match centroids with object IDs
-            centroid_to_face_id = self.centroid_tracker.match_centroids(centroids)
-            
-            for idx, (centroid, width, height, box) in enumerate(zip(centroids, face_widths, face_heights, face_boxes)):
-                centroid_tuple = tuple(centroid)
-                face_id = centroid_to_face_id.get(centroid_tuple, None)
-                
-                # Assign a new dark color for a new face or lost tracking
-                if face_id is None or face_id not in self.face_colors:
-                    self.face_colors[face_id] = self.generate_dark_color()
-                
-                face_color = self.face_colors[face_id]
-                cz = self.get_depth_at_centroid(centroid[0], centroid[1])
-                cz = cz if cz is not None else 0.0  # Default to 0.0 meters
-                
-                point = Point(x=float(centroid[0]), y=float(centroid[1]), z=float(cz) if cz else 0.0)
-                
-                # Add width and height to tracking data
-                tracking_data.append({
-                    'face_id': str(face_id),
-                    'centroid': point,
-                    'width': float(width),
-                    'height': float(height),
-                    'mutual_gaze': bool(mutualGaze_list[idx])
-                })
-                
-                # Unpack bounding box coordinates
-                x_min, y_min, x_max, y_max = box
-                
-                # Draw bounding box with assigned color
-                cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), face_color, 2)
-                
-                # Add label above bounding box
-                label = "Engaged" if mutualGaze_list[idx] else "Not Engaged"
-                cv2.putText(frame, label, (x_min, y_min - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, face_color, 2)
-                cv2.putText(frame, f"Face: {face_id}", (x_min, y_min - 30),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, face_color, 2)
-                
-                # Draw depth information below the box
-                cv2.putText(frame, f"Depth: {cz:.2f}m", (x_min, y_max + 20),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, face_color, 2)
-            
-        self.update_latest_frame(frame)
-        
-        # Publish the tracking data
-        self.publish_face_detection(tracking_data)
-
 class YOLOONNX:
     def __init__(self, model_path: str, class_score_th: float = 0.65,
         providers: List[str] = ['CUDAExecutionProvider', 'CPUExecutionProvider']):
@@ -635,12 +467,9 @@ class SixDrepNet(FaceDetectionNode):
         # Get SixDrepNet specific configuration values with defaults
         sixdrepnet_confidence = self.config.get('sixdrepnetConfidence', 0.65)
         self.sixdrep_angle = self.config.get('sixdrepnetHeadposeAngle', 10)
-        self.sort_max_disappeared = self.config.get('sortMaxDisappeared', 5)
-        self.sort_min_hits = self.config.get('sortMinHits', 3)
-        self.sort_iou_threshold = self.config.get('sortIouThreshold', 0.3)
         
         if self.verbose_mode:
-            self.get_logger().info(f"{self.node_name}: Initializing SixDrepNet...")
+            self.get_logger().info(f"{self.node_name}: Initializing SixDrepNet with object detection integration...")
 
         # Set up model paths
         try:
@@ -650,8 +479,8 @@ class SixDrepNet(FaceDetectionNode):
         except Exception as e:
             self.get_logger().error(f"{self.node_name}: Failed to get package path: {e}")
             return
-            
-        # Initialize YOLOONNX model early and check success
+
+        # Initialize YOLOONNX model for face detection within person ROIs
         try:
             self.yolo_model = YOLOONNX(model_path=yolo_model_path, class_score_th=sixdrepnet_confidence)
             if self.verbose_mode:
@@ -690,15 +519,32 @@ class SixDrepNet(FaceDetectionNode):
         self.mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
         self.std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
-        self.sort_tracker = Sort(max_age=self.sort_max_disappeared, min_hits=self.sort_min_hits, iou_threshold=self.sort_iou_threshold)
-        self.tracks = [] 
+        # Store latest object detections
+        self.latest_object_detections = None
+        self.object_detections_lock = threading.Lock()
         
+        # Create subscriber for object detection messages
+        self.object_detection_sub = self.create_subscription(
+            ObjectDetection,
+            '/objectDetection/data',
+            self.object_detection_callback,
+            10
+        )
+        
+        if self.verbose_mode:
+            self.get_logger().info(f"{self.node_name}: Subscribed to /objectDetection/data")
+
         if self.verbose_mode:
             self.get_logger().info(f"{self.node_name} SixDrepNet initialization complete.")
 
         self.subscribe_topics()
 
         self.start_timeout_monitor()
+    
+    def object_detection_callback(self, msg: ObjectDetection):
+        """Callback for object detection messages."""
+        with self.object_detections_lock:
+            self.latest_object_detections = msg
     
     def draw_axis(self, img, yaw, pitch, roll, tdx=None, tdy=None, size=100):
         pitch = pitch * pi / 180
@@ -730,7 +576,7 @@ class SixDrepNet(FaceDetectionNode):
             
     def process_frame(self, cv_image):
         """
-        Process the input frame for face detection and head pose estimation using SORT.
+        Process the input frame for face detection and head pose estimation using object detection.
         Args: 
             cv_image: Input frame as a NumPy array (BGR format)
         """
@@ -742,88 +588,146 @@ class SixDrepNet(FaceDetectionNode):
         if not hasattr(self, "face_colors"):
             self.face_colors = {}
 
-        # Object detection (YOLO)
-        boxes, scores = self.yolo_model(debug_image)
+        # Get latest object detections
+        with self.object_detections_lock:
+            object_detections = self.latest_object_detections
 
-        # Prepare detections for SORT ([x1, y1, x2, y2, score])
-        detections = []
-        for box, score in zip(boxes, scores):
-            x1, y1, x2, y2 = box
-            detections.append([x1, y1, x2, y2, score])
+        if object_detections is None:
+            # No object detections yet, return original image
+            return debug_image
 
-        # Convert detections to NumPy array
-        detections = np.array(detections)
-
-        # Update SORT tracker with detections
-        if detections.shape[0] > 0:
-            self.tracks = self.sort_tracker.update(detections)
-        else:
-            self.tracks = []  # Reset tracks if no detections
-
-        # Process tracks
-        for track in self.tracks:
-            x1, y1, x2, y2, face_id = map(int, track)  # SORT returns face_id as the last value
-            cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+        # Process each detected person
+        for i in range(len(object_detections.object_label_id)):
+            # Check if this is a person detection
+            if i < len(object_detections.class_names) and object_detections.class_names[i] != 'person':
+                continue  # Skip non-person detections
             
-            # Calculate width and height
-            width = x2 - x1
-            height = y2 - y1
-
-            # Assign a unique color for each face ID
-            # Assign a new dark color for a new face or lost tracking
-            if face_id is None or face_id not in self.face_colors:
-                self.face_colors[face_id] = self.generate_dark_color()
-
-            face_color = self.face_colors[face_id]
-
-            # Crop the face region for head pose estimation
-            head_image = debug_image[max(y1, 0):min(y2, img_h), max(x1, 0):min(x2, img_w)]
-            if head_image.size == 0:
-                continue  # Skip if cropped region is invalid
-
-            # Preprocess for SixDrepNet
-            resized_image = cv2.resize(head_image, (224, 224))
-            normalized_image = (resized_image[..., ::-1] / 255.0 - self.mean) / self.std
-            input_tensor = normalized_image.transpose(2, 0, 1)[np.newaxis, ...].astype(np.float32)
-
-            # Run head pose estimation
-            yaw_pitch_roll = self.sixdrepnet_session.run(None, {'input': input_tensor})[0][0]
-            yaw_deg, pitch_deg, roll_deg = yaw_pitch_roll
-
-            # Draw head pose axes
-            self.draw_axis(debug_image, yaw_deg, pitch_deg, roll_deg, cx, cy, size=100)
-
-            cz = self.get_depth_in_region(cx, cy, width, height)
-            cz = cz if cz is not None else 0.0
-
-            # Determine if the person is engaged
-            mutual_gaze = abs(yaw_deg) < self.sixdrep_angle and abs(pitch_deg) < self.sixdrep_angle
-
-            # Add width and height to tracking data
-            tracking_data.append({
-                'face_id': str(face_id),
-                'centroid': Point(x=float(cx), y=float(cy), z=float(cz) if cz else 0.0),
-                'width': float(width),
-                'height': float(height),
-                'mutual_gaze': mutual_gaze
-            })
-
-            # Draw bounding box with assigned color
-            cv2.rectangle(debug_image, (x1, y1), (x2, y2), face_color, 2)
-
-            # Add labels above bounding box
-            label = "Engaged" if mutual_gaze else "Not Engaged"
-            cv2.putText(debug_image, label, (x1 + 10, y1 - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, face_color, 2)
-
-            cv2.putText(debug_image, f"Face: {face_id}", (x1 + 10, y1 - 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, face_color, 2)
+            # Get person tracking ID (from object_detection node)
+            person_id = object_detections.object_label_id[i]
             
-               # Draw depth information below the box
-            cv2.putText(debug_image, f"Depth: {cz:.2f}m", (x1 + 10, y2 + 20),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, face_color, 2)
+            # Get person bounding box from object detection
+            if i < len(object_detections.centroids):
+                person_centroid = object_detections.centroids[i]
+                person_cx, person_cy = int(person_centroid.x), int(person_centroid.y)
+                
+                # Get person width and height from object detection
+                person_width = object_detections.width[i] if i < len(object_detections.width) else 100
+                person_height = object_detections.height[i] if i < len(object_detections.height) else 100
+                
+                # Calculate person bounding box coordinates from centroid and dimensions
+                person_x1 = int(person_cx - person_width / 2)
+                person_y1 = int(person_cy - person_height / 2)
+                person_x2 = int(person_cx + person_width / 2)
+                person_y2 = int(person_cy + person_height / 2)
+                
+                # Clamp to image boundaries
+                person_x1 = max(0, person_x1)
+                person_y1 = max(0, person_y1)
+                person_x2 = min(img_w, person_x2)
+                person_y2 = min(img_h, person_y2)
+                
+                # Skip if person bounding box is too small
+                if person_x2 - person_x1 < 20 or person_y2 - person_y1 < 20:
+                    continue
+
+                # Crop person ROI for face detection
+                person_roi = debug_image[person_y1:person_y2, person_x1:person_x2]
+                if person_roi.size == 0:
+                    continue  # Skip if ROI is invalid
+
+                # Run face detection within person ROI
+                face_boxes, face_scores = self.yolo_model(person_roi)
+                
+                # Process each detected face within the person ROI
+                for face_idx, (face_box, face_score) in enumerate(zip(face_boxes, face_scores)):
+                    # Convert face box coordinates from ROI to full image coordinates
+                    fx1, fy1, fx2, fy2 = face_box
+                    # Adjust coordinates to full image
+                    fx1 += person_x1
+                    fy1 += person_y1
+                    fx2 += person_x1
+                    fy2 += person_y1
+                    
+                    # Calculate face centroid
+                    face_cx = (fx1 + fx2) // 2
+                    face_cy = (fy1 + fy2) // 2
+                    face_width = fx2 - fx1
+                    face_height = fy2 - fy1
+                    
+                    # Skip if face bounding box is too small
+                    if face_width < 20 or face_height < 20:
+                        continue
+                    
+                    # Create unique face ID combining person ID and face index
+                    face_id = f"{person_id}_{face_idx}"
+                    
+                    # Assign a unique color for each face ID
+                    if face_id not in self.face_colors:
+                        self.face_colors[face_id] = self.generate_dark_color()
+
+                    face_color = self.face_colors[face_id]
+
+                    # Crop the face region for head pose estimation
+                    face_image = debug_image[fy1:fy2, fx1:fx2]
+                    if face_image.size == 0:
+                        continue  # Skip if cropped region is invalid
+
+                    # Preprocess for SixDrepNet
+                    resized_image = cv2.resize(face_image, (224, 224))
+                    normalized_image = (resized_image[..., ::-1] / 255.0 - self.mean) / self.std
+                    input_tensor = normalized_image.transpose(2, 0, 1)[np.newaxis, ...].astype(np.float32)
+
+                    # Run head pose estimation
+                    yaw_pitch_roll = self.sixdrepnet_session.run(None, {'input': input_tensor})[0][0]
+                    yaw_deg, pitch_deg, roll_deg = yaw_pitch_roll
+
+                    # Draw head pose axes at face centroid
+                    self.draw_axis(debug_image, yaw_deg, pitch_deg, roll_deg, face_cx, face_cy, size=50)
+
+                    # Get depth at face centroid
+                    cz = person_centroid.z if person_centroid.z > 0 else 0.0
+                    if cz == 0.0:
+                        # Fall back to depth image if object detection depth is not available
+                        cz_depth = self.get_depth_in_region(face_cx, face_cy, face_width, face_height)
+                        cz = cz_depth if cz_depth is not None else 0.0
+
+                    # Determine if the person is engaged (mutual gaze)
+                    mutual_gaze = abs(yaw_deg) < self.sixdrep_angle and abs(pitch_deg) < self.sixdrep_angle
+
+                    # Add face tracking data
+                    tracking_data.append({
+                        'face_id': str(face_id),
+                        'centroid': Point(x=float(face_cx), y=float(face_cy), z=float(cz) if cz else 0.0),
+                        'width': float(face_width),
+                        'height': float(face_height),
+                        'mutual_gaze': mutual_gaze
+                    })
+
+                    # Draw face bounding box with assigned color
+                    cv2.rectangle(debug_image, (fx1, fy1), (fx2, fy2), face_color, 2)
+
+                    # Add labels above face bounding box
+                    label = "Engaged" if mutual_gaze else "Not Engaged"
+                    cv2.putText(debug_image, label, (fx1 + 10, fy1 - 10),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, face_color, 2)
+
+                    cv2.putText(debug_image, f"Face: {face_id}", (fx1 + 10, fy1 - 30),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, face_color, 2)
+                    
+                    # Draw depth information below the box
+                    cv2.putText(debug_image, f"Depth: {cz:.2f}m", (fx1 + 10, fy2 + 20),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, face_color, 2)
+                    
+                    # Draw face detection confidence
+                    cv2.putText(debug_image, f"Conf: {face_score:.2f}", (fx1 + 10, fy2 + 40),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, face_color, 2)
+
+                # Draw person bounding box (optional, for visualization)
+                if self.verbose_mode:
+                    cv2.rectangle(debug_image, (person_x1, person_y1), (person_x2, person_y2), (255, 255, 255), 1)
+                    cv2.putText(debug_image, f"Person: {person_id}", (person_x1 + 5, person_y1 - 5),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
         # Publish tracking data
         self.publish_face_detection(tracking_data)
         return debug_image
- 
