@@ -1,9 +1,11 @@
 """
-object_detection_implementation.py Implementation code for running the Object Detection and Localization ROS2 node.
+object_detection_implementation.py - Implementation code for running the Object Detection and Localization ROS2 node.
+
+Supports configurable object detection with ByteTrack tracking using the bytetracker package.
 
 Author: Yohannes Tadesse Haile
 Date: December 07, 2025
-Version: v1.0
+Version: v2.0
 
 Copyright (C) 2023 CSSR4Africa Consortium
 
@@ -24,16 +26,31 @@ import multiprocessing
 import yaml
 import random
 import threading
+import supervision as sv
 from ament_index_python.packages import get_package_share_directory
 from rclpy.node import Node
 from sensor_msgs.msg import Image, CompressedImage
 from cv_bridge import CvBridge
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from geometry_msgs.msg import Point
-from typing import Tuple, List, Dict, Optional
-from cssr_interfaces.msg import PersonDetection
-from .object_detection_tracking import Sort
+from typing import Tuple, List, Dict, Optional, Set
+from cssr_interfaces.msg import ObjectDetection
 
+# COCO class names (80 classes)
+COCO_CLASSES = [
+    'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck',
+    'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench',
+    'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra',
+    'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee',
+    'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove',
+    'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup',
+    'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange',
+    'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch',
+    'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse',
+    'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink',
+    'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier',
+    'toothbrush'
+]
 
 def load_configuration() -> Dict:
     """
@@ -49,9 +66,16 @@ def load_configuration() -> Dict:
         'verboseMode': True,
         'imageTimeout': 2.0,
         'confidenceThreshold': 0.5,
-        'sortMaxDisappeared': 50,
-        'sortMinHits': 3,
-        'sortIouThreshold': 0.5
+        
+        # ByteTrack parameters
+        'trackThreshold': 0.45,    # Detection confidence threshold for tracking
+        'trackBuffer': 30,         # Frames to keep lost tracks (max_age)
+        'matchThreshold': 0.8,     # IoU threshold for matching
+        'frameRate': 30,           # Expected frame rate
+        
+        # Object classes to track (can be names or indices)
+        # If empty or 'all', track all detected objects
+        'targetClasses': ['person'],
     }
     
     try:
@@ -62,7 +86,7 @@ def load_configuration() -> Dict:
             with open(config_file, 'r') as file:
                 file_config = yaml.safe_load(file) or {}
                 config.update(file_config)  # Update defaults with file values
-                print(f"Loaded configuration from {config_file}")
+                # print(f"Loaded configuration from {config_file}")
         else:
             print(f"Warning: Configuration file not found at {config_file}, using defaults")
             
@@ -72,13 +96,42 @@ def load_configuration() -> Dict:
         
     return config
 
-
+def get_class_indices(target_classes: List, class_names: List[str] = COCO_CLASSES) -> Set[int]:
+    """
+    Convert class names or indices to a set of valid class indices.
+    
+    Args:
+        target_classes: List of class names (str) or indices (int)
+        class_names: List of all class names
+        
+    Returns:
+        Set of class indices to track
+    """
+    if not target_classes or target_classes == ['all'] or 'all' in target_classes:
+        return set(range(len(class_names)))
+    
+    indices = set()
+    for cls in target_classes:
+        if isinstance(cls, int):
+            if 0 <= cls < len(class_names):
+                indices.add(cls)
+            else:
+                print(f"Warning: Class index {cls} out of range (0-{len(class_names)-1})")
+        elif isinstance(cls, str):
+            cls_lower = cls.lower().strip()
+            try:
+                idx = [name.lower() for name in class_names].index(cls_lower)
+                indices.add(idx)
+            except ValueError:
+                print(f"Warning: Class name '{cls}' not found in COCO classes")
+    
+    return indices
 class ObjectDetectionNode(Node):
     def __init__(self, config: Dict, node_name: str = 'objectDetection'):
         super().__init__(node_name)
         
         self.config = config
-        self.pub_objects = self.create_publisher(PersonDetection, "/objectDetection/data", 10)
+        self.pub_objects = self.create_publisher(ObjectDetection, "/objectDetection/data", 10)
         self.debug_pub = self.create_publisher(Image, "/objectDetection/debug", 1)
         self.depth_debug_pub = self.create_publisher(Image, "/objectDetection/depth_debug", 1)
 
@@ -92,6 +145,13 @@ class ObjectDetectionNode(Node):
         self.verbose_mode = config['verboseMode']
         self.image_timeout = config['imageTimeout']
         
+        # Target classes to track
+        self.target_class_indices = get_class_indices(config.get('targetClasses', ['person']))
+        
+        if self.verbose_mode:
+            target_names = [COCO_CLASSES[i] for i in self.target_class_indices]
+            self.get_logger().info(f"Tracking classes: {target_names}")
+        
         self.node_name = self.get_name()
         self.timer_start = self.get_clock().now()
         self.last_image_time = None  # timestamp of the last received image
@@ -100,8 +160,11 @@ class ObjectDetectionNode(Node):
         self.frame_lock = threading.Lock()
         self.latest_frame: Optional[np.ndarray] = None
 
-        # Color tracking for person IDs
-        self.person_colors: Dict[int, Tuple[int, int, int]] = {}
+        # Color tracking for object IDs
+        self.object_colors: Dict[int, Tuple[int, int, int]] = {}
+        
+        # Store class_id mapping for tracked objects
+        self.track_class_map: Dict[int, int] = {}
 
         # Start visualization timer (30 Hz)
         self.vis_timer = self.create_timer(1.0 / 30.0, self.visualization_callback)
@@ -125,7 +188,7 @@ class ObjectDetectionNode(Node):
             if self.latest_frame is not None:
                 color_frame = self.latest_frame.copy()
             if self.depth_image is not None:
-                depth_vis = self._make_depth_vis(self.depth_image)
+                depth_vis = self.make_depth_vis(self.depth_image)
 
         if color_frame is None and depth_vis is None:
             return
@@ -133,9 +196,9 @@ class ObjectDetectionNode(Node):
         if self.config.get("verboseMode", False) and os.environ.get("DISPLAY", "") != "":
             try:
                 if color_frame is not None:
-                    cv2.imshow("Person Detection Debug (RGB)", color_frame)
+                    cv2.imshow("Object Detection Debug (RGB)", color_frame)
                 if depth_vis is not None:
-                    cv2.imshow("Person Detection Debug (Depth)", depth_vis)
+                    cv2.imshow("Object Detection Debug (Depth)", depth_vis)
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord('q'):
                     self.get_logger().info(f"{self.node_name}: User requested shutdown")
@@ -342,8 +405,7 @@ class ObjectDetectionNode(Node):
             elapsed = self.get_clock().now().nanoseconds / 1e9 - self.last_image_time
             if elapsed > self.image_timeout:
                 self.get_logger().warn(
-                    f"No images received for {elapsed:.1f}s (timeout={self.image_timeout}s)"
-                )
+                    f"No images received for {elapsed:.1f}s (timeout={self.image_timeout}s)")
 
     def check_camera_resolution(self, color_image: np.ndarray, depth_image: np.ndarray) -> bool:
         """Check if color and depth images have matching resolutions."""
@@ -351,7 +413,7 @@ class ObjectDetectionNode(Node):
             return False
         return color_image.shape[:2] == depth_image.shape[:2]
 
-    def _make_depth_vis(self, depth: np.ndarray) -> Optional[np.ndarray]:
+    def make_depth_vis(self, depth: np.ndarray) -> Optional[np.ndarray]:
         """Convert raw depth to a colorized BGR8 image for debug viewing/publishing."""
         if depth is None:
             return None
@@ -372,21 +434,6 @@ class ObjectDetectionNode(Node):
         except Exception as e:
             self.get_logger().error(f"Depth visualization failed: {e}")
             return None
-
-    def get_depth_at_centroid(self, centroid_x: float, centroid_y: float) -> Optional[float]:
-        """Get depth value at specific coordinates."""
-        if self.depth_image is None:
-            return None
-
-        height, width = self.depth_image.shape[:2]
-        x, y = int(round(centroid_x)), int(round(centroid_y))
-
-        if 0 <= x < width and 0 <= y < height:
-            depth_value = self.depth_image[y, x]
-            if np.isfinite(depth_value) and depth_value > 0:
-                return depth_value / 1000.0  # Convert to meters
-        
-        return None
 
     def get_depth_in_region(self, centroid_x: float, centroid_y: float, 
                            box_width: float, box_height: float, 
@@ -428,17 +475,21 @@ class ObjectDetectionNode(Node):
         if self.color_image is not None and self.depth_image is not None:
             # Check if resolution matches
             if self.check_camera_resolution(self.color_image, self.depth_image) or self.camera_type == "pepper":
-                # Process the image with the person detection algorithm
+                # Process the image with the object detection algorithm
                 frame = self.color_image.copy()
                 boxes, scores, class_ids = self.detect_object(frame) if hasattr(self, 'detect_object') else ([], [], [])
                 
-                # If boxes are returned, process them
+                # Filter detections by target classes
+                if len(boxes) > 0 and len(self.target_class_indices) < len(COCO_CLASSES):
+                    mask = np.array([cid in self.target_class_indices for cid in class_ids])
+                    boxes = boxes[mask]
+                    scores = scores[mask]
+                    class_ids = class_ids[mask]
+                
+                # If boxes are returned, process them with ByteTrack
                 if hasattr(self, 'tracker') and len(boxes) > 0:
-                    detections = np.hstack([boxes, scores.reshape(-1, 1)])
-                    tracked_objects = self.tracker.update(detections)
-    
+                    tracked_objects = self.update_tracker(boxes, scores, class_ids)
                     tracking_data = self.prepare_tracking_data(tracked_objects)
-
                     self.latest_frame = self.draw_tracked_objects(frame, tracked_objects, tracking_data)
                     self.update_latest_frame(self.latest_frame)
                     
@@ -449,11 +500,11 @@ class ObjectDetectionNode(Node):
             else:
                 self.get_logger().warn(f"{self.node_name}: Color and depth image resolutions do not match")
 
-    def prepare_tracking_data(self, tracked_objects) -> List[Dict]:
+    def prepare_tracking_data(self, tracked_objects: List[Dict]) -> List[Dict]:
         """Prepare tracking data for publishing."""
         tracking_data = []
         for obj in tracked_objects:
-            x1, y1, x2, y2, track_id = obj
+            x1, y1, x2, y2 = obj['bbox']
             width = x2 - x1
             height = y2 - y1
             centroid_x = (x1 + x2) / 2
@@ -464,8 +515,12 @@ class ObjectDetectionNode(Node):
             
             point = Point(x=float(centroid_x), y=float(centroid_y), z=float(depth) if depth else 0.0)
             
+            class_id = int(obj['class_id'])
             tracking_data.append({
-                'track_id': str(int(track_id)),
+                'track_id': str(int(obj['track_id'])),
+                'class_id': class_id,
+                'class_name': COCO_CLASSES[class_id] if class_id < len(COCO_CLASSES) else 'unknown',
+                'confidence': float(obj['confidence']),
                 'centroid': point,
                 'width': float(width),
                 'height': float(height)
@@ -478,33 +533,41 @@ class ObjectDetectionNode(Node):
         if not tracking_data:
             return
             
-        object_msg = PersonDetection()
-        object_msg.person_label_id = [data['track_id'] for data in tracking_data]
+        object_msg = ObjectDetection()
+        object_msg.object_label_id = [data['track_id'] for data in tracking_data]
+        object_msg.class_names = [data['class_name'] for data in tracking_data]
+        object_msg.class_ids = [data['class_id'] for data in tracking_data]
+        object_msg.confidences = [data['confidence'] for data in tracking_data]
         object_msg.centroids = [data['centroid'] for data in tracking_data]
         object_msg.width = [data['width'] for data in tracking_data]
         object_msg.height = [data['height'] for data in tracking_data]
         
         self.pub_objects.publish(object_msg)
 
-    def draw_tracked_objects(self, frame: np.ndarray, tracked_objects, tracking_data: List[Dict]) -> np.ndarray:
+    def draw_tracked_objects(self, frame: np.ndarray, tracked_objects: List[Dict], 
+                            tracking_data: List[Dict]) -> np.ndarray:
         """Draw bounding boxes for each tracked object."""
         output_img = frame.copy()
         for i, obj in enumerate(tracked_objects):
-            x1, y1, x2, y2, track_id = obj
-            track_id = int(track_id)
+            x1, y1, x2, y2 = obj['bbox']
+            track_id = int(obj['track_id'])
+            class_id = int(obj['class_id'])
+            confidence = obj['confidence']
+            class_name = COCO_CLASSES[class_id] if class_id < len(COCO_CLASSES) else 'unknown'
             
             # Assign a unique color for each track ID
-            if track_id not in self.person_colors:
-                self.person_colors[track_id] = self.generate_dark_color()
+            if track_id not in self.object_colors:
+                self.object_colors[track_id] = self.generate_dark_color()
             
-            color = self.person_colors[track_id]
+            color = self.object_colors[track_id]
             p1 = (int(x1), int(y1))
             p2 = (int(x2), int(y2))
             cv2.rectangle(output_img, p1, p2, color, 2)
 
-            label_str = f"Person: {track_id}"
+            # Label with class name, ID, and confidence
+            label_str = f"{class_name} #{track_id} ({confidence:.2f})"
             cv2.putText(output_img, label_str, (int(x1), int(y1) - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
             
             # Use depth from tracking data if available
             depth = None
@@ -512,7 +575,7 @@ class ObjectDetectionNode(Node):
                 if data['track_id'] == str(track_id):
                     depth = data['centroid'].z
                     break
-            
+                
             # Format and display depth info
             if depth is not None and depth > 0:
                 depth_str = f"Depth: {depth:.2f} m"
@@ -520,7 +583,7 @@ class ObjectDetectionNode(Node):
                 depth_str = "Depth: Unknown"
                 
             cv2.putText(output_img, depth_str, (int(x1), int(y2) + 20), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
                         
         return output_img
 
@@ -532,35 +595,36 @@ class ObjectDetectionNode(Node):
         except Exception as e:
             self.get_logger().error(f"Error during cleanup: {e}")
 
-
-class YOLOv8(ObjectDetectionNode):
+class YOLOv11(ObjectDetectionNode):
     def __init__(self, config: Dict):
         """
         Initializes the ROS2 node, loads configuration, and subscribes to necessary topics.
         """
         super().__init__(config)
         
-        # Get YOLOv8 specific configuration values with defaults
+        # Get YOLOv11 specific configuration values with defaults
         self.confidence_threshold = self.config.get('confidenceThreshold', 0.5)
-        self.sort_max_disap = self.config.get('sortMaxDisappeared', 50)
-        self.sort_min_hits = self.config.get('sortMinHits', 3)
-        self.sort_iou_threshold = self.config.get('sortIouThreshold', 0.5)
+        
+        # ByteTrack parameters
+        self.track_thresh = self.config.get('trackThreshold', 0.45)
+        self.track_buffer = self.config.get('trackBuffer', 30)
+        self.match_thresh = self.config.get('matchThreshold', 0.8)
+        self.frame_rate = self.config.get('frameRate', 30)
 
         # Initialize model
-        if not self._init_model():
+        if not self.init_model():
             self.get_logger().error("Failed to initialize ONNX model")
             rclpy.shutdown()
             return
 
-        # Instantiate SORT tracker
-        self.tracker = Sort(
-            max_age=self.sort_max_disap, 
-            min_hits=self.sort_min_hits, 
-            iou_threshold=self.sort_iou_threshold
-        )
+        # Initialize ByteTrack tracker
+        if not self.init_tracker():
+            self.get_logger().error("Failed to initialize ByteTrack tracker")
+            rclpy.shutdown()
+            return
 
         if self.verbose_mode:
-            self.get_logger().info(f"{self.node_name}: Object Detection YOLOv8 node initialized")
+            self.get_logger().info(f"{self.node_name}: Object Detection YOLOv11 node initialized with ByteTrack")
         
         # Subscribe to topics
         if not self.subscribe_topics():
@@ -570,7 +634,20 @@ class YOLOv8(ObjectDetectionNode):
         # Start timeout monitor
         self.start_timeout_monitor()
 
-    def _init_model(self) -> bool:
+    def init_tracker(self) -> bool:
+        try:
+            self.tracker = sv.ByteTrack(
+                track_activation_threshold=self.track_thresh,
+                lost_track_buffer=self.track_buffer,
+                minimum_matching_threshold=self.match_thresh,
+                frame_rate=self.frame_rate
+            )
+            return True
+        except Exception as e:
+            self.get_logger().error(f"Failed to initialize ByteTrack: {e}")
+            return False
+
+    def init_model(self) -> bool:
         """Loads the ONNX model and prepares the runtime session."""
         try:
             so = onnxruntime.SessionOptions()
@@ -579,7 +656,7 @@ class YOLOv8(ObjectDetectionNode):
 
             try:
                 package_path = get_package_share_directory('object_detection')
-                model_path = os.path.join(package_path, 'models', 'object_detection_yolov8s.onnx')
+                model_path = os.path.join(package_path, 'models', 'object_detection_yolov11m.onnx')
             except Exception as e:
                 self.get_logger().error(f"Failed to get package path: {e}")
                 return False
@@ -614,15 +691,47 @@ class YOLOv8(ObjectDetectionNode):
             self.get_logger().error(f"{self.node_name}: Failed to initialize ONNX model: {e}")
             return False
 
+    def update_tracker(self, boxes: np.ndarray, scores: np.ndarray, 
+              class_ids: np.ndarray) -> List[Dict]:
+        try:
+            detections = sv.Detections(
+                xyxy=boxes,
+                confidence=scores,
+                class_id=class_ids.astype(int)
+            )
+            
+            tracked_detections = self.tracker.update_with_detections(detections)
+            
+            tracked_objects = []
+            for i in range(len(tracked_detections)):
+                track_id = tracked_detections.tracker_id[i]
+                
+                # Skip detections without assigned track IDs
+                if track_id is None:
+                    continue
+                    
+                tracked_objects.append({
+                    'bbox': tracked_detections.xyxy[i],
+                    'track_id': track_id,
+                    'class_id': tracked_detections.class_id[i],
+                    'confidence': tracked_detections.confidence[i]
+                })
+            
+            return tracked_objects
+            
+        except Exception as e:
+            self.get_logger().error(f"Error updating tracker: {e}")
+            return []
+
     def detect_object(self, image: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Prepares the image and runs inference on the ONNX model.
         
         Returns:
             (boxes, scores, class_ids)
-            - boxes in shape Nx4
-            - scores in shape Nx1
-            - class_ids in shape Nx1
+            - boxes in shape Nx4 (xyxy format)
+            - scores in shape N
+            - class_ids in shape N
         """
         model_input = self.prepare_input(image)
         outputs = self.session.run(
@@ -642,30 +751,53 @@ class YOLOv8(ObjectDetectionNode):
     def process_output(self, model_output) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Interprets the raw model output to filter boxes, scores, classes, 
-        apply NMS, then keep only 'person' (class_id == 0) for this example.
+        apply NMS, and return detections.
+        
+        YOLOv11 output format: [1, 84, 8400] where:
+        - 84 = 4 box coordinates + 80 class scores
+        - 8400 = number of predictions (grid cells)
+        - Box coordinates are: cx, cy, w, h (normalized to 0-1)
+        - Class scores are logits that need sigmoid activation
         """
-        preds = np.squeeze(model_output[0]).T  # [num_boxes, 4 + #classes]
-        conf_scores = np.max(preds[:, 4:], axis=1)
+        # Output shape: [1, 84, 8400]
+        output = model_output[0]
+        
+        # Transpose to [8400, 84] - each row is one prediction
+        predictions = output[0].T  # [8400, 84]
+        
+        # Split into box coordinates and class scores
+        boxes = predictions[:, :4]  # [8400, 4] - cx, cy, w, h (normalized 0-1)
+        class_scores = predictions[:, 4:]  # [8400, 80] - class logits
+        
+        # Apply sigmoid to class scores to get probabilities
+        class_probs = 1 / (1 + np.exp(-class_scores))
+        
+        # Get max class probability for each prediction
+        conf_scores = np.max(class_probs, axis=1)  # [8400]
+        
+        # Filter by confidence threshold
         mask = conf_scores > self.confidence_threshold
-        preds, conf_scores = preds[mask], conf_scores[mask]
-
+        boxes = boxes[mask]
+        class_probs = class_probs[mask]
+        conf_scores = conf_scores[mask]
+        
         if not len(conf_scores):
             return np.array([]), np.array([]), np.array([])
-
-        class_ids = np.argmax(preds[:, 4:], axis=1)
-        boxes = preds[:, :4]
+        
+        # Get class IDs
+        class_ids = np.argmax(class_probs, axis=1)  # [N]
+        
+        # Convert normalized box coordinates to pixel coordinates
+        # boxes are in format: cx, cy, w, h (normalized 0-1)
         boxes = self.rescale_boxes(boxes)
         boxes = self.xywh2xyxy(boxes)
-
+        
+        # Apply NMS
         keep_idx = self.multiclass_nms(boxes, conf_scores, class_ids, self.confidence_threshold)
-        boxes, conf_scores, class_ids = boxes[keep_idx], conf_scores[keep_idx], class_ids[keep_idx]
-
-        # Filter only 'person' (COCO class 0)
-        is_person = (class_ids == 0)
-        boxes = boxes[is_person]
-        conf_scores = conf_scores[is_person]
-        class_ids = class_ids[is_person]
-
+        boxes = boxes[keep_idx]
+        conf_scores = conf_scores[keep_idx]
+        class_ids = class_ids[keep_idx]
+        
         return boxes, conf_scores, class_ids
 
     def rescale_boxes(self, boxes: np.ndarray) -> np.ndarray:
