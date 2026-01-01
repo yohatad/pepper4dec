@@ -38,17 +38,6 @@ def main():
     # Load configuration
     config = load_configuration()
     
-    # Print configuration summary
-    print(f"Configuration:")
-    print(f"  Camera: {config.get('camera', 'realsense')}")
-    print(f"  Target classes: {config.get('targetClasses', ['person'])}")
-    print(f"  Confidence threshold: {config.get('confidenceThreshold', 0.5)}")
-    print(f"  Track threshold: {config.get('trackThreshold', 0.45)}")
-    print(f"  Track buffer: {config.get('trackBuffer', 30)} frames")
-    print(f"  Match threshold: {config.get('matchThreshold', 0.8)}")
-    print(f"  Verbose mode: {config.get('verboseMode', True)}")
-    print()
-
     rclpy.init()
 
     node = None

@@ -5,16 +5,7 @@ Supports configurable object detection with ByteTrack tracking using the bytetra
 
 Author: Yohannes Tadesse Haile
 Date: December 07, 2025
-Version: v2.0
-
-Copyright (C) 2023 CSSR4Africa Consortium
-
-This project is funded by the African Engineering and Technology Network (Afretec)
-Inclusive Digital Transformation Research Grant Programme.
-
-Website: www.cssr4africa.org
-
-This program comes with ABSOLUTELY NO WARRANTY.
+Version: v1.0
 """
 
 import cv2
