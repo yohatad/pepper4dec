@@ -3,8 +3,17 @@ Simplified RAG ROS 2 Node for Pepper Robot Lab Assistant
 
 Clean implementation without intent classification.
 The application controls when to call the RAG service.
+
+Environment Variables:
+    LLM_BASE_URL: LLM API endpoint
+    LLM_API_KEY: API key for LLM service
+    LLM_MODEL: Model name
+    CHROMA_PATH: Path for ChromaDB storage
+    EMBEDDING_MODEL: Sentence transformer model
+    RAG_VERBOSE: Set to "true" for debug logging
 """
 
+import os
 import sys
 from pathlib import Path
 from typing import List, Dict, Optional
@@ -30,7 +39,6 @@ from simple_rag import (
     get_collection,
     setup_collection,
     handle_query,
-    read_config_file
 )
 
 
@@ -41,19 +49,27 @@ class SimpleRAGNode(Node):
     Services:
         - rag_prompt: Answer questions using RAG
         - create_collection: Initialize knowledge base
+    
+    Configuration via environment variables:
+        export LLM_API_KEY="your-api-key"
+        export LLM_BASE_URL="https://api.groq.com/openai/v1"
+        export LLM_MODEL="llama-3.1-8b-instant"
     """
     
     def __init__(self):
         super().__init__('rag_node')
         
-        # Parameters
-        self.declare_parameter('config_path', str(PACKAGE_PATH / 'config' / 'ragSystem.ini'))
+        # Parameters (can override env vars)
         self.declare_parameter('collection_name', 'upanzi_knowledge')
         self.declare_parameter('verbose', False)
         
-        # Load config
-        config_path = self.get_parameter('config_path').get_parameter_value().string_value
-        self._load_config(config_path)
+        # Log configuration (hide API key)
+        config = get_config()
+        self.get_logger().info(f"LLM URL: {config.llm_base_url}")
+        self.get_logger().info(f"LLM Model: {config.llm_model}")
+        self.get_logger().info(f"LLM API Key: {'***' + config.llm_api_key[-4:] if len(config.llm_api_key) > 4 else '(default)'}")
+        self.get_logger().info(f"ChromaDB Path: {config.chroma_path}")
+        self.get_logger().info(f"Embedding Model: {config.embedding_model}")
         
         # State
         self._collection = None
@@ -67,28 +83,8 @@ class SimpleRAGNode(Node):
         self.create_service(Prompt, 'rag_prompt', self._prompt_callback)
         self.create_service(CreateCollection, 'create_collection', self._create_collection_callback)
         
-        self.get_logger().info(f"RAG Node ready. Collection: {collection_name if self._collection else 'Not loaded'}")
-    
-    def _load_config(self, config_path: str):
-        """Load configuration"""
-        try:
-            file_config = read_config_file(config_path)
-            
-            config = RAGConfig(
-                llm_base_url=file_config.get('llmBaseUrl', RAGConfig.llm_base_url),
-                llm_model=file_config.get('llmModel', RAGConfig.llm_model),
-                chroma_host=file_config.get('chromaHost', RAGConfig.chroma_host),
-                chroma_port=int(file_config.get('chromaPort', str(RAGConfig.chroma_port))),
-                embedding_model=file_config.get('embeddingModel', RAGConfig.embedding_model),
-                similarity_threshold=float(file_config.get('similarityThreshold', str(RAGConfig.similarity_threshold))),
-                default_top_k=int(file_config.get('topK', str(RAGConfig.default_top_k))),
-            )
-            set_config(config)
-            self._verbose = file_config.get('verboseMode', 'false').lower() == 'true'
-            
-        except Exception as e:
-            self.get_logger().warn(f"Config load failed, using defaults: {e}")
-            self._verbose = False
+        status = f"Collection: {collection_name}" if self._collection else "Collection: Not loaded"
+        self.get_logger().info(f"RAG Node ready. {status}")
     
     def _load_collection(self, name: str):
         """Load existing collection"""
@@ -102,7 +98,9 @@ class SimpleRAGNode(Node):
     
     @property
     def verbose(self) -> bool:
-        return self._verbose or self.get_parameter('verbose').get_parameter_value().bool_value
+        env_verbose = os.getenv("RAG_VERBOSE", "false").lower() == "true"
+        param_verbose = self.get_parameter('verbose').get_parameter_value().bool_value
+        return env_verbose or param_verbose
     
     def _prompt_callback(self, request, response):
         """Handle RAG query"""
@@ -215,6 +213,7 @@ def main(args=None):
         if node:
             node.destroy_node()
         rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()
