@@ -3,14 +3,22 @@ Simplified RAG Implementation for Pepper Robot Lab Assistant
 
 Clean RAG system without intent classification.
 Designed for controlled interaction where the application manages conversation flow.
+
+Environment Variables:
+    LLM_BASE_URL: LLM API endpoint (default: http://localhost:8080/v1)
+    LLM_API_KEY: API key for LLM service (default: sk-no-key-required)
+    LLM_MODEL: Model name (default: HuggingFaceTB/SmolLM3-3B)
+    CHROMA_PATH: Path for embedded ChromaDB storage (default: ./chroma_data)
+    EMBEDDING_MODEL: Sentence transformer model (default: all-MiniLM-L6-v2)
 """
 
+import os
 import json
 import openai
 import chromadb
 from chromadb.utils import embedding_functions
 from typing import List, Dict, Any, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 # =============================================================================
@@ -19,18 +27,35 @@ from dataclasses import dataclass
 
 @dataclass
 class RAGConfig:
-    """Configuration for RAG system"""
-    # LLM settings
-    llm_base_url: str = "http://localhost:8080/v1"
-    llm_api_key: str = "sk-no-key-required"
-    llm_model: str = "HuggingFaceTB/SmolLM3-3B"
+    """
+    Configuration for RAG system.
     
-    # ChromaDB settings
-    chroma_host: str = "localhost"
-    chroma_port: int = 8000
+    Values are loaded from environment variables with sensible defaults.
+    Set environment variables to override:
+        export LLM_API_KEY="your-api-key"
+        export LLM_BASE_URL="https://api.groq.com/openai/v1"
+    """
+    
+    # LLM settings (from environment)
+    llm_base_url: str = field(
+        default_factory=lambda: os.getenv("LLM_BASE_URL", "http://localhost:8080/v1")
+    )
+    llm_api_key: str = field(
+        default_factory=lambda: os.getenv("LLM_API_KEY", "sk-no-key-required")
+    )
+    llm_model: str = field(
+        default_factory=lambda: os.getenv("LLM_MODEL", "HuggingFaceTB/SmolLM3-3B")
+    )
+    
+    # ChromaDB settings (embedded mode - no server needed)
+    chroma_path: str = field(
+        default_factory=lambda: os.getenv("CHROMA_PATH", "./chroma_data")
+    )
     
     # Embedding settings
-    embedding_model: str = "all-MiniLM-L6-v2"
+    embedding_model: str = field(
+        default_factory=lambda: os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+    )
     
     # Search settings
     similarity_threshold: float = 0.15
@@ -62,6 +87,7 @@ def get_config() -> RAGConfig:
         _config = RAGConfig()
     return _config
 
+
 def set_config(config: RAGConfig) -> None:
     """Set custom configuration"""
     global _config, _openai_client, _chroma_client, _embedding_function
@@ -69,6 +95,7 @@ def set_config(config: RAGConfig) -> None:
     _openai_client = None
     _chroma_client = None
     _embedding_function = None
+
 
 def get_openai_client() -> openai.OpenAI:
     """Get or create OpenAI client"""
@@ -82,20 +109,19 @@ def get_openai_client() -> openai.OpenAI:
         )
     return _openai_client
 
-def get_chroma_client() -> chromadb.HttpClient:
-    """Get or create ChromaDB client"""
+
+def get_chroma_client() -> chromadb.ClientAPI:
+    """Get or create ChromaDB client (embedded mode - no server needed)"""
     global _chroma_client
     if _chroma_client is None:
         config = get_config()
         try:
-            _chroma_client = chromadb.HttpClient(
-                host=config.chroma_host,
-                port=config.chroma_port
-            )
-            _chroma_client.heartbeat()
+            # Embedded mode - data stored locally, no server required
+            _chroma_client = chromadb.PersistentClient(path=config.chroma_path)
         except Exception as e:
-            raise RAGError(f"Failed to connect to ChromaDB: {e}")
+            raise RAGError(f"Failed to initialize ChromaDB: {e}")
     return _chroma_client
+
 
 def get_embedding_function():
     """Get or create embedding function"""
@@ -106,6 +132,7 @@ def get_embedding_function():
             model_name=config.embedding_model
         )
     return _embedding_function
+
 
 # =============================================================================
 # Data Loading
@@ -128,6 +155,7 @@ def load_json_data(file_path: str) -> List[Dict]:
         raise RAGError(f"Invalid JSON: {e}")
     except FileNotFoundError:
         raise RAGError(f"File not found: {file_path}")
+
 
 def _parse_upanzi_format(json_data: Dict) -> List[Dict]:
     """Parse Upanzi lab JSON format with 'text' fields"""
@@ -209,6 +237,7 @@ def _parse_upanzi_format(json_data: Dict) -> List[Dict]:
     
     print(f"Loaded {len(documents)} documents")
     return documents
+
 
 # =============================================================================
 # Collection Management
@@ -297,6 +326,7 @@ def setup_collection(name: str, json_path: str, description: str = "") -> chroma
         populate_collection(collection, documents)
     
     return collection
+
 
 # =============================================================================
 # Search
@@ -445,6 +475,7 @@ def generate_response(
 # =============================================================================
 # Main Query Handler
 # =============================================================================
+
 def handle_query(
     collection: chromadb.Collection,
     query: str,
