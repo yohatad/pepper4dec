@@ -14,32 +14,20 @@ Environment Variables:
 """
 
 import os
-import sys
-from pathlib import Path
-from typing import List, Dict, Optional
-
 import rclpy
+from pathlib import Path
+from typing import List, Dict
 from rclpy.node import Node
-
-# Package path setup
-try:
-    from ament_index_python.packages import get_package_share_directory
-    PACKAGE_PATH = Path(get_package_share_directory('language_model'))
-except ImportError:
-    PACKAGE_PATH = Path(__file__).parent.parent.parent.parent.parent.parent.parent / "src" / "language_model"
-
-sys.path.insert(0, str(PACKAGE_PATH))
-
-from llm_interfaces.srv import Prompt, CreateCollection
+from ament_index_python.packages import get_package_share_directory
+from cssr_interface.srv import LanguageModelCreateCollection, LanguageModelPrompt
 from simple_rag import (
-    RAGConfig,
-    RAGError,
-    set_config,
     get_config,
     get_collection,
     setup_collection,
     handle_query,
 )
+
+PACKAGE_PATH = Path(get_package_share_directory('language_model'))
 
 
 class SimpleRAGNode(Node):
