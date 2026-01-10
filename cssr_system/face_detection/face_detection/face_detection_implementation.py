@@ -90,6 +90,16 @@ class FaceDetectionNode(Node):
         self.frame_lock = threading.Lock()
         self.latest_frame: Optional[np.ndarray] = None
 
+        # Object detection related attributes
+        self.latest_object_detections = None
+        self.object_detections_lock = threading.Lock()
+        
+        # Create subscriber for object detection messages
+        self.object_detection_sub = self.create_subscription(ObjectDetection, '/objectDetection/data', self.object_detection_callback, 10)
+        
+        if self.verbose_mode:
+            self.get_logger().info(f"{self.node_name}: Subscribed to /objectDetection/data")
+
         # Start visualization timer (30 Hz)
         self.vis_timer = self.create_timer(1.0 / 30.0, self.visualization_callback)
 
@@ -166,34 +176,37 @@ class FaceDetectionNode(Node):
 
         return None
 
-    def wait_for_topics(self, color_topic: str, depth_topic: str, timeout: float = 30.0) -> bool:
-        """Wait for topics to become available."""
-        self.get_logger().info(f"Waiting for topics: {color_topic}, {depth_topic}")
+    def wait_for_topics(self, color_topic: str, depth_topic: str, object_detection_topic: str, timeout: float = 30.0) -> bool:
+        """Wait for topics to have active publishers."""
+        self.get_logger().info(f"Waiting for topics: {color_topic}, {depth_topic}, {object_detection_topic}")
+        topics_to_wait = [color_topic, depth_topic, object_detection_topic]
         
         start_time = self.get_clock().now()
         warning_interval = 5.0
         last_warning_time = start_time
         
         while rclpy.ok():
-            # Check if topics are available
-            topic_names_and_types = self.get_topic_names_and_types()
-            published_topics = [name for name, _ in topic_names_and_types]
+            # Check publisher count for each topic
+            missing_topics = []
+            for topic in topics_to_wait:
+                pub_count = self.count_publishers(topic)
+                if pub_count == 0:
+                    missing_topics.append(topic)
             
-            if color_topic in published_topics and depth_topic in published_topics:
+            if not missing_topics:
                 if self.verbose_mode:
-                    self.get_logger().info("Both topics are available!")
+                    self.get_logger().info("All topics have active publishers!")
                 return True
             
             # Check timeout
             elapsed = (self.get_clock().now() - start_time).nanoseconds / 1e9
             if elapsed > timeout:
-                self.get_logger().error(f"Timeout waiting for topics after {timeout}s")
+                self.get_logger().error(f"Timeout waiting for publishers after {timeout}s. Missing: {missing_topics}")
                 return False
             
             # Periodic warnings
             if (self.get_clock().now() - last_warning_time).nanoseconds / 1e9 >= warning_interval:
-                missing = [t for t in [color_topic, depth_topic] if t not in published_topics]
-                self.get_logger().warn(f"Still waiting for topics after {int(elapsed)}s: {missing}")
+                self.get_logger().warn(f"Still waiting for publishers after {int(elapsed)}s: {missing_topics}")
                 last_warning_time = self.get_clock().now()
                 
             rclpy.spin_once(self, timeout_sec=1.0)
@@ -223,8 +236,9 @@ class FaceDetectionNode(Node):
                 color_msg_type = Image
                 depth_msg_type = Image
 
-            # Wait for topics
-            if not self.wait_for_topics(color_topic, depth_topic):
+            # Wait for topics including object detection
+            object_detection_topic = "/objectDetection/data"
+            if not self.wait_for_topics(color_topic, depth_topic, object_detection_topic):
                 return False
 
             # Create subscribers
@@ -233,6 +247,7 @@ class FaceDetectionNode(Node):
             
             self.get_logger().info(f"Subscribed to {color_topic}")
             self.get_logger().info(f"Subscribed to {depth_topic}")
+            self.get_logger().info(f"Subscribed to {object_detection_topic}")
 
             # Set up synchronizer
             slop = 5.0 if self.camera_type == "pepper" else 0.1
@@ -404,6 +419,11 @@ class FaceDetectionNode(Node):
 
         self.pub_gaze.publish(face_msg)
 
+    def object_detection_callback(self, msg: ObjectDetection):
+        """Callback for object detection messages. Default implementation stores the message."""
+        with self.object_detections_lock:
+            self.latest_object_detections = msg
+
     def cleanup(self):
         """Clean up resources."""
         try:
@@ -430,20 +450,20 @@ class YOLOONNX:
         self.output_names = [out.name for out in self.onnx_session.get_outputs()]
 
     def __call__(self, image: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        resized_image = self.__preprocess(image)
+        resized_image = self.preprocess(image)
         inference_image = resized_image[np.newaxis, ...].astype(np.float32)
         boxes = self.onnx_session.run(
             self.output_names,
             {name: inference_image for name in self.input_names},
         )[0]
-        return self.__postprocess(image, boxes)
+        return self.postprocess(image, boxes)
 
-    def __preprocess(self, image: np.ndarray) -> np.ndarray:
+    def preprocess(self, image: np.ndarray) -> np.ndarray:
         resized_image = cv2.resize(image, (self.input_shape[3], self.input_shape[2]))
         resized_image = resized_image[:, :, ::-1] / 255.0  # BGR to RGB and normalize
         return resized_image.transpose(2, 0, 1)  # HWC to CHW
 
-    def __postprocess(self, image: np.ndarray, boxes: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def postprocess(self, image: np.ndarray, boxes: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         img_h, img_w = image.shape[:2]
         result_boxes = []
         result_scores = []
@@ -469,7 +489,7 @@ class SixDrepNet(FaceDetectionNode):
         self.sixdrep_angle = self.config.get('sixdrepnetHeadposeAngle', 10)
         
         if self.verbose_mode:
-            self.get_logger().info(f"{self.node_name}: Initializing SixDrepNet with object detection integration...")
+            self.get_logger().info(f"{self.node_name}: Initializing SixDrepNet ...")
 
         # Set up model paths
         try:
@@ -519,32 +539,16 @@ class SixDrepNet(FaceDetectionNode):
         self.mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
         self.std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
-        # Store latest object detections
-        self.latest_object_detections = None
-        self.object_detections_lock = threading.Lock()
-        
-        # Create subscriber for object detection messages
-        self.object_detection_sub = self.create_subscription(
-            ObjectDetection,
-            '/objectDetection/data',
-            self.object_detection_callback,
-            10
-        )
-        
-        if self.verbose_mode:
-            self.get_logger().info(f"{self.node_name}: Subscribed to /objectDetection/data")
-
         if self.verbose_mode:
             self.get_logger().info(f"{self.node_name} SixDrepNet initialization complete.")
 
-        self.subscribe_topics()
+        # Subscribe to topics (using parent class method)
+        if not self.subscribe_topics():
+            self.get_logger().error(f"{self.node_name}: Failed to subscribe to required topics. Shutting down.")
+            # Don't proceed if we can't subscribe to required topics
+            return
 
         self.start_timeout_monitor()
-    
-    def object_detection_callback(self, msg: ObjectDetection):
-        """Callback for object detection messages."""
-        with self.object_detections_lock:
-            self.latest_object_detections = msg
     
     def draw_axis(self, img, yaw, pitch, roll, tdx=None, tdy=None, size=100):
         pitch = pitch * pi / 180
