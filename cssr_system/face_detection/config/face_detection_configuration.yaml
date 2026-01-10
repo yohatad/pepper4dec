@@ -1,9 +1,6 @@
 # Face Detection Configuration File
 # This file contains all configurable parameters for the face detection node
 
-# Algorithm Selection
-algorithm: "sixdrep"         # Algorithm: "sixdrep"
-
 # General Settings
 useCompressed: false         # Use compressed image topics
 camera: "realsense"          # Camera type: "realsense", "pepper", or "video"

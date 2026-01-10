@@ -1,5 +1,18 @@
 #!/usr/bin/env python3
 
+"""
+gesture_execution_application.py
+ROS2 Node for Gesture Execution.
+
+Implements gesture execution logic.
+Configuration is loaded from gesture_execution_configuration.yaml.
+
+Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
+Email: yohanneh@andrew.cmu.edu
+Date: April 18, 2025
+Version: v1.0
+"""
+
 import rclpy
 from .gesture_execution_implementation import GestureExecutionSystem
 
