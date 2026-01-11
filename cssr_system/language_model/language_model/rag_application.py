@@ -67,9 +67,9 @@ class SimpleRAGNode(Node):
         collection_name = self.get_parameter('collection_name').get_parameter_value().string_value
         self._load_collection(collection_name)
         
-        # Services
-        self.create_service(Prompt, 'rag_prompt', self._prompt_callback)
-        self.create_service(CreateCollection, 'create_collection', self._create_collection_callback)
+        # Services - use the correct imported service types
+        self.create_service(LanguageModelPrompt, 'rag_prompt', self._prompt_callback)
+        self.create_service(LanguageModelCreateCollection, 'create_collection', self._create_collection_callback)
         
         status = f"Collection: {collection_name}" if self._collection else "Collection: Not loaded"
         self.get_logger().info(f"RAG Node ready. {status}")

@@ -16,6 +16,7 @@ import os
 import json
 import openai
 import chromadb
+import yaml
 from chromadb.utils import embedding_functions
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
@@ -24,6 +25,16 @@ from dataclasses import dataclass, field
 # =============================================================================
 # Configuration
 # =============================================================================
+
+# Default values as module constants (for use in apply_config_file)
+DEFAULT_LLM_BASE_URL = "http://localhost:8080/v1"
+DEFAULT_LLM_API_KEY = "sk-no-key-required"
+DEFAULT_LLM_MODEL = "HuggingFaceTB/SmolLM3-3B"
+DEFAULT_CHROMA_PATH = "./chroma_data"
+DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+DEFAULT_SIMILARITY_THRESHOLD = 0.15
+DEFAULT_TOP_K = 5
+
 
 @dataclass
 class RAGConfig:
@@ -38,28 +49,28 @@ class RAGConfig:
     
     # LLM settings (from environment)
     llm_base_url: str = field(
-        default_factory=lambda: os.getenv("LLM_BASE_URL", "http://localhost:8080/v1")
+        default_factory=lambda: os.getenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL)
     )
     llm_api_key: str = field(
-        default_factory=lambda: os.getenv("LLM_API_KEY", "sk-no-key-required")
+        default_factory=lambda: os.getenv("LLM_API_KEY", DEFAULT_LLM_API_KEY)
     )
     llm_model: str = field(
-        default_factory=lambda: os.getenv("LLM_MODEL", "HuggingFaceTB/SmolLM3-3B")
+        default_factory=lambda: os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL)
     )
     
     # ChromaDB settings (embedded mode - no server needed)
     chroma_path: str = field(
-        default_factory=lambda: os.getenv("CHROMA_PATH", "./chroma_data")
+        default_factory=lambda: os.getenv("CHROMA_PATH", DEFAULT_CHROMA_PATH)
     )
     
     # Embedding settings
     embedding_model: str = field(
-        default_factory=lambda: os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+        default_factory=lambda: os.getenv("EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
     )
     
     # Search settings
-    similarity_threshold: float = 0.15
-    default_top_k: int = 5
+    similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD
+    default_top_k: int = DEFAULT_TOP_K
     
     # Response settings
     max_response_sentences: int = 3
@@ -76,7 +87,7 @@ class RAGError(Exception):
 
 _config: Optional[RAGConfig] = None
 _openai_client: Optional[openai.OpenAI] = None
-_chroma_client: Optional[chromadb.HttpClient] = None
+_chroma_client: Optional[chromadb.ClientAPI] = None  # Fixed: was HttpClient
 _embedding_function = None
 
 
@@ -520,7 +531,7 @@ def handle_query(
 # Utility Functions
 # =============================================================================
 
-def read_config_file(file_path: str) -> Dict[str, str]:
+def read_config_file(file_path: str) -> Dict[str, Any]:
     """Read configuration from ini-style file"""
     config = {}
     try:
@@ -535,18 +546,41 @@ def read_config_file(file_path: str) -> Dict[str, str]:
     return config
 
 
+def read_yaml_config(file_path: str) -> Dict[str, Any]:
+    """Read configuration from YAML file"""
+    try:
+        with open(file_path, 'r') as f:
+            return yaml.safe_load(f) or {}
+    except Exception as e:
+        print(f"YAML config error: {e}")
+        return {}
+
+
 def apply_config_file(file_path: str) -> None:
-    """Load and apply configuration from file"""
-    file_config = read_config_file(file_path)
+    """Load and apply configuration from file (yaml format)"""
     
-    config = RAGConfig(
-        llm_base_url=file_config.get('llmBaseUrl', RAGConfig.llm_base_url),
-        llm_model=file_config.get('llmModel', RAGConfig.llm_model),
-        chroma_host=file_config.get('chromaHost', RAGConfig.chroma_host),
-        chroma_port=int(file_config.get('chromaPort', RAGConfig.chroma_port)),
-        embedding_model=file_config.get('embeddingModel', RAGConfig.embedding_model),
-        similarity_threshold=float(file_config.get('similarityThreshold', RAGConfig.similarity_threshold)),
-        default_top_k=int(file_config.get('topK', RAGConfig.default_top_k)),
-    )
+    try:
+        yaml_config = read_yaml_config(file_path)
+        
+        # Extract nested values
+        llm = yaml_config.get('llm', {})
+        chroma = yaml_config.get('chroma', {})
+        embedding = yaml_config.get('embedding', {})
+        search = yaml_config.get('search', {})
+        
+        config = RAGConfig(
+            llm_base_url=llm.get('base_url', DEFAULT_LLM_BASE_URL),
+            llm_api_key=llm.get('api_key', DEFAULT_LLM_API_KEY),
+            llm_model=llm.get('model', DEFAULT_LLM_MODEL),
+            chroma_path=chroma.get('path', DEFAULT_CHROMA_PATH),
+            embedding_model=embedding.get('model', DEFAULT_EMBEDDING_MODEL),
+            similarity_threshold=float(search.get('similarity_threshold', DEFAULT_SIMILARITY_THRESHOLD)),
+            default_top_k=int(search.get('top_k', DEFAULT_TOP_K)),
+        )
+
+    except Exception as e:
+        print(f"Failed to apply config file: {e}")
+        return
+    
     
     set_config(config)

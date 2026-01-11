@@ -1,15 +1,19 @@
-# rag
-top_k: 3
-verbose: true
 
-# llm
-provider: local   # local | openai
+# LLM Settings
+llm:
+  base_url: https://api.groq.com/openai/v1
+  api_key: your-api-key-here
+  model: llama-3.1-8b-instant
 
-# local
-local_base_url: "http://localhost:8080/v1"
-local_model: "HuggingFaceTB/SmolLM3-3B"
-local_api_key: "sk-no-key-required"
+# ChromaDB Settings (embedded mode - local storage path)
+chroma:
+  path: ./chroma_data
 
-# openai
-openai_api_key: "sk-xxxx"
-openai_model: "gpt-4o-mini"
+# Embedding Model
+embedding:
+  model: all-MiniLM-L6-v2
+
+# Search Settings
+search:
+  similarity_threshold: 0.15
+  top_k: 5
