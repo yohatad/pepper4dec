@@ -1,34 +1,30 @@
 from setuptools import setup
-import os
 from glob import glob
 
-package_name = 'pepper_attention'
+pkg = 'pepper_attention'
 
 setup(
-    name=package_name,
+    name=pkg,
     version='1.0.0',
-    packages=[package_name],
-    data_files=[
-        ('share/ament_index/resource_index/packages',
-            ['resource/' + package_name]),
-        ('share/' + package_name, ['package.xml']),
-        (os.path.join('share', package_name, 'launch'),
-            glob('launch/*.launch.py')),
-        (os.path.join('share', package_name, 'config'),
-            glob('config/*.yaml')),
-    ],
+    packages=[pkg],
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='Yohannes Haile',
-    maintainer_email='yohatad000@gmail.com',
+    maintainer_email='yohanneh@alumni.cmu.edu',
     description='Unified visual attention system for Pepper robot',
     license='MIT',
-    tests_require=['pytest'],
-   entry_points={
+    entry_points={
         'console_scripts': [
             'saliency_node = pepper_attention.saliency_node:main',
             'unified_attention_node = pepper_attention.unified_attention_node:main',
-            'visualization_node = pepper_attention.visualization_node:main',  # NEW
+            'visualization_node = pepper_attention.visualization_node:main',
         ],
     },
+    data_files=[
+        ('share/ament_index/resource_index/packages', [f"resource/{pkg}"]),
+        (f"share/{pkg}", ['package.xml']),
+        (f"share/{pkg}/launch", glob("launch/*.launch.py")),
+        (f"share/{pkg}/config", glob("config/*")),
+        (f"share/{pkg}/data", glob("data/*")),
+    ],
 )
