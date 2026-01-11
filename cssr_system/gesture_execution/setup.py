@@ -7,12 +7,7 @@ setup(
     name=pkg,
     version="0.1.0",
     packages=["gesture_execution"],
-    install_requires=[
-        "setuptools",
-        "opencv-python",
-        "numpy",
-        "PyYAML",
-    ],
+    install_requires=["setuptools", "PyYAML"],
     zip_safe=True,
     maintainer="Yohannes",
     maintainer_email="yohanneh@alumni.cmu.edu",
