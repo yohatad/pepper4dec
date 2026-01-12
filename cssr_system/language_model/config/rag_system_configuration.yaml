@@ -3,10 +3,6 @@ llm:
   base_url: https://api.deepseek.com/v1
   model: deepseek-chat
 
-# ChromaDB Settings (embedded mode - local storage path)
-chroma:
-  path: ./data/chroma_data
-
 # Embedding Model
 embedding:
   model: all-MiniLM-L6-v2

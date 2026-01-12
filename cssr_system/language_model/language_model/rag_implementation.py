@@ -17,17 +17,22 @@ import yaml
 from chromadb.utils import embedding_functions
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field
+from ament_index_python.packages import get_package_share_directory
+from pathlib import Path
 
 
 # =============================================================================
 # Configuration
 # =============================================================================
 
+# Package path for ChromaDB storage (always in package data folder)
+PACKAGE_PATH = Path(get_package_share_directory('language_model'))
+
 # Default values as module constants
 DEFAULT_LLM_BASE_URL = "http://localhost:8080/v1"
 DEFAULT_LLM_API_KEY = "sk-no-key-required"
 DEFAULT_LLM_MODEL = "HuggingFaceTB/SmolLM3-3B"
-DEFAULT_CHROMA_PATH = "./data/chroma_data"
+DEFAULT_CHROMA_PATH = str(PACKAGE_PATH / 'data')
 DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 DEFAULT_SIMILARITY_THRESHOLD = 0.15
 DEFAULT_TOP_K = 5
@@ -119,16 +124,13 @@ class RAGConfig:
         
         return len(errors) == 0, errors
 
-
 class RAGError(Exception):
     """Custom exception for RAG-related errors"""
     pass
 
-
 class ConfigError(RAGError):
     """Exception for configuration-related errors"""
     pass
-
 
 # =============================================================================
 # Global Clients (Thread-Safe)
@@ -193,7 +195,6 @@ def get_openai_client() -> openai.OpenAI:
                     timeout=30.0
                 )
     return openai_client_instance
-
 
 def get_chroma_client() -> chromadb.PersistentClient:
     """Get or create ChromaDB client (embedded mode - no server needed, thread-safe)"""
@@ -779,8 +780,6 @@ def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
           base_url: "https://api.groq.com/openai/v1"
           # api_key should be set as environment variable LLM_API_KEY
           model: "llama-3.1-8b-instant"
-        chroma:
-          path: "./data/chroma_data"
         embedding:
           model: "all-MiniLM-L6-v2"
         search:
@@ -801,7 +800,6 @@ def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
     
     # Extract nested values with defaults
     llm = yaml_config.get('llm', {})
-    chroma = yaml_config.get('chroma', {})
     embedding = yaml_config.get('embedding', {})
     search = yaml_config.get('search', {})
     conversation = yaml_config.get('conversation', {})
@@ -856,11 +854,15 @@ def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
         messages.append(warn)
     
     try:
+        # ChromaDB is always stored in the package data folder
+        chroma_path = str(PACKAGE_PATH / 'data')
+        log_verbose(f"Using package data folder for ChromaDB: {chroma_path}")
+        
         config = RAGConfig(
             llm_base_url=llm.get('base_url', DEFAULT_LLM_BASE_URL),
             # LLM_API_KEY must be exported as environment variable, not from config file
             llm_model=llm.get('model', DEFAULT_LLM_MODEL),
-            chroma_path=chroma.get('path', DEFAULT_CHROMA_PATH),
+            chroma_path=chroma_path,  # Always use package data folder
             embedding_model=embedding.get('model', DEFAULT_EMBEDDING_MODEL),
             similarity_threshold=similarity_threshold,
             default_top_k=top_k,

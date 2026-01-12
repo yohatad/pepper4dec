@@ -17,7 +17,6 @@ Configuration:
     All non-API key settings loaded from config/rag_system_configuration.yaml
 """
 
-import os
 import rclpy
 from pathlib import Path
 from typing import List, Dict
@@ -81,7 +80,6 @@ class SimpleRAGNode(Node):
         self.get_logger().info(f"LLM URL: {config.llm_base_url}")
         self.get_logger().info(f"LLM Model: {config.llm_model}")
         self.get_logger().info(f"LLM API Key: {'***' + config.llm_api_key[-4:] if len(config.llm_api_key) > 4 else '(default)'}")
-        self.get_logger().info(f"ChromaDB Path: {config.chroma_path}")
         self.get_logger().info(f"Embedding Model: {config.embedding_model}")
         self.get_logger().info(f"Data Default Path: {config.data_default_path}")
         
@@ -251,7 +249,6 @@ class SimpleRAGNode(Node):
     def clear_history(self):
         """Clear conversation history"""
         self.conversation_history = []
-
 
 def main(args=None):
     rclpy.init(args=args)
