@@ -1,0 +1,31 @@
+# =============================================================================
+# Camera Settings
+# =============================================================================
+
+camera: realsense
+useCompressed: false
+imageTimeout: 2.0
+verboseMode: true
+
+# =============================================================================
+# Detection Settings
+# =============================================================================
+
+# Minimum confidence threshold for detections (0.0 - 1.0)
+confidenceThreshold: 0.7
+targetClasses:
+  - all
+
+# =============================================================================
+# ByteTrack Tracking Parameters (supervision package)
+# =============================================================================
+trackThreshold: 0.45
+
+# Number of frames to keep lost tracks before removing (integer)
+trackBuffer: 30
+
+# IoU threshold for matching detections to tracks (0.0 - 1.0)
+matchThreshold: 0.8
+
+# Expected frame rate of the video stream (fps)
+frameRate: 30

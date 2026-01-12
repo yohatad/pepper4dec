@@ -4,7 +4,7 @@
 face_detection_application.py
 ROS2 Node for Face and Mutual Gaze Detection and Localization.
 
-Implements face detection using either MediaPipe or SixDrepNet (YOLO + SixDrepNet).
+Implements face detection using SixDrepNet (YOLO + SixDrepNet).
 Configuration is loaded from face_detection_configuration.yaml.
 
 Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
@@ -15,47 +15,30 @@ Version: v1.0
 
 import sys
 import rclpy
-from .face_detection_implementation import MediaPipe, SixDrepNet, load_configuration
+from .face_detection_implementation import SixDrepNet, load_configuration
 
-
-BANNER = """faceDetection v1.0
-This program comes with ABSOLUTELY NO WARRANTY.
-"""
+SOFTWARE_VERSION = "v1.0"
 
 def main():
-    print(BANNER)
+    """
+    Main function to run the face detection system.
+    """
+    
+    rclpy.init()
+    node_name = "face_detection"
+
+    copyright_message = (
+        f"{node_name} {SOFTWARE_VERSION}\n"
+        "\t\t\t    This program comes with ABSOLUTELY NO WARRANTY."
+    )
+
+    print(copyright_message)
 
     # Load configuration
     config = load_configuration()
-    algo_name = config.get("algorithm", "sixdrep").lower()
 
-    print(f"Using algorithm: {algo_name}")
-
-    rclpy.init()
-
-    node = None
     try:
-        # Directly choose algorithm class
-        if algo_name == "mediapipe":
-            node = MediaPipe(config)
-        elif algo_name == "sixdrep":
-            node = SixDrepNet(config)
-        else:
-            print(f"Error: Invalid algorithm '{algo_name}'. Choose 'mediapipe' or 'sixdrep'.")
-            sys.exit(1)
-
-        # Setup subscriptions
-        if not node.subscribe_topics():
-            node.get_logger().error("Failed to setup subscribers")
-            sys.exit(1)
-
-        # Start monitoring for timeouts
-        node.start_timeout_monitor()
-
-        # Verify camera resolution compatibility (except Pepper)
-        if (node.depth_image is not None and not node.check_camera_resolution(node.color_image, node.depth_image) and node.camera_type != "pepper"):
-            node.get_logger().error("Color and depth camera resolutions don't match")
-            sys.exit(1)
+        node = SixDrepNet(config)
 
         # Spin until shutdown
         rclpy.spin(node)

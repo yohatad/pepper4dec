@@ -12,7 +12,7 @@ setup(
     maintainer="Yohannes",
     maintainer_email="yohanneh@alumni.cmu.edu",
     description="Face detection node",
-    license="",
+    license="MIT",
     entry_points={
         "console_scripts": [
             "face_detection = face_detection.face_detection_application:main",

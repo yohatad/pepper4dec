@@ -1,24 +1,12 @@
 # Face Detection Configuration File
 # This file contains all configurable parameters for the face detection node
 
-# Algorithm Selection
-algorithm: "sixdrep"         # Choose algorithm: "mediapipe" or "sixdrep"
-
 # General Settings
 useCompressed: false         # Use compressed image topics
 camera: "realsense"          # Camera type: "realsense", "pepper", or "video"
-verboseMode: false            # Enable verbose logging and display
+verboseMode: true            # Enable verbose logging and display
 imageTimeout: 2.0            # Timeout in seconds for image reception
-
-# MediaPipe Algorithm Settings
-mpFacedetConfidence: 0.5     # Face detection confidence threshold (0.0-1.0)
-mpHeadposeAngle: 8           # Head pose angle threshold for mutual gaze (degrees)
-centroidMaxDisappeared: 15   # Max frames a centroid can disappear before removal
-centroidMaxDistance: 100     # Max distance for centroid matching (pixels)
 
 # SixDrepNet Algorithm Settings
 sixdrepnetConfidence: 0.80   # Face detection confidence threshold (0.0-1.0)
 sixdrepnetHeadposeAngle: 10  # Head pose angle threshold for mutual gaze (degrees)
-sortMaxDisappeared: 5        # Max age for SORT tracker
-sortMinHits: 3               # Min hits required for SORT tracker
-sortIouThreshold: 0.3        # IoU threshold for SORT tracker (0.0-1.0)

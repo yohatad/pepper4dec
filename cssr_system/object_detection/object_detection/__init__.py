@@ -2,7 +2,7 @@
 Face Detection Package
 
 This package provides face detection and mutual gaze estimation functionality
-using SixDrepNet algorithm.
+using MediaPipe and SixDrepNet algorithms.
 """
 
 __version__ = "1.0.0"

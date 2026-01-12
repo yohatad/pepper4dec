@@ -56,7 +56,6 @@ def get_image_qos() -> QoSProfile:
         depth=1
     )
 
-
 def clamp(x, lo, hi):
     return max(lo, min(hi, x))
 
@@ -67,13 +66,11 @@ def depth_bonus(Z, lo, hi):
     mid, width = 0.5*(lo+hi), 0.5*(hi-lo)
     return max(0.0, 1.0 - abs(Z - mid)/width)
 
-
 def pixel_to_angles(u, v, fx, fy, cx, cy):
     """Convert pixel to angles (simple pinhole)"""
     x = (u - cx)/fx
     y = (v - cy)/fy
     return math.atan2(x, 1.0), math.atan2(y, 1.0)
-
 
 def uvZ_to_angles(u, v, Z, fx, fy, cx, cy):
     """Convert pixel + depth to angles"""
