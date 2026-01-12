@@ -10,3 +10,4 @@ __pycache__/
 **/*.svg
 **/cssr4africa_virtual_envs/**
 **/BehaviorTree.CPP/**
+**/chroma.sqlite3
