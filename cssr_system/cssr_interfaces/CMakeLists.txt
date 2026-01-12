@@ -13,7 +13,6 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ObjectDetection.msg"
   "msg/OvertAttentionStatus.msg"
   "srv/OvertAttentionSetMode.srv"
-  "srv/GetDepthAtPixel.srv"
   "srv/PerformGesture.srv"
   "srv/LanguageModelPrompt.srv"
   "srv/LanguageModelCreateCollection.srv"

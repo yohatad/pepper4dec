@@ -1,24 +1,21 @@
 """
 Simplified RAG Implementation for Pepper Robot Lab Assistant
 
-Clean RAG system without intent classification.
-Designed for controlled interaction where the application manages conversation flow.
-
 Environment Variables:
-    LLM_BASE_URL: LLM API endpoint (default: http://localhost:8080/v1)
-    LLM_API_KEY: API key for LLM service (default: sk-no-key-required)
-    LLM_MODEL: Model name (default: HuggingFaceTB/SmolLM3-3B)
-    CHROMA_PATH: Path for embedded ChromaDB storage (default: ./chroma_data)
-    EMBEDDING_MODEL: Sentence transformer model (default: all-MiniLM-L6-v2)
+    LLM_API_KEY: API key for LLM service (MUST be exported as environment variable)
+    
+Configuration File (config/rag_system_configuration.yaml):
+    All other settings (LLM base URL, model, ChromaDB path, embedding model, etc.)
 """
 
 import os
 import json
+import threading
 import openai
 import chromadb
 import yaml
 from chromadb.utils import embedding_functions
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field
 
 
@@ -26,14 +23,26 @@ from dataclasses import dataclass, field
 # Configuration
 # =============================================================================
 
-# Default values as module constants (for use in apply_config_file)
+# Default values as module constants
 DEFAULT_LLM_BASE_URL = "http://localhost:8080/v1"
 DEFAULT_LLM_API_KEY = "sk-no-key-required"
 DEFAULT_LLM_MODEL = "HuggingFaceTB/SmolLM3-3B"
-DEFAULT_CHROMA_PATH = "./chroma_data"
+DEFAULT_CHROMA_PATH = "./data/chroma_data"
 DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 DEFAULT_SIMILARITY_THRESHOLD = 0.15
 DEFAULT_TOP_K = 5
+DEFAULT_MAX_HISTORY_TURNS = 5
+DEFAULT_CONTEXT_TURNS = 3
+DEFAULT_MAX_RESPONSE_SENTENCES = 3
+DEFAULT_DATA_PATH = "./data/upanzi_data.json"
+DEFAULT_VERBOSE = False
+
+
+def log_verbose(message: str) -> None:
+    """Log message only if verbose mode is enabled"""
+    config = get_config()
+    if config.verbose:
+        print(f"[VERBOSE] {message}")
 
 
 @dataclass
@@ -41,39 +50,74 @@ class RAGConfig:
     """
     Configuration for RAG system.
     
-    Values are loaded from environment variables with sensible defaults.
-    Set environment variables to override:
-        export LLM_API_KEY="your-api-key"
-        export LLM_BASE_URL="https://api.groq.com/openai/v1"
+    LLM_API_KEY must be exported as environment variable.
+    All other values are loaded from configuration file with sensible defaults.
     """
     
-    # LLM settings (from environment)
-    llm_base_url: str = field(
-        default_factory=lambda: os.getenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL)
-    )
+    # LLM settings (only LLM_API_KEY comes from environment variable)
+    llm_base_url: str = DEFAULT_LLM_BASE_URL
     llm_api_key: str = field(
         default_factory=lambda: os.getenv("LLM_API_KEY", DEFAULT_LLM_API_KEY)
     )
-    llm_model: str = field(
-        default_factory=lambda: os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL)
-    )
+    llm_model: str = DEFAULT_LLM_MODEL
     
     # ChromaDB settings (embedded mode - no server needed)
-    chroma_path: str = field(
-        default_factory=lambda: os.getenv("CHROMA_PATH", DEFAULT_CHROMA_PATH)
-    )
+    chroma_path: str = DEFAULT_CHROMA_PATH
     
     # Embedding settings
-    embedding_model: str = field(
-        default_factory=lambda: os.getenv("EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
-    )
+    embedding_model: str = DEFAULT_EMBEDDING_MODEL
     
     # Search settings
     similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD
     default_top_k: int = DEFAULT_TOP_K
     
+    # Conversation settings
+    max_history_turns: int = DEFAULT_MAX_HISTORY_TURNS
+    context_turns: int = DEFAULT_CONTEXT_TURNS
+    
     # Response settings
-    max_response_sentences: int = 3
+    max_response_sentences: int = DEFAULT_MAX_RESPONSE_SENTENCES
+    
+    # Data settings
+    data_default_path: str = DEFAULT_DATA_PATH
+    
+    # Debug settings
+    verbose: bool = DEFAULT_VERBOSE
+    
+    def validate(self) -> Tuple[bool, List[str]]:
+        """
+        Validate configuration values.
+        
+        Returns:
+            Tuple of (is_valid, list of error messages)
+        """
+        errors = []
+        
+        if not self.llm_base_url:
+            errors.append("llm_base_url cannot be empty")
+        
+        if not self.llm_api_key or self.llm_api_key == DEFAULT_LLM_API_KEY:
+            errors.append("LLM_API_KEY must be exported as environment variable")
+        
+        if not self.llm_model:
+            errors.append("llm_model cannot be empty")
+        
+        if not 0.0 <= self.similarity_threshold <= 1.0:
+            errors.append(f"similarity_threshold must be between 0 and 1, got {self.similarity_threshold}")
+        
+        if self.default_top_k < 1:
+            errors.append(f"default_top_k must be at least 1, got {self.default_top_k}")
+        
+        if self.max_history_turns < 0:
+            errors.append(f"max_history_turns must be non-negative, got {self.max_history_turns}")
+        
+        if self.context_turns < 0:
+            errors.append(f"context_turns must be non-negative, got {self.context_turns}")
+        
+        if self.context_turns > self.max_history_turns:
+            errors.append(f"context_turns ({self.context_turns}) should not exceed max_history_turns ({self.max_history_turns})")
+        
+        return len(errors) == 0, errors
 
 
 class RAGError(Exception):
@@ -81,68 +125,105 @@ class RAGError(Exception):
     pass
 
 
+class ConfigError(RAGError):
+    """Exception for configuration-related errors"""
+    pass
+
+
 # =============================================================================
-# Global Clients
+# Global Clients (Thread-Safe)
 # =============================================================================
 
-_config: Optional[RAGConfig] = None
-_openai_client: Optional[openai.OpenAI] = None
-_chroma_client: Optional[chromadb.ClientAPI] = None  # Fixed: was HttpClient
-_embedding_function = None
+global_config: Optional[RAGConfig] = None
+openai_client_instance: Optional[openai.OpenAI] = None
+chroma_client_instance: Optional[chromadb.PersistentClient] = None
+embedding_function_instance = None
+config_lock = threading.Lock()
+client_lock = threading.Lock()
 
 
 def get_config() -> RAGConfig:
     """Get or create default configuration"""
-    global _config
-    if _config is None:
-        _config = RAGConfig()
-    return _config
+    global global_config
+    with config_lock:
+        if global_config is None:
+            global_config = RAGConfig()
+        return global_config
 
 
 def set_config(config: RAGConfig) -> None:
-    """Set custom configuration"""
-    global _config, _openai_client, _chroma_client, _embedding_function
-    _config = config
-    _openai_client = None
-    _chroma_client = None
-    _embedding_function = None
+    """
+    Set custom configuration.
+    
+    Args:
+        config: RAGConfig instance to use
+        
+    Raises:
+        ConfigError: If configuration validation fails
+    """
+    global global_config, openai_client_instance, chroma_client_instance, embedding_function_instance
+    
+    is_valid, errors = config.validate()
+    if not is_valid:
+        raise ConfigError(f"Invalid configuration: {'; '.join(errors)}")
+    
+    with config_lock:
+        global_config = config
+    
+    with client_lock:
+        openai_client_instance = None
+        chroma_client_instance = None
+        embedding_function_instance = None
+    
+    log_verbose(f"Configuration updated: llm_base_url={config.llm_base_url}, llm_model={config.llm_model}")
 
 
 def get_openai_client() -> openai.OpenAI:
-    """Get or create OpenAI client"""
-    global _openai_client
-    if _openai_client is None:
-        config = get_config()
-        _openai_client = openai.OpenAI(
-            base_url=config.llm_base_url,
-            api_key=config.llm_api_key,
-            timeout=30.0
-        )
-    return _openai_client
+    """Get or create OpenAI client (thread-safe)"""
+    global openai_client_instance
+    
+    if openai_client_instance is None:
+        with client_lock:
+            if openai_client_instance is None:
+                config = get_config()
+                log_verbose(f"Creating OpenAI client with base_url: {config.llm_base_url}")
+                openai_client_instance = openai.OpenAI(
+                    base_url=config.llm_base_url,
+                    api_key=config.llm_api_key,
+                    timeout=30.0
+                )
+    return openai_client_instance
 
 
-def get_chroma_client() -> chromadb.ClientAPI:
-    """Get or create ChromaDB client (embedded mode - no server needed)"""
-    global _chroma_client
-    if _chroma_client is None:
-        config = get_config()
-        try:
-            # Embedded mode - data stored locally, no server required
-            _chroma_client = chromadb.PersistentClient(path=config.chroma_path)
-        except Exception as e:
-            raise RAGError(f"Failed to initialize ChromaDB: {e}")
-    return _chroma_client
+def get_chroma_client() -> chromadb.PersistentClient:
+    """Get or create ChromaDB client (embedded mode - no server needed, thread-safe)"""
+    global chroma_client_instance
+    
+    if chroma_client_instance is None:
+        with client_lock:
+            if chroma_client_instance is None:
+                config = get_config()
+                try:
+                    log_verbose(f"Creating ChromaDB client with path: {config.chroma_path}")
+                    chroma_client_instance = chromadb.PersistentClient(path=config.chroma_path)
+                except Exception as e:
+                    raise RAGError(f"Failed to initialize ChromaDB: {e}")
+    return chroma_client_instance
 
 
 def get_embedding_function():
-    """Get or create embedding function"""
-    global _embedding_function
-    if _embedding_function is None:
-        config = get_config()
-        _embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name=config.embedding_model
-        )
-    return _embedding_function
+    """Get or create embedding function (thread-safe)"""
+    global embedding_function_instance
+    
+    if embedding_function_instance is None:
+        with client_lock:
+            if embedding_function_instance is None:
+                config = get_config()
+                log_verbose(f"Creating embedding function with model: {config.embedding_model}")
+                embedding_function_instance = embedding_functions.SentenceTransformerEmbeddingFunction(
+                    model_name=config.embedding_model
+                )
+    return embedding_function_instance
 
 
 # =============================================================================
@@ -150,25 +231,40 @@ def get_embedding_function():
 # =============================================================================
 
 def load_json_data(file_path: str) -> List[Dict]:
-    """Load and parse JSON knowledge base file"""
+    """
+    Load and parse JSON knowledge base file.
+    
+    Args:
+        file_path: Path to JSON file
+        
+    Returns:
+        List of document dictionaries
+        
+    Raises:
+        RAGError: If file not found or invalid JSON
+    """
     try:
+        log_verbose(f"Loading JSON data from: {file_path}")
         with open(file_path, 'r', encoding='utf-8') as file:
             json_data = json.load(file)
 
         if isinstance(json_data, dict):
-            return _parse_upanzi_format(json_data)
+            result = parse_upanzi_format(json_data)
         elif isinstance(json_data, list):
-            return json_data
+            result = json_data
         else:
             raise RAGError(f"Unexpected JSON type: {type(json_data).__name__}")
 
+        log_verbose(f"Loaded {len(result)} documents from {file_path}")
+        return result
+
     except json.JSONDecodeError as e:
-        raise RAGError(f"Invalid JSON: {e}")
+        raise RAGError(f"Invalid JSON in {file_path}: {e}")
     except FileNotFoundError:
         raise RAGError(f"File not found: {file_path}")
 
 
-def _parse_upanzi_format(json_data: Dict) -> List[Dict]:
+def parse_upanzi_format(json_data: Dict) -> List[Dict]:
     """Parse Upanzi lab JSON format with 'text' fields"""
     documents = []
     
@@ -246,7 +342,7 @@ def _parse_upanzi_format(json_data: Dict) -> List[Dict]:
                 'status': project.get('status', '')
             })
     
-    print(f"Loaded {len(documents)} documents")
+    log_verbose(f"Parsed {len(documents)} documents from Upanzi format")
     return documents
 
 
@@ -255,21 +351,31 @@ def _parse_upanzi_format(json_data: Dict) -> List[Dict]:
 # =============================================================================
 
 def create_collection(name: str, description: str = "") -> chromadb.Collection:
-    """Create or get ChromaDB collection"""
+    """
+    Create or get ChromaDB collection.
+    
+    Args:
+        name: Collection name
+        description: Optional description
+        
+    Returns:
+        ChromaDB Collection object
+    """
     existing = get_collection(name)
     if existing:
-        print(f"Using existing collection: {name}")
+        log_verbose(f"Using existing collection: {name}")
         return existing
     
     client = get_chroma_client()
     ef = get_embedding_function()
     
+    log_verbose(f"Creating new collection: {name}")
     collection = client.create_collection(
         name=name,
         metadata={'description': description} if description else None,
         embedding_function=ef
     )
-    print(f"Created collection: {name}")
+    log_verbose(f"Created collection: {name}")
     return collection
 
 
@@ -278,23 +384,25 @@ def get_collection(name: str) -> Optional[chromadb.Collection]:
     try:
         client = get_chroma_client()
         ef = get_embedding_function()
-        return client.get_collection(name=name, embedding_function=ef)
+        collection = client.get_collection(name=name, embedding_function=ef)
+        log_verbose(f"Retrieved collection: {name}")
+        return collection
     except Exception:
+        log_verbose(f"Collection not found: {name}")
         return None
 
 
-def delete_collection(name: str) -> bool:
-    """Delete a collection"""
-    try:
-        client = get_chroma_client()
-        client.delete_collection(name)
-        return True
-    except Exception:
-        return False
-
-
 def populate_collection(collection: chromadb.Collection, documents: List[Dict]) -> int:
-    """Add documents to collection"""
+    """
+    Add documents to collection.
+    
+    Args:
+        collection: ChromaDB collection
+        documents: List of document dictionaries
+        
+    Returns:
+        Number of documents added
+    """
     docs = []
     ids = []
     metadatas = []
@@ -322,20 +430,40 @@ def populate_collection(collection: chromadb.Collection, documents: List[Dict]) 
         })
     
     if docs:
+        log_verbose(f"Adding {len(docs)} documents to collection")
         collection.add(documents=docs, ids=ids, metadatas=metadatas)
+    else:
+        log_verbose("No documents to add to collection")
     
-    print(f"Added {len(docs)} documents to collection")
+    log_verbose(f"Added {len(docs)} documents to collection")
     return len(docs)
 
 
 def setup_collection(name: str, json_path: str, description: str = "") -> chromadb.Collection:
-    """Convenience: Create collection and load data"""
+    """
+    Convenience: Create collection and load data.
+    
+    Args:
+        name: Collection name
+        json_path: Path to JSON data file
+        description: Optional description
+        
+    Returns:
+        Populated ChromaDB collection
+        
+    Raises:
+        RAGError: If data loading fails
+    """
+    log_verbose(f"Setting up collection '{name}' from {json_path}")
     documents = load_json_data(json_path)
     collection = create_collection(name, description)
     
     if collection.count() == 0:
         populate_collection(collection, documents)
+    else:
+        log_verbose(f"Collection '{name}' already has {collection.count()} documents")
     
+    log_verbose(f"Collection '{name}' ready with {collection.count()} documents")
     return collection
 
 
@@ -362,10 +490,13 @@ def search(
         List of results with doc_id, title, content, score
     """
     if not query or not query.strip():
+        log_verbose("Empty query, returning empty results")
         return []
     
     config = get_config()
     top_k = top_k or config.default_top_k
+    
+    log_verbose(f"Searching for query: '{query}' with top_k={top_k}, category_filter={category_filter}")
     
     where_filter = None
     if category_filter:
@@ -379,6 +510,7 @@ def search(
         )
         
         if not results or not results['ids'] or not results['ids'][0]:
+            log_verbose("No search results found")
             return []
         
         formatted = []
@@ -386,6 +518,7 @@ def search(
             score = 1 - results['distances'][0][i]
             
             if score < config.similarity_threshold:
+                log_verbose(f"Result {results['ids'][0][i]} below threshold ({score} < {config.similarity_threshold})")
                 continue
             
             formatted.append({
@@ -395,11 +528,12 @@ def search(
                 'score': score
             })
         
+        log_verbose(f"Search returned {len(formatted)} results above threshold")
         return formatted
         
     except Exception as e:
-        print(f"Search error: {e}")
-        return []
+        log_verbose(f"Search failed with error: {e}")
+        raise RAGError(f"Search failed: {e}")
 
 
 # =============================================================================
@@ -435,21 +569,28 @@ def generate_response(
         
     Returns:
         Generated response string
+        
+    Raises:
+        RAGError: If LLM call fails
     """
     config = get_config()
+    log_verbose(f"Generating response for query: '{query}'")
     
     # Build context from search results
     context = ""
     if search_results:
         context_parts = [f"[{r['title']}]\n{r['content']}" for r in search_results[:3]]
         context = "\n\n".join(context_parts)
+        log_verbose(f"Using {len(search_results)} search results as context")
     
     # Build messages
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     
-    # Add conversation history if provided
+    # Add conversation history if provided (use configured context_turns)
     if conversation_history:
-        for turn in conversation_history[-3:]:  # Last 3 turns
+        history_to_use = conversation_history[-config.context_turns:]
+        log_verbose(f"Using {len(history_to_use)} previous conversation turns")
+        for turn in history_to_use:
             messages.append({"role": "user", "content": turn.get("query", "")})
             messages.append({"role": "assistant", "content": turn.get("response", "")})
     
@@ -462,6 +603,7 @@ def generate_response(
     
     try:
         client = get_openai_client()
+        log_verbose(f"Sending request to LLM (model: {config.llm_model})")
         response = client.chat.completions.create(
             model=config.llm_model,
             messages=messages
@@ -474,13 +616,15 @@ def generate_response(
             if "</think>" in answer:
                 answer = answer.split("</think>")[-1].strip()
             
+            log_verbose(f"LLM response received: {answer[:100]}...")
             return answer
         
+        log_verbose("LLM returned no choices")
         return "I'm sorry, I couldn't generate a response. Please try again."
         
     except Exception as e:
-        print(f"LLM error: {e}")
-        return "I encountered an error. Please try again."
+        log_verbose(f"LLM request failed: {e}")
+        raise RAGError(f"LLM request failed: {e}")
 
 
 # =============================================================================
@@ -500,26 +644,41 @@ def handle_query(
     Args:
         collection: ChromaDB collection
         query: User's question
-        conversation_history: Previous conversation turns
+        conversation_history: Previous conversation turns (will be truncated to max_history_turns)
         category_filter: Optional category to filter search
         top_k: Number of documents to retrieve
         
     Returns:
         Dict with 'response', 'sources', and 'query'
+        
+    Raises:
+        RAGError: If search or generation fails
     """
     if not query or not query.strip():
+        log_verbose("Empty query received")
         return {
             'response': "I didn't catch that. Could you please repeat?",
             'sources': [],
             'query': query
         }
     
+    config = get_config()
+    log_verbose(f"Handling query: '{query}'")
+    
+    # Truncate history to configured maximum
+    if conversation_history and len(conversation_history) > config.max_history_turns:
+        log_verbose(f"Truncating conversation history from {len(conversation_history)} to {config.max_history_turns} turns")
+        conversation_history = conversation_history[-config.max_history_turns:]
+    
     # Search for relevant documents
+    log_verbose("Searching for relevant documents...")
     results = search(collection, query, top_k=top_k, category_filter=category_filter)
     
     # Generate response
+    log_verbose("Generating response...")
     response = generate_response(query, results, conversation_history)
     
+    log_verbose(f"Query handled successfully, response length: {len(response)}")
     return {
         'response': response,
         'sources': [r['doc_id'] for r in results],
@@ -531,56 +690,194 @@ def handle_query(
 # Utility Functions
 # =============================================================================
 
-def read_config_file(file_path: str) -> Dict[str, Any]:
-    """Read configuration from ini-style file"""
-    config = {}
+def read_yaml_config(file_path: str) -> Tuple[Dict[str, Any], Optional[str]]:
+    """
+    Read configuration from YAML file.
+    
+    Args:
+        file_path: Path to YAML config file
+        
+    Returns:
+        Tuple of (config dict, error message or None)
+    """
     try:
+        log_verbose(f"Reading YAML config from: {file_path}")
         with open(file_path, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#') and ' ' in line:
-                    key, value = line.split(' ', 1)
-                    config[key] = value.strip()
+            config = yaml.safe_load(f)
+            if config is None:
+                return {}, "YAML file is empty"
+            if not isinstance(config, dict):
+                return {}, f"YAML root must be a dictionary, got {type(config).__name__}"
+            return config, None
+    except FileNotFoundError:
+        return {}, f"Config file not found: {file_path}"
+    except yaml.YAMLError as e:
+        return {}, f"Invalid YAML syntax: {e}"
     except Exception as e:
-        print(f"Config error: {e}")
-    return config
+        return {}, f"Failed to read config file: {e}"
 
 
-def read_yaml_config(file_path: str) -> Dict[str, Any]:
-    """Read configuration from YAML file"""
+def safe_float(value: Any, default: float, name: str) -> Tuple[float, Optional[str]]:
+    """Safely convert value to float"""
+    if value is None:
+        return default, None
     try:
-        with open(file_path, 'r') as f:
-            return yaml.safe_load(f) or {}
-    except Exception as e:
-        print(f"YAML config error: {e}")
-        return {}
+        return float(value), None
+    except (ValueError, TypeError):
+        return default, f"Invalid value for {name}: '{value}' (using default: {default})"
 
 
-def apply_config_file(file_path: str) -> None:
-    """Load and apply configuration from file (yaml format)"""
+def safe_int(value: Any, default: int, name: str) -> Tuple[int, Optional[str]]:
+    """Safely convert value to int"""
+    if value is None:
+        return default, None
+    try:
+        return int(value), None
+    except (ValueError, TypeError):
+        return default, f"Invalid value for {name}: '{value}' (using default: {default})"
+
+
+def safe_str(value: Any, default: str, name: str) -> Tuple[str, Optional[str]]:
+    """Safely convert value to string"""
+    if value is None:
+        return default, None
+    try:
+        return str(value), None
+    except Exception:
+        return default, f"Invalid value for {name}: '{value}' (using default: {default})"
+
+
+def safe_bool(value: Any, default: bool, name: str) -> Tuple[bool, Optional[str]]:
+    """Safely convert value to boolean"""
+    if value is None:
+        return default, None
+    if isinstance(value, bool):
+        return value, None
+    if isinstance(value, str):
+        if value.lower() in ('true', 'yes', '1', 'on'):
+            return True, None
+        if value.lower() in ('false', 'no', '0', 'off'):
+            return False, None
+    try:
+        return bool(value), None
+    except Exception:
+        return default, f"Invalid value for {name}: '{value}' (using default: {default})"
+
+
+def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
+    """
+    Load and apply configuration from YAML file.
+    
+    Args:
+        file_path: Path to YAML config file
+        
+    Returns:
+        Tuple of (success, list of warnings/errors)
+        
+    Example YAML format:
+        llm:
+          base_url: "https://api.groq.com/openai/v1"
+          # api_key should be set as environment variable LLM_API_KEY
+          model: "llama-3.1-8b-instant"
+        chroma:
+          path: "./data/chroma_data"
+        embedding:
+          model: "all-MiniLM-L6-v2"
+        search:
+          similarity_threshold: 0.15
+          top_k: 5
+        data:
+          default_path: "./data/upanzi_data.json"
+        debug:
+          verbose: true
+    """
+    messages = []
+    
+    yaml_config, error = read_yaml_config(file_path)
+    if error:
+        return False, [error]
+    
+    log_verbose(f"Successfully read YAML config from {file_path}")
+    
+    # Extract nested values with defaults
+    llm = yaml_config.get('llm', {})
+    chroma = yaml_config.get('chroma', {})
+    embedding = yaml_config.get('embedding', {})
+    search = yaml_config.get('search', {})
+    conversation = yaml_config.get('conversation', {})
+    data = yaml_config.get('data', {})
+    debug = yaml_config.get('debug', {})
+    
+    # Parse numeric values safely
+    similarity_threshold, warn = safe_float(
+        search.get('similarity_threshold'), 
+        DEFAULT_SIMILARITY_THRESHOLD, 
+        'similarity_threshold'
+    )
+    if warn:
+        messages.append(warn)
+    
+    top_k, warn = safe_int(search.get('top_k'), DEFAULT_TOP_K, 'top_k')
+    if warn:
+        messages.append(warn)
+    
+    max_history_turns, warn = safe_int(
+        conversation.get('max_history_turns'), 
+        DEFAULT_MAX_HISTORY_TURNS, 
+        'max_history_turns'
+    )
+    if warn:
+        messages.append(warn)
+    
+    context_turns, warn = safe_int(
+        conversation.get('context_turns'), 
+        DEFAULT_CONTEXT_TURNS, 
+        'context_turns'
+    )
+    if warn:
+        messages.append(warn)
+    
+    # Get data default path
+    data_default_path, warn = safe_str(
+        data.get('default_path'),
+        DEFAULT_DATA_PATH,
+        'data.default_path'
+    )
+    if warn:
+        messages.append(warn)
+    
+    # Parse verbose
+    verbose, warn = safe_bool(
+        debug.get('verbose'),
+        DEFAULT_VERBOSE,
+        'debug.verbose'
+    )
+    if warn:
+        messages.append(warn)
     
     try:
-        yaml_config = read_yaml_config(file_path)
-        
-        # Extract nested values
-        llm = yaml_config.get('llm', {})
-        chroma = yaml_config.get('chroma', {})
-        embedding = yaml_config.get('embedding', {})
-        search = yaml_config.get('search', {})
-        
         config = RAGConfig(
             llm_base_url=llm.get('base_url', DEFAULT_LLM_BASE_URL),
-            llm_api_key=llm.get('api_key', DEFAULT_LLM_API_KEY),
+            # LLM_API_KEY must be exported as environment variable, not from config file
             llm_model=llm.get('model', DEFAULT_LLM_MODEL),
             chroma_path=chroma.get('path', DEFAULT_CHROMA_PATH),
             embedding_model=embedding.get('model', DEFAULT_EMBEDDING_MODEL),
-            similarity_threshold=float(search.get('similarity_threshold', DEFAULT_SIMILARITY_THRESHOLD)),
-            default_top_k=int(search.get('top_k', DEFAULT_TOP_K)),
+            similarity_threshold=similarity_threshold,
+            default_top_k=top_k,
+            max_history_turns=max_history_turns,
+            context_turns=context_turns,
+            data_default_path=data_default_path,
+            verbose=verbose,
         )
-
+        
+        # This will validate and raise ConfigError if invalid
+        set_config(config)
+        log_verbose(f"Configuration applied successfully: verbose={verbose}")
+        return True, messages
+        
+    except ConfigError as e:
+        log_verbose(f"ConfigError: {e}")
+        return False, [str(e)] + messages
     except Exception as e:
-        print(f"Failed to apply config file: {e}")
-        return
-    
-    
-    set_config(config)
+        log_verbose(f"Exception applying configuration: {e}")
+        return False, [f"Failed to apply configuration: {e}"] + messages
