@@ -33,7 +33,6 @@ from .rag_implementation import (
 
 PACKAGE_PATH = Path(get_package_share_directory('language_model'))
 
-
 class SimpleRAGNode(Node):
     """
     Simple RAG Node for Pepper robot.

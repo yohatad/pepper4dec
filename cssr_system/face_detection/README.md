@@ -3,22 +3,19 @@
 </div>
 
 <div align="center">
-  <img src="../CSSR4AfricaLogo.svg" alt="CSSR4Africa Logo" style="width:50%; height:auto;">
+  <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:50%; height:auto;">
 </div>
 
 The **Face and Mutual Gaze Detection and Localization** package is a **ROS2** package designed to detect multiple faces and evaluate their **mutual gaze** in real-time by subscribing to image topics. It publishes an array of detected faces and their mutual gaze status to the **/faceDetection/data** topic. Each entry in the published data includes the **label ID** of the detected face, the **centroid** coordinates representing the center point of each face, and a boolean value indicating **mutual gaze** status as either **True** or **False**, the **width** and **height** of the bounding box.
 
 ## Key Features
-- **ROS2 Native**: Built for ROS2 Humble/Humble+
+- **ROS2 Native**: Built for ROS2 Humble
 - **SixDrepNet Algorithm**: State-of-the-art face detection and head pose estimation
 - **Object Detection Integration**: Uses YOLO-based person detection to locate faces within person bounding boxes
 - **Real-time Processing**: Processes synchronized RGB-D camera streams
-- **Configurable**: Extensive configuration via YAML file
+- **Configurable**: Configuration via YAML file
 - **Multi-camera Support**: RealSense and Pepper camera support
 - **ROS2 Bag Compatible**: Optional camera launch for use with recorded data
-
-# 📄 Documentation
-The main documentation for this deliverable is found in [D4.2.2 Face and Mutual Gaze Detection and Localization](https://cssr4africa.github.io/deliverables/CSSR4Africa_Deliverable_D4.2.2.pdf) that provides more details.
 
 # 🛠️ Installation 
 
@@ -190,8 +187,6 @@ For issues or questions:
 - Visit: <a href="http://www.cssr4africa.org">www.cssr4africa.org</a>
 
 # 📜 License
-Copyright (C) 2023 CSSR4Africa Consortium  
-Funded by African Engineering and Technology Network (Afretec)  
-Inclusive Digital Transformation Research Grant Programme
+Copyright (C) 2023 Upanzi Network   
 
 2025-03-15 (Updated for ROS2: 2026-01-10)

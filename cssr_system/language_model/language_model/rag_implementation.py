@@ -179,7 +179,6 @@ def set_config(config: RAGConfig) -> None:
     
     log_verbose(f"Configuration updated: llm_base_url={config.llm_base_url}, llm_model={config.llm_model}")
 
-
 def get_openai_client() -> openai.OpenAI:
     """Get or create OpenAI client (thread-safe)"""
     global openai_client_instance
@@ -211,7 +210,6 @@ def get_chroma_client() -> chromadb.PersistentClient:
                     raise RAGError(f"Failed to initialize ChromaDB: {e}")
     return chroma_client_instance
 
-
 def get_embedding_function():
     """Get or create embedding function (thread-safe)"""
     global embedding_function_instance
@@ -225,7 +223,6 @@ def get_embedding_function():
                     model_name=config.embedding_model
                 )
     return embedding_function_instance
-
 
 # =============================================================================
 # Data Loading
@@ -263,7 +260,6 @@ def load_json_data(file_path: str) -> List[Dict]:
         raise RAGError(f"Invalid JSON in {file_path}: {e}")
     except FileNotFoundError:
         raise RAGError(f"File not found: {file_path}")
-
 
 def parse_upanzi_format(json_data: Dict) -> List[Dict]:
     """Parse Upanzi lab JSON format with 'text' fields"""
@@ -346,11 +342,9 @@ def parse_upanzi_format(json_data: Dict) -> List[Dict]:
     log_verbose(f"Parsed {len(documents)} documents from Upanzi format")
     return documents
 
-
 # =============================================================================
 # Collection Management
 # =============================================================================
-
 def create_collection(name: str, description: str = "") -> chromadb.Collection:
     """
     Create or get ChromaDB collection.
@@ -391,7 +385,6 @@ def get_collection(name: str) -> Optional[chromadb.Collection]:
     except Exception:
         log_verbose(f"Collection not found: {name}")
         return None
-
 
 def populate_collection(collection: chromadb.Collection, documents: List[Dict]) -> int:
     """
@@ -439,7 +432,6 @@ def populate_collection(collection: chromadb.Collection, documents: List[Dict]) 
     log_verbose(f"Added {len(docs)} documents to collection")
     return len(docs)
 
-
 def setup_collection(name: str, json_path: str, description: str = "") -> chromadb.Collection:
     """
     Convenience: Create collection and load data.
@@ -466,7 +458,6 @@ def setup_collection(name: str, json_path: str, description: str = "") -> chroma
     
     log_verbose(f"Collection '{name}' ready with {collection.count()} documents")
     return collection
-
 
 # =============================================================================
 # Search
@@ -535,7 +526,6 @@ def search(
     except Exception as e:
         log_verbose(f"Search failed with error: {e}")
         raise RAGError(f"Search failed: {e}")
-
 
 # =============================================================================
 # Response Generation
@@ -627,7 +617,6 @@ def generate_response(
         log_verbose(f"LLM request failed: {e}")
         raise RAGError(f"LLM request failed: {e}")
 
-
 # =============================================================================
 # Main Query Handler
 # =============================================================================
@@ -686,11 +675,9 @@ def handle_query(
         'query': query
     }
 
-
 # =============================================================================
 # Utility Functions
 # =============================================================================
-
 def read_yaml_config(file_path: str) -> Tuple[Dict[str, Any], Optional[str]]:
     """
     Read configuration from YAML file.
@@ -717,7 +704,6 @@ def read_yaml_config(file_path: str) -> Tuple[Dict[str, Any], Optional[str]]:
     except Exception as e:
         return {}, f"Failed to read config file: {e}"
 
-
 def safe_float(value: Any, default: float, name: str) -> Tuple[float, Optional[str]]:
     """Safely convert value to float"""
     if value is None:
@@ -726,7 +712,6 @@ def safe_float(value: Any, default: float, name: str) -> Tuple[float, Optional[s
         return float(value), None
     except (ValueError, TypeError):
         return default, f"Invalid value for {name}: '{value}' (using default: {default})"
-
 
 def safe_int(value: Any, default: int, name: str) -> Tuple[int, Optional[str]]:
     """Safely convert value to int"""
@@ -737,7 +722,6 @@ def safe_int(value: Any, default: int, name: str) -> Tuple[int, Optional[str]]:
     except (ValueError, TypeError):
         return default, f"Invalid value for {name}: '{value}' (using default: {default})"
 
-
 def safe_str(value: Any, default: str, name: str) -> Tuple[str, Optional[str]]:
     """Safely convert value to string"""
     if value is None:
@@ -746,7 +730,6 @@ def safe_str(value: Any, default: str, name: str) -> Tuple[str, Optional[str]]:
         return str(value), None
     except Exception:
         return default, f"Invalid value for {name}: '{value}' (using default: {default})"
-
 
 def safe_bool(value: Any, default: bool, name: str) -> Tuple[bool, Optional[str]]:
     """Safely convert value to boolean"""
@@ -763,7 +746,6 @@ def safe_bool(value: Any, default: bool, name: str) -> Tuple[bool, Optional[str]
         return bool(value), None
     except Exception:
         return default, f"Invalid value for {name}: '{value}' (using default: {default})"
-
 
 def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
     """
