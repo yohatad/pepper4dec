@@ -7,7 +7,6 @@
 **/*cpython*
 __pycache__/
 **/*.png
-**/*.svg
 **/cssr4africa_virtual_envs/**
 **/BehaviorTree.CPP/**
 **/chroma.sqlite3
