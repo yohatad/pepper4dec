@@ -16,6 +16,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/PerformGesture.srv"
   "srv/LanguageModelPrompt.srv"
   "srv/LanguageModelCreateCollection.srv"
+  "action/Gesture.action"
   DEPENDENCIES builtin_interfaces std_msgs geometry_msgs
 )
 

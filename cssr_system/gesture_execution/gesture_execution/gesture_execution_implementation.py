@@ -19,6 +19,7 @@ from typing import Dict, List, Tuple, Optional, Union
 from dataclasses import dataclass
 
 from rclpy.node import Node
+from rclpy.action import ActionServer
 from ament_index_python.packages import get_package_share_directory
 
 # ROS2 messages and services
@@ -26,6 +27,7 @@ from sensor_msgs.msg import JointState
 from geometry_msgs.msg import Pose2D, Twist
 from naoqi_bridge_msgs.msg import JointAngleTrajectory
 from cssr_interfaces.srv import PerformGesture
+from cssr_interfaces.action import Gesture
 from .pepper_kinematics_utilities import PepperKinematicsUtilities, RIGHT_ARM, LEFT_ARM
 
 # Constants
@@ -193,6 +195,7 @@ class GestureExecutionSystem(Node):
         self.init_joint_states()
         
         self.setup_ros_interfaces()
+        self.setup_action_server()
         self.get_logger().info("Gesture Execution System initialized")
         self.get_logger().info("Gesture Execution System started - waiting for service calls")
     
@@ -231,6 +234,49 @@ class GestureExecutionSystem(Node):
         
         # Services
         self.create_service(PerformGesture, "/gesture_execution/perform_gesture", self.perform_gesture_callback)
+
+    def setup_action_server(self):
+        """Initialize ROS2 Action Server for gesture execution"""
+        self._gesture_action_server = ActionServer(
+            self,
+            Gesture,
+            '/gesture_execution/perform_gesture_action',
+            self.execute_gesture_action_callback
+        )
+
+    def execute_gesture_action_callback(self, goal_handle):
+        """Handle gesture execution action requests"""
+        request = goal_handle.request
+        
+        try:
+            success = self.execute_gesture(
+                gesture_type=request.gesture_type,
+                gesture_id=request.gesture_id,
+                gesture_duration=request.gesture_duration,
+                bow_nod_angle=request.bow_nod_angle,
+                location_x=request.location_x,
+                location_y=request.location_y,
+                location_z=request.location_z
+            )
+            
+            result = Gesture.Result()
+            result.gesture_success = 1 if success else 0
+            
+            if success and self.verbose_mode:
+                self.get_logger().info("Gesture executed successfully via action")
+            elif not success:
+                self.get_logger().error("Gesture execution failed via action")
+                
+            goal_handle.succeed()
+            return result
+            
+        except Exception as e:
+            self.get_logger().error(f"Gesture execution error via action: {e}")
+            self.get_logger().error(traceback.format_exc())
+            goal_handle.abort()
+            result = Gesture.Result()
+            result.gesture_success = 0
+            return result
     
     def joint_states_callback(self, msg: JointState):
         """Handle joint state"""
