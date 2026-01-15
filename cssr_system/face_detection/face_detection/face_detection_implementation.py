@@ -579,31 +579,22 @@ class SixDrepNet(FaceDetectionNode):
             self.update_latest_frame(frame)
             
     def process_frame(self, cv_image):
-        """
-        Process the input frame for face detection and head pose estimation.
-        Runs face detection on full image, then associates faces with detected persons.
-        Args: 
-            cv_image: Input frame as a NumPy array (BGR format)
-        """
+        """Process frame with one-face-per-person tracking."""
         debug_image = cv_image.copy()
         img_h, img_w = debug_image.shape[:2]
         tracking_data = []
 
-        # Dictionary to store face ID colors
         if not hasattr(self, "face_colors"):
             self.face_colors = {}
 
-        # Get latest object detections
         with self.object_detections_lock:
             object_detections = self.latest_object_detections
 
         if object_detections is None:
-            # No object detections yet, return original image
             return debug_image
 
-        # Check if any persons are detected
-        person_boxes = []
-        person_ids = []
+        # Collect person detections
+        persons = []
         for i in range(len(object_detections.object_label_id)):
             if i < len(object_detections.class_names) and object_detections.class_names[i] == 'person':
                 if i < len(object_detections.centroids):
@@ -616,57 +607,94 @@ class SixDrepNet(FaceDetectionNode):
                     x2 = min(img_w, int(centroid.x + width / 2))
                     y2 = min(img_h, int(centroid.y + height / 2))
                     
-                    person_boxes.append((x1, y1, x2, y2, centroid.z))
-                    person_ids.append(object_detections.object_label_id[i])
+                    persons.append({
+                        'id': object_detections.object_label_id[i],
+                        'box': (x1, y1, x2, y2),
+                        'depth': centroid.z,
+                        'assigned_face': None
+                    })
 
-        if not person_boxes:
-            # No persons detected
+        if not persons:
             return debug_image
 
-        # Run face detection on the FULL image
+        # Run face detection on full image
         face_boxes, face_scores = self.yolo_model(cv_image)
         
         if self.verbose_mode:
-            self.get_logger().info(f"Persons detected: {len(person_boxes)}, Faces detected: {len(face_boxes)}")
+            self.get_logger().info(f"Persons: {len(persons)}, Faces: {len(face_boxes)}")
 
-        # Process each detected face
-        for face_idx, (face_box, face_score) in enumerate(zip(face_boxes, face_scores)):
-            fx1, fy1, fx2, fy2 = face_box
+        # Build list of face detections
+        faces = []
+        for idx, (box, score) in enumerate(zip(face_boxes, face_scores)):
+            fx1, fy1, fx2, fy2 = box
             face_cx = (fx1 + fx2) // 2
             face_cy = (fy1 + fy2) // 2
             face_width = fx2 - fx1
             face_height = fy2 - fy1
-
-            # Skip if face bounding box is too small
+            
             if face_width < 20 or face_height < 20:
                 continue
+                
+            faces.append({
+                'box': (fx1, fy1, fx2, fy2),
+                'centroid': (face_cx, face_cy),
+                'size': (face_width, face_height),
+                'score': score,
+                'assigned': False
+            })
 
-            # Find which person this face belongs to (if any)
-            associated_person_idx = None
-            for p_idx, (px1, py1, px2, py2, pz) in enumerate(person_boxes):
-                # Check if face centroid is within person bounding box
-                if px1 <= face_cx <= px2 and py1 <= face_cy <= py2:
-                    associated_person_idx = p_idx
-                    break
-
-            # If face is not associated with any person, skip it
-            if associated_person_idx is None:
-                if self.verbose_mode:
-                    self.get_logger().info(f"Face at ({face_cx}, {face_cy}) not associated with any person, skipping")
-                continue
-
-            person_id = person_ids[associated_person_idx]
-            person_depth = person_boxes[associated_person_idx][4]
+        # Associate faces with persons (greedy: best score first)
+        faces.sort(key=lambda f: f['score'], reverse=True)
+        
+        for face in faces:
+            face_cx, face_cy = face['centroid']
             
-            # Create unique face ID
-            face_id = f"{person_id}_{face_idx}"
+            best_person_idx = None
+            best_overlap = 0
+            
+            for p_idx, person in enumerate(persons):
+                if person['assigned_face'] is not None:
+                    continue  # Already has a face
+                    
+                px1, py1, px2, py2 = person['box']
+                
+                # Check if face centroid is inside person box
+                if px1 <= face_cx <= px2 and py1 <= face_cy <= py2:
+                    # Calculate how centered the face is in the upper portion of person box
+                    # (faces should be in upper half of person)
+                    person_upper_half_y = (py1 + py2) / 2
+                    if face_cy < person_upper_half_y:
+                        # Prefer faces in upper half
+                        overlap = face['score'] + 0.5
+                    else:
+                        overlap = face['score']
+                    
+                    if overlap > best_overlap:
+                        best_overlap = overlap
+                        best_person_idx = p_idx
+            
+            if best_person_idx is not None:
+                persons[best_person_idx]['assigned_face'] = face
+                face['assigned'] = True
 
-            # Assign a unique color for each face ID
+        # Process assigned faces
+        for person in persons:
+            face = person['assigned_face']
+            if face is None:
+                continue
+                
+            fx1, fy1, fx2, fy2 = face['box']
+            face_cx, face_cy = face['centroid']
+            face_width, face_height = face['size']
+            
+            # Face ID = Person ID (stable tracking!)
+            face_id = str(person['id'])
+            
             if face_id not in self.face_colors:
                 self.face_colors[face_id] = self.generate_dark_color()
             face_color = self.face_colors[face_id]
 
-            # Crop the face region for head pose estimation
+            # Crop face for head pose estimation
             face_image = cv_image[fy1:fy2, fx1:fx2]
             if face_image.size == 0:
                 continue
@@ -680,48 +708,44 @@ class SixDrepNet(FaceDetectionNode):
             yaw_pitch_roll = self.sixdrepnet_session.run(None, {'input': input_tensor})[0][0]
             yaw_deg, pitch_deg, roll_deg = yaw_pitch_roll
 
-            # Draw head pose axes at face centroid
+            # Draw head pose axes
             self.draw_axis(debug_image, yaw_deg, pitch_deg, roll_deg, face_cx, face_cy, size=50)
 
             # Get depth
-            cz = person_depth if person_depth > 0 else 0.0
+            cz = person['depth'] if person['depth'] > 0 else 0.0
             if cz == 0.0:
                 cz_depth = self.get_depth_in_region(face_cx, face_cy, face_width, face_height)
                 cz = cz_depth if cz_depth is not None else 0.0
 
-            # Determine if the person is engaged (mutual gaze)
+            # Mutual gaze check
             mutual_gaze = abs(yaw_deg) < self.sixdrep_angle and abs(pitch_deg) < self.sixdrep_angle
 
-            # Add face tracking data
             tracking_data.append({
-                'face_id': str(face_id),
-                'centroid': Point(x=float(face_cx), y=float(face_cy), z=float(cz) if cz else 0.0),
+                'face_id': face_id,
+                'centroid': Point(x=float(face_cx), y=float(face_cy), z=float(cz)),
                 'width': float(face_width),
                 'height': float(face_height),
                 'mutual_gaze': mutual_gaze
             })
 
-            # Draw face bounding box
+            # Draw visualizations
             cv2.rectangle(debug_image, (fx1, fy1), (fx2, fy2), face_color, 2)
-
-            # Add labels
             label = "Engaged" if mutual_gaze else "Not Engaged"
             cv2.putText(debug_image, label, (fx1 + 10, fy1 - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, face_color, 2)
-            cv2.putText(debug_image, f"Face: {face_id}", (fx1 + 10, fy1 - 30),
+            cv2.putText(debug_image, f"ID: {face_id}", (fx1 + 10, fy1 - 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, face_color, 2)
             cv2.putText(debug_image, f"Depth: {cz:.2f}m", (fx1 + 10, fy2 + 20),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, face_color, 2)
-            cv2.putText(debug_image, f"Conf: {face_score:.2f}", (fx1 + 10, fy2 + 40),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, face_color, 2)
 
-        # Draw person bounding boxes (for visualization)
+        # Draw person boxes
         if self.verbose_mode:
-            for p_idx, (px1, py1, px2, py2, pz) in enumerate(person_boxes):
-                cv2.rectangle(debug_image, (px1, py1), (px2, py2), (255, 255, 255), 1)
-                cv2.putText(debug_image, f"Person: {person_ids[p_idx]}", (px1 + 5, py1 - 5),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            for person in persons:
+                px1, py1, px2, py2 = person['box']
+                color = (0, 255, 0) if person['assigned_face'] else (128, 128, 128)
+                cv2.rectangle(debug_image, (px1, py1), (px2, py2), color, 1)
+                cv2.putText(debug_image, f"P:{person['id']}", (px1 + 5, py1 - 5),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
-        # Publish tracking data
         self.publish_face_detection(tracking_data)
         return debug_image
