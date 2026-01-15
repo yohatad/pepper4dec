@@ -16,7 +16,6 @@ from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 from enum import Enum
 
-import rclpy
 from rclpy.node import Node
 from ament_index_python.packages import get_package_share_directory
 from cv_bridge import CvBridge

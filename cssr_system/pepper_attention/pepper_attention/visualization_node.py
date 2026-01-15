@@ -19,9 +19,7 @@ from geometry_msgs.msg import Vector3, Point, Pose, PoseStamped
 from std_msgs.msg import Float32MultiArray, ColorRGBA
 from visualization_msgs.msg import Marker, MarkerArray
 from cv_bridge import CvBridge
-
 from cssr_interfaces.msg import FaceDetection
-
 
 # ============ Helper Functions ============
 def get_image_topic(base_topic: str, use_compressed: bool, is_depth: bool = False) -> str:
@@ -50,7 +48,6 @@ def get_image_qos() -> QoSProfile:
         history=HistoryPolicy.KEEP_LAST,
         depth=1
     )
-
 
 class AttentionVisualization(Node):
     def __init__(self):
