@@ -5,7 +5,7 @@
 camera: realsense
 useCompressed: false
 imageTimeout: 2.0
-verboseMode: true
+verboseMode: false
 
 # =============================================================================
 # Detection Settings

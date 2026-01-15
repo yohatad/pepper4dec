@@ -580,7 +580,8 @@ class SixDrepNet(FaceDetectionNode):
             
     def process_frame(self, cv_image):
         """
-        Process the input frame for face detection and head pose estimation using object detection.
+        Process the input frame for face detection and head pose estimation.
+        Runs face detection on full image, then associates faces with detected persons.
         Args: 
             cv_image: Input frame as a NumPy array (BGR format)
         """
@@ -600,137 +601,126 @@ class SixDrepNet(FaceDetectionNode):
             # No object detections yet, return original image
             return debug_image
 
-        # Process each detected person
+        # Check if any persons are detected
+        person_boxes = []
+        person_ids = []
         for i in range(len(object_detections.object_label_id)):
-            # Check if this is a person detection
-            if i < len(object_detections.class_names) and object_detections.class_names[i] != 'person':
-                continue  # Skip non-person detections
-            
-            # Get person tracking ID (from object_detection node)
-            person_id = object_detections.object_label_id[i]
-            
-            # Get person bounding box from object detection
-            if i < len(object_detections.centroids):
-                person_centroid = object_detections.centroids[i]
-                person_cx, person_cy = int(person_centroid.x), int(person_centroid.y)
-                
-                # Get person width and height from object detection
-                person_width = object_detections.width[i] if i < len(object_detections.width) else 100
-                person_height = object_detections.height[i] if i < len(object_detections.height) else 100
-                
-                # Calculate person bounding box coordinates from centroid and dimensions
-                person_x1 = int(person_cx - person_width / 2)
-                person_y1 = int(person_cy - person_height / 2)
-                person_x2 = int(person_cx + person_width / 2)
-                person_y2 = int(person_cy + person_height / 2)
-                
-                # Clamp to image boundaries
-                person_x1 = max(0, person_x1)
-                person_y1 = max(0, person_y1)
-                person_x2 = min(img_w, person_x2)
-                person_y2 = min(img_h, person_y2)
-                
-                # Skip if person bounding box is too small
-                if person_x2 - person_x1 < 20 or person_y2 - person_y1 < 20:
-                    continue
-
-                # Crop person ROI for face detection
-                person_roi = debug_image[person_y1:person_y2, person_x1:person_x2]
-                if person_roi.size == 0:
-                    continue  # Skip if ROI is invalid
-
-                # Run face detection within person ROI
-                face_boxes, face_scores = self.yolo_model(person_roi)
-                
-                # Process each detected face within the person ROI
-                for face_idx, (face_box, face_score) in enumerate(zip(face_boxes, face_scores)):
-                    # Convert face box coordinates from ROI to full image coordinates
-                    fx1, fy1, fx2, fy2 = face_box
-                    # Adjust coordinates to full image
-                    fx1 += person_x1
-                    fy1 += person_y1
-                    fx2 += person_x1
-                    fy2 += person_y1
+            if i < len(object_detections.class_names) and object_detections.class_names[i] == 'person':
+                if i < len(object_detections.centroids):
+                    centroid = object_detections.centroids[i]
+                    width = object_detections.width[i] if i < len(object_detections.width) else 100
+                    height = object_detections.height[i] if i < len(object_detections.height) else 100
                     
-                    # Calculate face centroid
-                    face_cx = (fx1 + fx2) // 2
-                    face_cy = (fy1 + fy2) // 2
-                    face_width = fx2 - fx1
-                    face_height = fy2 - fy1
+                    x1 = max(0, int(centroid.x - width / 2))
+                    y1 = max(0, int(centroid.y - height / 2))
+                    x2 = min(img_w, int(centroid.x + width / 2))
+                    y2 = min(img_h, int(centroid.y + height / 2))
                     
-                    # Skip if face bounding box is too small
-                    if face_width < 20 or face_height < 20:
-                        continue
-                    
-                    # Create unique face ID combining person ID and face index
-                    face_id = f"{person_id}_{face_idx}"
-                    
-                    # Assign a unique color for each face ID
-                    if face_id not in self.face_colors:
-                        self.face_colors[face_id] = self.generate_dark_color()
+                    person_boxes.append((x1, y1, x2, y2, centroid.z))
+                    person_ids.append(object_detections.object_label_id[i])
 
-                    face_color = self.face_colors[face_id]
+        if not person_boxes:
+            # No persons detected
+            return debug_image
 
-                    # Crop the face region for head pose estimation
-                    face_image = debug_image[fy1:fy2, fx1:fx2]
-                    if face_image.size == 0:
-                        continue  # Skip if cropped region is invalid
+        # Run face detection on the FULL image
+        face_boxes, face_scores = self.yolo_model(cv_image)
+        
+        if self.verbose_mode:
+            self.get_logger().info(f"Persons detected: {len(person_boxes)}, Faces detected: {len(face_boxes)}")
 
-                    # Preprocess for SixDrepNet
-                    resized_image = cv2.resize(face_image, (224, 224))
-                    normalized_image = (resized_image[..., ::-1] / 255.0 - self.mean) / self.std
-                    input_tensor = normalized_image.transpose(2, 0, 1)[np.newaxis, ...].astype(np.float32)
+        # Process each detected face
+        for face_idx, (face_box, face_score) in enumerate(zip(face_boxes, face_scores)):
+            fx1, fy1, fx2, fy2 = face_box
+            face_cx = (fx1 + fx2) // 2
+            face_cy = (fy1 + fy2) // 2
+            face_width = fx2 - fx1
+            face_height = fy2 - fy1
 
-                    # Run head pose estimation
-                    yaw_pitch_roll = self.sixdrepnet_session.run(None, {'input': input_tensor})[0][0]
-                    yaw_deg, pitch_deg, roll_deg = yaw_pitch_roll
+            # Skip if face bounding box is too small
+            if face_width < 20 or face_height < 20:
+                continue
 
-                    # Draw head pose axes at face centroid
-                    self.draw_axis(debug_image, yaw_deg, pitch_deg, roll_deg, face_cx, face_cy, size=50)
+            # Find which person this face belongs to (if any)
+            associated_person_idx = None
+            for p_idx, (px1, py1, px2, py2, pz) in enumerate(person_boxes):
+                # Check if face centroid is within person bounding box
+                if px1 <= face_cx <= px2 and py1 <= face_cy <= py2:
+                    associated_person_idx = p_idx
+                    break
 
-                    # Get depth at face centroid
-                    cz = person_centroid.z if person_centroid.z > 0 else 0.0
-                    if cz == 0.0:
-                        # Fall back to depth image if object detection depth is not available
-                        cz_depth = self.get_depth_in_region(face_cx, face_cy, face_width, face_height)
-                        cz = cz_depth if cz_depth is not None else 0.0
-
-                    # Determine if the person is engaged (mutual gaze)
-                    mutual_gaze = abs(yaw_deg) < self.sixdrep_angle and abs(pitch_deg) < self.sixdrep_angle
-
-                    # Add face tracking data
-                    tracking_data.append({
-                        'face_id': str(face_id),
-                        'centroid': Point(x=float(face_cx), y=float(face_cy), z=float(cz) if cz else 0.0),
-                        'width': float(face_width),
-                        'height': float(face_height),
-                        'mutual_gaze': mutual_gaze
-                    })
-
-                    # Draw face bounding box with assigned color
-                    cv2.rectangle(debug_image, (fx1, fy1), (fx2, fy2), face_color, 2)
-
-                    # Add labels above face bounding box
-                    label = "Engaged" if mutual_gaze else "Not Engaged"
-                    cv2.putText(debug_image, label, (fx1 + 10, fy1 - 10),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, face_color, 2)
-
-                    cv2.putText(debug_image, f"Face: {face_id}", (fx1 + 10, fy1 - 30),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, face_color, 2)
-                    
-                    # Draw depth information below the box
-                    cv2.putText(debug_image, f"Depth: {cz:.2f}m", (fx1 + 10, fy2 + 20),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, face_color, 2)
-                    
-                    # Draw face detection confidence
-                    cv2.putText(debug_image, f"Conf: {face_score:.2f}", (fx1 + 10, fy2 + 40),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, face_color, 2)
-
-                # Draw person bounding box (optional, for visualization)
+            # If face is not associated with any person, skip it
+            if associated_person_idx is None:
                 if self.verbose_mode:
-                    cv2.rectangle(debug_image, (person_x1, person_y1), (person_x2, person_y2), (255, 255, 255), 1)
-                    cv2.putText(debug_image, f"Person: {person_id}", (person_x1 + 5, person_y1 - 5),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                    self.get_logger().info(f"Face at ({face_cx}, {face_cy}) not associated with any person, skipping")
+                continue
+
+            person_id = person_ids[associated_person_idx]
+            person_depth = person_boxes[associated_person_idx][4]
+            
+            # Create unique face ID
+            face_id = f"{person_id}_{face_idx}"
+
+            # Assign a unique color for each face ID
+            if face_id not in self.face_colors:
+                self.face_colors[face_id] = self.generate_dark_color()
+            face_color = self.face_colors[face_id]
+
+            # Crop the face region for head pose estimation
+            face_image = cv_image[fy1:fy2, fx1:fx2]
+            if face_image.size == 0:
+                continue
+
+            # Preprocess for SixDrepNet
+            resized_image = cv2.resize(face_image, (224, 224))
+            normalized_image = (resized_image[..., ::-1] / 255.0 - self.mean) / self.std
+            input_tensor = normalized_image.transpose(2, 0, 1)[np.newaxis, ...].astype(np.float32)
+
+            # Run head pose estimation
+            yaw_pitch_roll = self.sixdrepnet_session.run(None, {'input': input_tensor})[0][0]
+            yaw_deg, pitch_deg, roll_deg = yaw_pitch_roll
+
+            # Draw head pose axes at face centroid
+            self.draw_axis(debug_image, yaw_deg, pitch_deg, roll_deg, face_cx, face_cy, size=50)
+
+            # Get depth
+            cz = person_depth if person_depth > 0 else 0.0
+            if cz == 0.0:
+                cz_depth = self.get_depth_in_region(face_cx, face_cy, face_width, face_height)
+                cz = cz_depth if cz_depth is not None else 0.0
+
+            # Determine if the person is engaged (mutual gaze)
+            mutual_gaze = abs(yaw_deg) < self.sixdrep_angle and abs(pitch_deg) < self.sixdrep_angle
+
+            # Add face tracking data
+            tracking_data.append({
+                'face_id': str(face_id),
+                'centroid': Point(x=float(face_cx), y=float(face_cy), z=float(cz) if cz else 0.0),
+                'width': float(face_width),
+                'height': float(face_height),
+                'mutual_gaze': mutual_gaze
+            })
+
+            # Draw face bounding box
+            cv2.rectangle(debug_image, (fx1, fy1), (fx2, fy2), face_color, 2)
+
+            # Add labels
+            label = "Engaged" if mutual_gaze else "Not Engaged"
+            cv2.putText(debug_image, label, (fx1 + 10, fy1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, face_color, 2)
+            cv2.putText(debug_image, f"Face: {face_id}", (fx1 + 10, fy1 - 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, face_color, 2)
+            cv2.putText(debug_image, f"Depth: {cz:.2f}m", (fx1 + 10, fy2 + 20),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, face_color, 2)
+            cv2.putText(debug_image, f"Conf: {face_score:.2f}", (fx1 + 10, fy2 + 40),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, face_color, 2)
+
+        # Draw person bounding boxes (for visualization)
+        if self.verbose_mode:
+            for p_idx, (px1, py1, px2, py2, pz) in enumerate(person_boxes):
+                cv2.rectangle(debug_image, (px1, py1), (px2, py2), (255, 255, 255), 1)
+                cv2.putText(debug_image, f"Person: {person_ids[p_idx]}", (px1 + 5, py1 - 5),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
         # Publish tracking data
         self.publish_face_detection(tracking_data)
