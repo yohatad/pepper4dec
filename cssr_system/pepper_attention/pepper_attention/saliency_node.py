@@ -1,33 +1,22 @@
 #!/usr/bin/env python3
 
 """
-Saliency Node - Computes bottom-up visual attention
-Uses Boolean Map Saliency (BMS) + motion (optical flow)
-Publishes peak location as /attn/saliency_peak
+Saliency Node - Computes bottom-up visual attention using Boolean Map Saliency (BMS)
+Publishes peaks as /attn/saliency_peak
 """
 
-import numpy as np
+import threading
 import cv2
+import numpy as np
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
-from sensor_msgs.msg import CompressedImage, Image, CameraInfo, JointState
+from sensor_msgs.msg import CompressedImage, Image
 from std_msgs.msg import Float32MultiArray
 
 
-# ============ Helper Functions ============
 def get_image_topic(base_topic: str, use_compressed: bool, is_depth: bool = False) -> str:
-    """
-    Construct the full topic name based on compression setting.
-    
-    Args:
-        base_topic: Base topic name (e.g., "/camera/color/image_raw")
-        use_compressed: Whether to use compressed transport
-        is_depth: Whether this is a depth image (uses /compressedDepth instead of /compressed)
-    
-    Returns:
-        Full topic name with appropriate suffix
-    """
+    """Construct the full topic name based on compression setting."""
     if use_compressed:
         suffix = "/compressedDepth" if is_depth else "/compressed"
         return base_topic + suffix
@@ -45,168 +34,181 @@ def get_image_qos() -> QoSProfile:
 
 
 class BooleanMapSaliency:
-    """BMS - Fast boolean map based saliency with temporal filtering"""
-    def __init__(self, quantization_level=12):
-        self.prev_saliency = None
-        self.alpha = 0.3  # Temporal smoothing factor
-        self.quantization_level = quantization_level
-        
-    def compute_saliency(self, frame: np.ndarray) -> np.ndarray:
-        h, w = frame.shape[:2]
-        
-        # Convert to LAB color space for better perceptual uniformity
-        lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
-        
-        # Quantize colors (key insight of BMS - reduces color space for efficiency)
-        lab_quant = (lab // self.quantization_level).astype(np.int32)
-        
-        # Create boolean maps for each quantized color
-        unique_colors = {}
-        for y in range(h):
-            for x in range(w):
-                color = tuple(lab_quant[y, x])
-                if color not in unique_colors:
-                    unique_colors[color] = np.zeros((h, w), dtype=bool)
-                unique_colors[color][y, x] = True
-        
-        # Compute attention map
-        attention = np.zeros((h, w), dtype=np.float32)
-        
-        for color, bool_map in unique_colors.items():
-            # Find connected components for this color
-            num_labels, labels = cv2.connectedComponents(bool_map.astype(np.uint8))
-            
-            for label in range(1, num_labels):
-                component = (labels == label)
-                
-                # Compute features
-                area = component.sum()
-                if area < 5:  # Skip tiny regions (noise)
-                    continue
-                
-                # Centroid
-                y_coords, x_coords = np.where(component)
-                cy, cx = y_coords.mean(), x_coords.mean()
-                
-                # Compactness (how circular/blob-like the region is)
-                contours, _ = cv2.findContours(
-                    component.astype(np.uint8), 
-                    cv2.RETR_EXTERNAL, 
-                    cv2.CHAIN_APPROX_SIMPLE
-                )[-2:]
-                
-                if len(contours) > 0 and len(contours[0]) > 0:
-                    perimeter = cv2.arcLength(contours[0], True)
-                    compactness = (4 * np.pi * area) / (perimeter ** 2 + 1e-6)
-                else:
-                    compactness = 0.0
-                
-                # Distance to border (center bias)
-                border_dist = min(cy, h-cy, cx, w-cx)
-                border_dist_norm = border_dist / (min(h, w) / 2 + 1e-6)
-                
-                # Saliency value: combines compactness, center bias, and size
-                # Compact, centered, medium-sized regions are most salient
-                sal_value = compactness * border_dist_norm * np.log(area + 1)
-                attention[component] += sal_value
-        
-        # Smooth to create coherent regions
-        attention = cv2.GaussianBlur(attention, (15, 15), 0)
-        
-        # Temporal filtering (exponential smoothing)
-        if self.prev_saliency is not None:
-            attention = self.alpha * attention + (1 - self.alpha) * self.prev_saliency
-        self.prev_saliency = attention.copy()
-        
-        # Normalize to [0, 1]
-        return (attention - attention.min()) / (attention.max() - attention.min() + 1e-6)
+    """
+    Boolean Map Saliency (BMS) - Frame-based
 
+    - Threshold-based boolean maps (per BMS paper)
+    - Spatial Gaussian smoothing
+    - Output normalized to [0, 1]
+    """
+
+    def __init__(self, n_thresholds: int = 10):
+        self.n_thresholds = n_thresholds
+        # Pre-compute thresholds
+        self.thresholds = np.linspace(0, 1, n_thresholds + 1, endpoint=False)[1:]
+
+    def activate_boolean_map(self, bool_map: np.ndarray) -> np.ndarray:
+        """
+        Activate boolean map using flood-fill to suppress background.
+        Implements the core BMS region activation step.
+        """
+        activation = bool_map.astype(np.uint8)
+        h, w = activation.shape
+        ffill_mask = np.zeros((h + 2, w + 2), dtype=np.uint8)
+
+        # Flood-fill from image borders
+        for y in range(h):
+            if activation[y, 0]:
+                cv2.floodFill(activation, ffill_mask, (0, y), 0)
+            if activation[y, w - 1]:
+                cv2.floodFill(activation, ffill_mask, (w - 1, y), 0)
+
+        for x in range(w):
+            if activation[0, x]:
+                cv2.floodFill(activation, ffill_mask, (x, 0), 0)
+            if activation[h - 1, x]:
+                cv2.floodFill(activation, ffill_mask, (x, h - 1), 0)
+
+        return activation
+
+    def compute_saliency(self, frame_bgr: np.ndarray, apply_blur: bool = True) -> np.ndarray:
+        """
+        Compute saliency map.
+
+        Args:
+            frame_bgr: BGR image (H, W, 3), downsampled
+            apply_blur: Whether to apply Gaussian blur (set False if caller will blur)
+
+        Returns:
+            Saliency map (H, W), float32 in [0, 1]
+        """
+        # Convert to LAB color space
+        lab = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2LAB)
+        lab = lab.astype(np.float32)
+
+        # Global normalization with proper handling of uniform images
+        lab_min = lab.min()
+        lab_max = lab.max()
+        lab_range = lab_max - lab_min
+        if lab_range < 1e-6:
+            # Uniform image - return zero saliency
+            return np.zeros((frame_bgr.shape[0], frame_bgr.shape[1]), dtype=np.float32)
+        lab = (lab - lab_min) / lab_range
+
+        h, w = lab.shape[:2]
+        saliency = np.zeros((h, w), dtype=np.float32)
+
+        # Reorder to (C, H, W) for faster channel access
+        lab_ch = lab.transpose(2, 0, 1)
+
+        # Accumulate boolean activations
+        for thresh in self.thresholds:
+            for c in range(3):
+                saliency += self.activate_boolean_map(lab_ch[c] > thresh)
+
+        # Normalize accumulation
+        saliency /= (self.n_thresholds * 3)
+
+        # Spatial smoothing (optional - caller may want to do final blur)
+        if apply_blur:
+            saliency = cv2.GaussianBlur(saliency, (0, 0), 3)
+
+        # Final normalization to [0, 1]
+        s_min = saliency.min()
+        s_max = saliency.max()
+        s_range = s_max - s_min
+        if s_range < 1e-6:
+            return np.zeros_like(saliency, dtype=np.float32)
+        saliency = (saliency - s_min) / s_range
+
+        return saliency.astype(np.float32)
 
 class SaliencyNode(Node):
     def __init__(self):
         super().__init__('saliency_node')
         
-        # Declare all parameters
+        # Declare and load parameters
         self.declare_all_parameters()
         self.load_parameters()
+        
+        # Initialize dimensions with sensible defaults
+        self.W = 640
+        self.H = 480
+        
+        # Thread lock for depth data access
+        self._depth_lock = threading.Lock()
+        self._depth_small = None  # Protected by _depth_lock
         
         # QoS for Wi-Fi
         qos = get_image_qos()
         
-        # Publishers
+        # Publishers - create visualization publisher only if needed
         if self.visualize_components:
-            self.pub_static = self.create_publisher(CompressedImage, '/attn/saliency_static/compressed', 1)
-            self.pub_motion = self.create_publisher(CompressedImage, '/attn/saliency_motion/compressed', 1)
-            self.pub_center = self.create_publisher(CompressedImage, '/attn/saliency_center/compressed', 1)
-            self.pub_combined = self.create_publisher(CompressedImage, '/attn/saliency_combined/compressed', 1)
+            self.pub_combined = self.create_publisher(
+                CompressedImage, '/attn/saliency_combined/compressed', 1)
+        else:
+            self.pub_combined = None
         
         self.pub_peak = self.create_publisher(Float32MultiArray, '/attn/saliency_peak', 10)
         
+        # Only create map publisher if flag is set
         self.pub_map = None
         if self.publish_map_flag:
-            self.pub_map = self.create_publisher(CompressedImage, '/attn/saliency_map/compressed', 1)
+            self.pub_map = self.create_publisher(
+                CompressedImage, '/attn/saliency_map/compressed', 1)
         
-        # Subscriber for images (using shared use_compressed parameter)
+        # Subscriber for images
         image_topic = get_image_topic(self.image_topic_base, self.use_compressed, is_depth=False)
         if self.use_compressed:
-            self.sub = self.create_subscription(CompressedImage, image_topic, self.on_img_compressed, qos)
+            self.sub = self.create_subscription(
+                CompressedImage, image_topic, self.on_img_compressed, qos)
         else:
-            self.sub = self.create_subscription(Image, image_topic, self.on_img_raw, qos)
+            self.sub = self.create_subscription(
+                Image, image_topic, self.on_img_raw, qos)
         
         self.get_logger().info(f"Subscribing to image: {image_topic}")
         
-        # Subscribe to joint states for motion gating
-        self.create_subscription(JointState, '/joint_states', self.on_joint_states, 10)
+        # Subscriber for depth images (for depth weighting)
+        if self.use_depth_weighting:
+            depth_topic = get_image_topic(self.depth_topic_base, self.use_compressed, is_depth=True)
+            if self.use_compressed:
+                self.sub_depth = self.create_subscription(
+                    CompressedImage, depth_topic, self.on_depth_compressed, qos)
+            else:
+                self.sub_depth = self.create_subscription(
+                    Image, depth_topic, self.on_depth_raw, qos)
+            self.get_logger().info(f"Subscribing to depth: {depth_topic}")
         
         # Initialize BMS
-        self.bms = BooleanMapSaliency(quantization_level=self.bms_quantization)
-                
-        # State
-        self.prev_small = None
-        self.prev_small_bgr = None
-        self.dis = None
-        if self.flow_method == 'dis':
-            try:
-                self.dis = cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_FAST)
-            except Exception:
-                self.get_logger().warn("DIS not available, using Farneback")
-                self.flow_method = 'farneback'
-        
-        self.W = self.H = None
-        self.head_velocity = 0.0
+        self.bms = BooleanMapSaliency()
         
         self.get_logger().info(
-            f"Saliency node ready (BMS) "
+            f"Saliency node ready (Pure BMS) "
             f"(use_compressed={self.use_compressed}, "
-            f"motion_gating={'ON' if self.skip_during_motion else 'OFF'}, "
-            f"thresh={self.head_threshold:.3f} rad/s, "
-            f"bms_quantization={self.bms_quantization})"
+            f"depth_weighting={'ON' if self.use_depth_weighting else 'OFF'})"
         )
 
     def declare_all_parameters(self):
-        """Declare all ROS parameters with defaults"""
+        """Declare all ROS parameters with defaults."""
         # Global shared parameter
         self.declare_parameter('use_compressed', True)
         
         # Image topic (base, without /compressed suffix)
         self.declare_parameter('image_topic_base', '/camera/color/image_raw')
+        self.declare_parameter('depth_topic_base', '/camera/depth/image_rect_raw')
+        
+        # Depth weighting parameters
+        self.declare_parameter('use_depth_weighting', True)
+        self.declare_parameter('depth_min_m', 0.3)  # Closer than this = max weight
+        self.declare_parameter('depth_max_m', 4.0)  # Farther than this = min weight
+        self.declare_parameter('depth_weight_min', 0.2)  # Weight at max distance
         
         # Processing parameters
         self.declare_parameter('publish_map', True)
         self.declare_parameter('down_w', 160)
         self.declare_parameter('down_h', 120)
-        self.declare_parameter('alpha_static', 0.6)
-        self.declare_parameter('beta_motion', 0.3)
-        self.declare_parameter('gamma_center', 0.1)
+        
         self.declare_parameter('min_peak', 0.25)
-        self.declare_parameter('flow_method', 'farneback')
-        
-        # BMS-specific parameters
-        self.declare_parameter('bms_quantization', 12)
-        
-        # Motion gating parameters
-        self.declare_parameter('head_motion_threshold', 0.08)
-        self.declare_parameter('skip_during_motion', True)
         
         # Visualization parameters
         self.declare_parameter('overlay_alpha', 0.4)
@@ -215,34 +217,28 @@ class SaliencyNode(Node):
         # Multi-peak parameters
         self.declare_parameter('num_peaks', 5)
         self.declare_parameter('peak_min_distance_px', 40)
-        
-        # Motion focus threshold
-        self.declare_parameter('motion_focus_threshold', 0.3)
 
     def load_parameters(self):
-        """Load all parameters into instance variables"""
+        """Load all parameters into instance variables."""
         # Global shared parameter
         self.use_compressed = self.get_parameter('use_compressed').value
         
         # Image topic base
         self.image_topic_base = self.get_parameter('image_topic_base').value
+        self.depth_topic_base = self.get_parameter('depth_topic_base').value
+        
+        # Depth weighting
+        self.use_depth_weighting = self.get_parameter('use_depth_weighting').value
+        self.depth_min_m = self.get_parameter('depth_min_m').value
+        self.depth_max_m = self.get_parameter('depth_max_m').value
+        self.depth_weight_min = self.get_parameter('depth_weight_min').value
         
         # Processing parameters
         self.publish_map_flag = self.get_parameter('publish_map').value
         self.down_w = self.get_parameter('down_w').value
         self.down_h = self.get_parameter('down_h').value
-        self.ALPHA = self.get_parameter('alpha_static').value
-        self.BETA = self.get_parameter('beta_motion').value
-        self.GAMMA = self.get_parameter('gamma_center').value
+        
         self.MIN_PEAK = self.get_parameter('min_peak').value
-        self.flow_method = self.get_parameter('flow_method').value.lower()
-        
-        # BMS parameters
-        self.bms_quantization = self.get_parameter('bms_quantization').value
-        
-        # Motion gating
-        self.head_threshold = self.get_parameter('head_motion_threshold').value
-        self.skip_during_motion = self.get_parameter('skip_during_motion').value
         
         # Visualization
         self.overlay_alpha = self.get_parameter('overlay_alpha').value
@@ -251,150 +247,142 @@ class SaliencyNode(Node):
         # Multi-peak
         self.num_peaks = self.get_parameter('num_peaks').value
         self.peak_min_dist = self.get_parameter('peak_min_distance_px').value
-        
-        # Motion focus
-        self.motion_focus_threshold = self.get_parameter('motion_focus_threshold').value
 
-    def publish_simple_visualization(self, bgr, S, peaks, W, H, stamp):
-        """Simple saliency visualization with all peaks marked"""
-        # Resize saliency to full resolution
-        vis_small = (S * 255.0).astype(np.uint8)
-        vis_full = cv2.resize(vis_small, (W, H), interpolation=cv2.INTER_LINEAR)
-        saliency_colored = cv2.applyColorMap(vis_full, cv2.COLORMAP_JET)
-        
-        # Overlay on original image
-        vis_color = cv2.addWeighted(bgr, 1.0, saliency_colored, self.overlay_alpha, 0)
-        
-        # Mark all peaks (different colors/sizes by rank)
-        colors = [
-            (255, 255, 255),  # White - highest
-            (0, 255, 255),    # Yellow
-            (255, 0, 255),    # Magenta
-            (0, 255, 0),      # Green
-            (255, 128, 0)     # Orange
-        ]
-        marker_sizes = [20, 16, 14, 12, 10]
-        
-        for idx, (u, v, score) in enumerate(peaks):
-            color = colors[idx] if idx < len(colors) else (128, 128, 128)
-            size = marker_sizes[idx] if idx < len(marker_sizes) else 8
-            
-            # Draw marker
-            cv2.drawMarker(vis_color, (int(u), int(v)), color,
-                        markerType=cv2.MARKER_TILTED_CROSS, 
-                        markerSize=size, thickness=2)
-            
-            # Draw rank number
-            cv2.putText(vis_color, str(idx + 1), (int(u) + 12, int(v) - 12),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-            
-            # Draw score near peak
-            score_text = f"{score:.2f}"
-            cv2.putText(vis_color, score_text, (int(u) + 12, int(v) + 12),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
-        
-        # Status text
-        status = f"Peaks: {len(peaks)}/{self.num_peaks}"
-        cv2.putText(vis_color, status, (10, H - 20),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-        
-        if self.skip_during_motion:
-            motion_status = f"Head: {self.head_velocity:.3f} rad/s"
-            color = (0, 255, 0) if not self.is_head_moving() else (0, 165, 255)
-            cv2.putText(vis_color, motion_status, (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-        
-        # Publish
-        enc = cv2.imencode('.png', vis_color)[1].tobytes()
-        out = CompressedImage()
-        out.format = 'png'
-        out.header.stamp = stamp
-        out.data = enc
-        self.pub_map.publish(out)
-
-    def publish_component_visualization(self, S_static, S_motion, C, S_final, W, H, stamp, bgr_full):
-        """Publish visualization of individual saliency components"""
-        if not self.visualize_components:
+    def on_img_raw(self, msg: Image):
+        """Handle raw Image messages."""
+        if msg.encoding.lower() in ('bgr8', 'rgb8'):
+            bgr = np.frombuffer(msg.data, np.uint8).reshape(
+                (msg.height, msg.width, 3)
+            )
+            if msg.encoding.lower() == 'rgb8':
+                bgr = cv2.cvtColor(bgr, cv2.COLOR_RGB2BGR)
+        else:
             return
         
-        overlay_alpha = self.overlay_alpha
-        
-        def component_to_image(component, width, height, base_image):
-            """Convert component to colorized overlay on real image and find top 3 peaks"""
-            vis = (component * 255.0).astype(np.uint8)
-            vis = cv2.resize(vis, (width, height), interpolation=cv2.INTER_LINEAR)
-            saliency_colored = cv2.applyColorMap(vis, cv2.COLORMAP_JET)
-            
-            vis_color = cv2.addWeighted(base_image.copy(), 1.0, saliency_colored, overlay_alpha, 0)
-            
-            component_copy = component.copy()
-            peaks = []
-            min_dist = 10
-            
-            for rank in range(3):
-                max_idx = np.argmax(component_copy)
-                v_s, u_s = np.unravel_index(max_idx, component_copy.shape)
-                peak_val = component_copy[v_s, u_s]
-                
-                scale_x = width / float(component_copy.shape[1])
-                scale_y = height / float(component_copy.shape[0])
-                u = int(u_s * scale_x)
-                v = int(v_s * scale_y)
-                
-                peaks.append((u, v, peak_val))
-                
-                y_min = max(0, v_s - min_dist)
-                y_max = min(component_copy.shape[0], v_s + min_dist + 1)
-                x_min = max(0, u_s - min_dist)
-                x_max = min(component_copy.shape[1], u_s + min_dist + 1)
-                component_copy[y_min:y_max, x_min:x_max] = 0
-            
-            return vis_color, peaks
-        
-        vis_static, peaks_static = component_to_image(S_static, W, H, bgr_full)
-        vis_motion, peaks_motion = component_to_image(S_motion, W, H, bgr_full)
-        vis_center, peaks_center = component_to_image(C, W, H, bgr_full)
-        vis_final, peaks_final = component_to_image(S_final, W, H, bgr_full)
-        
-        colors = [(255, 255, 255), (0, 255, 255), (255, 0, 255)]
-        marker_sizes = [20, 16, 12]
-        
-        for vis, peaks in [(vis_static, peaks_static), 
-                          (vis_motion, peaks_motion),
-                          (vis_center, peaks_center),
-                          (vis_final, peaks_final)]:
-            for idx, (u, v, val) in enumerate(peaks):
-                cv2.drawMarker(vis, (u, v), colors[idx],
-                             markerType=cv2.MARKER_TILTED_CROSS, 
-                             markerSize=marker_sizes[idx], thickness=2)
-                cv2.putText(vis, str(idx + 1), (u + 12, v - 12),
-                          cv2.FONT_HERSHEY_SIMPLEX, 0.6, colors[idx], 2)
-        
-        cv2.putText(vis_static, "Static (BMS)", (10, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        cv2.putText(vis_motion, "Motion (Optical Flow)", (10, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        cv2.putText(vis_center, "Center Prior", (10, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        cv2.putText(vis_final, f"Final (a={self.ALPHA:.1f} b={self.BETA:.1f} g={self.GAMMA:.1f})", 
-                   (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        
-        for vis, pub in [(vis_static, self.pub_static), 
-                        (vis_motion, self.pub_motion),
-                        (vis_center, self.pub_center),
-                        (vis_final, self.pub_combined)]:
-            enc = cv2.imencode('.png', vis)[1].tobytes()
-            msg = CompressedImage()
-            msg.format = 'png'
-            msg.header.stamp = stamp
-            msg.data = enc
-            pub.publish(msg)
+        self.process_frame(bgr, (msg.width, msg.height), msg.header.stamp)
 
-    def find_top_n_peaks(self, S):
-        """Find top N spatially separated peaks
+    def on_img_compressed(self, msg: CompressedImage):
+        """Handle CompressedImage messages."""
+        np_arr = np.frombuffer(msg.data, np.uint8)
+        bgr = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        if bgr is None:
+            return
+        
+        H, W = bgr.shape[:2]
+        self.process_frame(bgr, (W, H), msg.header.stamp)
+
+    def on_depth_raw(self, msg: Image):
+        """Handle raw depth Image messages."""
+        # RealSense depth is typically 16UC1 (millimeters)
+        if msg.encoding.lower() in ('16uc1', 'mono16'):
+            depth = np.frombuffer(msg.data, np.uint16).reshape(
+                (msg.height, msg.width))
+            depth_m = depth.astype(np.float32) / 1000.0  # Convert to meters
+        elif msg.encoding.lower() == '32fc1':
+            depth_m = np.frombuffer(msg.data, np.float32).reshape(
+                (msg.height, msg.width))
+        else:
+            return
+        
+        self._process_depth(depth_m)
+
+    def on_depth_compressed(self, msg: CompressedImage):
+        """Handle CompressedImage depth messages (compressedDepth format)."""
+        # compressedDepth uses PNG compression for 16-bit depth
+        # First 12 bytes are a header with compression info
+        if len(msg.data) < 12:
+            return
+        
+        # Skip header and decode PNG
+        png_data = msg.data[12:]
+        depth = cv2.imdecode(np.frombuffer(png_data, np.uint8), cv2.IMREAD_UNCHANGED)
+        
+        if depth is None:
+            return
+        
+        # Convert to meters (RealSense depth is in millimeters)
+        depth_m = depth.astype(np.float32) / 1000.0
+        self._process_depth(depth_m)
+
+    def _process_depth(self, depth_m: np.ndarray):
+        """Downsample and cache depth for use in saliency computation."""
+        # Downsample to match saliency resolution
+        # Use INTER_NEAREST to avoid interpolating depth values
+        depth_small = cv2.resize(
+            depth_m, (self.down_w, self.down_h), 
+            interpolation=cv2.INTER_NEAREST)
+        
+        # Thread-safe update
+        with self._depth_lock:
+            self._depth_small = depth_small
+
+    def get_depth_small(self) -> np.ndarray:
+        """Thread-safe getter for depth data."""
+        with self._depth_lock:
+            if self._depth_small is None:
+                return None
+            return self._depth_small.copy()
+
+    def compute_depth_weight(self) -> np.ndarray:
+        """
+        Compute depth-based weighting map.
+        Closer objects get higher weight.
+        
+        Returns:
+            Weight map (down_h, down_w) with values in [depth_weight_min, 1.0]
+        """
+        depth_small = self.get_depth_small()
+        if depth_small is None:
+            # No depth available - return uniform weight
+            return np.ones((self.down_h, self.down_w), dtype=np.float32)
+        
+        # depth_small is already a copy from get_depth_small()
+        depth = depth_small
+        
+        # Handle invalid depth (0 or very large values)
+        invalid_mask = (depth <= 0) | (depth > 10.0)
+        depth[invalid_mask] = self.depth_max_m  # Treat invalid as far
+        
+        # Normalize depth to [0, 1] range
+        # 0 = close (depth_min_m), 1 = far (depth_max_m)
+        depth_range = self.depth_max_m - self.depth_min_m
+        if depth_range < 1e-6:
+            return np.ones((self.down_h, self.down_w), dtype=np.float32)
+        
+        depth_normalized = (depth - self.depth_min_m) / depth_range
+        depth_normalized = np.clip(depth_normalized, 0, 1)
+        
+        # Invert: close = high weight, far = low weight
+        # Scale to [depth_weight_min, 1.0]
+        weight = 1.0 - depth_normalized * (1.0 - self.depth_weight_min)
+        
+        return weight.astype(np.float32)
+
+    def compute_saliency_map(self, S_static: np.ndarray, depth_weight: np.ndarray) -> np.ndarray:
+        """
+        Compute final saliency map using depth-weighted BMS.
         
         Args:
-            S: Saliency map (downsampled resolution)
+            S_static: Static saliency map (BMS)
+            depth_weight: Pre-computed depth weight map
+            
+        Returns:
+            Final saliency map (values in [0, 1])
+        """
+        # Apply depth weighting to static saliency (closer objects score higher)
+        if self.use_depth_weighting:
+            S = S_static * depth_weight
+        else:
+            S = S_static
+        
+        return S
+
+    def find_top_n_peaks(self, S: np.ndarray) -> list:
+        """
+        Find top N spatially separated peaks.
+        
+        Args:
+            S: Final saliency map (downsampled resolution)
         
         Returns:
             List of [u, v, score] in full resolution coordinates
@@ -408,12 +396,25 @@ class SaliencyNode(Node):
         scale_y = self.H / float(self.down_h)
         
         # Convert min distance from full resolution to downsampled
-        min_dist_downsampled = self.peak_min_dist / scale_x
+        # Use average scale to handle non-uniform aspect ratios
+        avg_scale = (scale_x + scale_y) / 2.0
+        min_dist_downsampled = max(1, self.peak_min_dist / avg_scale)
+        
+        # Edge padding - use larger of 5% of image or 3 pixels
+        pad = max(3, int(min(h, w) * 0.05))
         
         for i in range(self.num_peaks):
-            # Find maximum in remaining map
-            v_s, u_s = np.unravel_index(np.argmax(S_copy), S_copy.shape)
-            score = float(S_copy[v_s, u_s])
+            # Mask edges to avoid boundary issues
+            S_masked = S_copy.copy()
+            S_masked[:pad, :] = 0
+            S_masked[-pad:, :] = 0
+            S_masked[:, :pad] = 0
+            S_masked[:, -pad:] = 0
+            
+            # Find maximum
+            max_idx = np.argmax(S_masked)
+            v_s, u_s = np.unravel_index(max_idx, S_masked.shape)
+            score = float(S_masked[v_s, u_s])
             
             # Stop if below threshold
             if score < self.MIN_PEAK:
@@ -425,213 +426,150 @@ class SaliencyNode(Node):
             peaks.append([u, v, score])
             
             # Suppress circular region around this peak
-            # Use meshgrid for efficient circular mask
             yy, xx = np.ogrid[:h, :w]
             mask = (xx - u_s)**2 + (yy - v_s)**2 <= min_dist_downsampled**2
             S_copy[mask] = 0
         
         return peaks
 
-    def on_joint_states(self, msg: JointState):
-        """Track head motion for gating"""
-        try:
-            yaw_idx = msg.name.index('HeadYaw')
-            pitch_idx = msg.name.index('HeadPitch')
-            
-            yaw_vel = msg.velocity[yaw_idx]
-            pitch_vel = msg.velocity[pitch_idx]
-            
-            yaw_vel = 0.0 if (yaw_vel != yaw_vel) else yaw_vel
-            pitch_vel = 0.0 if (pitch_vel != pitch_vel) else pitch_vel
-            
-            self.head_velocity = np.sqrt(yaw_vel**2 + pitch_vel**2)
-            
-        except (ValueError, IndexError):
-            pass
-
-    def is_head_moving(self):
-        """Check if head is moving above threshold"""
-        return self.head_velocity > self.head_threshold
-
-    def on_img_raw(self, msg: Image):
-        """Handle raw Image messages"""
-        if msg.encoding.lower() in ('bgr8', 'rgb8'):
-            bgr = np.frombuffer(msg.data, np.uint8).reshape(
-                (msg.height, msg.width, 3)
-            )
-            if msg.encoding.lower() == 'rgb8':
-                bgr = cv2.cvtColor(bgr, cv2.COLOR_RGB2BGR)
-        else:
-            return
+    def process_frame(self, bgr: np.ndarray, full_size: tuple, stamp):
+        """Main processing pipeline for pure BMS saliency."""
         
-        self.process_frame(bgr, (msg.width, msg.height), msg.header.stamp)
-
-    def on_img_compressed(self, msg: CompressedImage):
-        """Handle CompressedImage messages"""
-        np_arr = np.frombuffer(msg.data, np.uint8)
-        bgr = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-        if bgr is None:
-            return
-        
-        H, W = bgr.shape[:2]
-        self.process_frame(bgr, (W, H), msg.header.stamp)
-
-    def motion_map(self, gray_small: np.ndarray) -> np.ndarray:
-        """Compute motion saliency via optical flow"""
-        if self.prev_small is None:
-            return np.zeros_like(gray_small, dtype=np.float32)
-        
-        if self.flow_method == 'dis' and self.dis is not None:
-            flow = self.dis.calc(self.prev_small, gray_small, None)
-        else:
-            flow = cv2.calcOpticalFlowFarneback(
-                self.prev_small, gray_small,
-                None, 0.5, 3, 15, 3, 5, 1.2, 0
-            )
-        
-        h, w = flow.shape[:2]
-        step = 8
-        flow_samples = flow[::step, ::step].reshape(-1, 2)
-        
-        try:
-            bins = 20
-            hist_x, edges_x = np.histogram(flow_samples[:, 0], bins=bins)
-            hist_y, edges_y = np.histogram(flow_samples[:, 1], bins=bins)
-            
-            mode_x = (edges_x[np.argmax(hist_x)] + edges_x[np.argmax(hist_x) + 1]) / 2
-            mode_y = (edges_y[np.argmax(hist_y)] + edges_y[np.argmax(hist_y) + 1]) / 2
-            
-            ego_x, ego_y = mode_x, mode_y
-        except:
-            ego_x = np.median(flow[..., 0])
-            ego_y = np.median(flow[..., 1])
-        
-        flow[..., 0] -= ego_x
-        flow[..., 1] -= ego_y
-        
-        mag = np.sqrt(flow[..., 0]**2 + flow[..., 1]**2)
-        
-        motion_threshold = 0.5
-        mag = np.where(mag < motion_threshold, 0, mag)
-        
-        motion_percentile_95 = np.percentile(mag, 95)
-        motion_mean = np.mean(mag[mag > 0]) if np.any(mag > 0) else 0
-        
-        if motion_percentile_95 < 0.5 or motion_mean < 0.3:
-            return np.zeros_like(gray_small, dtype=np.float32) * 0.1
-        
-        mag = cv2.GaussianBlur(mag, (5, 5), 0)
-        
-        kernel_size = 5
-        mag_dilated = cv2.dilate(mag, np.ones((kernel_size, kernel_size)))
-        mag = np.where(mag == mag_dilated, mag, mag * 0.3)
-        
-        m95 = np.percentile(mag, 95)
-        
-        if m95 < 1.0:
-            scale_factor = m95 / 1.0
-        else:
-            scale_factor = 1.0
-        
-        M = np.clip(mag / (m95 + 1e-6), 0, 1).astype(np.float32)
-        M = M * scale_factor
-        
-        M = np.where(M < 0.15, 0, M)
-        
-        if M.max() > 0:
-            M = (M - M.min()) / (M.max() - M.min() + 1e-6)
-        
-        return M.astype(np.float32)
-
-    def center_prior(self, w: int, h: int) -> np.ndarray:
-        """Compute center bias"""
-        yy, xx = np.mgrid[0:h, 0:w]
-        cx, cy = w/2.0, h/2.0
-        C = 1.0 - np.sqrt(((xx-cx)**2 + (yy-cy)**2)) / np.sqrt(cx**2 + cy**2)
-        return np.clip(C, 0, 1).astype(np.float32)
-
-    def process_frame(self, bgr: np.ndarray, full_size, stamp):
-        """Main processing pipeline with multiple peaks"""
-        
-        # Set dimensions first
+        # Update dimensions
         W, H = full_size
         self.W, self.H = W, H
         
-        # Motion gating
-        if self.skip_during_motion and self.is_head_moving():
-            return        
-        
         # Downsample
-        gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-        small = cv2.resize(gray, (self.down_w, self.down_h), interpolation=cv2.INTER_AREA)
         small_bgr = cv2.resize(bgr, (self.down_w, self.down_h), interpolation=cv2.INTER_AREA)
         
-        # Compute components
-        S_static = self.bms.compute_saliency(small_bgr)
-        S_motion = self.motion_map(small)
-        C = self.center_prior(self.down_w, self.down_h)
+        # Compute BMS saliency
+        # Skip internal blur in BMS since we do final blur below
+        S_static = self.bms.compute_saliency(small_bgr, apply_blur=False)
         
-        # Check if there's significant motion
-        motion_score = S_motion.max()
-        has_significant_motion = motion_score > self.motion_focus_threshold
+        # Compute depth weight for this frame
+        depth_weight = self.compute_depth_weight()
         
-        # Fuse components
-        S = self.ALPHA*S_static + self.BETA*S_motion + self.GAMMA*C
+        # Compute final saliency map (depth-weighted if enabled)
+        S = self.compute_saliency_map(S_static, depth_weight)
+        
+        # Single smoothing pass on final result
         S = cv2.GaussianBlur(S, (5, 5), 0)
-        S = (S - S.min()) / (S.max() - S.min() + 1e-6)
         
-        # ========================================
-        # MOTION FOCUS: If motion detected, only return motion peak
-        # ========================================
-        if has_significant_motion:
-            # Find single peak in motion map
-            pad = 2
-            crop = S_motion[pad:-pad, pad:-pad]
-            v_s, u_s = np.unravel_index(np.argmax(crop), crop.shape)
-            u_s += pad
-            v_s += pad
-            
-            # Scale to full resolution
-            scale_x = W / float(self.down_w)
-            scale_y = H / float(self.down_h)
-            u = float(u_s * scale_x)
-            v = float(v_s * scale_y)
-            
-            # Use combined saliency score at motion location
-            score = float(S[v_s, u_s])
-            
-            if score >= self.MIN_PEAK:
-                # Publish ONLY the motion peak
-                msg = Float32MultiArray()
-                msg.data = [u, v, score]
-                self.pub_peak.publish(msg)
-                
-                peaks = [[u, v, score]]  # For visualization
-            else:
-                peaks = []
+        # Normalize
+        s_min, s_max = S.min(), S.max()
+        s_range = s_max - s_min
+        if s_range > 1e-6:
+            S = (S - s_min) / s_range
         else:
-            # No significant motion - find multiple static peaks
-            peaks = self.find_top_n_peaks(S)
-            
-            # Publish all peaks as flat array: [u1, v1, s1, u2, v2, s2, ...]
-            if peaks:
-                msg = Float32MultiArray()
-                msg.data = []
-                for u, v, score in peaks:
-                    msg.data.extend([u, v, score])
-                self.pub_peak.publish(msg)
+            S = np.zeros_like(S)
         
-        # Visualization
-        if self.pub_map and self.publish_map_flag and peaks:
+        # Find peaks
+        peaks = self.find_top_n_peaks(S)
+        
+        # ALWAYS publish - even empty list (so downstream knows we're alive)
+        msg = Float32MultiArray()
+        msg.data = []
+        for peak in peaks:
+            u, v, score = peak
+            # For pure BMS, source is always static
+            source_code = 0.0  # static
+            msg.data.extend([u, v, score, source_code])
+        self.pub_peak.publish(msg)
+        
+        # Visualization - only check pub_map existence (it's only created if flag was True)
+        if self.pub_map is not None:
             self.publish_simple_visualization(bgr, S, peaks, W, H, stamp)
         
         # Component visualization
-        self.publish_component_visualization(S_static, S_motion, C, S, W, H, stamp, bgr)
+        if self.visualize_components and self.pub_combined is not None:
+            self.publish_component_visualization(S, peaks, W, H, stamp, bgr)
+
+    def publish_simple_visualization(self, bgr, S, peaks, W, H, stamp):
+        """Simple saliency visualization with all peaks marked."""
+        # Resize saliency to full resolution
+        vis_small = (S * 255.0).astype(np.uint8)
+        vis_full = cv2.resize(vis_small, (W, H), interpolation=cv2.INTER_LINEAR)
+        saliency_colored = cv2.applyColorMap(vis_full, cv2.COLORMAP_JET)
         
-        # Update state
-        self.prev_small = small
-        self.prev_small_bgr = small_bgr
-    
+        # Overlay on original image
+        vis_color = cv2.addWeighted(bgr, 1.0, saliency_colored, self.overlay_alpha, 0)
+        
+        # Color scheme for peaks
+        peak_color = (255, 200, 100)  # Light blue for BMS peaks
+        marker_sizes = [20, 16, 14, 12, 10]
+        
+        for idx, peak in enumerate(peaks):
+            u, v, score = peak
+            color = peak_color
+            size = marker_sizes[idx] if idx < len(marker_sizes) else 8
+            
+            # Draw marker
+            cv2.drawMarker(vis_color, (int(u), int(v)), color,
+                          markerType=cv2.MARKER_TILTED_CROSS,
+                          markerSize=size, thickness=2)
+            
+            # Draw rank
+            cv2.putText(vis_color, str(idx + 1), (int(u) + 12, int(v) - 12),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            
+            # Draw score
+            cv2.putText(vis_color, f"{score:.2f}", (int(u) + 12, int(v) + 12),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
+        
+        # Status text
+        status = f"Peaks: {len(peaks)}/{self.num_peaks}"
+        cv2.putText(vis_color, status, (10, H - 20),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        
+        # Publish
+        enc = cv2.imencode('.png', vis_color)[1].tobytes()
+        out = CompressedImage()
+        out.format = 'png'
+        out.header.stamp = stamp
+        out.data = enc
+        self.pub_map.publish(out)
+
+    def publish_component_visualization(self, S_final, peaks, W, H, stamp, bgr_full):
+        """Publish visualization of depth-weighted BMS saliency with consistent peaks."""
+        # Resize saliency to full resolution
+        vis_small = (S_final * 255.0).astype(np.uint8)
+        vis_full = cv2.resize(vis_small, (W, H), interpolation=cv2.INTER_LINEAR)
+        saliency_colored = cv2.applyColorMap(vis_full, cv2.COLORMAP_JET)
+        
+        # Overlay on original image
+        vis_color = cv2.addWeighted(
+            bgr_full.copy(), 1.0, saliency_colored, self.overlay_alpha, 0)
+        
+        # Draw peaks (use the same peaks from main pipeline for consistency)
+        colors = [(255, 255, 255), (0, 255, 255), (255, 0, 255), (0, 255, 0), (255, 128, 0)]
+        marker_sizes = [20, 16, 14, 12, 10]
+        
+        for idx, peak in enumerate(peaks):
+            u, v, score = peak[:3]
+            color = colors[idx] if idx < len(colors) else (200, 200, 200)
+            size = marker_sizes[idx] if idx < len(marker_sizes) else 8
+            
+            cv2.drawMarker(vis_color, (int(u), int(v)), color,
+                          markerType=cv2.MARKER_TILTED_CROSS,
+                          markerSize=size, thickness=2)
+            cv2.putText(vis_color, str(idx + 1), (int(u) + 12, int(v) - 12),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+            cv2.putText(vis_color, f"{score:.2f}", (int(u) + 12, int(v) + 12),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
+        
+        # Add title
+        title = "BMS Saliency" + (" + Depth" if self.use_depth_weighting else "")
+        cv2.putText(vis_color, title, (10, 30),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        
+        # Publish
+        enc = cv2.imencode('.png', vis_color)[1].tobytes()
+        msg = CompressedImage()
+        msg.format = 'png'
+        msg.header.stamp = stamp
+        msg.data = enc
+        self.pub_combined.publish(msg)
+
 
 def main(args=None):
     rclpy.init(args=args)
