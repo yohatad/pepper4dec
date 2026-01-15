@@ -18,8 +18,10 @@ import os
 import onnxruntime
 import threading
 from collections import deque
+from rclpy.action import ActionServer
 from concurrent.futures import ThreadPoolExecutor
 from scipy.optimize import minimize
+from cssr_interfaces.action  import SpeechRecognition
 
 from ament_index_python.packages import get_package_share_directory
 from rclpy.node import Node
@@ -208,6 +210,17 @@ class SpeechRecognitionNode(Node):
         self.speech_chunk_count = 0
 
         # =====================================================
+        # Action server
+        # =====================================================
+        self._action_server = True
+        self._action_started = False
+        self._asr_action_server = None  # To be initialized elsewhere
+        self._processing_action_goal = False
+
+        if self._action_server:
+            self._init_action_server()
+
+        # =====================================================
         # IMPROVED: Async transcription with thread pool
         # =====================================================
         self.transcription_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="whisper")
@@ -250,6 +263,37 @@ class SpeechRecognitionNode(Node):
         except Exception as e:
             self.get_logger().warning(f"Whisper warmup failed (non-critical): {e}")
 
+    def _init_action_server(self):
+        """Initialize ROS2 Action Server for speech recognition"""
+
+        self._asr_action_server = ActionServer(
+            self,
+            SpeechRecognition,
+            '/speech_recognition_action',
+            self.execute_asr_action_callback
+        )
+
+    def execute_asr_action_callback(self, goal_handle):
+        """Handle ASR action goal."""
+        self.get_logger().info("ASR Action Goal received.")
+        self._action_started = True
+        self._processing_action_goal = True
+        self.max_speech_duration_s = goal_handle.request.wait
+        self.max_speech_chunks = int(self.max_speech_duration_s * self.sample_rate / self.vad_chunk_size)
+
+        # Wait until speech is collected and processed
+        while self._processing_action_goal:
+            rclpy.spin_once(self)
+
+        # Prepare result
+        result = SpeechRecognition.Result()
+        transcription = self._transcribed_text if hasattr(self, '_transcribed_text') else ""
+        result.transcription = transcription
+        
+        self.get_logger().info("ASR Action Goal completed.")
+        goal_handle.succeed()
+        self._action_started = False
+        return result
     # =========================================================================
     # Audio Parsing
     # =========================================================================
@@ -475,6 +519,9 @@ class SpeechRecognitionNode(Node):
         5. Resample to 16kHz
         6. VAD + speech collection
         """
+        if self._action_server and not self._action_started:
+            return 
+        
         # Parse multi-channel audio (keep at 48kHz)
         mic_signals_48k, freq_in = self.parse_audio_buffer(msg)
         if mic_signals_48k is None:
@@ -529,7 +576,81 @@ class SpeechRecognitionNode(Node):
             self.vad_pending_buffer = self.vad_pending_buffer[self.vad_chunk_size:]
             
             # Run VAD on this chunk
-            self._process_vad_chunk(vad_chunk)
+            if self._action_server:
+                self._process_vad_chunk_sync(vad_chunk)
+            else:
+                self._process_vad_chunk(vad_chunk)
+
+    def _process_vad_chunk_sync(self, vad_chunk: np.ndarray):
+        """
+        Process a single 512-sample VAD chunk through the state machine.
+        """
+        # Run VAD
+        speech_prob = self.run_silero_vad(vad_chunk)
+        
+        # Publish probability
+        prob_msg = Float32()
+        prob_msg.data = float(speech_prob)
+        self.vad_prob_pub.publish(prob_msg)
+        
+        # Two-threshold system
+        vad_is_speech = speech_prob >= self.speech_threshold
+        vad_is_silence = speech_prob < self.neg_threshold
+        
+        # =====================================================
+        # State machine with chunk-based tracking
+        # =====================================================
+        
+        if not self.speech_active and vad_is_speech:
+            # =====================================================
+            # START: Speech detected - include pre-speech buffer
+            # =====================================================
+            self.speech_active = True
+            self.speech_start_time = time.time()
+            self.silence_chunks = 0
+            self.speech_chunk_count = 1
+            
+            # Prepend pre-speech buffer (captures the onset)
+            pre_speech_audio = np.array(list(self.pre_speech_ring), dtype=np.float32)
+            self.speech_buffer = [pre_speech_audio, vad_chunk.copy()]
+            
+            self.get_logger().info(f"VAD: speech START (prob={speech_prob:.3f}, "
+                                  f"pre-buffer={len(pre_speech_audio)} samples)")
+        
+        elif self.speech_active and vad_is_speech:
+            # CONTINUE: Still speaking - reset silence counter
+            self.speech_buffer.append(vad_chunk.copy())
+            self.silence_chunks = 0
+            self.speech_chunk_count += 1
+            
+            # =====================================================
+            # CHECK: Max duration cutoff
+            # =====================================================
+            if self.speech_chunk_count >= self.max_speech_chunks:
+                self._finalize_speech_sync(speech_prob, reason="max_duration")
+        
+        elif self.speech_active and vad_is_silence:
+            # POSSIBLE END: Below negative threshold
+            self.speech_buffer.append(vad_chunk.copy())
+            self.silence_chunks += 1
+            self.speech_chunk_count += 1
+            
+            # Check if silence duration exceeded threshold
+            if self.silence_chunks >= self.min_silence_chunks:
+                self._finalize_speech_sync(speech_prob, reason="silence")
+            
+            # Also check max duration during silence
+            elif self.speech_chunk_count >= self.max_speech_chunks:
+                self._finalize_speech_sync(speech_prob, reason="max_duration")
+        
+        elif self.speech_active:
+            # In between thresholds - continue collecting, don't increment silence counter
+            self.speech_buffer.append(vad_chunk.copy())
+            self.speech_chunk_count += 1
+            
+            # Check max duration
+            if self.speech_chunk_count >= self.max_speech_chunks:
+                self._finalize_speech_sync(speech_prob, reason="max_duration")
 
     def _process_vad_chunk(self, vad_chunk: np.ndarray):
         """
@@ -649,12 +770,88 @@ class SpeechRecognitionNode(Node):
         
         self._reset_speech_state()
 
+    def _finalize_speech_sync(self, speech_prob: float, reason: str):
+        """
+        Finalize speech segment and trigger sync transcription.
+        
+        Args:
+            speech_prob: Current VAD probability
+            reason: "silence" or "max_duration"
+        """
+        self.speech_active = False
+        
+        if reason == "silence":
+            silence_duration_s = self.silence_chunks * self.vad_chunk_size / self.sample_rate
+            self.get_logger().info(f"VAD: speech END (prob={speech_prob:.3f}, "
+                                  f"silence={silence_duration_s:.2f}s)")
+        else:
+            self.get_logger().info(f"VAD: speech END (max duration {self.max_speech_duration_s}s reached)")
+        
+        # Reset VAD state
+        self.reset_vad_state()
+        
+        # Concatenate speech
+        if not self.speech_buffer:
+            self.get_logger().warning("Empty speech buffer at finalization")
+            self._reset_speech_state()
+            return
+        
+        speech_audio = np.concatenate(self.speech_buffer).astype(np.float32)
+        duration_s = len(speech_audio) / self.sample_rate
+        
+        # Filter short segments
+        if duration_s < self.min_speech_duration:
+            self.get_logger().info(f"Ignoring short segment ({duration_s:.2f}s)")
+            self._reset_speech_state()
+            return
+        
+        # =====================================================
+        # SYNC: Do transcription
+        # =====================================================
+        self._transcribed_text = self._transcribe_sync(speech_audio, duration_s)
+        self._processing_action_goal = False
+        
+        self._reset_speech_state()
+
     def _reset_speech_state(self):
         """Reset speech collection state."""
         self.speech_buffer = []
         self.silence_chunks = 0
         self.speech_chunk_count = 0
         self.speech_start_time = None
+
+    def _transcribe_sync(self, audio: np.ndarray, duration_s: float):
+        """
+        Transcribe speech segment with Whisper.
+        
+        This blocks the audio callback.
+        """
+        try:
+            self.get_logger().info(f"[Async] Running Whisper on {duration_s:.2f}s segment...")
+            start_time = time.time()
+
+            segments, info = self.whisper.transcribe(
+                audio, 
+                language=self.language, 
+                task="transcribe", 
+                beam_size=1,
+                vad_filter=False
+            )
+
+            text = " ".join([seg.text.strip() for seg in segments]).strip()
+            elapsed = time.time() - start_time
+            rtf = elapsed / info.duration if info.duration > 0 else 0.0
+
+            self.get_logger().info(f"[Sync] ASR done. elapsed={elapsed:.3f}s, RTF={rtf:.3f}")
+            self.get_logger().info(f"[Sync] Transcript: '{text}'")
+
+            return text
+                
+        except Exception as e:
+            self.get_logger().error(f"[Sync] Transcription error: {e}")
+            return ""
+        finally:
+            pass
 
     def _transcribe_async(self, audio: np.ndarray, duration_s: float):
         """
