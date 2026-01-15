@@ -8,5 +8,5 @@ verboseMode: true           # Enable verbose logging and display
 imageTimeout: 2.0            # Timeout in seconds for image reception
 
 # SixDrepNet Algorithm Settings
-sixdrepnetConfidence: 0.80   # Face detection confidence threshold (0.0-1.0)
+sixdrepnetConfidence: 0.75   # Face detection confidence threshold (0.0-1.0)
 sixdrepnetHeadposeAngle: 10  # Head pose angle threshold for mutual gaze (degrees)

@@ -29,7 +29,10 @@ def generate_launch_description():
             package='pepper_attention',
             executable='saliency_node',
             name='saliency_node',
-            parameters=[LaunchConfiguration('params_file')],
+            parameters=[
+                LaunchConfiguration('params_file'),
+                {'process_hz': 2.0}
+            ],
             output='screen'
         ),
         

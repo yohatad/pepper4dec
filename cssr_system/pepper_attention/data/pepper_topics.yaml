@@ -1,0 +1,2 @@
+RealSenseCameraRGB: /camera/color/image_raw
+RealSenseCameraDepth: /camera/aligned_depth_to_color/image_raw
