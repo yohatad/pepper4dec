@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="4"
+      main_tree_to_execute="TourGuide">
+  <BehaviorTree ID="I. DetectVisitor">
+    <Sequence>
+      <Parallel failure_count="2"
+                success_count="2">
+        <Fallback>
+          <SetAnimateBehavior name="enabled"/>
+          <HandleFallBack/>
+        </Fallback>
+        <Fallback>
+          <SetOvertAttentionMode name="scanning"/>
+          <HandleFallBack/>
+        </Fallback>
+      </Parallel>
+      <IsVisitorDiscovered/>
+    </Sequence>
+  </BehaviorTree>
+
+  <BehaviorTree ID="II. EngageVisitor">
+    <Sequence>
+      <Fallback>
+        <Sequence>
+          <SetAnimateBehavior name="disabled"/>
+          <PerformIconicGesture name="welcome"/>
+          <SetAnimateBehavior name="enabled"/>
+        </Sequence>
+        <HandleFallBack/>
+      </Fallback>
+      <Fallback>
+        <SayText name="4"
+                 _description="Welcome speech"/>
+        <HandleFallBack/>
+      </Fallback>
+      <Fallback>
+        <SetOvertAttentionMode name="seeking"/>
+        <HandleFallBack/>
+      </Fallback>
+      <IsMutualGazeDiscovered/>
+      <Fallback>
+        <SetOvertAttentionMode name="social"/>
+        <HandleFallBack/>
+      </Fallback>
+      <Fallback>
+        <SayText name="5"
+                 _description="Query Tour Speech"/>
+        <HandleFallBack/>
+      </Fallback>
+    </Sequence>
+  </BehaviorTree>
+
+  <BehaviorTree ID="III. QueryVisitorResponse">
+    <Sequence>
+      <Fallback>
+        <IsASREnabled/>
+        <RetryUntilSuccessful num_attempts="3">
+          <Sequence>
+            <Fallback>
+              <SayText name="1"
+                       _description="Press &quot;yes&quot; or &quot;no&quot; speech"/>
+              <HandleFallBack/>
+            </Fallback>
+            <Fallback>
+              <PressYesNoDialogue/>
+              <HandleFallBack/>
+            </Fallback>
+          </Sequence>
+        </RetryUntilSuccessful>
+      </Fallback>
+      <Sequence>
+        <IsASREnabled/>
+        <Fallback>
+          <SetSpeechEvent name="enabled"/>
+          <HandleFallBack/>
+        </Fallback>
+        <Fallback>
+          <GetVisitorResponse/>
+          <HandleFallBack/>
+        </Fallback>
+        <Fallback>
+          <SetSpeechEvent name="disabled"/>
+          <HandleFallBack/>
+        </Fallback>
+      </Sequence>
+      <Fallback>
+        <IsVisitorResponseYes/>
+        <ForceFailure>
+          <Fallback>
+            <SayText name="3"
+                     _description="Maybe another time speech"/>
+            <HandleFallBack/>
+          </Fallback>
+        </ForceFailure>
+      </Fallback>
+    </Sequence>
+  </BehaviorTree>
+
+  <BehaviorTree ID="IV. VisitExhibit">
+    <Sequence>
+      <Fallback>
+        <RetrieveListOfExhibits/>
+        <HandleFallBack/>
+      </Fallback>
+      <Fallback>
+        <ResetRobotPose/>
+        <HandleFallBack/>
+      </Fallback>
+      <Inverter>
+        <KeepRunningUntilFailure>
+          <Sequence>
+            <IsListWithExhibit/>
+            <Sequence>
+              <Fallback>
+                <SelectExhibit/>
+                <HandleFallBack/>
+              </Fallback>
+              <Fallback>
+                <SayText name="2"
+                         _description="Follow me speech"/>
+                <HandleFallBack/>
+              </Fallback>
+              <SubTree ID="_NavigateToLocation"/>
+              <Fallback>
+                <SetOvertAttentionMode name="social"/>
+                <HandleFallBack/>
+              </Fallback>
+              <Fallback>
+                <DescribeExhibitSpeech name="1"/>
+                <HandleFallBack/>
+              </Fallback>
+              <Fallback>
+                <SetOvertAttentionMode name="location"/>
+                <HandleFallBack/>
+              </Fallback>
+              <Fallback>
+                <PerformDeicticGesture/>
+                <HandleFallBack/>
+              </Fallback>
+              <Fallback>
+                <SetOvertAttentionMode name="social"/>
+                <HandleFallBack/>
+              </Fallback>
+              <Fallback>
+                <DescribeExhibitSpeech name="2"/>
+                <HandleFallBack/>
+              </Fallback>
+            </Sequence>
+          </Sequence>
+        </KeepRunningUntilFailure>
+      </Inverter>
+    </Sequence>
+  </BehaviorTree>
+
+  <BehaviorTree ID="TourGuide">
+    <Sequence>
+      <StartOfTree/>
+      <SubTree ID="I. DetectVisitor"/>
+      <SubTree ID="II. EngageVisitor"/>
+      <SubTree ID="III. QueryVisitorResponse"/>
+      <SubTree ID="IV. VisitExhibit"/>
+      <SubTree ID="V. EndTour"/>
+    </Sequence>
+  </BehaviorTree>
+
+  <BehaviorTree ID="V. EndTour">
+    <Sequence>
+      <Fallback>
+        <SayText name="7"
+                 _description="Say Goodbye speech"/>
+        <HandleFallBack/>
+      </Fallback>
+      <Fallback>
+        <PerformIconicGesture name="goodbye"/>
+        <HandleFallBack/>
+      </Fallback>
+    </Sequence>
+  </BehaviorTree>
+
+  <BehaviorTree ID="_NavigateToLocation">
+    <Sequence>
+      <Fallback>
+        <SetOvertAttentionMode name="disabled"/>
+        <HandleFallBack/>
+      </Fallback>
+      <Fallback>
+        <SetAnimateBehavior name="disabled"/>
+        <HandleFallBack/>
+      </Fallback>
+      <Fallback>
+        <Navigate/>
+        <HandleFallBack/>
+      </Fallback>
+      <Fallback>
+        <SetOvertAttentionMode name="seeking"/>
+        <HandleFallBack/>
+      </Fallback>
+      <IsMutualGazeDiscovered/>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- Description of Node Models (used by Groot) -->
+  <TreeNodesModel>
+    <Action ID="DescribeExhibitSpeech"
+            editable="true"/>
+    <Action ID="GetVisitorResponse"
+            editable="true"/>
+    <Action ID="HandleFallBack"
+            editable="true"/>
+    <Condition ID="IsASREnabled"
+               editable="true"/>
+    <Condition ID="IsListWithExhibit"
+               editable="true"/>
+    <Condition ID="IsMutualGazeDiscovered"
+               editable="true"/>
+    <Condition ID="IsVisitorDiscovered"
+               editable="true"/>
+    <Condition ID="IsVisitorResponseYes"
+               editable="true"/>
+    <Action ID="Navigate"
+            editable="true"/>
+    <Action ID="PerformDeicticGesture"
+            editable="true"/>
+    <Action ID="PerformIconicGesture"
+            editable="true"/>
+    <Action ID="PressYesNoDialogue"
+            editable="true"/>
+    <Action ID="ResetRobotPose"
+            editable="true"/>
+    <Action ID="RetrieveListOfExhibits"
+            editable="true"/>
+    <Action ID="StartOfTree"
+            editable="true"/>
+    <Action ID="SayText"
+            editable="true"/>
+    <Action ID="SelectExhibit"
+            editable="true"/>
+    <Action ID="SetAnimateBehavior"
+            editable="true"/>
+    <Action ID="SetOvertAttentionMode"
+            editable="true"/>
+    <Action ID="SetSpeechEvent"
+            editable="true"/>
+  </TreeNodesModel>
+
+</root>

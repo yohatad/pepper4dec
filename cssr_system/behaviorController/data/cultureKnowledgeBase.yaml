@@ -1,0 +1,98 @@
+# Cultural Knowledge Base
+phrase_language: "English"
+
+# Behavioral Parameters
+passing_distance: 100
+passing_position_preferred: "BEHIND"
+passing_position_avoid: "BETWEEN"
+accompanying_distance_leading: 100
+accompanying_position_leading: "FRONTSIDE"
+accompanying_position_older: "SIDE"
+accompanying_position_same_age: "SIDE"
+accompanying_position_younger: "SIDE"
+expression_loudness: 40
+phrase_rhythm_english: "Nice"
+
+# Greetings and Phrases
+phrase_greeting_english: "Greetings"
+phrase_greeting_kinyarwanda: "Muraho"
+phrase_title_english: "Excellency"
+phrase_preamble_english: "It is nice to meet you. How are you?"
+phrase_social_english: "I hope you are well"
+phrase_address_older_english: "Hello"
+phrase_address_older_kinyarwanda: "Muraho"
+phrase_address_same_age_english: "Hello"
+phrase_address_same_age_kinyarwanda: "Muraho"
+phrase_address_younger_english: "Hello"
+phrase_address_younger_kinyarwanda: "Muraho"
+phrase_passing_english: "Hello"
+phrase_passing_kinyarwanda: "Muraho"
+
+# Timing and Turn-taking
+pause_duration: 2
+turn_taking_initiation_order: "WAIT"
+turn_taking_avoid: "INTERRUPT"
+
+# Focus and Eye Contact
+focus_of_attention_target_respect: "TORSO"
+focus_of_attention_target_addressed: "FACE"
+focus_of_attention_target_explanation_to: "FACE_AND_OBJECT"
+focus_of_attention_target_explanation_by: "FACE_AND_OBJECT"
+eye_contact_duration: 2
+eye_contact_frequency_explaining_to: 5
+eye_contact_frequency_explaining_to_older: 5
+eye_contact_frequency_explaining_to_younger: 5
+eye_contact_frequency_explaining_by: 5
+eye_contact_frequency_explaining_by_older: 5
+eye_contact_frequency_explaining_by_younger: 5
+
+# Nodding Gestures
+nod_extent_attention: 30
+nod_extent_gratitude: 30
+nod_extent_agreement: 30
+nod_extent_respect: 30
+nod_extent_friendliness: 30
+nod_extent_comprehension: 30
+nod_extent_interest: 30
+
+# Gesture Shapes
+deictic_shape: "PALM_UPWARDS"
+deictic_avoid: "PALM_FORWARDS"
+iconic_shape: "ANIMATE_BEHAVIOR"
+symbolic_shape_respect: "BOTH_HANDS_UP"
+symbolic_shape_turn_taking: "RIGHT_HAND_UP"
+symbolic_shape_gratitude: "CLASP_HANDS"
+symbolic_shape_agreement: "RIGHT_THUMB_UP"
+symbolic_shape_friendliness: "HANDSHAKE"
+symbolic_shape_confusion: "RIGHT_HAND_UP"
+symbolic_shape_comprehension: "RIGHT_THUMB_UP"
+symbolic_shape_interest: "RIGHT_THUMB_UP"
+symbolic_shape_handover: "BOTH_HANDS"
+symbolic_shape_hand_shake: "POLITE_HANDSHAKE"
+symbolic_avoid_wave: 30
+symbolic_avoid_handover: "LEFT_HAND"
+
+# Bowing and Movement
+bow_extent_greeting: 10
+bow_extent_respect: 10
+bow_extent_gratitude: 10
+sway_intensity: "ANIMATE_BEHAVIOR"
+
+# Utility Phrases
+utility_phrases:
+  english:
+    1: "Please press Yes or No on my screen"
+    2: "Please follow me"
+    3: "Maybe another time"
+    4: "Hello! Welcome to the Robotics Lab! I'm Pepper, your friendly robot tour guide."
+    5: "Would you like a tour of the lab?"
+    6: "Here is the door"
+    7: "Goodbye"
+  kinyarwanda:
+    1: "Mukande Yego cyangwa Oya kuri ekara yanjye"
+    2: "Munkurikire"
+    3: "Ahari ikindi gihe"
+    4: "Muraho! Murakazaneza muri robotikisi lab. Nitwa pepa nkaba ndi robo ifasha mugutembereza abashyitsi."
+    5: "Wakwifuza gutemberezwa muri laboratwari?"
+    6: "Umuryango uri hano"
+    7: "Murabeho"
