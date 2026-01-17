@@ -3,7 +3,7 @@
 </div>
 
 <div align="center">
-  <img src="../CSSR4AfricaLogo.svg" alt="CSSR4Africa Logo" style="width:50%; height:auto;">
+  <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:50%; height:auto;">
 </div>
 
 The **Language Model Package** implements a **Retrieval-Augmented Generation (RAG)** system for the Pepper robot to serve as a lab assistant at the Upanzi Network, Carnegie Mellon University Africa. The system allows Pepper to answer questions about Upanzi Network's research, projects, facilities, and impact areas using a knowledge base built from structured JSON data.

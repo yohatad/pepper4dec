@@ -1,143 +1,182 @@
 <div align="center">
-<h1> Face and Mutual Gaze Detection and Localization </h1>
+<h1> Object Detection and Tracking (ROS2) </h1>
 </div>
 
 <div align="center">
-  <img src="../CSSR4AfricaLogo.svg" alt="CSSR4Africa Logo" style="width:50%; height:auto;">
+  <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:50%; height:auto;">
 </div>
 
-The **Face and Mutual Gaze Detection and Localization** package is a ROS package designed to detect multiple faces and evaluate their **mutual gaze** in real-time by subscribing to an image topic. It publishes an array of detected faces and their mutual gaze status to the **/faceDetection/data** topic. Each entry in the published data includes the **label ID** of the detected face, the **centroid** coordinates representing the center point of each face, and a boolean value indicating **mutual gaze** status as either **True** or **False**, the **width** and **height** of the bounding box.
+The **Object Detection and Tracking** package is a **ROS2** package designed to detect and track multiple objects (including persons) in real-time by subscribing to image topics. It publishes an array of detected objects with their bounding boxes, labels, and tracking IDs to the **/objectDetection/data** topic. Each entry in the published data includes the **label** of the detected object, the **centroid** coordinates, the **width** and **height** of the bounding box, and a unique **track_id** for tracking over time.
 
-# 📄 Documentation
-The main documentation for this deliverable is found in [D4.2.2 Face and Mutual Gaze Detection and Localization](https://cssr4africa.github.io/deliverables/CSSR4Africa_Deliverable_D4.2.2.pdf) that provides more details.
+## Key Features
+- **ROS2 Native**: Built for ROS2 Humble
+- **YOLO-based Detection**: Uses state-of-the-art YOLO models for object detection
+- **ByteTrack Tracking**: Multi-object tracking with ByteTrack algorithm
+- **Real-time Processing**: Processes synchronized RGB-D camera streams
+- **Configurable**: Configuration via YAML file
+- **Multi-camera Support**: RealSense and Pepper camera support
+- **ROS2 Bag Compatible**: Optional camera launch for use with recorded data
 
 # 🛠️ Installation 
 
-Install the required software components to instantiate and set up the development environment for controlling the Pepper robot. Use the [CSSR4Africa Software Installation Manual](https://cssr4africa.github.io/deliverables/CSSR4Africa_Deliverable_D3.3.pdf). This includes downloading the models files and putting in the models files directory. 
+## Prerequisites
+- **ROS2 Humble** or newer
+- **Python 3.10** or compatible version
+- **CUDA-capable GPU** (recommended for optimal performance)
+- **Intel RealSense camera** (if using RealSense) with USB 3.0 connection
 
-## Installation on Ubuntu (x86-based Systems)
+## Package Installation
 
-1. Prerequisites  
-Make sure you are running Ubuntu 20.04. The python environment to run face detection similar to person detection. If you have setup the person detection python environment you can skip this step.If the intel real sense camera is used make sure it uses USB 3.0. 
+1. **Clone and Build the Workspace**
+```bash
+# Clone the repository (if not already done)
+cd ~/ros2_ws/src
+git clone <repository-url>
 
-2. Install Python 3.10 and Virtual Environment.
-```sh
-# Update system packages
-sudo apt update && sudo apt upgrade -y
-
-# Add the deadsnakes PPA for Python versions
-sudo apt install software-properties-common -y
-sudo add-apt-repository ppa:deadsnakes/ppa -y
-sudo apt update
-
-# Install Python 3.10
-sudo apt install python3.10 python3.10-venv python3.10-distutils -y
-
-# Verify Python installation
-python3.10 --version
+# Build the workspace
+cd ~/ros2_ws
+colcon build --packages-select object_detection
+source install/setup.bash
 ```
 
-3. Set Up Virtual Environment
-```sh
-# Create a virtual environment:
-mkdir -p $HOME/workspace/pepper_rob_ws/src/cssr4africa_virtual_envs
-cd $HOME/workspace/pepper_rob_ws/src/cssr4africa_virtual_envs
+2. **Set Up Python Virtual Environment**
+```bash
+# Create virtual environment
+python3.10 -m venv ~/object_detection_env
 
-python3.10 -m venv cssr4africa_face_person_detection_env
+# Activate the virtual environment
+source ~/object_detection_env/bin/activate
 
-# Activate the virtual environment:
-source cssr4africa_face_person_detection_env/bin/activate
-
-# Upgrade pip in the virtual environment:
+# Upgrade pip
 pip install --upgrade pip
 ```
 
-4. Install Required Packages
-```sh
-# Install PyTorch with CUDA support:
+3. **Install Python Dependencies**
+```bash
+# Install PyTorch with CUDA support (recommended)
 pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
-# Install additional requirements:
-pip install -r  ~/workspace/pepper_rob_ws/src/cssr4africa/cssr_system/face_detection/face_detection_requirements_x86.txt
+# Install package requirements
+pip install -r ~/ros2_ws/src/cssr4africa/cssr_system/object_detection/object_detection_requirements_x86.txt
 ```
 
+4. **Download Model Files**
+Ensure the required ONNX model files are in the `models/` directory:
+- `yolov8n.onnx` - YOLOv8 detection model (or other YOLO variant)
+
 # 🔧 Configuration Parameters
-The following table provides the key-value pairs used in the configuration file:
+The configuration is managed via `config/object_detection_configuration.yaml`:
 
 | Parameter                   | Description                                                      | Range/Values            | Default Value |
 |-----------------------------|------------------------------------------------------------------|-------------------------|---------------|
-| `algorithm`                 | Algorithm selected for face detection                            | `mediapipe`, `sixdrep`  | `sixdrep`     |
-| `useCompressed`             | Use compressed ROS image topics                                  | `True`, `False`         | `True`        |
-| `mpFacedetConfidence`       | Face detection confidence threshold (MediaPipe)                  | `[0.0 - 1.0]`           | `0.5`         |
-| `mpHeadposeAngle`           | Head pose angle threshold in degrees (MediaPipe)                 | Positive integer        | `8`           |
-| `centroidMaxDistance`       | Maximum centroid distance for centroid tracking                  | Positive integer        | `15`          |
-| `centroidMaxDisappeared`    | Frames allowed before centroid tracker deregisters an object     | Positive integer        | `100`         |
-| `sixdrepnetConfidence`      | Confidence threshold for face detection (SixDRepNet)             | `[0.0 - 1.0]`           | `0.65`        |
-| `sixdrepnetHeadposeAngle`   | Head pose angle threshold in degrees (SixDRepNet)                | Positive integer        | `10`          |
-| `sortMaxDisappeared`        | Maximum frames allowed for disappearance in SORT tracking        | Positive integer        | `30`          |
-| `sortMinHits`               | Minimum consecutive detections to confirm object tracking (SORT) | Positive integer        | `20`          |
-| `sortIouThreshold`          | IoU threshold for SORT tracker                                   | `[0.0 - 1.0]`           | `0.3`         |
-| `imageTimeout`	            | Timeout (seconds) for shutting down the node after video ends	   | Float (seconds)	       | `2.0`         |
-| `verboseMode`               | Enable visualization using OpenCV windows and detailed logging   | `True`, `False`         | `True`        |
+| `camera`                    | Camera type to use                                               | `realsense`, `pepper`   | `realsense`   |
+| `useCompressed`             | Use compressed ROS image topics                                  | `True`, `False`         | `False`       |
+| `confidenceThreshold`       | Confidence threshold for object detection                        | `[0.0 - 1.0]`           | `0.7`         |
+| `targetClasses`             | List of target classes to detect (or `all`)                      | List of class names     | `all`         |
+| `trackThreshold`            | Confidence threshold for tracking (ByteTrack)                    | `[0.0 - 1.0]`           | `0.45`        |
+| `trackBuffer`               | Number of frames to keep lost tracks before removing             | Positive integer        | `30`          |
+| `matchThreshold`            | IoU threshold for matching detections to tracks                  | `[0.0 - 1.0]`           | `0.8`         |
+| `frameRate`                 | Expected frame rate of the video stream (fps)                    | Positive integer        | `30`          |
+| `imageTimeout`              | Timeout (seconds) for shutting down the node after video ends    | Float (seconds)         | `2.0`         |
+| `verboseMode`               | Enable visualization using OpenCV windows and detailed logging   | `True`, `False`         | `False`       |
 
 > **Note:**  
 > Enabling **`verboseMode`** (`True`) will activate real-time visualization via OpenCV windows. 
 
-# 🚀 Running the node
-**Run the `faceDetection` from the `cssr_system` package:**
+# 🚀 Running the Node
 
-Source the workspace in first terminal:
-  ```bash
-  cd $HOME/workspace/pepper_rob_ws && source devel/setup.bash
-  ```
-
-Follow below steps, run in different terminals.
-
-  1️. Launch the robot and specify which camera to use. 
-  ```bash
-  roslaunch cssr_system face_detection_launch_robot.launch robot_ip:=<robot_ip> roscore_ip:=<roscore_ip> network_interface:=<network_interface> camera:=<camera>
-  ```
-
-  The default camera is set to the realsense.
-
-  2️. Then run the Face and gaze detection and   Localization.
-
-  In a new terminal activate the python environment. 
-  ```bash
-  # Activate the python environment.
-  source $HOME/workspace/pepper_rob_ws/src/cssr4africa_virtual_envs/cssr4africa_face_person_detection_env/bin/activate
-  ```
-
-  ```bash
-  # Command to make application executable.  
-  chmod +x ~/workspace/pepper_rob_ws/src/cssr4africa/cssr_system/face_detection/src/face_detection_application.py
-  ```
-
-  ```bash
-  # Run the face_detection node
-  rosrun cssr_system face_detection_application.py
-  ```
-
-#  🖥️ Output
-The node publishes the detected faces and their corresponding centroid, the width and height of the bounding box and the a boolean array whether a mutual gaze is established or not. When running in the verbose it display the OpenCv annotated color image and depth image that could help to visualize the result obtained. 
-
-Subscription to the topic **faceDetection/data** allows verification of its publication status using the following command:
+## Launch All Components
+The launch file starts the camera driver and object detection node:
 
 ```bash
-rostopic echo /faceDetection/data
+# Source the workspace
+source ~/ros2_ws/install/setup.bash
+
+# Launch with default configuration (RealSense camera)
+ros2 launch object_detection object_detection_launch_robot.launch.py
 ```
+
+## Launch Arguments
+The launch file supports the following arguments:
+
+| Argument        | Description                                      | Default | Example                    |
+|-----------------|--------------------------------------------------|---------|----------------------------|
+| `launch_camera` | Whether to launch the camera driver              | `true`  | `launch_camera:=false`     |
+
+### Example: Using ROS2 Bag Data
+When using pre-recorded ROS2 bag data, disable the camera launch:
+
+```bash
+ros2 launch object_detection object_detection_launch_robot.launch.py launch_camera:=false
+```
+
+## Manual Node Execution
+You can also run nodes individually:
+
+1. **Start Camera Driver** (if not using bags):
+```bash
+ros2 run realsense2_camera realsense2_camera_node \
+  --ros-args \
+  -p rgb_camera.color_profile:=640x480x15 \
+  -p depth_module.depth_profile:=640x480x15 \
+  -p align_depth.enable:=true \
+  -p enable_sync:=true
+```
+
+2. **Start Object Detection Node**:
+```bash
+# Activate Python environment first
+source ~/object_detection_env/bin/activate
+
+# Run object detection
+ros2 run object_detection object_detection
+```
+
+# 🖥️ Output
+The node publishes detected objects and their corresponding data to the `/objectDetection/data` topic. When running in verbose mode, it displays OpenCV-annotated color and depth images for visualization.
+
+## Topic Structure
+- **Published Topic**: `/objectDetection/data` (`cssr_interfaces/msg/ObjectDetection`)
+  - `label[]`: Array of object labels (strings)
+  - `centroids[]`: Array of centroid coordinates (geometry_msgs/Point)
+  - `width[]`: Array of bounding box widths (float)
+  - `height[]`: Array of bounding box heights (float)
+  - `track_id[]`: Array of tracking IDs (integer)
+
+- **Subscribed Topics**:
+  - Color image topic (depends on camera configuration)
+  - Depth image topic (depends on camera configuration)
+
+## Verification
+To verify the node is publishing data:
+
+```bash
+# Monitor object detection output
+ros2 topic echo /objectDetection/data
+
+# Check node status
+ros2 node list
+ros2 topic list
+```
+
+# 🏗️ Architecture
+The object detection system consists of two main components:
+
+1. **Camera Driver**: Provides synchronized RGB-D image streams
+2. **Object Detection Node**: 
+   - Receives image streams from the camera
+   - Performs object detection using YOLO model
+   - Tracks objects across frames using ByteTrack algorithm
+   - Publishes object detection results
 
 # 💡 Support
 
 For issues or questions:
 - Create an issue on GitHub
-- Contact: <a href="mailto:dvernon@andrew.cmu.edu">dvernon@andrew.cmu.edu</a>, <a href="mailto:yohanneh@andrew.cmu.edu">yohanneh@andrew.cmu.edu</a><br>
+- Contact: <a href="mailto:yohanneh@andrew.cmu.edu">yohanneh@andrew.cmu.edu</a><br>
 - Visit: <a href="http://www.cssr4africa.org">www.cssr4africa.org</a>
 
+# 📜 License
+Copyright (C) 2023 Upanzi Network   
 
-# 📜License
-Copyright (C) 2023 CSSR4Africa Consortium  
-Funded by African Engineering and Technology Network (Afretec)  
-Inclusive Digital Transformation Research Grant Programme
-
-2025-03-15
+2026-01-17 (Updated for ROS2)

@@ -52,10 +52,10 @@ def load_configuration() -> Dict:
     """
     config = {
         # Default values
-        'useCompressed': False,
         'camera': 'realsense',
-        'verboseMode': True,
+        'useCompressed': False,
         'imageTimeout': 2.0,
+        'verboseMode': True,
         'confidenceThreshold': 0.5,
         
         # ByteTrack parameters
