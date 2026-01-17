@@ -23,10 +23,6 @@ setup(
     entry_points={
         'console_scripts': [
             'color_compressor = custom_launch.color_compressor:main',  # Add this line
-<<<<<<< HEAD
-=======
-            'depth_roi_service = custom_launch.depth_roi_service:main'
->>>>>>> a61fa31e128caadaa492c499b524c1e292bd7330
         ],
     },
 )
