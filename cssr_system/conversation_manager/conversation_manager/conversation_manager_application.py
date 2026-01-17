@@ -2,7 +2,6 @@
 """
 Simplified RAG ROS 2 Node for Pepper Robot Lab Assistant
 
-Clean implementation without intent classification.
 The application controls when to call the RAG service.
 
 Environment Variables:
@@ -23,7 +22,7 @@ from typing import List, Dict
 from rclpy.node import Node
 from ament_index_python.packages import get_package_share_directory
 from cssr_interfaces.srv import LanguageModelCreateCollection, LanguageModelPrompt
-from .rag_implementation import (
+from .conversation_manager_implementation import (
     get_config,
     get_collection,
     setup_collection,
@@ -31,7 +30,7 @@ from .rag_implementation import (
     apply_config_file,
 )
 
-PACKAGE_PATH = Path(get_package_share_directory('language_model'))
+PACKAGE_PATH = Path(get_package_share_directory('conversation_manager'))
 
 class SimpleRAGNode(Node):
     """
@@ -48,7 +47,7 @@ class SimpleRAGNode(Node):
     """
     
     def __init__(self):
-        super().__init__('rag_node')
+        super().__init__('conversation_manager')
         
         # Load configuration from YAML file
         config_file = PACKAGE_PATH / 'config' / 'rag_system_configuration.yaml'

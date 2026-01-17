@@ -27,7 +27,7 @@ from datetime import datetime
 # =============================================================================
 
 # Package path for ChromaDB storage (always in package data folder)
-PACKAGE_PATH = Path(get_package_share_directory('language_model'))
+PACKAGE_PATH = Path(get_package_share_directory('conversation_manager'))
 
 # Default values as module constants
 DEFAULT_LLM_BASE_URL = "http://localhost:8080/v1"

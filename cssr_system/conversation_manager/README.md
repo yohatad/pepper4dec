@@ -39,7 +39,7 @@ git clone <repository-url>
 
 # Build the workspace
 cd ~/ros2_ws
-colcon build --packages-select language_model
+colcon build --packages-select conversation_manager
 source install/setup.bash
 ```
 
@@ -93,7 +93,7 @@ The RAG node can be started directly:
 source ~/ros2_ws/install/setup.bash
 
 # Run the RAG node
-ros2 run language_model rag_node
+ros2 run conversation_manager conversation_manager
 ```
 
 ## Manual Node Execution
@@ -101,7 +101,7 @@ You can run the node with custom parameters:
 
 ```bash
 # Run with custom collection name
-ros2 run language_model rag_node --ros-args -p collection_name:="custom_knowledge" -p verbose:=true
+ros2 run conversation_manager conversation_manager --ros-args -p collection_name:="custom_knowledge" -p verbose:=true
 ```
 
 # 🖥️ Output

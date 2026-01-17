@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>language_model</name>
+  <name>conversation_manager</name>
   <version>0.0.0</version>
-  <description>RAG system server wrapper for large language model</description>
+  <description>Conversation Manager a RAG system server wrapper for LLM</description>
   <maintainer email="mahadanso79@gmail.com">Muhammed Danso</maintainer>
   <license>Apache-2.0</license>
 

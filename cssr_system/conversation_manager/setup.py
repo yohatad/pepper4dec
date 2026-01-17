@@ -1,7 +1,7 @@
 from setuptools import find_packages, setup
 from glob import glob
 
-package_name = 'language_model'
+package_name = 'conversation_manager'
 
 setup(
     name=package_name,
@@ -15,7 +15,7 @@ setup(
     license='Apache-2.0',
     entry_points={
         'console_scripts': [
-            'language_model = language_model.rag_application:main',
+            'conversation_manager = conversation_manager.conversation_manager_application:main',
         ],
     },
     
