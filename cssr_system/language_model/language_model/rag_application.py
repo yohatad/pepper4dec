@@ -250,18 +250,40 @@ class SimpleRAGNode(Node):
         self.conversation_history = []
 
 def main(args=None):
-    rclpy.init(args=args)
-    
-    node = None
+    """Main function"""
     try:
+        # Initialize ROS 2
+        rclpy.init(args=args)
+        
+        # Your setup code here
         node = SimpleRAGNode()
+        
+        # Spin the node
         rclpy.spin(node)
+        
     except KeyboardInterrupt:
-        pass
+        # Handle Ctrl+C gracefully
+        print("\nShutdown requested (Ctrl+C)...")
+        
+    except Exception as e:
+        # Handle other exceptions
+        print(f"Error: {e}")
+        
     finally:
-        if node:
-            node.destroy_node()
-        rclpy.shutdown()
+        # Clean shutdown sequence
+        try:
+            # Destroy the node explicitly if it exists
+            if 'node' in locals():
+                node.destroy_node()
+        except Exception as e:
+            print(f"Error destroying node: {e}")
+        
+        try:
+            # Only shutdown if rclpy context is valid
+            if rclpy.ok():
+                rclpy.shutdown()
+        except Exception as e:
+            print(f"Error during shutdown: {e}")
 
 
 if __name__ == '__main__':

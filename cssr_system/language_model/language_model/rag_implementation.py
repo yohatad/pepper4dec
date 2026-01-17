@@ -19,6 +19,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from ament_index_python.packages import get_package_share_directory
 from pathlib import Path
+from datetime import datetime
 
 
 # =============================================================================
@@ -42,6 +43,37 @@ DEFAULT_MAX_RESPONSE_SENTENCES = 3
 DEFAULT_DATA_PATH = "./data/upanzi_data.json"
 DEFAULT_VERBOSE = False
 
+class Colors:
+    """ANSI color codes for terminal output"""
+    RESET = '\033[0m'
+    BOLD = '\033[1m'
+    DIM = '\033[2m'
+    
+    # Regular colors
+    BLACK = '\033[30m'
+    RED = '\033[31m'
+    GREEN = '\033[32m'
+    YELLOW = '\033[33m'
+    BLUE = '\033[34m'
+    MAGENTA = '\033[35m'
+    CYAN = '\033[36m'
+    WHITE = '\033[37m'
+    
+    # Bright colors
+    BRIGHT_BLACK = '\033[90m'
+    BRIGHT_RED = '\033[91m'
+    BRIGHT_GREEN = '\033[92m'
+    BRIGHT_YELLOW = '\033[93m'
+    BRIGHT_BLUE = '\033[94m'
+    BRIGHT_MAGENTA = '\033[95m'
+    BRIGHT_CYAN = '\033[96m'
+    BRIGHT_WHITE = '\033[97m'
+    
+    # Background colors
+    BG_BLACK = '\033[40m'
+    BG_CYAN = '\033[46m'
+    BG_BLUE = '\033[44m'
+
 
 def log_verbose(message: str) -> None:
     """Log message only if verbose mode is enabled"""
@@ -49,6 +81,123 @@ def log_verbose(message: str) -> None:
     if config.verbose:
         print(f"[VERBOSE] {message}")
 
+def print_separator(char='=', length=80, color=Colors.BRIGHT_BLACK):
+    """Print a colored separator line"""
+    config = get_config()
+    if config.verbose:
+        print(f"{color}{char * length}{Colors.RESET}")
+
+def print_message_header(role: str, index: int = None):
+    """Print a formatted message header"""
+    config = get_config()
+    if not config.verbose:
+        return
+    
+    role_colors = {
+        'system': Colors.BRIGHT_MAGENTA,
+        'user': Colors.BRIGHT_CYAN,
+        'assistant': Colors.BRIGHT_GREEN
+    }
+    
+    color = role_colors.get(role, Colors.WHITE)
+    role_upper = role.upper()
+    
+    if index is not None:
+        header = f"{color}{Colors.BOLD}[{role_upper} #{index}]{Colors.RESET}"
+    else:
+        header = f"{color}{Colors.BOLD}[{role_upper}]{Colors.RESET}"
+    
+    print(f"\n{header}")
+
+def print_message_content(content: str, indent: int = 2):
+    """Print message content with indentation and wrapping"""
+    config = get_config()
+    if not config.verbose:
+        return
+    
+    indent_str = " " * indent
+    # Split content into lines and print with indentation
+    lines = content.split('\n')
+    for line in lines:
+        print(f"{Colors.BRIGHT_WHITE}{indent_str}{line}{Colors.RESET}")
+
+
+def print_search_results(search_results: List[Dict]):
+    """Print search results in a readable format"""
+    config = get_config()
+    if not config.verbose:
+        return
+    
+    print(f"\n{Colors.BRIGHT_YELLOW}{Colors.BOLD}SEARCH RESULTS ({len(search_results)} documents){Colors.RESET}")
+    print_separator('─', 80, Colors.YELLOW)
+    
+    for i, result in enumerate(search_results, 1):
+        score = result.get('score', 0)
+        score_color = Colors.BRIGHT_GREEN if score > 0.5 else Colors.YELLOW if score > 0.3 else Colors.RED
+        
+        print(f"\n{Colors.BRIGHT_CYAN}Result #{i}{Colors.RESET}")
+        print(f"  {Colors.DIM}Doc ID:{Colors.RESET} {result.get('doc_id', 'N/A')}")
+        print(f"  {Colors.DIM}Title:{Colors.RESET} {Colors.BOLD}{result.get('title', 'N/A')}{Colors.RESET}")
+        print(f"  {Colors.DIM}Score:{Colors.RESET} {score_color}{score:.4f}{Colors.RESET}")
+        
+        content = result.get('content', '')
+        if len(content) > 200:
+            content = content[:200] + "..."
+        print(f"  {Colors.DIM}Content:{Colors.RESET}")
+        for line in content.split('\n')[:3]:  # Show first 3 lines
+            print(f"    {Colors.BRIGHT_BLACK}{line}{Colors.RESET}")
+
+def print_conversation_history(conversation_history: List[Dict], context_turns: int):
+    """Print conversation history in a readable format"""
+    config = get_config()
+    if not config.verbose or not conversation_history:
+        return
+    
+    history_to_use = conversation_history[-context_turns:]
+    
+    print(f"\n{Colors.BRIGHT_BLUE}{Colors.BOLD}CONVERSATION HISTORY ({len(history_to_use)}/{len(conversation_history)} turns used){Colors.RESET}")
+    print_separator('─', 80, Colors.BLUE)
+    
+    for i, turn in enumerate(history_to_use, 1):
+        print(f"\n{Colors.CYAN}Turn #{i}{Colors.RESET}")
+        
+        query = turn.get('query', '')
+        response = turn.get('response', '')
+        
+        print(f"  {Colors.DIM}User Query:{Colors.RESET}")
+        print(f"    {Colors.BRIGHT_CYAN}{query}{Colors.RESET}")
+        
+        print(f"  {Colors.DIM}Assistant Response:{Colors.RESET}")
+        # Truncate long responses
+        if len(response) > 150:
+            response = response[:150] + "..."
+        print(f"    {Colors.BRIGHT_GREEN}{response}{Colors.RESET}")
+
+
+def print_llm_request(messages: List[Dict], model: str):
+    """Print the complete LLM request in a readable format"""
+    config = get_config()
+    if not config.verbose:
+        return
+    
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    
+    print(f"\n{Colors.BG_BLUE}{Colors.BRIGHT_WHITE}{Colors.BOLD} LLM REQUEST @ {timestamp} {Colors.RESET}")
+    print_separator('=', 80, Colors.BRIGHT_BLUE)
+    
+    print(f"{Colors.DIM}Model:{Colors.RESET} {Colors.BRIGHT_WHITE}{model}{Colors.RESET}")
+    print(f"{Colors.DIM}Messages:{Colors.RESET} {Colors.BRIGHT_WHITE}{len(messages)}{Colors.RESET}")
+    
+    print_separator('─', 80, Colors.BRIGHT_BLACK)
+    
+    for i, message in enumerate(messages, 1):
+        role = message.get('role', 'unknown')
+        content = message.get('content', '')
+        
+        print_message_header(role, i)
+        print_message_content(content)
+    
+    print_separator('=', 80, Colors.BRIGHT_BLUE)
 
 @dataclass
 class RAGConfig:
@@ -567,6 +716,10 @@ def generate_response(
     config = get_config()
     log_verbose(f"Generating response for query: '{query}'")
     
+    # Print search results in verbose mode
+    if search_results:
+        print_search_results(search_results)
+    
     # Build context from search results
     context = ""
     if search_results:
@@ -580,6 +733,10 @@ def generate_response(
     # Add conversation history if provided (use configured context_turns)
     if conversation_history:
         history_to_use = conversation_history[-config.context_turns:]
+        
+        # Print conversation history in verbose mode
+        print_conversation_history(conversation_history, config.context_turns)
+        
         log_verbose(f"Using {len(history_to_use)} previous conversation turns")
         for turn in history_to_use:
             messages.append({"role": "user", "content": turn.get("query", "")})
@@ -591,6 +748,9 @@ def generate_response(
         user_content += f"\n\nRelevant information:\n{context}"
     
     messages.append({"role": "user", "content": user_content})
+    
+    # Print complete LLM request in verbose mode
+    print_llm_request(messages, config.llm_model)
     
     try:
         client = get_openai_client()
@@ -607,6 +767,13 @@ def generate_response(
             if "</think>" in answer:
                 answer = answer.split("</think>")[-1].strip()
             
+            # Print LLM response in verbose mode
+            if config.verbose:
+                print(f"\n{Colors.BG_CYAN}{Colors.BLACK}{Colors.BOLD} LLM RESPONSE {Colors.RESET}")
+                print_separator('=', 80, Colors.BRIGHT_CYAN)
+                print_message_content(answer)
+                print_separator('=', 80, Colors.BRIGHT_CYAN)
+            
             log_verbose(f"LLM response received: {answer[:100]}...")
             return answer
         
@@ -615,6 +782,8 @@ def generate_response(
         
     except Exception as e:
         log_verbose(f"LLM request failed: {e}")
+        if config.verbose:
+            print(f"\n{Colors.BRIGHT_RED}{Colors.BOLD}ERROR: {e}{Colors.RESET}")
         raise RAGError(f"LLM request failed: {e}")
 
 # =============================================================================
