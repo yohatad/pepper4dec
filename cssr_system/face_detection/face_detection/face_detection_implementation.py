@@ -18,6 +18,7 @@ import yaml
 import random
 import threading
 from ament_index_python.packages import get_package_share_directory
+from rclpy.qos import qos_profile_sensor_data
 from rclpy.node import Node
 from math import cos, sin, pi
 from sensor_msgs.msg import Image, CompressedImage
@@ -242,8 +243,8 @@ class FaceDetectionNode(Node):
                 return False
 
             # Create subscribers
-            self.color_sub = Subscriber(self, color_msg_type, color_topic)
-            self.depth_sub = Subscriber(self, depth_msg_type, depth_topic)
+            self.color_sub = Subscriber(self, color_msg_type, color_topic, qos_profile=qos_profile_sensor_data)
+            self.depth_sub = Subscriber(self, depth_msg_type, depth_topic, qos_profile=qos_profile_sensor_data)
             
             self.get_logger().info(f"Subscribed to {color_topic}")
             self.get_logger().info(f"Subscribed to {depth_topic}")
@@ -620,8 +621,8 @@ class SixDrepNet(FaceDetectionNode):
         # Run face detection on full image
         face_boxes, face_scores = self.yolo_model(cv_image)
         
-        if self.verbose_mode:
-            self.get_logger().info(f"Persons: {len(persons)}, Faces: {len(face_boxes)}")
+        # if self.verbose_mode:
+        #     self.get_logger().info(f"Persons: {len(persons)}, Faces: {len(face_boxes)}")
 
         # Build list of face detections
         faces = []

@@ -12,9 +12,9 @@ verboseMode: false
 # =============================================================================
 
 # Minimum confidence threshold for detections (0.0 - 1.0)
-confidenceThreshold: 0.7
+confidenceThreshold: 0.6
 targetClasses:
-  - all
+  - person
 
 # =============================================================================
 # ByteTrack Tracking Parameters (supervision package)

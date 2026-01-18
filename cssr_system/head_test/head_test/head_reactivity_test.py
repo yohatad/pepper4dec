@@ -380,9 +380,11 @@ def main(args=None):
     except KeyboardInterrupt:
         node.get_logger().info("Test interrupted by user")
     finally:
-        node.log_final_statistics()
+        if rclpy.ok():  # Only log if context is still valid
+            node.log_final_statistics()
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():  # Only shutdown if not already shutdown
+            rclpy.shutdown()
 
 if __name__ == "__main__":
     main()
