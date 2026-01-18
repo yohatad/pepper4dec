@@ -18,6 +18,7 @@ import cv2
 from std_msgs.msg import Float32, Float32MultiArray
 from sensor_msgs.msg import CameraInfo, JointState, Image
 from naoqi_bridge_msgs.msg import JointAnglesWithSpeed
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from cv_bridge import CvBridge
 
 # ============ Helper Functions ============
@@ -46,16 +47,16 @@ class HeadReactivityTest(Node):
         # Parameters
         self.declare_parameter("test_duration", 60.0)  # seconds
         self.declare_parameter("point_interval", 2.0)  # seconds between points
-        self.declare_parameter("settle_threshold", 0.05)  # rad, threshold to consider settled
+        self.declare_parameter("settle_threshold", 0.2)  # rad, threshold to consider settled
         self.declare_parameter("max_response_time", 5.0)  # seconds, timeout for movement
         self.declare_parameter("image_width", 640)  # camera image width (fallback)
         self.declare_parameter("image_height", 480)  # camera image height (fallback)
         self.declare_parameter("joint_state_topic", "/joint_states")
         self.declare_parameter("camera_info_topic", "/camera/color/camera_info")
         self.declare_parameter("head_command_topic", "/joint_angles")
-        self.declare_parameter("image_topic", "/camera/color/image_raw")  # Image topic to subscribe
+        self.declare_parameter("image_topic", "/camera/color/image_raw_custom")  # Image topic to subscribe
         self.declare_parameter("use_image_dimensions", True)  # Whether to get dimensions from image topic
-        self.declare_parameter("visualize", False)  # Whether to visualize selected points
+        self.declare_parameter("visualize", True)  # Whether to visualize selected points
         
         # State variables
         self.camera_info = None
@@ -72,19 +73,26 @@ class HeadReactivityTest(Node):
         self.image_dimensions = None  # (width, height)
         self.image_received = False
         
-        # Subscribers
+        # Define QoS profile for camera topics (typically use BEST_EFFORT)
+        camera_qos = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=10
+        )
+        
+        # Subscribers with QoS
         self.joint_state_sub = self.create_subscription(
             JointState,
             self.get_parameter("joint_state_topic").value,
             self.joint_state_callback,
-            10
+            10  # joint_states typically use default QoS
         )
         
         self.camera_info_sub = self.create_subscription(
             CameraInfo,
             self.get_parameter("camera_info_topic").value,
             self.camera_info_callback,
-            10
+            camera_qos  # Use BEST_EFFORT for camera topics
         )
         
         # Image subscriber
@@ -92,7 +100,7 @@ class HeadReactivityTest(Node):
             Image,
             self.get_parameter("image_topic").value,
             self.image_callback,
-            10
+            camera_qos  # Use BEST_EFFORT for camera topics
         )
         
         # Publisher for head commands
@@ -249,7 +257,7 @@ class HeadReactivityTest(Node):
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.joint_names = ['HeadYaw', 'HeadPitch']
         msg.joint_angles = [float(yaw), float(pitch)]
-        msg.speed = 0.2  # Moderate speed
+        msg.speed = 0.08  # Moderate speed
         msg.relative = False
         
         self.head_pub.publish(msg)

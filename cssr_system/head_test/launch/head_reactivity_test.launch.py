@@ -25,7 +25,7 @@ def generate_launch_description():
             'joint_state_topic': '/joint_states',
             'camera_info_topic': '/camera/color/camera_info',
             'head_command_topic': '/joint_angles',
-            'image_topic': '/camera/color/image_raw',  # Image topic
+            'image_topic': '/camera/color/image_raw_custom',  # Image topic
             'use_image_dimensions': True,    # Use actual image dimensions
             'visualize': False,              # Disable visualization by default
         }]
