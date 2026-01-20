@@ -8,6 +8,16 @@ find_package(builtin_interfaces REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 
+# Execute python to find the numpy include path
+execute_process(
+  COMMAND python3 -c "import numpy; print(numpy.get_include())"
+  OUTPUT_VARIABLE NUMPY_INCLUDE_DIR
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+# Add the directory to the include path
+include_directories(${NUMPY_INCLUDE_DIR})
+
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/FaceDetection.msg"
   "msg/ObjectDetection.msg"

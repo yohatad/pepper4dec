@@ -31,7 +31,7 @@ PACKAGE_PATH = Path(get_package_share_directory('language_model'))
 # Default values as module constants
 DEFAULT_LLM_BASE_URL = "http://localhost:8080/v1"
 DEFAULT_LLM_API_KEY = "sk-no-key-required"
-DEFAULT_LLM_MODEL = "HuggingFaceTB/SmolLM3-3B"
+DEFAULT_LLM_MODEL = "meta-llama/Llama-3.1-8B-Instruct"
 DEFAULT_CHROMA_PATH = str(PACKAGE_PATH / 'data')
 DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 DEFAULT_SIMILARITY_THRESHOLD = 0.15
@@ -101,8 +101,8 @@ class RAGConfig:
         if not self.llm_base_url:
             errors.append("llm_base_url cannot be empty")
         
-        if not self.llm_api_key or self.llm_api_key == DEFAULT_LLM_API_KEY:
-            errors.append("LLM_API_KEY must be exported as environment variable")
+        if not self.llm_api_key:
+            errors.append("LLM_API_KEY cannot be empty")
         
         if not self.llm_model:
             errors.append("llm_model cannot be empty")
@@ -163,7 +163,7 @@ def set_config(config: RAGConfig) -> None:
     Raises:
         ConfigError: If configuration validation fails
     """
-    global global_config, openai_client_instance, chroma_client_instance, embedding_function_instance
+    global global_config
     
     is_valid, errors = config.validate()
     if not is_valid:
@@ -171,11 +171,6 @@ def set_config(config: RAGConfig) -> None:
     
     with config_lock:
         global_config = config
-    
-    with client_lock:
-        openai_client_instance = None
-        chroma_client_instance = None
-        embedding_function_instance = None
     
     log_verbose(f"Configuration updated: llm_base_url={config.llm_base_url}, llm_model={config.llm_model}")
 
@@ -185,14 +180,13 @@ def get_openai_client() -> openai.OpenAI:
     
     if openai_client_instance is None:
         with client_lock:
-            if openai_client_instance is None:
-                config = get_config()
-                log_verbose(f"Creating OpenAI client with base_url: {config.llm_base_url}")
-                openai_client_instance = openai.OpenAI(
-                    base_url=config.llm_base_url,
-                    api_key=config.llm_api_key,
-                    timeout=30.0
-                )
+            config = get_config()
+            log_verbose(f"Creating OpenAI client with base_url: {config.llm_base_url}")
+            openai_client_instance = openai.OpenAI(
+                base_url=config.llm_base_url,
+                api_key=config.llm_api_key,
+                timeout=30.0
+            )
     return openai_client_instance
 
 def get_chroma_client() -> chromadb.PersistentClient:
@@ -201,13 +195,12 @@ def get_chroma_client() -> chromadb.PersistentClient:
     
     if chroma_client_instance is None:
         with client_lock:
-            if chroma_client_instance is None:
-                config = get_config()
-                try:
-                    log_verbose(f"Creating ChromaDB client with path: {config.chroma_path}")
-                    chroma_client_instance = chromadb.PersistentClient(path=config.chroma_path)
-                except Exception as e:
-                    raise RAGError(f"Failed to initialize ChromaDB: {e}")
+            config = get_config()
+            try:
+                log_verbose(f"Creating ChromaDB client with path: {config.chroma_path}")
+                chroma_client_instance = chromadb.PersistentClient(path=config.chroma_path)
+            except Exception as e:
+                raise RAGError(f"Failed to initialize ChromaDB: {e}")
     return chroma_client_instance
 
 def get_embedding_function():
@@ -216,12 +209,11 @@ def get_embedding_function():
     
     if embedding_function_instance is None:
         with client_lock:
-            if embedding_function_instance is None:
-                config = get_config()
-                log_verbose(f"Creating embedding function with model: {config.embedding_model}")
-                embedding_function_instance = embedding_functions.SentenceTransformerEmbeddingFunction(
-                    model_name=config.embedding_model
-                )
+            config = get_config()
+            log_verbose(f"Creating embedding function with model: {config.embedding_model}")
+            embedding_function_instance = embedding_functions.SentenceTransformerEmbeddingFunction(
+                model_name=config.embedding_model
+            )
     return embedding_function_instance
 
 # =============================================================================
@@ -481,7 +473,7 @@ def search(
     Returns:
         List of results with doc_id, title, content, score
     """
-    if not query or not query.strip():
+    if not query.strip():
         log_verbose("Empty query, returning empty results")
         return []
     
@@ -531,18 +523,15 @@ def search(
 # Response Generation
 # =============================================================================
 
-SYSTEM_PROMPT = """You are Pepper, a friendly humanoid robot lab assistant at the Upanzi Network, 
-located at Carnegie Mellon University Africa in Rwanda.
+def _read_system_prompt(system_prompt_file: str) -> str:
+    with open(system_prompt_file, "r") as f:
+        system_prompt = f.read()
 
-Your role is to help visitors learn about the lab's research on digital public infrastructure, 
-cybersecurity, and technology for Africa.
+    return system_prompt
 
-Guidelines:
-- Be friendly, helpful, and concise (2-3 sentences unless more detail is needed)
-- Use the provided context to answer accurately
-- If you don't know something, say so honestly
-- Never make up information
-- Watch for misspellings of project names like 'Upanzi', 'picoCTF', 'MOSIP', etc."""
+system_prompt_file = PACKAGE_PATH / "data" / "system_prompt_input.txt"
+log_verbose(f"Loading system prompt from: {system_prompt_file}")
+SYSTEM_PROMPT = _read_system_prompt(system_prompt_file)
 
 
 def generate_response(
@@ -570,27 +559,26 @@ def generate_response(
     # Build context from search results
     context = ""
     if search_results:
-        context_parts = [f"[{r['title']}]\n{r['content']}" for r in search_results[:3]]
+        context_parts = [f"[{r['title']}]\n{r['content']}" for r in search_results]
         context = "\n\n".join(context_parts)
         log_verbose(f"Using {len(search_results)} search results as context")
     
     # Build messages
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    
-    # Add conversation history if provided (use configured context_turns)
-    if conversation_history:
-        history_to_use = conversation_history[-config.context_turns:]
-        log_verbose(f"Using {len(history_to_use)} previous conversation turns")
-        for turn in history_to_use:
-            messages.append({"role": "user", "content": turn.get("query", "")})
-            messages.append({"role": "assistant", "content": turn.get("response", "")})
+    system_message = [{"role": "system", "content": SYSTEM_PROMPT}]
+    examples = [
+                {"role": "user", "content": "Who are you?"},
+                {"role": "assistant","content": "I am Pepper, a lab assistant here in the digital experience center at CMU-Africa. How can I help you today?"},
+
+                {"role": "user","content": "What can you do?"},
+                {"role": "assistant","content": "I can answer questions you have about the upanzi network at CMU-Africa."},
+
+                {"role": "user","content": "Hello Pepper"},
+                {"role": "assistant","content": "Hello too. How can I help you today?"},
+            ]
     
     # Add current query with context
-    user_content = f'Question: "{query}"'
-    if context:
-        user_content += f"\n\nRelevant information:\n{context}"
-    
-    messages.append({"role": "user", "content": user_content})
+    user_prompt = [{"role": "user", "content": f"{query} \n{context}"}]
+    messages = system_message + examples + (conversation_history or []) + user_prompt
     
     try:
         client = get_openai_client()
@@ -617,6 +605,62 @@ def generate_response(
         log_verbose(f"LLM request failed: {e}")
         raise RAGError(f"LLM request failed: {e}")
 
+def get_intent_response(
+    query: str,
+) -> str:
+    """
+    Get intent classification response from LLM.
+    
+    Args:
+        query: User's question
+        conversation_history: Previous conversation turns (not used here)
+
+    Returns:
+        Intent classification response string
+
+    Raises:
+        RAGError: If LLM call fails
+    """
+    config = get_config()
+    log_verbose(f"Getting intent response for query: '{query}'")
+    
+    system_prompt = """
+                    You need to determine the intent (positive or negative) of messages. Respond only with either 'positive'
+                    or 'negative', and provide no further text. No further explanations are to be provided. Always check the
+                    text you generate at least one more time to ensure that it contains only one word, either the word
+                    'positive' or the word 'negative', and rectifying the generated text to generate only either 'positive'
+                    or 'negative' without any other text or explanation being provided. Remember, never generate anything
+                    other than 'positive' or 'negative', and never give extra information or explanations.
+                    """
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": "Yes"}, {"role": "assistant","content": "positive"},
+        {"role": "user","content": "No"}, {"role": "assistant","content": "negative"},
+        {"role": "user","content": "Give me a tour of the lab"}, {"role": "assistant","content": "positive"},
+        {"role": "user","content": "I don't want a tour"}, {"role": "assistant","content": "negative"},
+        {"role": "user", "content": query}
+    ]
+    
+    try:
+        client = get_openai_client()
+        log_verbose(f"Sending intent classification request to LLM (model: {config.llm_model})")
+        response = client.chat.completions.create(
+            model=config.llm_model,
+            messages=messages
+        )
+        
+        if response.choices:
+            intent_response = response.choices[0].message.content.strip()
+            log_verbose(f"LLM intent response received: {intent_response[:100]}...")
+            return intent_response
+        
+        log_verbose("LLM returned no choices for intent classification")
+        return "I'm sorry, I couldn't classify the intent. Please try again."
+        
+    except Exception as e:
+        log_verbose(f"LLM intent request failed: {e}")
+        raise RAGError(f"LLM intent request failed: {e}")
+
 # =============================================================================
 # Main Query Handler
 # =============================================================================
@@ -624,6 +668,7 @@ def generate_response(
 def handle_query(
     collection: chromadb.Collection,
     query: str,
+    get_intent: bool = False,
     conversation_history: List[Dict] = None,
     category_filter: str = None,
     top_k: int = None
@@ -644,7 +689,7 @@ def handle_query(
     Raises:
         RAGError: If search or generation fails
     """
-    if not query or not query.strip():
+    if not query.strip():
         log_verbose("Empty query received")
         return {
             'response': "I didn't catch that. Could you please repeat?",
@@ -652,21 +697,20 @@ def handle_query(
             'query': query
         }
     
-    config = get_config()
     log_verbose(f"Handling query: '{query}'")
-    
-    # Truncate history to configured maximum
-    if conversation_history and len(conversation_history) > config.max_history_turns:
-        log_verbose(f"Truncating conversation history from {len(conversation_history)} to {config.max_history_turns} turns")
-        conversation_history = conversation_history[-config.max_history_turns:]
     
     # Search for relevant documents
     log_verbose("Searching for relevant documents...")
-    results = search(collection, query, top_k=top_k, category_filter=category_filter)
     
     # Generate response
     log_verbose("Generating response...")
-    response = generate_response(query, results, conversation_history)
+
+    if get_intent:
+        results = []
+        response = get_intent_response(query)
+    else:
+        results = search(collection, query, top_k=top_k, category_filter=category_filter)
+        response = generate_response(query, results, conversation_history)
     
     log_verbose(f"Query handled successfully, response length: {len(response)}")
     return {
