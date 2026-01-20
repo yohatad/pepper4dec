@@ -1,6 +1,6 @@
 """
 speech_event_implementation.py
-Implementation of 4-microphone speech localization with beamforming and Whisper ASR
+Implementation of speech recognition with Whisper ASR
 
 Author: Yohannes Tadesse Haile
 Date: November 8, 2025
@@ -13,18 +13,15 @@ import math
 import time
 import numpy as np
 import torch
-import rclpy
 import os
 import onnxruntime
 import threading
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
-from scipy.optimize import minimize
 
 from ament_index_python.packages import get_package_share_directory
 from rclpy.node import Node
 from std_msgs.msg import Bool, Float32, String
-from geometry_msgs.msg import Vector3Stamped
 from naoqi_bridge_msgs.msg import AudioBuffer
 from faster_whisper import WhisperModel
 from scipy import signal as scipy_signal
@@ -32,15 +29,43 @@ from scipy.signal import resample_poly
 
 
 class OnnxWrapper():
-    def __init__(self, path, force_onnx_cpu=False):
+    def __init__(self, path, force_onnx_cpu=False, logger=None):
         opts = onnxruntime.SessionOptions()
-        opts.inter_op_num_threads = 1
-        opts.intra_op_num_threads = 1
+        opts.inter_op_num_threads = 4
+        opts.intra_op_num_threads = 4
 
-        if force_onnx_cpu and 'CPUExecutionProvider' in onnxruntime.get_available_providers():
+        available_providers = onnxruntime.get_available_providers()
+        
+        if force_onnx_cpu:
+            # Explicitly force CPU
             self.session = onnxruntime.InferenceSession(path, providers=['CPUExecutionProvider'], sess_options=opts)
+            self.device = 'CPU (forced)'
         else:
-            self.session = onnxruntime.InferenceSession(path, sess_options=opts)
+            # Try to use GPU providers in priority order
+            if 'CUDAExecutionProvider' in available_providers:
+                providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+            elif 'TensorrtExecutionProvider' in available_providers:
+                providers = ['TensorrtExecutionProvider', 'CPUExecutionProvider']
+            else:
+                providers = ['CPUExecutionProvider']
+            
+            self.session = onnxruntime.InferenceSession(path, providers=providers, sess_options=opts)
+            
+            # Determine which provider was actually used
+            provider = self.session.get_providers()[0]
+            if 'CUDA' in provider:
+                self.device = 'GPU (CUDA)'
+            elif 'TensorRT' in provider or 'Tensorrt' in provider:
+                self.device = 'GPU (TensorRT)'
+            elif 'CPU' in provider:
+                self.device = 'CPU'
+            else:
+                self.device = provider
+
+        if logger:
+            logger.info(f"Silero VAD using: {self.device}")
+            logger.info(f"Available ONNX providers: {available_providers}")
+            logger.info(f"Active ONNX provider: {self.session.get_providers()[0]}")
 
         # Always work with 16kHz (since we resample from 48kHz)
         self.sample_rate = 16000
@@ -114,12 +139,7 @@ class SpeechRecognitionNode(Node):
         self.declare_parameter("max_speech_duration_s", 10.0)
         self.declare_parameter("min_speech_duration", 0.3)
         self.declare_parameter("pre_speech_buffer_ms", 200)
-        
-        # Localization parameters
-        self.declare_parameter("use_localization", True)
-        self.declare_parameter("use_beamforming", True)
-        self.declare_parameter("speed_of_sound", 343.0)
-        self.declare_parameter("intensity_threshold", 0.004)
+        self.declare_parameter("intensity_threshold", 0.001)
         
         self.declare_parameter("microphone_topic", "/audio")
 
@@ -136,47 +156,44 @@ class SpeechRecognitionNode(Node):
         self.max_speech_duration_s = float(self.get_parameter("max_speech_duration_s").value)
         self.min_speech_duration = float(self.get_parameter("min_speech_duration").value)
         self.pre_speech_buffer_ms = int(self.get_parameter("pre_speech_buffer_ms").value)
-        
-        self.use_localization = bool(self.get_parameter("use_localization").value)
-        self.use_beamforming = bool(self.get_parameter("use_beamforming").value)
-        self.speed_of_sound = float(self.get_parameter("speed_of_sound").value)
         self.intensity_threshold = float(self.get_parameter("intensity_threshold").value)
         
         self.microphone_topic = self.get_parameter("microphone_topic").value
 
-        # =====================================================
-        # Microphone array geometry (Pepper head frame, meters)
-        # Order: [back_left (RL), back_right (RR), front_left (FL), front_right (FR)]
-        # =====================================================
-        self.mic_positions = np.array([
-            [-0.0267,  0.0343, 0.2066],  # Back-left  (RL)
-            [-0.0267, -0.0343, 0.2066],  # Back-right (RR)
-            [ 0.0313,  0.0343, 0.2066],  # Front-left (FL)
-            [ 0.0313, -0.0343, 0.2066]   # Front-right(FR)
-        ])
-
-        # Current direction (updated by localization)
-        self.current_azimuth = 0.0
-        self.current_elevation = 0.0
-        self.direction_lock = threading.Lock()
-
         package_path = get_package_share_directory('speech_event')
         silero_path = os.path.join(package_path, 'models', 'silero_vad.onnx')
 
-        # Load Silero VAD
-        self.silero_model = OnnxWrapper(silero_path)
+        # Load Silero VAD with logger
+        self.silero_model = OnnxWrapper(silero_path, logger=self.get_logger())
         self.get_logger().info(f"Silero VAD loaded for {self.sample_rate}Hz")
 
-        # Load Whisper
-        self.get_logger().info("Loading Whisper model...")
-        self.whisper = WhisperModel(self.whisper_model_id, device=self.device, compute_type=self.compute_type)
+        # Load Whisper with optimizations
+        self.get_logger().info(f"Loading Whisper model on device: {self.device}...")
+        self.whisper = WhisperModel(
+            self.whisper_model_id, 
+            device=self.device, 
+            compute_type=self.compute_type,
+            num_workers=1,  # Reduce overhead for short segments
+            cpu_threads=4   # For CPU fallback
+        )
+        
+        # Check if Whisper is actually using GPU
+        if self.device == "cuda":
+            if torch.cuda.is_available():
+                self.get_logger().info(f"Whisper using GPU: {torch.cuda.get_device_name(0)}")
+                self.get_logger().info(f"CUDA version: {torch.version.cuda}")
+            else:
+                self.get_logger().warning("CUDA requested but not available! Whisper will use CPU")
+        else:
+            self.get_logger().info(f"Whisper using CPU (device parameter: {self.device})")
+        
         self.get_logger().info("Whisper model loaded.")
         
         # Warmup Whisper to avoid first-inference latency
         self._warmup_whisper()
 
         # =====================================================
-        # IMPROVED: Proper chunk-aligned VAD processing
+        # Proper chunk-aligned VAD processing
         # =====================================================
         # Input: 4096 samples @ 48kHz -> 1365 samples @ 16kHz (after resampling)
         # VAD needs: 512 samples per chunk
@@ -186,7 +203,7 @@ class SpeechRecognitionNode(Node):
         self.vad_pending_buffer = np.zeros(0, dtype=np.float32)  # Accumulates until we have 512 samples
         
         # =====================================================
-        # IMPROVED: Pre-speech lookback buffer (ring buffer)
+        # Pre-speech lookback buffer (ring buffer)
         # =====================================================
         # Keep last N ms of audio to prepend when speech starts
         self.pre_speech_samples = int((self.pre_speech_buffer_ms / 1000.0) * self.sample_rate)
@@ -208,7 +225,7 @@ class SpeechRecognitionNode(Node):
         self.speech_chunk_count = 0
 
         # =====================================================
-        # IMPROVED: Async transcription with thread pool
+        # Async transcription with thread pool
         # =====================================================
         self.transcription_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="whisper")
         self.transcription_lock = threading.Lock()
@@ -218,9 +235,6 @@ class SpeechRecognitionNode(Node):
         self.vad_prob_pub = self.create_publisher(Float32, "/vad/speech_prob", 10)
         self.asr_pub = self.create_publisher(String, "/asr/text", 10)
         
-        # Localization publishers
-        self.direction_pub = self.create_publisher(Vector3Stamped, "/speech/sound_direction", 10)
-        self.azimuth_pub = self.create_publisher(Float32, "/speech/azimuth", 10)
 
         # Subscriber
         self.audio_sub = self.create_subscription(AudioBuffer, self.microphone_topic, self.audio_callback, 10)
@@ -230,7 +244,6 @@ class SpeechRecognitionNode(Node):
                               f"min_silence={self.min_silence_duration_ms}ms ({self.min_silence_chunks} chunks), "
                               f"min_speech={self.min_speech_duration}s, max_speech={self.max_speech_duration_s}s")
         self.get_logger().info(f"Pre-speech buffer: {self.pre_speech_buffer_ms}ms ({self.pre_speech_samples} samples)")
-        self.get_logger().info(f"Localization: {self.use_localization}, Beamforming: {self.use_beamforming}")
 
     def _warmup_whisper(self):
         """Run a dummy transcription to warm up CUDA kernels."""
@@ -255,12 +268,10 @@ class SpeechRecognitionNode(Node):
     # =========================================================================
     def parse_audio_buffer(self, msg):
         """
-        Convert naoqi_bridge_msgs/AudioBuffer to 4 float32 channel arrays at 48kHz.
-        Does NOT resample - returns native 48kHz for localization.
+        Convert naoqi_bridge_msgs/AudioBuffer to single-channel audio at 48kHz.
         
         Returns:
-            tuple: (mic_signals_48k, freq_in) or (None, None) on failure
-            mic_signals_48k order: [RL, RR, FL, FR]
+            tuple: (audio_48k, freq_in) or (None, None) on failure
         """
         try:
             freq_in = int(msg.frequency)
@@ -278,7 +289,7 @@ class SpeechRecognitionNode(Node):
             
             frames = data[:num_frames * channels].reshape(num_frames, channels).astype(np.float32) / 32767.0
 
-            # Extract channels
+            # Extract front-left channel (primary microphone)
             def get_chan(enum_val, fallback=None):
                 if enum_val in channel_map:
                     idx = channel_map.index(enum_val)
@@ -286,14 +297,8 @@ class SpeechRecognitionNode(Node):
                 return np.copy(fallback) if fallback is not None else np.zeros(num_frames, dtype=np.float32)
 
             FL = get_chan(AudioBuffer.CHANNEL_FRONT_LEFT)
-            FR = get_chan(AudioBuffer.CHANNEL_FRONT_RIGHT)
-            RL = get_chan(AudioBuffer.CHANNEL_REAR_LEFT, FL)
-            RR = get_chan(AudioBuffer.CHANNEL_REAR_RIGHT, FR)
-
-            # Order: [back_left, back_right, front_left, front_right]
-            mic_signals = [RL, RR, FL, FR]
-
-            return mic_signals, freq_in
+            
+            return FL, freq_in
 
         except Exception as e:
             self.get_logger().error(f"AudioBuffer parse error: {e}")
@@ -322,189 +327,24 @@ class SpeechRecognitionNode(Node):
         return rms >= self.intensity_threshold
 
     # =========================================================================
-    # GCC-PHAT Localization (operates at 48kHz for precision)
-    # =========================================================================
-    def gcc_phat(self, sig1: np.ndarray, sig2: np.ndarray, sample_rate: int) -> float:
-        """GCC-PHAT for time delay estimation at native sample rate."""
-        try:
-            n = sig1.shape[0] + sig2.shape[0]
-
-            SIG1 = np.fft.rfft(sig1, n=n)
-            SIG2 = np.fft.rfft(sig2, n=n)
-
-            R = SIG1 * np.conj(SIG2)
-            R /= (np.abs(R) + 1e-10)
-
-            cc = np.fft.irfft(R, n=n)
-
-            max_shift = int(n / 2)
-            cc = np.concatenate((cc[-max_shift:], cc[:max_shift + 1]))
-            shift = int(np.argmax(np.abs(cc)) - max_shift)
-
-            return shift / float(sample_rate)
-        except Exception as e:
-            self.get_logger().error(f"GCC-PHAT error: {e}")
-            return 0.0
-
-    def localize_4mic(self, mic_signals: list, sample_rate: int) -> tuple:
-        """
-        4-mic sound source localization using TDOA at native sample rate (48kHz).
-        Returns (azimuth, elevation, confidence).
-        """
-        try:
-            num_mics = 4
-            tdoa_matrix = np.zeros((num_mics, num_mics), dtype=np.float32)
-
-            for i in range(num_mics):
-                for j in range(i + 1, num_mics):
-                    tdoa = self.gcc_phat(mic_signals[i], mic_signals[j], sample_rate)
-                    tdoa_matrix[i, j] = tdoa
-                    tdoa_matrix[j, i] = -tdoa
-
-            azimuth, elevation = self._estimate_direction_from_tdoa(tdoa_matrix)
-
-            # Confidence from TDOA consistency
-            tdoa_variance = float(np.var(tdoa_matrix[np.triu_indices(num_mics, k=1)]))
-            confidence = 1.0 / (1.0 + tdoa_variance * 1e6)
-
-            return azimuth, elevation, confidence
-
-        except Exception as e:
-            self.get_logger().error(f"4-mic localization error: {e}")
-            return 0.0, 0.0, 0.0
-
-    def _estimate_direction_from_tdoa(self, tdoa_matrix: np.ndarray) -> tuple:
-        """Estimate direction from TDOA using least squares optimization."""
-        def cost_function(angles):
-            azimuth, elevation = angles
-
-            source_vec = np.array([
-                np.cos(elevation) * np.cos(azimuth),
-                np.cos(elevation) * np.sin(azimuth),
-                np.sin(elevation)
-            ])
-
-            predicted_tdoa = np.zeros((4, 4), dtype=np.float32)
-            for i in range(4):
-                for j in range(i + 1, 4):
-                    dist_i = float(np.dot(self.mic_positions[i], source_vec))
-                    dist_j = float(np.dot(self.mic_positions[j], source_vec))
-                    predicted_tdoa[i, j] = (dist_j - dist_i) / self.speed_of_sound
-                    predicted_tdoa[j, i] = -predicted_tdoa[i, j]
-
-            return float(np.sum((tdoa_matrix - predicted_tdoa) ** 2))
-
-        result = minimize(
-            cost_function,
-            [0.0, 0.0],
-            method='L-BFGS-B',
-            bounds=[(-np.pi, np.pi), (-np.pi/4, np.pi/4)]
-        )
-
-        return float(result.x[0]), float(result.x[1])
-
-    # =========================================================================
-    # Beamforming (operates at 48kHz)
-    # =========================================================================
-    def apply_beamforming(self, mic_signals: list, azimuth: float, elevation: float, sample_rate: int) -> np.ndarray:
-        """Delay-and-sum beamforming at native sample rate (48kHz)."""
-        if not self.use_beamforming:
-            return mic_signals[2]  # Default to front-left
-
-        try:
-            target_direction = np.array([
-                np.cos(elevation) * np.cos(azimuth),
-                np.cos(elevation) * np.sin(azimuth),
-                np.sin(elevation)
-            ])
-
-            delays = np.zeros(4, dtype=np.float32)
-            for i in range(4):
-                distance = float(np.dot(self.mic_positions[i], target_direction))
-                delays[i] = distance / self.speed_of_sound
-
-            delays -= delays.min()
-            delay_samples = (delays * sample_rate).astype(int)
-
-            signal_length = min(len(sig) for sig in mic_signals)
-            beamformed = np.zeros(signal_length, dtype=np.float32)
-
-            for i in range(4):
-                delay = int(delay_samples[i])
-                if delay >= signal_length:
-                    continue
-                shifted = np.zeros(signal_length, dtype=np.float32)
-                shifted[delay:] = mic_signals[i][:signal_length - delay]
-                beamformed += shifted
-
-            beamformed /= 4.0
-            return np.clip(beamformed, -1.0, 1.0)
-
-        except Exception as e:
-            self.get_logger().error(f"Beamforming error: {e}")
-            return mic_signals[2]
-
-    def publish_direction(self, azimuth: float, elevation: float, confidence: float):
-        """Publish sound source direction."""
-        stamp = self.get_clock().now().to_msg()
-
-        # Publish direction as unit vector
-        direction_msg = Vector3Stamped()
-        direction_msg.header.stamp = stamp
-        direction_msg.header.frame_id = 'Head'
-        direction_msg.vector.x = float(np.cos(elevation) * np.cos(azimuth))
-        direction_msg.vector.y = float(np.cos(elevation) * np.sin(azimuth))
-        direction_msg.vector.z = float(np.sin(elevation))
-        self.direction_pub.publish(direction_msg)
-
-        # Publish azimuth
-        azimuth_msg = Float32()
-        azimuth_msg.data = float(azimuth)
-        self.azimuth_pub.publish(azimuth_msg)
-
-    # =========================================================================
     # Audio Callback
     # =========================================================================
     def audio_callback(self, msg: AudioBuffer):
         """
         Process incoming audio:
-        1. Parse 4-channel audio at 48kHz
+        1. Parse single-channel audio at 48kHz
         2. Intensity gate
-        3. Localization at 48kHz (high precision)
-        4. Beamforming at 48kHz
-        5. Resample to 16kHz
-        6. VAD + speech collection
+        3. Resample to 16kHz
+        4. VAD + speech collection
         """
-        # Parse multi-channel audio (keep at 48kHz)
-        mic_signals_48k, freq_in = self.parse_audio_buffer(msg)
-        if mic_signals_48k is None:
+        # Parse single-channel audio (keep at 48kHz)
+        audio_48k, freq_in = self.parse_audio_buffer(msg)
+        if audio_48k is None:
             return
 
-        # Intensity gate using front-left mic
-        if not self.is_intense_enough(mic_signals_48k[2]):
+        # Intensity gate
+        if not self.is_intense_enough(audio_48k):
             return
-
-        # =====================================================
-        # Localization at 48kHz (full precision)
-        # =====================================================
-        if self.use_localization:
-            azimuth, elevation, confidence = self.localize_4mic(mic_signals_48k, freq_in)
-            
-            with self.direction_lock:
-                self.current_azimuth = azimuth
-                self.current_elevation = elevation
-            
-            self.publish_direction(azimuth, elevation, confidence)
-        else:
-            azimuth, elevation = 0.0, 0.0
-
-        # =====================================================
-        # Beamforming at 48kHz
-        # =====================================================
-        if self.use_beamforming and self.use_localization:
-            audio_48k = self.apply_beamforming(mic_signals_48k, azimuth, elevation, freq_in)
-        else:
-            audio_48k = mic_signals_48k[2]  # Front-left
 
         # =====================================================
         # Resample to 16kHz for VAD/Whisper
@@ -670,8 +510,14 @@ class SpeechRecognitionNode(Node):
                 audio, 
                 language=self.language, 
                 task="transcribe", 
-                beam_size=1,
-                vad_filter=False
+                beam_size=1,           # Already optimal (greedy decoding)
+                best_of=1,             # Don't sample multiple candidates
+                temperature=0.0,       # Deterministic (no sampling)
+                vad_filter=False,      # We do VAD externally
+                condition_on_previous_text=False,  # Don't condition on history (faster)
+                compression_ratio_threshold=2.4,   # Default
+                log_prob_threshold=-1.0,           # Default
+                no_speech_threshold=0.6            # Default
             )
 
             text = " ".join([seg.text.strip() for seg in segments]).strip()

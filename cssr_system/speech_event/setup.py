@@ -17,6 +17,7 @@ setup(
         "console_scripts": [
             "speech_event = speech_event.speech_event_application:main",
             "speech_event_recorder  = speech_event.speech_event_recorder:main",
+            "speech_event_localization = speech_event.speech_event_localization:main"
         ],
     },
     data_files=[
