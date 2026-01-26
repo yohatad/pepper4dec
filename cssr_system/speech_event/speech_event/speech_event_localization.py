@@ -5,7 +5,7 @@ Dedicated sound source localization using pyroomacoustics SRP-PHAT
 
 Author: Yohannes Tadesse Haile
 Date: January 2026
-Version: v1.5 - Azimuth-only (removed fake elevation)
+Version: v1.0 - Azimuth-only
 
 This program comes with ABSOLUTELY NO WARRANTY.
 """
@@ -22,7 +22,6 @@ from geometry_msgs.msg import Vector3Stamped, PoseStamped
 from naoqi_bridge_msgs.msg import AudioBuffer
 from visualization_msgs.msg import Marker
 from scipy import signal
-
 
 class SoundLocalizationNode(Node):
     def __init__(self):
