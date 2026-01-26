@@ -1,12 +1,12 @@
 <div align="center">
-<h1> Language Model Package for Pepper Robot Lab Assistant (ROS2) </h1>
+<h1> Conversation Manager Package for Pepper Robot Lab Assistant (ROS2) </h1>
 </div>
 
 <div align="center">
   <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:50%; height:auto;">
 </div>
 
-The **Language Model Package** implements a **Retrieval-Augmented Generation (RAG)** system for the Pepper robot to serve as a lab assistant at the Upanzi Network, Carnegie Mellon University Africa. The system allows Pepper to answer questions about Upanzi Network's research, projects, facilities, and impact areas using a knowledge base built from structured JSON data.
+The **Conversation Manager Package** implements a **Retrieval-Augmented Generation (RAG)** system for the Pepper robot to serve as a lab assistant at the Upanzi Network, Carnegie Mellon University Africa. The system allows Pepper to answer questions about Upanzi Network's research, projects, facilities, and impact areas using a knowledge base built from structured JSON data.
 
 ## Key Features
 - **ROS2 Native**: Built for ROS2 Humble/Humble+
@@ -109,7 +109,7 @@ The node provides ROS2 services for knowledge base management and querying.
 
 ## Service Structure
 
-### 1. `/create_collection` Service (`cssr_interface/srv/LanguageModelCreateCollection`)
+### 1. `/create_collection` Service (`cssr_interfaces/srv/LanguageModelCreateCollection`)
 Creates and populates a new knowledge base collection from a JSON file.
 
 **Request Fields:**
@@ -121,7 +121,7 @@ Creates and populates a new knowledge base collection from a JSON file.
 - `success` (int32): 1 for success, 0 for failure
 - `message` (string): Status message
 
-### 2. `/rag_prompt` Service (`cssr_interface/srv/LanguageModelPrompt`)
+### 2. `/rag_prompt` Service (`cssr_interfaces/srv/LanguageModelPrompt`)
 Query the knowledge base with a question.
 
 **Request Fields:**
@@ -134,28 +134,28 @@ Query the knowledge base with a question.
 
 1. **Create a Knowledge Base Collection**
 ```bash
-ros2 service call /create_collection cssr_interface/srv/LanguageModelCreateCollection \
-  "{name: 'upanzi_knowledge', datafile_path: '$(pwd)/ros2_ws/src/cssr4africa/cssr_system/language_model/data/upanzi_data.json', description: 'Upanzi Network knowledge base'}"
+ros2 service call /create_collection cssr_interfaces/srv/LanguageModelCreateCollection \
+  "{name: 'upanzi_knowledge', datafile_path: '$(pwd)/ros2_ws/src/cssr4africa/cssr_system/conversation_manager/data/upanzi_data.json', description: 'Upanzi Network knowledge base'}"
 ```
 
 2. **Query the Knowledge Base**
 ```bash
-ros2 service call /rag_prompt cssr_interface/srv/LanguageModelPrompt \
+ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
   "{prompt: 'What is the Upanzi Network?'}"
 ```
 
 3. **More Example Queries**
 ```bash
 # Ask about specific projects
-ros2 service call /rag_prompt cssr_interface/srv/LanguageModelPrompt \
+ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
   "{prompt: 'What projects are focused on cybersecurity?'}"
 
 # Ask about facilities
-ros2 service call /rag_prompt cssr_interface/srv/LanguageModelPrompt \
+ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
   "{prompt: 'Tell me about the Digital Experience Center.'}"
 
 # Ask about research areas
-ros2 service call /rag_prompt cssr_interface/srv/LanguageModelPrompt \
+ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
   "{prompt: 'What are the main thrust areas of research?'}"
 ```
 
@@ -170,7 +170,7 @@ ros2 node list
 ros2 service list
 
 # Test the service with a simple query
-ros2 service call /rag_prompt cssr_interface/srv/LanguageModelPrompt "{prompt: 'Hello, are you working?'}"
+ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt "{prompt: 'Hello, are you working?'}"
 ```
 
 # 🏗️ Architecture
@@ -208,8 +208,6 @@ For issues or questions:
 - Visit: <a href="http://www.cssr4africa.org">www.cssr4africa.org</a>
 
 # 📜 License
-Copyright (C) 2023 CSSR4Africa Consortium  
-Funded by African Engineering and Technology Network (Afretec)  
-Inclusive Digital Transformation Research Grant Programme
+Copyright (C) 2023 Upanzi Network
 
-2026-01-11 (Updated for ROS2)
+2026-01-11
