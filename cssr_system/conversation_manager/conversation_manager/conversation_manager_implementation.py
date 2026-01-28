@@ -74,7 +74,6 @@ class Colors:
     BG_CYAN = '\033[46m'
     BG_BLUE = '\033[44m'
 
-
 def log_verbose(message: str) -> None:
     """Log message only if verbose mode is enabled"""
     config = get_config()

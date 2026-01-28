@@ -3,27 +3,27 @@
 <package format="3">
   <name>behavior_controller</name>
   <version>1.0.0</version>
-  <description>ROS2 Python BehaviorTree package for museum tour guide robot</description>
+  <description>C++ implementation of the behavior controller</description>
   <maintainer email="yohatad000@gmail.com">Yohannes Haile</maintainer>
   <license>Apache-2.0</license>
 
-  <buildtool_depend>ament_python</buildtool_depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>rosidl_default_generators</buildtool_depend>
 
-  <depend>rclpy</depend>
+  <depend>rclcpp</depend>
   <depend>std_msgs</depend>
   <depend>geometry_msgs</depend>
-  <depend>sensor_msgs</depend>
-  <depend>nav2_msgs</depend>
+  <depend>behaviortree_cpp</depend>
+  <depend>yaml-cpp</depend>
+  <exec_depend>rosidl_default_runtime</exec_depend>
 
-  <exec_depend>py-trees</exec_depend>
-  <exec_depend>py-trees-ros-interfaces</exec_depend>
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
 
-  <test_depend>ament_copyright</test_depend>
-  <test_depend>ament_flake8</test_depend>
-  <test_depend>ament_pep257</test_depend>
-  <test_depend>python3-pytest</test_depend>
+  <!-- Required for interface packages -->
+  <member_of_group>rosidl_interface_packages</member_of_group>
 
   <export>
-    <build_type>ament_python</build_type>
+    <build_type>ament_cmake</build_type>
   </export>
 </package>
