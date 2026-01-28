@@ -28,7 +28,7 @@ locations:
       x: 6.0
       y: 8.0
       z: 0.0
-    pre_gesture_message_english: "Our first stop is crucial – establishing your digital identity. Here a researcher will get you registered for a National Digital ID"
+    pre_gesture_message_english: "Our first stop is crucial 0 establishing your digital identity. Here a researcher will get you registered for a National Digital ID"
     pre_gesture_message_kinyarwanda: "Iyi yitwa pepa humanoyidi roboti"
     post_gesture_message_english: "Please introduce yourself, and help our citizen out"
     post_gesture_message_kinyarwanda: "Tuyikoresha mubushakashatsi mubijyanye nimibanire hamwe nimikoranire hagati yabantu ndetse naza robo"

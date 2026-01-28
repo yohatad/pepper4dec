@@ -110,6 +110,7 @@ The node provides ROS2 services for knowledge base management and querying.
 ## Service Structure
 
 ### 1. `/create_collection` Service (`cssr_interfaces/srv/LanguageModelCreateCollection`)
+### 1. `/create_collection` Service (`cssr_interfaces/srv/LanguageModelCreateCollection`)
 Creates and populates a new knowledge base collection from a JSON file.
 
 **Request Fields:**
@@ -121,6 +122,7 @@ Creates and populates a new knowledge base collection from a JSON file.
 - `success` (int32): 1 for success, 0 for failure
 - `message` (string): Status message
 
+### 2. `/rag_prompt` Service (`cssr_interfaces/srv/LanguageModelPrompt`)
 ### 2. `/rag_prompt` Service (`cssr_interfaces/srv/LanguageModelPrompt`)
 Query the knowledge base with a question.
 
@@ -141,6 +143,7 @@ ros2 service call /create_collection cssr_interfaces/srv/LanguageModelCreateColl
 2. **Query the Knowledge Base**
 ```bash
 ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
+ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
   "{prompt: 'What is the Upanzi Network?'}"
 ```
 
@@ -148,13 +151,16 @@ ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
 ```bash
 # Ask about specific projects
 ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
+ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
   "{prompt: 'What projects are focused on cybersecurity?'}"
 
 # Ask about facilities
 ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
+ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
   "{prompt: 'Tell me about the Digital Experience Center.'}"
 
 # Ask about research areas
+ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
 ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
   "{prompt: 'What are the main thrust areas of research?'}"
 ```
@@ -170,6 +176,7 @@ ros2 node list
 ros2 service list
 
 # Test the service with a simple query
+ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt "{prompt: 'Hello, are you working?'}"
 ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt "{prompt: 'Hello, are you working?'}"
 ```
 
