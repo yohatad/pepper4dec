@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-animate_behavior.py
+animate_behavior.py - Fully non-blocking version
 
-Simplified action server with extensive debug output.
+The execute_callback returns immediately and everything is handled by timers.
 """
 
 import rclpy
@@ -12,6 +12,8 @@ from typing import List
 from dataclasses import dataclass
 from rclpy.node import Node
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
+from rclpy.executors import MultiThreadedExecutor
+from rclpy.callback_groups import ReentrantCallbackGroup
 
 from geometry_msgs.msg import Twist
 from naoqi_bridge_msgs.msg import JointAnglesWithSpeed
@@ -20,22 +22,25 @@ from cssr_interfaces.action import AnimateBehavior
 
 @dataclass
 class JointDef:
-    """Simple joint definition"""
+    """Joint definition with limits and home positions"""
     names: List[str]
     min: List[float]
     max: List[float]
     home: List[float]
     factors: List[float]
 
-class AnimateBehaviorSimple(Node):
-    """Simplified animate behavior with debug output"""
+class AnimateBehaviorServer(Node):
+    """Animate behavior action server for Pepper robot"""
     
     def __init__(self):
         super().__init__('animate_behavior')
         
         self.get_logger().info('='*60)
-        self.get_logger().info('INITIALIZING ANIMATE BEHAVIOR NODE')
+        self.get_logger().info('ANIMATE BEHAVIOR NODE (NON-BLOCKING)')
         self.get_logger().info('='*60)
+        
+        # Use reentrant callback group
+        self.callback_group = ReentrantCallbackGroup()
         
         # Joint definitions
         self.joints = {
@@ -76,378 +81,342 @@ class AnimateBehaviorSimple(Node):
             )
         }
         
-        self.get_logger().info(f'Loaded {len(self.joints)} limb definitions')
-        for limb_name, joint_def in self.joints.items():
-            self.get_logger().info(f'  {limb_name}: {len(joint_def.names)} joints')
-        
-        # State
+        # Animation state
         self.active = False
         self.behavior = ''
         self.range = 0.5
+        self.limbs_to_animate = []
         self.last_gesture = {}
         self.last_rotation = 0.0
         self.gesture_count = 0
         
-        # Timing
-        self.gesture_interval = 0.2  # seconds
-        self.rotation_interval = 2.0  # seconds
+        # Goal tracking
+        self.current_goal_handle = None
+        self.start_time = 0.0
+        self.duration = 0.0
         
-        # Joint states from robot
-        self.current_joint_states = {}
-        self.joint_states_received = False
+        # Timing intervals
+        self.gesture_interval = 3.0  # seconds between gestures
+        self.rotation_interval = 5.0  # seconds between rotations
         
         # Publishers
-        self.get_logger().info('Creating publishers...')
-        self.joint_pub = self.create_publisher(JointAnglesWithSpeed, '/joint_angles', 10)
-        self.vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
-        self.get_logger().info(f'  Joint publisher: /joint_angles')
-        self.get_logger().info(f'  Velocity publisher: /cmd_vel')
+        self.joint_pub = self.create_publisher(
+            JointAnglesWithSpeed, 
+            '/joint_angles', 
+            10
+        )
+        self.vel_pub = self.create_publisher(
+            Twist, 
+            '/cmd_vel', 
+            10
+        )
         
         # Subscriber
-        self.get_logger().info('Creating subscriber...')
         self.joint_sub = self.create_subscription(
             JointState, 
             '/joint_states', 
             self.joint_states_callback, 
             10
         )
-        self.get_logger().info(f'  Joint states subscriber: /joint_states')
         
         # Action server
-        self.get_logger().info('Creating action server...')
         self._action_server = ActionServer(
             self, 
             AnimateBehavior, 
             'animate_behavior',
-            execute_callback=self.execute,
+            execute_callback=self.execute_callback,
             goal_callback=self.goal_callback,
-            cancel_callback=self.cancel_callback
+            cancel_callback=self.cancel_callback,
+            callback_group=self.callback_group
         )
-        self.get_logger().info(f'  Action server: /animate_behavior')
         
-        # Main timer
-        self.get_logger().info('Creating update timer at 20Hz...')
-        self.timer = self.create_timer(0.05, self.update)
+        # Main animation timer - 10Hz
+        self.animation_timer = self.create_timer(
+            0.1, 
+            self.animation_update,
+            callback_group=self.callback_group
+        )
         
-        self.get_logger().info('='*60)
-        self.get_logger().info('NODE READY - Waiting for action goals')
-        self.get_logger().info('Send a goal with:')
-        self.get_logger().info('  ros2 action send_goal /animate_behavior \\')
-        self.get_logger().info('    animate_behavior_interfaces/action/AnimateBehavior \\')
-        self.get_logger().info('    "{behavior_type: \'All\', selected_range: 0.5, duration_seconds: 10}" \\')
-        self.get_logger().info('    --feedback')
+        # Feedback timer - 2Hz
+        self.feedback_timer = self.create_timer(
+            0.5,
+            self.feedback_update,
+            callback_group=self.callback_group
+        )
+        
+        self.get_logger().info('✓ Node ready, timers running at 10Hz and 2Hz')
+        self.get_logger().info('✓ Waiting for goals on /animate_behavior')
         self.get_logger().info('='*60)
     
     def joint_states_callback(self, msg: JointState):
-        """Receive joint states from robot"""
-        if not self.joint_states_received:
-            self.get_logger().info(f'✓ Received joint states: {len(msg.name)} joints')
-            self.joint_states_received = True
-        
-        for name, position in zip(msg.name, msg.position):
-            self.current_joint_states[name] = position
+        """Receive joint states"""
+        pass
     
     def goal_callback(self, goal_request):
-        """Handle incoming goal"""
-        self.get_logger().info('')
-        self.get_logger().info('='*60)
-        self.get_logger().info('GOAL RECEIVED')
-        self.get_logger().info('='*60)
-        self.get_logger().info(f'  behavior_type: {goal_request.behavior_type}')
-        self.get_logger().info(f'  selected_range: {goal_request.selected_range}')
-        self.get_logger().info(f'  duration_seconds: {goal_request.duration_seconds}')
+        """Validate goal"""
+        self.get_logger().info(f'Goal: {goal_request.behavior_type}, '
+                              f'range={goal_request.selected_range}, '
+                              f'duration={goal_request.duration_seconds}s')
         
-        # Validate
         valid_behaviors = ['All', 'body', 'hands', 'rotation']
         if goal_request.behavior_type not in valid_behaviors:
-            self.get_logger().error(f'❌ Invalid behavior type: {goal_request.behavior_type}')
-            self.get_logger().error(f'   Valid types: {valid_behaviors}')
+            self.get_logger().error(f'Invalid behavior: {goal_request.behavior_type}')
             return GoalResponse.REJECT
         
         if not 0.0 <= goal_request.selected_range <= 1.0:
-            self.get_logger().error(f'❌ Invalid range: {goal_request.selected_range}')
-            self.get_logger().error(f'   Must be between 0.0 and 1.0')
+            self.get_logger().error(f'Invalid range: {goal_request.selected_range}')
             return GoalResponse.REJECT
         
-        self.get_logger().info('✓ Goal validated and ACCEPTED')
-        self.get_logger().info('='*60)
+        self.get_logger().info('✓ Goal accepted')
         return GoalResponse.ACCEPT
     
     def cancel_callback(self, goal_handle):
-        """Handle cancel request"""
-        self.get_logger().warn('')
-        self.get_logger().warn('⚠ CANCEL REQUESTED')
+        """Handle cancellation"""
+        self.get_logger().info('Cancel requested')
         return CancelResponse.ACCEPT
     
-    def execute(self, goal_handle):
-        """Execute action"""
-        self.get_logger().info('')
+    def execute_callback(self, goal_handle):
+        """Execute - returns immediately, timers do the work"""
         self.get_logger().info('='*60)
-        self.get_logger().info('STARTING EXECUTION')
+        self.get_logger().info('EXECUTE CALLBACK STARTED')
         self.get_logger().info('='*60)
         
-        # Stop previous
+        # Stop previous animation
         if self.active:
-            self.get_logger().warn('⚠ Stopping previous execution')
-            self.stop()
+            self.stop_animation()
         
-        # Initialize
+        # Setup new animation
         goal = goal_handle.request
         self.behavior = goal.behavior_type
         self.range = goal.selected_range
-        self.active = True
+        self.duration = goal.duration_seconds
+        self.start_time = time.time()
         self.gesture_count = 0
-        start_time = time.time()
+        self.current_goal_handle = goal_handle
         
-        # Get limbs to animate
-        limbs = self.get_limbs(self.behavior)
-        self.get_logger().info(f'Limbs to animate: {limbs}')
+        # Get limbs
+        self.limbs_to_animate = self.get_limbs_for_behavior(self.behavior)
+        self.get_logger().info(f'Animating: {", ".join(self.limbs_to_animate) if self.limbs_to_animate else "rotation only"}')
         
-        # Reset timers
-        self.last_gesture = {}
-        for limb in limbs:
-            self.last_gesture[limb] = 0.0
+        # Initialize timing
+        self.last_gesture = {limb: 0.0 for limb in self.limbs_to_animate}
         self.last_rotation = 0.0
         
-        self.get_logger().info(f'Initialized {len(self.last_gesture)} limb timers')
-        
         # Move to home
-        self.get_logger().info('Moving to home positions...')
-        self.move_home(limbs)
-        self.get_logger().info('✓ Home positions sent')
+        self.get_logger().info('Moving to home...')
+        for limb in self.limbs_to_animate:
+            self.move_to_home(limb)
         
+        # Activate - timers will now do the work
+        self.active = True
+        
+        self.get_logger().info('✓ Animation ACTIVE - returning from execute')
+        self.get_logger().info('  Timers will handle animation and completion')
         self.get_logger().info('='*60)
-        self.get_logger().info('EXECUTION ACTIVE - Timer will handle updates')
-        self.get_logger().info('='*60)
         
-        # Monitor loop
-        rate = self.create_rate(10)
-        feedback_counter = 0
-        
-        while rclpy.ok() and self.active:
-            # Check cancel
-            if goal_handle.is_cancel_requested:
-                self.get_logger().warn('')
-                self.get_logger().warn('❌ Goal cancelled by client')
-                self.stop()
-                goal_handle.canceled()
-                return AnimateBehavior.Result(
-                    success=False,
-                    message='Cancelled by client',
-                    total_duration=time.time() - start_time
-                )
-            
-            # Check duration
-            elapsed = time.time() - start_time
-            if goal.duration_seconds > 0 and elapsed >= goal.duration_seconds:
-                self.get_logger().info('')
-                self.get_logger().info(f'✓ Duration reached: {elapsed:.1f}s')
-                break
-            
-            # Publish feedback
-            feedback_counter += 1
-            if feedback_counter >= 10:  # Every second (10 * 0.1s)
-                feedback = AnimateBehavior.Feedback()
-                feedback.current_limb = self.behavior
-                feedback.gestures_completed = self.gesture_count
-                feedback.elapsed_time = elapsed
-                feedback.is_running = self.active
-                goal_handle.publish_feedback(feedback)
-                
-                self.get_logger().info(
-                    f'[{elapsed:.1f}s] Gestures: {self.gesture_count}, Active: {self.active}'
-                )
-                feedback_counter = 0
-            
-            rate.sleep()
-        
-        # Complete
-        self.get_logger().info('')
-        self.get_logger().info('='*60)
-        self.get_logger().info('EXECUTION COMPLETE')
-        self.get_logger().info('='*60)
-        self.stop()
-        goal_handle.succeed()
-        
-        result = AnimateBehavior.Result(
+        # Return immediately - don't block!
+        # The animation_update and feedback_update timers handle everything
+        return AnimateBehavior.Result(
             success=True,
-            message=f'Completed {self.gesture_count} gestures',
-            total_duration=time.time() - start_time
+            message='Animation started',
+            total_duration=0.0
         )
-        
-        self.get_logger().info(f'✓ Success: {result.message}')
-        self.get_logger().info(f'✓ Duration: {result.total_duration:.1f}s')
-        self.get_logger().info('='*60)
-        
-        return result
     
-    def update(self):
-        """Main update loop - 20Hz"""
+    def animation_update(self):
+        """Main animation loop - 10Hz"""
         if not self.active:
+            return
+        
+        # Check duration
+        if self.duration > 0:
+            elapsed = time.time() - self.start_time
+            if elapsed >= self.duration:
+                self.get_logger().info(f'Duration complete: {elapsed:.1f}s')
+                self.complete_goal()
+                return
+        
+        # Check cancellation
+        if self.current_goal_handle and self.current_goal_handle.is_cancel_requested:
+            self.get_logger().info('Goal cancelled')
+            self.cancel_goal()
             return
         
         now = time.time()
         
-        # Update limbs
-        for limb in self.last_gesture.keys():
-            time_since = now - self.last_gesture[limb]
-            
-            if time_since >= self.gesture_interval:
-                self.get_logger().info(
-                    f'[UPDATE] {limb}: time_since={time_since:.3f}s >= interval={self.gesture_interval}s'
-                )
-                self.animate_limb(limb)
-                self.last_gesture[limb] = now
-                self.gesture_count += 1
+        # Animate limbs
+        for limb in self.limbs_to_animate:
+            if limb in self.last_gesture:
+                time_since = now - self.last_gesture[limb]
+                if time_since >= self.gesture_interval:
+                    self.animate_limb(limb)
+                    self.last_gesture[limb] = now
+                    self.gesture_count += 1
         
-        # Update rotation
-        if 'rotation' in self.behavior or self.behavior == 'All':
+        # Animate rotation
+        if self.behavior in ['All', 'rotation']:
             time_since_rot = now - self.last_rotation
-            
             if time_since_rot >= self.rotation_interval:
-                self.get_logger().info(
-                    f'[UPDATE] Rotation: time_since={time_since_rot:.3f}s >= interval={self.rotation_interval}s'
-                )
                 self.animate_rotation()
                 self.last_rotation = now
     
+    def feedback_update(self):
+        """Publish feedback - 2Hz"""
+        if not self.active or not self.current_goal_handle:
+            return
+        
+        elapsed = time.time() - self.start_time
+        
+        feedback = AnimateBehavior.Feedback()
+        feedback.current_limb = self.behavior
+        feedback.gestures_completed = self.gesture_count
+        feedback.elapsed_time = elapsed
+        feedback.is_running = self.active
+        
+        self.current_goal_handle.publish_feedback(feedback)
+        
+        self.get_logger().info(f'[{elapsed:.1f}s] Gestures: {self.gesture_count}')
+    
+    def complete_goal(self):
+        """Complete the current goal"""
+        if not self.current_goal_handle:
+            return
+        
+        elapsed = time.time() - self.start_time
+        
+        self.stop_animation()
+        self.current_goal_handle.succeed()
+        
+        result = AnimateBehavior.Result(
+            success=True,
+            message=f'Completed {self.gesture_count} gestures',
+            total_duration=elapsed
+        )
+        
+        self.get_logger().info('='*60)
+        self.get_logger().info(f'✓ Complete: {result.message} in {elapsed:.1f}s')
+        self.get_logger().info('='*60)
+        
+        self.current_goal_handle = None
+    
+    def cancel_goal(self):
+        """Cancel the current goal"""
+        if not self.current_goal_handle:
+            return
+        
+        elapsed = time.time() - self.start_time
+        
+        self.stop_animation()
+        self.current_goal_handle.canceled()
+        
+        self.get_logger().info(f'✓ Cancelled after {elapsed:.1f}s')
+        
+        self.current_goal_handle = None
+    
     def animate_limb(self, limb: str):
         """Animate one limb"""
-        self.get_logger().info(f'')
-        self.get_logger().info(f'--- Animating {limb} ---')
+        if limb not in self.joints:
+            return
         
         joint_def = self.joints[limb]
-        target = []
+        target_angles = []
         
-        # Generate random position
         for i in range(len(joint_def.names)):
             center = joint_def.home[i]
             full_range = joint_def.max[i] - joint_def.min[i]
-            allowed = full_range * joint_def.factors[i] * self.range / 2.0
+            allowed_range = full_range * joint_def.factors[i] * self.range / 2.0
             
-            low = max(center - allowed, joint_def.min[i])
-            high = min(center + allowed, joint_def.max[i])
+            min_angle = max(center - allowed_range, joint_def.min[i])
+            max_angle = min(center + allowed_range, joint_def.max[i])
             
-            random_val = random.uniform(low, high)
-            target.append(random_val)
-            
-            self.get_logger().info(
-                f'  {joint_def.names[i]}: '
-                f'home={center:.2f}, '
-                f'range=[{low:.2f}, {high:.2f}], '
-                f'target={random_val:.2f}'
-            )
+            target = random.uniform(min_angle, max_angle)
+            target_angles.append(target)
         
-        # Send command
-        self.get_logger().info(f'  Publishing to /joint_angles')
-        self.send_joints(joint_def.names, target, 0.15)
-        self.get_logger().info(f'✓ {limb} command sent')
+        self.send_joint_command(joint_def.names, target_angles, speed=0.2)
+        self.get_logger().info(f'  → {limb}')
     
     def animate_rotation(self):
-        """Animate rotation"""
-        vel = random.uniform(-0.3 * self.range, 0.3 * self.range)
-        
-        self.get_logger().info('')
-        self.get_logger().info('--- Animating Rotation ---')
-        self.get_logger().info(f'  Angular velocity: {vel:.3f} rad/s')
-        self.get_logger().info(f'  Publishing to /cmd_vel')
+        """Rotate base"""
+        angular_vel = random.uniform(-0.3 * self.range, 0.3 * self.range)
         
         msg = Twist()
-        msg.angular.z = vel
+        msg.angular.z = angular_vel
         self.vel_pub.publish(msg)
         
-        self.get_logger().info(f'✓ Rotation command sent')
+        self.get_logger().info(f'  → Rotation: {angular_vel:.2f} rad/s')
         
-        # Schedule stop
-        def stop():
-            self.get_logger().info('  Stopping rotation')
-            msg = Twist()
-            self.vel_pub.publish(msg)
+        # Stop after half interval
+        def stop_rotation():
+            if self.active:
+                msg = Twist()
+                self.vel_pub.publish(msg)
         
-        self.create_timer(self.rotation_interval / 2, stop, oneshot=True)
+        self.create_timer(
+            self.rotation_interval / 2,
+            stop_rotation,
+            callback_group=self.callback_group
+        )
     
-    def send_joints(self, names: List[str], angles: List[float], speed: float):
+    def send_joint_command(self, joint_names: List[str], angles: List[float], speed: float):
         """Send joint command"""
         msg = JointAnglesWithSpeed()
-        msg.joint_names = names
+        msg.joint_names = joint_names
         msg.joint_angles = angles
         msg.speed = speed
         msg.relative = 0
         
-        # Debug output
-        self.get_logger().info(f'  Message contents:')
-        self.get_logger().info(f'    joint_names: {msg.joint_names}')
-        self.get_logger().info(f'    joint_angles: {[f"{a:.2f}" for a in msg.joint_angles]}')
-        self.get_logger().info(f'    speed: {msg.speed}')
-        self.get_logger().info(f'    relative: {msg.relative}')
-        
         self.joint_pub.publish(msg)
-        
-        # Check if anyone is listening
-        num_connections = self.joint_pub.get_subscription_count()
-        if num_connections == 0:
-            self.get_logger().warn(f'  ⚠ WARNING: No subscribers on /joint_angles!')
-            self.get_logger().warn(f'  ⚠ Is naoqi_driver running?')
-        else:
-            self.get_logger().info(f'  ✓ Message published ({num_connections} subscribers)')
     
-    def get_limbs(self, behavior: str) -> List[str]:
-        """Get limbs for behavior"""
+    def get_limbs_for_behavior(self, behavior: str) -> List[str]:
+        """Get limbs to animate"""
         limbs = []
         
         if behavior in ['All', 'body']:
             limbs.extend(['RArm', 'LArm', 'Leg'])
-            self.get_logger().info(f'  Added body limbs: RArm, LArm, Leg')
         
         if behavior in ['All', 'hands']:
             limbs.extend(['RHand', 'LHand'])
-            self.get_logger().info(f'  Added hand limbs: RHand, LHand')
-        
-        if behavior == 'rotation':
-            self.get_logger().info(f'  Rotation only (no limbs)')
         
         return limbs
     
-    def move_home(self, limbs: List[str]):
-        """Move to home positions"""
-        for limb in limbs:
-            joint_def = self.joints[limb]
-            self.get_logger().info(f'  {limb} -> home: {[f"{h:.2f}" for h in joint_def.home]}')
-            self.send_joints(joint_def.names, joint_def.home, 0.2)
+    def move_to_home(self, limb: str):
+        """Move to home position"""
+        if limb not in self.joints:
+            return
         
-        self.get_logger().info('  Waiting 0.5s for movement...')
-        time.sleep(0.5)
+        joint_def = self.joints[limb]
+        self.send_joint_command(joint_def.names, joint_def.home, speed=0.2)
     
-    def stop(self):
-        """Stop all movement"""
-        self.get_logger().info('')
-        self.get_logger().info('--- STOPPING ---')
+    def stop_animation(self):
+        """Stop animation"""
+        self.get_logger().info('Stopping...')
         
         self.active = False
         
-        # Stop limbs
-        for limb in self.last_gesture.keys():
-            joint_def = self.joints[limb]
-            self.get_logger().info(f'  Stopping {limb}')
-            self.send_joints(joint_def.names, joint_def.home, 0.0)
+        # Return to home
+        for limb in self.limbs_to_animate:
+            self.move_to_home(limb)
         
         # Stop rotation
-        self.get_logger().info(f'  Stopping rotation')
         msg = Twist()
         self.vel_pub.publish(msg)
         
+        self.limbs_to_animate = []
         self.last_gesture = {}
-        self.get_logger().info('✓ All movement stopped')
 
 def main(args=None):
     rclpy.init(args=args)
     
+    node = AnimateBehaviorServer()
+    
+    executor = MultiThreadedExecutor(num_threads=4)
+    executor.add_node(node)
+    
     try:
-        node = AnimateBehaviorSimple()
-        rclpy.spin(node)
+        executor.spin()
     except KeyboardInterrupt:
-        print('\n[INFO] Keyboard interrupt received')
+        pass
     finally:
+        node.destroy_node()
         rclpy.shutdown()
 
 if __name__ == '__main__':

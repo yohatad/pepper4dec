@@ -14,14 +14,14 @@ Version: v1.0
 """
 
 import rclpy
-from .animate_behavior_implementation import AnimateBehaviorSimple
+from .animate_behavior_implementation import AnimateBehaviorServer
 
 
 def main(args=None):
     rclpy.init(args=args)
     
     try:
-        action_server = AnimateBehaviorSimple()
+        action_server = AnimateBehaviorServer()
         
         try:
             rclpy.spin(action_server)
