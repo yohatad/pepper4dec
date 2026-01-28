@@ -1,5 +1,5 @@
 <div align="center">
-<h1> Conversation Manager Package for Pepper Robot Lab Assistant (ROS2) </h1>
+<h1> Conversation Manager Package for Pepper Robot Assistant (ROS2) </h1>
 </div>
 
 <div align="center">
@@ -9,7 +9,7 @@
 The **Conversation Manager Package** implements a **Retrieval-Augmented Generation (RAG)** system for the Pepper robot to serve as a lab assistant at the Upanzi Network, Carnegie Mellon University Africa. The system allows Pepper to answer questions about Upanzi Network's research, projects, facilities, and impact areas using a knowledge base built from structured JSON data.
 
 ## Key Features
-- **ROS2 Native**: Built for ROS2 Humble/Humble+
+- **ROS2 Native**: Built for ROS2 Humble
 - **Retrieval-Augmented Generation**: Combines vector search with large language models for accurate, context-aware responses
 - **ChromaDB Integration**: Local vector database for privacy-preserving knowledge storage
 - **Configurable LLM Support**: Compatible with any OpenAI-compatible API (DeepSeek, Groq, etc.)
@@ -110,7 +110,6 @@ The node provides ROS2 services for knowledge base management and querying.
 ## Service Structure
 
 ### 1. `/create_collection` Service (`cssr_interfaces/srv/LanguageModelCreateCollection`)
-### 1. `/create_collection` Service (`cssr_interfaces/srv/LanguageModelCreateCollection`)
 Creates and populates a new knowledge base collection from a JSON file.
 
 **Request Fields:**
@@ -122,7 +121,6 @@ Creates and populates a new knowledge base collection from a JSON file.
 - `success` (int32): 1 for success, 0 for failure
 - `message` (string): Status message
 
-### 2. `/rag_prompt` Service (`cssr_interfaces/srv/LanguageModelPrompt`)
 ### 2. `/rag_prompt` Service (`cssr_interfaces/srv/LanguageModelPrompt`)
 Query the knowledge base with a question.
 
@@ -143,7 +141,6 @@ ros2 service call /create_collection cssr_interfaces/srv/LanguageModelCreateColl
 2. **Query the Knowledge Base**
 ```bash
 ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
-ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
   "{prompt: 'What is the Upanzi Network?'}"
 ```
 
@@ -151,16 +148,13 @@ ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
 ```bash
 # Ask about specific projects
 ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
-ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
   "{prompt: 'What projects are focused on cybersecurity?'}"
 
 # Ask about facilities
 ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
-ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
   "{prompt: 'Tell me about the Digital Experience Center.'}"
 
 # Ask about research areas
-ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
 ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
   "{prompt: 'What are the main thrust areas of research?'}"
 ```
@@ -176,7 +170,6 @@ ros2 node list
 ros2 service list
 
 # Test the service with a simple query
-ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt "{prompt: 'Hello, are you working?'}"
 ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt "{prompt: 'Hello, are you working?'}"
 ```
 
