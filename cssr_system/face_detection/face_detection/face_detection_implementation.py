@@ -3,7 +3,7 @@ face_detection_implementation.py Implementation code for running the Face and Mu
 
 Author: Yohannes Tadesse Haile
 Date: April 18, 2025
-Version: v1.0
+Version: v1.2
 
 This program comes with ABSOLUTELY NO WARRANTY.
 """
@@ -17,6 +17,7 @@ import multiprocessing
 import yaml
 import random
 import threading
+import copy
 from ament_index_python.packages import get_package_share_directory
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.node import Node
@@ -27,6 +28,7 @@ from message_filters import ApproximateTimeSynchronizer, Subscriber
 from geometry_msgs.msg import Point
 from typing import Tuple, List, Dict, Optional
 from cssr_interfaces.msg import FaceDetection, ObjectDetection
+from scipy.optimize import linear_sum_assignment
 
 def load_configuration() -> Dict:
     """
@@ -43,7 +45,8 @@ def load_configuration() -> Dict:
         'verboseMode': True,
         'imageTimeout': 2.0,
         'sixdrepnetConfidence': 0.65,
-        'sixdrepnetHeadposeAngle': 10
+        'sixdrepnetHeadposeAngle': 10,
+        'requirePersonDetection': True  # New parameter
     }
     
     try:
@@ -82,6 +85,7 @@ class FaceDetectionNode(Node):
         self.camera_type = config['camera']
         self.verbose_mode = config['verboseMode']
         self.image_timeout = config['imageTimeout']
+        self.require_person_detection = config.get('requirePersonDetection', True)
         
         self.node_name = self.get_name()
         self.timer_start = self.get_clock().now()
@@ -95,11 +99,23 @@ class FaceDetectionNode(Node):
         self.latest_object_detections = None
         self.object_detections_lock = threading.Lock()
         
-        # Create subscriber for object detection messages
-        self.object_detection_sub = self.create_subscription(ObjectDetection, '/objectDetection/data', self.object_detection_callback, 10)
+        # Face ID counter for standalone mode
+        self.next_face_id = 1
+        self.face_id_map = {}  # Maps face tracking across frames
         
-        if self.verbose_mode:
-            self.get_logger().info(f"{self.node_name}: Subscribed to /objectDetection/data")
+        # Only subscribe to object detection if required
+        if self.require_person_detection:
+            self.object_detection_sub = self.create_subscription(
+                ObjectDetection, 
+                '/objectDetection/data', 
+                self.object_detection_callback, 
+                10
+            )
+            if self.verbose_mode:
+                self.get_logger().info(f"{self.node_name}: Person detection ENABLED - subscribed to /objectDetection/data")
+        else:
+            if self.verbose_mode:
+                self.get_logger().info(f"{self.node_name}: Person detection DISABLED - running standalone face detection")
 
         # Start visualization timer (30 Hz)
         self.vis_timer = self.create_timer(1.0 / 30.0, self.visualization_callback)
@@ -115,8 +131,6 @@ class FaceDetectionNode(Node):
         with self.frame_lock:
             if self.latest_frame is not None:
                 color_frame = self.latest_frame.copy()
-            # depth_image is updated in sync callback; safe to read without copy for view,
-            # but copy if you plan heavy ops
             if self.depth_image is not None:
                 depth_vis = self.make_depth_vis(self.depth_image)
 
@@ -133,7 +147,6 @@ class FaceDetectionNode(Node):
             except Exception as e:
                 self.get_logger().warn(f"imshow failed (likely headless): {e}")
 
-            # Publish only when verboseMode=True (as per your intent)
             try:
                 if color_frame is not None:
                     msg = self.bridge.cv2_to_imgmsg(color_frame, encoding="bgr8")
@@ -177,10 +190,13 @@ class FaceDetectionNode(Node):
 
         return None
 
-    def wait_for_topics(self, color_topic: str, depth_topic: str, object_detection_topic: str, timeout: float = 30.0) -> bool:
+    def wait_for_topics(self, color_topic: str, depth_topic: str, object_detection_topic: Optional[str] = None, timeout: float = 30.0) -> bool:
         """Wait for topics to have active publishers."""
-        self.get_logger().info(f"Waiting for topics: {color_topic}, {depth_topic}, {object_detection_topic}")
-        topics_to_wait = [color_topic, depth_topic, object_detection_topic]
+        topics_to_wait = [color_topic, depth_topic]
+        if object_detection_topic and self.require_person_detection:
+            topics_to_wait.append(object_detection_topic)
+            
+        self.get_logger().info(f"Waiting for topics: {topics_to_wait}")
         
         start_time = self.get_clock().now()
         warning_interval = 5.0
@@ -237,8 +253,8 @@ class FaceDetectionNode(Node):
                 color_msg_type = Image
                 depth_msg_type = Image
 
-            # Wait for topics including object detection
-            object_detection_topic = "/objectDetection/data"
+            # Wait for topics (conditionally wait for object detection)
+            object_detection_topic = "/objectDetection/data" if self.require_person_detection else None
             if not self.wait_for_topics(color_topic, depth_topic, object_detection_topic):
                 return False
 
@@ -248,7 +264,8 @@ class FaceDetectionNode(Node):
             
             self.get_logger().info(f"Subscribed to {color_topic}")
             self.get_logger().info(f"Subscribed to {depth_topic}")
-            self.get_logger().info(f"Subscribed to {object_detection_topic}")
+            if self.require_person_detection:
+                self.get_logger().info(f"Subscribed to {object_detection_topic}")
 
             # Set up synchronizer
             slop = 5.0 if self.camera_type == "pepper" else 0.1
@@ -354,10 +371,6 @@ class FaceDetectionNode(Node):
             depth_f32 = np.array(depth, dtype=np.float32)
             depth_f32 = np.nan_to_num(depth_f32, nan=0.0, posinf=0.0, neginf=0.0)
 
-            # Optional: clamp far distances to improve local contrast, e.g., 0..3m
-            # depth_f32 = np.clip(depth_f32, 0.0, 3.0)
-
-            # Normalize to 0..255; if your depth is in millimeters, scale first
             # Detect likely units (heuristic): if max > 100, assume mm
             m = float(np.max(depth_f32)) if depth_f32.size else 0.0
             if m > 1000.0:             # looks like millimeters
@@ -409,6 +422,9 @@ class FaceDetectionNode(Node):
     def publish_face_detection(self, tracking_data: List[Dict]):
         """Publish face detection results."""
         if not tracking_data:
+            # Publish empty message
+            face_msg = FaceDetection()
+            self.pub_gaze.publish(face_msg)
             return
 
         face_msg = FaceDetection()
@@ -421,9 +437,9 @@ class FaceDetectionNode(Node):
         self.pub_gaze.publish(face_msg)
 
     def object_detection_callback(self, msg: ObjectDetection):
-        """Callback for object detection messages. Default implementation stores the message."""
+        """Callback for object detection messages. Thread-safe storage with deep copy."""
         with self.object_detections_lock:
-            self.latest_object_detections = msg
+            self.latest_object_detections = copy.deepcopy(msg)
 
     def cleanup(self):
         """Clean up resources."""
@@ -501,7 +517,7 @@ class SixDrepNet(FaceDetectionNode):
             self.get_logger().error(f"{self.node_name}: Failed to get package path: {e}")
             return
 
-        # Initialize YOLOONNX model for face detection within person ROIs
+        # Initialize YOLOONNX model for face detection
         try:
             self.yolo_model = YOLOONNX(model_path=yolo_model_path, class_score_th=sixdrepnet_confidence)
             if self.verbose_mode:
@@ -509,7 +525,7 @@ class SixDrepNet(FaceDetectionNode):
         except Exception as e:
             self.yolo_model = None
             self.get_logger().error(f"{self.node_name}: Failed to initialize YOLOONNX model: {e}")
-            return  # Exit early if initialization fails
+            return
 
         # Initialize SixDrepNet ONNX session
         try:
@@ -534,7 +550,7 @@ class SixDrepNet(FaceDetectionNode):
                     self.get_logger().info(f"{self.node_name}: CUDAExecutionProvider is active. Running on GPU for faster inference.")
         except Exception as e:
             self.get_logger().error(f"{self.node_name}: Failed to initialize SixDrepNet ONNX session: {e}")
-            return  # Exit early if initialization fails
+            return
 
         # Set up remaining attributes
         self.mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
@@ -543,10 +559,9 @@ class SixDrepNet(FaceDetectionNode):
         if self.verbose_mode:
             self.get_logger().info(f"{self.node_name} SixDrepNet initialization complete.")
 
-        # Subscribe to topics (using parent class method)
+        # Subscribe to topics
         if not self.subscribe_topics():
             self.get_logger().error(f"{self.node_name}: Failed to subscribe to required topics. Shutting down.")
-            # Don't proceed if we can't subscribe to required topics
             return
 
         self.start_timeout_monitor()
@@ -570,17 +585,127 @@ class SixDrepNet(FaceDetectionNode):
         cv2.line(img, (int(tdx), int(tdy)), (int(x2), int(y2)), (0, 255, 0), 2)
         cv2.line(img, (int(tdx), int(tdy)), (int(x3), int(y3)), (255, 0, 0), 2)
 
+    def calculate_matching_cost(self, face: Dict, person: Dict, img_h: int, img_w: int) -> float:
+        """
+        Calculate the cost of matching a face to a person.
+        Lower cost means better match.
+        
+        Args:
+            face: Dictionary containing face information
+            person: Dictionary containing person information
+            img_h: Image height
+            img_w: Image width
+            
+        Returns:
+            float: Cost value (lower is better, np.inf if impossible match)
+        """
+        face_cx, face_cy = face['centroid']
+        px1, py1, px2, py2 = person['box']
+        
+        # Check if face centroid is inside person box
+        if not (px1 <= face_cx <= px2 and py1 <= face_cy <= py2):
+            return np.inf  # Impossible match
+        
+        # Calculate person dimensions and center
+        person_cx = (px1 + px2) / 2
+        person_cy = (py1 + py2) / 2
+        person_width = px2 - px1
+        person_height = py2 - py1
+        person_area = person_width * person_height
+        
+        if person_area == 0:
+            return np.inf
+        
+        # 1. Calculate normalized distance from face to person center
+        distance = np.sqrt((face_cx - person_cx)**2 + (face_cy - person_cy)**2)
+        normalized_distance = distance / np.sqrt(person_area)
+        
+        # 2. Calculate vertical position penalty
+        person_upper_third_y = py1 + person_height * 0.33
+        if face_cy < person_upper_third_y:
+            vertical_penalty = 0.0
+        elif face_cy < py1 + person_height * 0.5:
+            vertical_penalty = 0.5
+        else:
+            vertical_penalty = 2.0
+        
+        # 3. Size consistency check
+        face_height = face['size'][1]
+        expected_face_height_ratio = face_height / person_height
+        if 0.1 <= expected_face_height_ratio <= 0.4:
+            size_penalty = 0.0
+        else:
+            size_penalty = 1.0
+        
+        # 4. Detection confidence
+        confidence_cost = 1.0 - face['score']
+        
+        # Combine costs
+        total_cost = (
+            normalized_distance * 2.0 +
+            vertical_penalty * 1.5 +
+            size_penalty * 1.0 +
+            confidence_cost * 0.5
+        )
+        
+        return total_cost
+
+    def match_faces_to_persons_hungarian(self, faces: List[Dict], persons: List[Dict], 
+                                         img_h: int, img_w: int) -> List[Tuple[int, int]]:
+        """
+        Use Hungarian algorithm to optimally match faces to persons.
+        
+        Args:
+            faces: List of face detections
+            persons: List of person detections
+            img_h: Image height
+            img_w: Image width
+            
+        Returns:
+            List of tuples (face_idx, person_idx) for matched pairs
+        """
+        if not faces or not persons:
+            return []
+        
+        # Build cost matrix
+        n_faces = len(faces)
+        n_persons = len(persons)
+        cost_matrix = np.full((n_faces, n_persons), np.inf)
+        
+        for f_idx, face in enumerate(faces):
+            for p_idx, person in enumerate(persons):
+                cost_matrix[f_idx, p_idx] = self.calculate_matching_cost(face, person, img_h, img_w)
+        
+        # Apply Hungarian algorithm
+        try:
+            face_indices, person_indices = linear_sum_assignment(cost_matrix)
+            
+            # Filter out impossible matches
+            matches = []
+            for f_idx, p_idx in zip(face_indices, person_indices):
+                if cost_matrix[f_idx, p_idx] < np.inf:
+                    matches.append((f_idx, p_idx))
+            
+            return matches
+        except Exception as e:
+            self.get_logger().error(f"Hungarian algorithm failed: {e}")
+            return []
+
     def process_images(self):
         """Process synchronized RGB + depth images for SixDrepNet."""
         if self.color_image is None or self.depth_image is None:
             return
 
-        frame = self.process_frame(self.color_image)
+        if self.require_person_detection:
+            frame = self.process_frame_with_person_detection(self.color_image)
+        else:
+            frame = self.process_frame_standalone(self.color_image)
+            
         if frame is not None:
             self.update_latest_frame(frame)
-            
-    def process_frame(self, cv_image):
-        """Process frame with one-face-per-person tracking."""
+    
+    def process_frame_standalone(self, cv_image):
+        """Process frame with standalone face detection (no person detection required)."""
         debug_image = cv_image.copy()
         img_h, img_w = debug_image.shape[:2]
         tracking_data = []
@@ -588,44 +713,13 @@ class SixDrepNet(FaceDetectionNode):
         if not hasattr(self, "face_colors"):
             self.face_colors = {}
 
-        with self.object_detections_lock:
-            object_detections = self.latest_object_detections
-
-        if object_detections is None:
-            return debug_image
-
-        # Collect person detections
-        persons = []
-        for i in range(len(object_detections.object_label_id)):
-            if i < len(object_detections.class_names) and object_detections.class_names[i] == 'person':
-                if i < len(object_detections.centroids):
-                    centroid = object_detections.centroids[i]
-                    width = object_detections.width[i] if i < len(object_detections.width) else 100
-                    height = object_detections.height[i] if i < len(object_detections.height) else 100
-                    
-                    x1 = max(0, int(centroid.x - width / 2))
-                    y1 = max(0, int(centroid.y - height / 2))
-                    x2 = min(img_w, int(centroid.x + width / 2))
-                    y2 = min(img_h, int(centroid.y + height / 2))
-                    
-                    persons.append({
-                        'id': object_detections.object_label_id[i],
-                        'box': (x1, y1, x2, y2),
-                        'depth': centroid.z,
-                        'assigned_face': None
-                    })
-
-        if not persons:
-            return debug_image
-
         # Run face detection on full image
         face_boxes, face_scores = self.yolo_model(cv_image)
-        
-        # if self.verbose_mode:
-        #     self.get_logger().info(f"Persons: {len(persons)}, Faces: {len(face_boxes)}")
 
-        # Build list of face detections
-        faces = []
+        if self.verbose_mode:
+            self.get_logger().info(f"Standalone mode: {len(face_boxes)} faces detected")
+
+        # Process all detected faces
         for idx, (box, score) in enumerate(zip(face_boxes, face_scores)):
             fx1, fy1, fx2, fy2 = box
             face_cx = (fx1 + fx2) // 2
@@ -633,63 +727,16 @@ class SixDrepNet(FaceDetectionNode):
             face_width = fx2 - fx1
             face_height = fy2 - fy1
             
+            # Filter small faces
             if face_width < 20 or face_height < 20:
                 continue
-                
-            faces.append({
-                'box': (fx1, fy1, fx2, fy2),
-                'centroid': (face_cx, face_cy),
-                'size': (face_width, face_height),
-                'score': score,
-                'assigned': False
-            })
-
-        # Associate faces with persons (greedy: best score first)
-        faces.sort(key=lambda f: f['score'], reverse=True)
-        
-        for face in faces:
-            face_cx, face_cy = face['centroid']
             
-            best_person_idx = None
-            best_overlap = 0
-            
-            for p_idx, person in enumerate(persons):
-                if person['assigned_face'] is not None:
-                    continue  # Already has a face
-                    
-                px1, py1, px2, py2 = person['box']
-                
-                # Check if face centroid is inside person box
-                if px1 <= face_cx <= px2 and py1 <= face_cy <= py2:
-                    # Calculate how centered the face is in the upper portion of person box
-                    # (faces should be in upper half of person)
-                    person_upper_half_y = (py1 + py2) / 2
-                    if face_cy < person_upper_half_y:
-                        # Prefer faces in upper half
-                        overlap = face['score'] + 0.5
-                    else:
-                        overlap = face['score']
-                    
-                    if overlap > best_overlap:
-                        best_overlap = overlap
-                        best_person_idx = p_idx
-            
-            if best_person_idx is not None:
-                persons[best_person_idx]['assigned_face'] = face
-                face['assigned'] = True
-
-        # Process assigned faces
-        for person in persons:
-            face = person['assigned_face']
-            if face is None:
+            # Validate coordinates
+            if not (0 <= fx1 < fx2 <= img_w and 0 <= fy1 < fy2 <= img_h):
                 continue
-                
-            fx1, fy1, fx2, fy2 = face['box']
-            face_cx, face_cy = face['centroid']
-            face_width, face_height = face['size']
-            
-            # Face ID = Person ID (stable tracking!)
-            face_id = str(person['id'])
+
+            # Assign a simple face ID (could be improved with tracking)
+            face_id = f"face_{idx}"
             
             if face_id not in self.face_colors:
                 self.face_colors[face_id] = self.generate_dark_color()
@@ -706,10 +753,242 @@ class SixDrepNet(FaceDetectionNode):
             input_tensor = normalized_image.transpose(2, 0, 1)[np.newaxis, ...].astype(np.float32)
 
             # Run head pose estimation
-            yaw_pitch_roll = self.sixdrepnet_session.run(None, {'input': input_tensor})[0][0]
-            yaw_deg, pitch_deg, roll_deg = yaw_pitch_roll
+            try:
+                yaw_pitch_roll = self.sixdrepnet_session.run(None, {'input': input_tensor})[0][0]
+                yaw_deg, pitch_deg, roll_deg = yaw_pitch_roll
+            except Exception as e:
+                self.get_logger().error(f"Head pose estimation failed: {e}")
+                continue
 
             # Draw head pose axes
+            self.draw_axis(debug_image, yaw_deg, pitch_deg, roll_deg, face_cx, face_cy, size=50)
+
+            # Get depth
+            cz = self.get_depth_in_region(face_cx, face_cy, face_width, face_height)
+            cz = cz if cz is not None else 0.0
+
+            # Mutual gaze check
+            mutual_gaze = abs(yaw_deg) < self.sixdrep_angle and abs(pitch_deg) < self.sixdrep_angle
+
+            tracking_data.append({
+                'face_id': face_id,
+                'centroid': Point(x=float(face_cx), y=float(face_cy), z=float(cz)),
+                'width': float(face_width),
+                'height': float(face_height),
+                'mutual_gaze': mutual_gaze
+            })
+
+            # Draw visualizations
+            cv2.rectangle(debug_image, (fx1, fy1), (fx2, fy2), face_color, 2)
+            label = "Engaged" if mutual_gaze else "Not Engaged"
+            cv2.putText(debug_image, label, (fx1 + 10, fy1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, face_color, 2)
+            cv2.putText(debug_image, f"ID: {face_id}", (fx1 + 10, fy1 - 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, face_color, 2)
+            if cz > 0:
+                cv2.putText(debug_image, f"Depth: {cz:.2f}m", (fx1 + 10, fy2 + 20),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, face_color, 2)
+
+        self.publish_face_detection(tracking_data)
+        return debug_image
+
+    def process_frame_with_person_detection(self, cv_image):
+        """Process frame with person-constrained face detection (original logic)."""
+        debug_image = cv_image.copy()
+        img_h, img_w = debug_image.shape[:2]
+        tracking_data = []
+
+        if not hasattr(self, "face_colors"):
+            self.face_colors = {}
+
+        # Thread-safe retrieval of object detections
+        with self.object_detections_lock:
+            if self.latest_object_detections is None:
+                if self.verbose_mode:
+                    self.get_logger().warn("No object detection data available")
+                self.publish_face_detection([])
+                return debug_image
+            object_detections = copy.deepcopy(self.latest_object_detections)
+
+        # Validate array consistency
+        n_detections = len(object_detections.object_label_id)
+        
+        if self.verbose_mode and n_detections > 0:
+            person_count = sum(1 for cn in object_detections.class_names if cn == 'person')
+            self.get_logger().info(f"Object detection: {n_detections} total objects, {person_count} persons")
+        
+        if n_detections == 0:
+            if self.verbose_mode:
+                self.get_logger().debug("No objects in object detection message")
+            self.publish_face_detection([])
+            self.face_colors.clear()
+            return debug_image
+            
+        if not all(len(arr) == n_detections for arr in [
+            object_detections.class_names,
+            object_detections.centroids,
+            object_detections.width,
+            object_detections.height
+        ]):
+            self.get_logger().error("Inconsistent object detection array lengths")
+            self.publish_face_detection([])
+            return debug_image
+
+        # Collect person detections
+        persons = []
+        active_person_ids = set()
+        for i in range(n_detections):
+            if object_detections.class_names[i] == 'person':
+                centroid = object_detections.centroids[i]
+                width = object_detections.width[i]
+                height = object_detections.height[i]
+                
+                x1 = max(0, int(centroid.x - width / 2))
+                y1 = max(0, int(centroid.y - height / 2))
+                x2 = min(img_w, int(centroid.x + width / 2))
+                y2 = min(img_h, int(centroid.y + height / 2))
+                
+                # Validate bounding box
+                box_width = x2 - x1
+                box_height = y2 - y1
+                box_area = box_width * box_height
+                
+                if x2 <= x1 or y2 <= y1 or box_area < 100:
+                    if self.verbose_mode:
+                        self.get_logger().warn(f"Skipping invalid person box: area={box_area}")
+                    continue
+                
+                if x1 >= img_w or y1 >= img_h or x2 <= 0 or y2 <= 0:
+                    if self.verbose_mode:
+                        self.get_logger().warn(f"Skipping out-of-frame person box")
+                    continue
+                
+                person_id = object_detections.object_label_id[i]
+                active_person_ids.add(str(person_id))
+                
+                if self.verbose_mode:
+                    self.get_logger().info(f"Person {person_id}: box=({x1},{y1},{x2},{y2}), depth={centroid.z:.2f}m")
+                
+                persons.append({
+                    'id': person_id,
+                    'box': (x1, y1, x2, y2),
+                    'depth': centroid.z,
+                    'assigned_face_idx': None
+                })
+
+        # Clean up stale face colors
+        if hasattr(self, 'face_colors'):
+            stale_ids = set(self.face_colors.keys()) - active_person_ids
+            if stale_ids and self.verbose_mode:
+                self.get_logger().info(f"Cleaning up stale face IDs: {stale_ids}")
+            for stale_id in stale_ids:
+                del self.face_colors[stale_id]
+
+        # Early return if no valid persons
+        if not persons:
+            if self.verbose_mode:
+                self.get_logger().info(f"No valid persons detected (total objects: {n_detections})")
+            self.publish_face_detection([])
+            self.face_colors.clear()
+            return debug_image
+
+        # Run face detection
+        face_boxes, face_scores = self.yolo_model(cv_image)
+        
+        if self.verbose_mode:
+            self.get_logger().info(f"Face detection: {len(face_boxes)} raw detections")
+
+        # Build list of valid faces
+        faces = []
+        for idx, (box, score) in enumerate(zip(face_boxes, face_scores)):
+            fx1, fy1, fx2, fy2 = box
+            face_cx = (fx1 + fx2) // 2
+            face_cy = (fy1 + fy2) // 2
+            face_width = fx2 - fx1
+            face_height = fy2 - fy1
+            
+            if face_width < 20 or face_height < 20:
+                continue
+            
+            if not (0 <= fx1 < fx2 <= img_w and 0 <= fy1 < fy2 <= img_h):
+                continue
+                
+            faces.append({
+                'box': (fx1, fy1, fx2, fy2),
+                'centroid': (face_cx, face_cy),
+                'size': (face_width, face_height),
+                'score': score,
+                'original_idx': idx
+            })
+
+        if not faces:
+            if self.verbose_mode:
+                self.get_logger().info(f"No valid faces detected (persons: {len(persons)})")
+            self.publish_face_detection([])
+            if self.verbose_mode:
+                for person in persons:
+                    px1, py1, px2, py2 = person['box']
+                    cv2.rectangle(debug_image, (px1, py1), (px2, py2), (128, 128, 128), 1)
+                    cv2.putText(debug_image, f"P:{person['id']}", (px1 + 5, py1 - 5),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (128, 128, 128), 1)
+            return debug_image
+
+        # Hungarian matching
+        matches = self.match_faces_to_persons_hungarian(faces, persons, img_h, img_w)
+        
+        if self.verbose_mode:
+            self.get_logger().info(f"Hungarian matching: Persons={len(persons)}, Faces={len(faces)}, Matches={len(matches)}")
+
+        if not matches:
+            self.publish_face_detection([])
+            if self.verbose_mode:
+                self.get_logger().warn(f"Faces detected ({len(faces)}) but none matched to persons ({len(persons)})")
+                for face in faces:
+                    fx1, fy1, fx2, fy2 = face['box']
+                    cv2.rectangle(debug_image, (fx1, fy1), (fx2, fy2), (0, 0, 255), 1)
+                    cv2.putText(debug_image, f"Unmatched (score={face['score']:.2f})", 
+                               (fx1, fy1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
+                for person in persons:
+                    px1, py1, px2, py2 = person['box']
+                    cv2.rectangle(debug_image, (px1, py1), (px2, py2), (255, 0, 0), 2)
+                    cv2.putText(debug_image, f"Person:{person['id']}", (px1 + 5, py1 - 5),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
+            return debug_image
+
+        # Process matched pairs
+        for face_idx, person_idx in matches:
+            face = faces[face_idx]
+            person = persons[person_idx]
+            
+            fx1, fy1, fx2, fy2 = face['box']
+            face_cx, face_cy = face['centroid']
+            face_width, face_height = face['size']
+            
+            person['assigned_face_idx'] = face_idx
+            face_id = str(person['id'])
+            
+            if face_id not in self.face_colors:
+                self.face_colors[face_id] = self.generate_dark_color()
+            face_color = self.face_colors[face_id]
+
+            # Crop face
+            face_image = cv_image[fy1:fy2, fx1:fx2]
+            if face_image.size == 0:
+                continue
+
+            # Preprocess for SixDrepNet
+            resized_image = cv2.resize(face_image, (224, 224))
+            normalized_image = (resized_image[..., ::-1] / 255.0 - self.mean) / self.std
+            input_tensor = normalized_image.transpose(2, 0, 1)[np.newaxis, ...].astype(np.float32)
+
+            # Head pose estimation
+            try:
+                yaw_pitch_roll = self.sixdrepnet_session.run(None, {'input': input_tensor})[0][0]
+                yaw_deg, pitch_deg, roll_deg = yaw_pitch_roll
+            except Exception as e:
+                self.get_logger().error(f"Head pose estimation failed: {e}")
+                continue
+
             self.draw_axis(debug_image, yaw_deg, pitch_deg, roll_deg, face_cx, face_cy, size=50)
 
             # Get depth
@@ -718,7 +997,7 @@ class SixDrepNet(FaceDetectionNode):
                 cz_depth = self.get_depth_in_region(face_cx, face_cy, face_width, face_height)
                 cz = cz_depth if cz_depth is not None else 0.0
 
-            # Mutual gaze check
+            # Mutual gaze
             mutual_gaze = abs(yaw_deg) < self.sixdrep_angle and abs(pitch_deg) < self.sixdrep_angle
 
             tracking_data.append({
@@ -743,7 +1022,7 @@ class SixDrepNet(FaceDetectionNode):
         if self.verbose_mode:
             for person in persons:
                 px1, py1, px2, py2 = person['box']
-                color = (0, 255, 0) if person['assigned_face'] else (128, 128, 128)
+                color = (0, 255, 0) if person['assigned_face_idx'] is not None else (128, 128, 128)
                 cv2.rectangle(debug_image, (px1, py1), (px2, py2), color, 1)
                 cv2.putText(debug_image, f"P:{person['id']}", (px1 + 5, py1 - 5),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
