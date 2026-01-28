@@ -148,31 +148,17 @@ class SoundLocalizationNode(Node):
         # =====================================================
         # Publishers
         # =====================================================
-        self.direction_pub = self.create_publisher(
-            Vector3Stamped, "/sound_localization/direction", 10
-        )
-        self.azimuth_pub = self.create_publisher(
-            Float32, "/sound_localization/azimuth", 10
-        )
-        self.confidence_pub = self.create_publisher(
-            Float32, "/sound_localization/confidence", 10
-        )
-        self.pose_pub = self.create_publisher(
-            PoseStamped, "/sound_localization/source_pose", 10
-        )
-        self.marker_pub = self.create_publisher(
-            Marker, "/sound_localization/visualization", 10
-        )
+        self.direction_pub = self.create_publisher(Vector3Stamped, "/sound_localization/direction", 10)
+        self.azimuth_pub = self.create_publisher(Float32, "/sound_localization/azimuth", 10)
+        self.confidence_pub = self.create_publisher(Float32, "/sound_localization/confidence", 10)
+        self.pose_pub = self.create_publisher(PoseStamped, "/sound_localization/source_pose", 10)
+        self.marker_pub = self.create_publisher(Marker, "/sound_localization/visualization", 10)
 
         # =====================================================
         # Subscriber
         # =====================================================
-        self.audio_sub = self.create_subscription(
-            AudioBuffer, 
-            self.microphone_topic, 
-            self.audio_callback, 
-            10
-        )
+        self.audio_sub = self.create_subscription(AudioBuffer, self.microphone_topic, 
+            self.audio_callback, 10)
 
         self.get_logger().info("Sound localization node ready.")
 
