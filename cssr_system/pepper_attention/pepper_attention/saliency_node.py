@@ -31,7 +31,6 @@ def get_image_qos() -> QoSProfile:
         depth=1
     )
 
-
 class BooleanMapSaliency:
     """
     Boolean Map Saliency (BMS) - Frame-based
@@ -184,9 +183,9 @@ class SaliencyNode(Node):
         self.declare_parameter('down_h', 120)
         self.declare_parameter('min_peak', 0.25)
         self.declare_parameter('overlay_alpha', 0.4)
-        self.declare_parameter('num_peaks', 5)
-        self.declare_parameter('peak_min_distance_px', 100)
-        self.declare_parameter('process_hz', 5.0)
+        self.declare_parameter('num_peaks', 10)
+        self.declare_parameter('peak_min_distance_px', 50)
+        self.declare_parameter('process_hz', 1.0)
 
     def _load_parameters(self):
         """Load parameters into instance variables."""
@@ -398,13 +397,21 @@ class SaliencyNode(Node):
         out.data = cv2.imencode('.png', vis_color)[1].tobytes()
         self.pub_map.publish(out)
 
-
 def main(args=None):
     rclpy.init(args=args)
     node = SaliencyNode()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
 
 
 if __name__ == '__main__':

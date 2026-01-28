@@ -31,7 +31,7 @@ def generate_launch_description():
             name='saliency_node',
             parameters=[
                 LaunchConfiguration('params_file'),
-                {'process_hz': 2.0}
+                {'process_hz': 1.0}
             ],
             output='screen'
         ),
