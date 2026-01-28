@@ -16,6 +16,7 @@ setup(
     entry_points={
         "console_scripts": [
             "face_detection = face_detection.face_detection_application:main",
+            "age_detection = face_detection.age_gender_detection:main",
         ],
     },
     data_files=[
