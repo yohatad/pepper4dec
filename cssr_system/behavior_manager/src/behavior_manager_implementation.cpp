@@ -4,7 +4,6 @@
 
 namespace behavior_manager
 {
-// Populate the request sent to the Service Server
 bool LLMPromptServiceNode::setRequest(Request::SharedPtr& request)
 {
   request->prompt = getInput<std::string>("query");
@@ -12,12 +11,33 @@ bool LLMPromptServiceNode::setRequest(Request::SharedPtr& request)
   return true;
 }
 
-// Handle the response from the Service Server
 NodeStatus LLMPromptServiceNode::onResponseReceived(const Response::SharedPtr& response)
 {
   RCLCPP_INFO(getLogger(), "Received response: %s", response->response.c_str());
   setOutput<std::string>("response", response->response);
   return NodeStatus::SUCCESS;
+}
+
+bool ASRActionNode::setGoal(RosActionNode::Goal& goal) {
+  double wait_seconds;
+  if (!getInput("wait_seconds", wait_seconds)) {
+    RCLCPP_ERROR(node()->get_logger(), "Missing port: wait_seconds");
+    return false;
+  }
+  goal.wait_time = rclcpp::Duration::from_seconds(wait_seconds);
+  RCLCPP_INFO(node()->get_logger(), "Setting ASR wait time to %.2f seconds", wait_seconds);
+  return true;
+}
+
+NodeStatus ASRActionNode::onResultReceived(const WrappedResult& wr) {
+  if (wr.code == rclcpp_action::ResultCode::SUCCEEDED) {
+    RCLCPP_INFO(node()->get_logger(), "ASR Action Succeeded. Recognized Speech: %s", wr.result->transcription.c_str());
+    setOutput<std::string>("recognized_text", wr.result->transcription);
+    return NodeStatus::SUCCESS;
+  }
+  RCLCPP_ERROR(node()->get_logger(), "ASR Action Failed.");
+  setOutput<std::string>("recognized_text", "None");
+  return NodeStatus::FAILURE;
 }
 
 bool NavToPoseAction::setGoal(RosActionNode::Goal& goal) {

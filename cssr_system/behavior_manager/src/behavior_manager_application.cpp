@@ -10,13 +10,18 @@ int main(int argc, char** argv)
 
   // Create Behavior Tree factory
   BT::BehaviorTreeFactory factory;
-  BT::RosNodeParams params;
-  params.nh = node;
-  params.default_port_value = "/conversationManagement/prompt";
+  BT::RosNodeParams llm_prompt_params;
+  BT::RosNodeParams nav2_params;
+
+  nav2_params.nh = node;
+  llm_prompt_params.nh = node;
+  
+  nav2_params.default_port_value = "navigate_to_pose";
+  llm_prompt_params.default_port_value = "/conversationManagement/prompt";
 
   // Register custom nodes from behavior_manager
-//   factory.registerFromPlugin("libbehavior_manager_nodes.so");
-  factory.registerRosServiceNode<behavior_manager::LLMPromptServiceNode>("LLMPromptServiceNode", params);
+  factory.registerRosServiceNode<behavior_manager::LLMPromptServiceNode>("LLMPromptServiceNode", llm_prompt_params);
+  factory.registerRosAction<behavior_manager::NavToPoseAction>("NavToPose", nav2_params);
 
   // Load and create the Behavior Tree from XML
   auto tree = factory.createTreeFromFile("behavior_tree.xml");

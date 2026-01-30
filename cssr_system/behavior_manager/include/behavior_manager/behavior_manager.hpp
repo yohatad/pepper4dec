@@ -3,7 +3,8 @@
 
 #include "behaviortree_ros2/plugins/ros_action_node.hpp"
 #include "behaviortree_ros2/plugins/ros_service_node.hpp"
-#include "CSSR_interfaces/srv/LanguageModelPrompt.hpp"
+#include "cssr_interfaces/action/SpeechRecognition.hpp"
+#include "cssr_interfaces/srv/LanguageModelPrompt.hpp"
 #include "nav2_msgs/action/navigate_to_pose.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 
@@ -11,8 +12,8 @@ namespace behavior_manager
 {
 using namespace BT;
 using Prompt = CSSR_interfaces::srv::LanguageModelPrompt;
+using ASR = CSSR_interfaces::action::SpeechRecognition;
 
-// Custom Action Node wrapping a ROS 2 Action
 class LLMPromptServiceNode : public RosServiceNode<Prompt>
 {
 public:
@@ -32,6 +33,21 @@ public:
 
   // Handle the response from the Service Server
   NodeStatus onResponseReceived(const Response::SharedPtr& response) override;
+};
+
+class ASRActionNode : public RosActionNode<ASR>
+{
+public:
+  ASRActionNode(const std::string& name, const NodeConfig& conf, const RosNodeParams& params)
+    : RosActionNode<ASR>(name, conf, params) {}
+
+    // Define ports to recieve wait time and response from the XML/Blackboard
+    static PortsList providedPorts() {
+      return { InputPort<double>("wait_seconds"), OutputPort<std::string>("recognized_text") };
+    }
+
+    bool setGoal(RosActionNode::Goal& goal) override;
+    NodeStatus onResultReceived(const WrappedResult& wr) override;
 };
 
 class NavToPoseAction : public RosActionNode<nav2_msgs::action::NavigateToPose>

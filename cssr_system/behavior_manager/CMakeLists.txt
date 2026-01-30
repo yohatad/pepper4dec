@@ -14,9 +14,14 @@ find_package(behaviortree_cpp REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(behaviortree_ros2 REQUIRED)
 
+add_executable(behavior_manager_node src/behavior_manager_implementation.cpp src/behavior_manager_application.cpp)
+
 target_link_libraries(behavior_manager_node
   # ... other libs ...
   tf2::tf2
+  rclcpp::rclcpp
+  behaviortree_cpp::behaviortree_cpp
+  behaviortree_ros2::behaviortree_ros2
   tf2_geometry_msgs::tf2_geometry_msgs
 )
 
