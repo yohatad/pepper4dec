@@ -1,6 +1,7 @@
 #include "behavior_manager/behavior_manager.cpp"
 #include <behaviortree_cpp/bt_factory.h>
 
+
 int main(int argc, char** argv)
 {
   // Initialize ROS 2
@@ -11,6 +12,7 @@ int main(int argc, char** argv)
   BT::BehaviorTreeFactory factory;
   BT::RosNodeParams params;
   params.nh = node;
+  params.default_port_value = "/conversationManagement/prompt";
 
   // Register custom nodes from behavior_manager
 //   factory.registerFromPlugin("libbehavior_manager_nodes.so");
