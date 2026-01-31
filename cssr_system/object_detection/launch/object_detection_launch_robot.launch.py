@@ -69,6 +69,21 @@ def launch_setup(context, *args, **kwargs):
                 output="screen",
             )
         )
+    
+    else:
+        # Log that camera launch is skipped
+        print("Camera launch is disabled (launch_camera=false). Assuming topics are available from ROS2 bag or other source.")
+
+
+    # Add object detection node
+    actions.append(
+        Node(
+            package="object_detection",
+            executable="object_detection",
+            name="object_detection",
+            output="screen",
+        )
+    )
 
     return actions
 
