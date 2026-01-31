@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Simple Attention Controller for Pepper Robot
-Priority 1: Faces | Priority 2: Saliency (with cooldown + IOR)
+Improved Attention Controller for Pepper Robot
+Priority 1: Engaged Faces | Priority 2: Detected Faces | Priority 3: Saliency (with cooldown + IOR)
 """
 
 import math
@@ -53,10 +53,15 @@ class SimpleAttention(Node):
         self.declare_parameter("pitch_dn", -0.7)
         
         # Face parameters
-        self.declare_parameter("face_timeout", 0.5)
-        self.declare_parameter("saliency_min_score", 0.30)
+        self.declare_parameter("face_timeout", 2.0)  # Increased: stay on faces longer
+        self.declare_parameter("engaged_priority_bonus", 2.0)  # Bonus for engaged faces
+        self.declare_parameter("face_switch_cooldown", 1.0)  # Min time before switching faces
+        self.declare_parameter("same_face_threshold_deg", 8.0)  # Threshold to consider same face
+        self.declare_parameter("prefer_closer_faces", True)  # Prefer faces that are closer
+        self.declare_parameter("max_face_distance", 5.0)  # Maximum distance to consider (meters)
         
-        # Cooldown parameters
+        # Saliency parameters
+        self.declare_parameter("saliency_min_score", 0.30)
         self.declare_parameter("saliency_min_cooldown", 1.5)
         self.declare_parameter("saliency_max_dwell", 3.0)
         self.declare_parameter("switch_score_ratio", 1.4)
@@ -82,8 +87,13 @@ class SimpleAttention(Node):
         self.pitch_dn = self.get_parameter("pitch_dn").value
         
         self.face_timeout = self.get_parameter("face_timeout").value
-        self.saliency_min = self.get_parameter("saliency_min_score").value
+        self.engaged_bonus = self.get_parameter("engaged_priority_bonus").value
+        self.face_switch_cooldown = self.get_parameter("face_switch_cooldown").value
+        self.same_face_threshold = math.radians(self.get_parameter("same_face_threshold_deg").value)
+        self.prefer_closer = self.get_parameter("prefer_closer_faces").value
+        self.max_face_distance = self.get_parameter("max_face_distance").value
         
+        self.saliency_min = self.get_parameter("saliency_min_score").value
         self.min_cooldown = self.get_parameter("saliency_min_cooldown").value
         self.max_dwell = self.get_parameter("saliency_max_dwell").value
         self.switch_ratio = self.get_parameter("switch_score_ratio").value
@@ -104,6 +114,9 @@ class SimpleAttention(Node):
         
         # Face state
         self.last_face_time = 0.0
+        self.last_face_switch_time = 0.0
+        self.current_face_id = None  # Track which face we're currently looking at
+        self.current_face_location = None  # (world_yaw, world_pitch)
         
         # Saliency state (store in world angles)
         self.last_saliency_cmd_time = 0.0
@@ -120,12 +133,11 @@ class SimpleAttention(Node):
         self.create_subscription(CameraInfo, self.camera_info_topic, self.on_caminfo, qos_img)
         self.create_subscription(JointState, '/joint_states', self.on_joint_states, 10)
         
-        
         # Publishers
         self.pub_head = self.create_publisher(JointAnglesWithSpeed, self.head_cmd_topic, 10)
         self.pub_target = self.create_publisher(Vector3, self.target_topic, 10) 
         
-        self.get_logger().info("Attention controller ready (Faces + Saliency + IOR)")
+        self.get_logger().info("Improved attention controller ready (Engaged Faces > Faces > Saliency + IOR)")
 
     def on_caminfo(self, msg: CameraInfo):
         if self.fx is None:
@@ -140,38 +152,175 @@ class SimpleAttention(Node):
         except (ValueError, IndexError):
             pass
 
+    def calculate_face_priority(self, centroid, mutual_gaze, face_id, is_current_face):
+        """
+        Calculate priority score for a face based on multiple factors.
+        
+        Priority factors:
+        1. Engagement (mutual gaze) - highest priority
+        2. Distance from center - prefer centered faces
+        3. Depth - prefer closer faces (if enabled)
+        4. Continuity - prefer staying on current face
+        
+        Returns: priority score (higher is better)
+        """
+        # Base score
+        score = 1.0
+        
+        # Factor 1: Engagement bonus (most important)
+        if mutual_gaze:
+            score *= self.engaged_bonus
+        
+        # Factor 2: Distance from center (normalized)
+        # Closer to center = higher priority
+        dist_from_center = math.sqrt((centroid.x - self.cx)**2 + (centroid.y - self.cy)**2)
+        max_dist = math.sqrt(self.cx**2 + self.cy**2)  # Corner distance
+        center_score = 1.0 - (dist_from_center / max_dist)
+        score *= (0.5 + 0.5 * center_score)  # Scale: 0.5 to 1.0
+        
+        # Factor 3: Depth bonus (if enabled and valid depth)
+        if self.prefer_closer and centroid.z > 0:
+            if centroid.z <= self.max_face_distance:
+                # Closer faces get higher scores (inverse distance)
+                # Map 0-max_distance to 1.5-0.5 bonus
+                depth_bonus = 1.5 - (centroid.z / self.max_face_distance)
+                score *= max(0.5, depth_bonus)
+            else:
+                # Too far, reduce priority
+                score *= 0.3
+        
+        # Factor 4: Continuity bonus (prefer staying on current face)
+        if is_current_face:
+            time_since_switch = time.time() - self.last_face_switch_time
+            if time_since_switch < self.face_switch_cooldown:
+                # Strong preference to stay on current face during cooldown
+                score *= 1.5
+            else:
+                # Mild preference even after cooldown
+                score *= 1.1
+        
+        return score
+
     def on_faces(self, msg: FaceDetection):
-        """Priority 1: Face detection."""
-        if self.fx is None or self._head_yaw is None:
+        """Priority 1: Face detection with engagement awareness."""
+        if self.fx is None or self._head_yaw is None or self._head_pitch is None:
             return
         
         if not msg.centroids:
+            # No faces detected - clear state
+            if self.current_face_id is not None:
+                self.get_logger().info(f"Lost face: {self.current_face_id}")
+                self.current_face_id = None
+                self.current_face_location = None
             return
         
-        # Pick face closest to center
-        # FIX: min() returns a Point object, not a tuple
-        best_centroid = min(msg.centroids, 
-                            key=lambda c: (c.x - self.cx)**2 + (c.y - self.cy)**2)
+        current_time = time.time()
         
-        # Extract coordinates from the Point object
-        u = best_centroid.x
-        v = best_centroid.y
+        # Build candidate list with priorities
+        candidates = []
+        for i, centroid in enumerate(msg.centroids):
+            face_id = msg.face_label_id[i] if i < len(msg.face_label_id) else f"unknown_{i}"
+            mutual_gaze = msg.mutual_gaze[i] if i < len(msg.mutual_gaze) else False
+            
+            # Check if this is the face we're currently looking at
+            is_current = (face_id == self.current_face_id)
+            
+            # Calculate priority score
+            priority = self.calculate_face_priority(centroid, mutual_gaze, face_id, is_current)
+            
+            # Convert to world angles
+            cam_yaw, cam_pitch = pixel_to_angles(centroid.x, centroid.y, 
+                                                 self.fx, self.fy, self.cx, self.cy)
+            world_yaw = cam_yaw + self._head_yaw
+            world_pitch = cam_pitch + self._head_pitch
+            
+            candidates.append({
+                'face_id': face_id,
+                'centroid': centroid,
+                'world_yaw': world_yaw,
+                'world_pitch': world_pitch,
+                'mutual_gaze': mutual_gaze,
+                'priority': priority,
+                'is_current': is_current
+            })
         
-        self.last_face_time = time.time()
+        # Select best face
+        best_face = max(candidates, key=lambda f: f['priority'])
         
-        # Convert to world angles
-        cam_yaw, cam_pitch = pixel_to_angles(u, v, self.fx, self.fy, self.cx, self.cy)
-        world_yaw = clamp(cam_yaw + self._head_yaw, -self.yaw_lim, self.yaw_lim)
-        world_pitch = clamp(cam_pitch + self._head_pitch, self.pitch_dn, self.pitch_up)
+        # Check if we should switch faces
+        should_switch = False
+        switch_reason = ""
         
-        self.publish_head(world_yaw, world_pitch, score=1.0, source='face')
+        if self.current_face_id is None:
+            # No current face - always switch
+            should_switch = True
+            switch_reason = "initial"
+        elif best_face['is_current']:
+            # Same face - always update (refresh position)
+            should_switch = True
+            switch_reason = "refresh"
+        else:
+            # Different face - check cooldown and priority
+            time_since_switch = current_time - self.last_face_switch_time
+            
+            # Find current face in candidates
+            current_face = next((f for f in candidates if f['is_current']), None)
+            
+            if current_face is None:
+                # Current face no longer detected
+                should_switch = True
+                switch_reason = "lost_current"
+            elif time_since_switch < self.face_switch_cooldown:
+                # In cooldown - only switch if much better priority
+                if best_face['priority'] > current_face['priority'] * 1.5:
+                    should_switch = True
+                    switch_reason = "much_better"
+            else:
+                # After cooldown - switch if better priority
+                if best_face['priority'] > current_face['priority'] * 1.1:
+                    should_switch = True
+                    switch_reason = "better"
+        
+        if not should_switch:
+            # Just update last_face_time to prevent saliency from taking over
+            self.last_face_time = current_time
+            return
+        
+        # Update state
+        is_new_face = (best_face['face_id'] != self.current_face_id)
+        
+        if is_new_face:
+            self.last_face_switch_time = current_time
+            self.get_logger().info(
+                f"Switching to face: {best_face['face_id']} "
+                f"(engaged={best_face['mutual_gaze']}, "
+                f"depth={best_face['centroid'].z:.2f}m, "
+                f"priority={best_face['priority']:.2f}, "
+                f"reason={switch_reason})"
+            )
+        
+        self.current_face_id = best_face['face_id']
+        self.current_face_location = (best_face['world_yaw'], best_face['world_pitch'])
+        self.last_face_time = current_time
+        
+        # Clamp and publish
+        yaw = clamp(best_face['world_yaw'], -self.yaw_lim, self.yaw_lim)
+        pitch = clamp(best_face['world_pitch'], self.pitch_dn, self.pitch_up)
+        
+        source = f"face[{best_face['face_id']}]"
+        if best_face['mutual_gaze']:
+            source += "_engaged"
+        if switch_reason:
+            source += f"({switch_reason})"
+        
+        self.publish_head(yaw, pitch, score=best_face['priority'], source=source)
 
-    def _calculate_ior_suppression(self, age_seconds):
+    def calculate_ior_suppression(self, age_seconds):
         """Exponential decay: suppression = max * exp(-ln(2) * age / half_life)"""
         decay = math.log(2) / self.ior_half_life
         return self.ior_max_suppression * math.exp(-decay * age_seconds)
 
-    def _apply_ior_filter(self, world_yaw, world_pitch, score):
+    def apply_ior_filter(self, world_yaw, world_pitch, score):
         """Apply IOR suppression (expects world coordinates)."""
         if not self.enable_ior or not self.visited_locations:
             return score
@@ -184,13 +333,13 @@ class SimpleAttention(Node):
             dist = math.sqrt((world_yaw - v_yaw)**2 + (world_pitch - v_pitch)**2)
             
             if dist < self.ior_radius:
-                time_supp = self._calculate_ior_suppression(age)
+                time_supp = self.calculate_ior_suppression(age)
                 space_decay = 1.0 - (dist / self.ior_radius)
                 max_suppression = max(max_suppression, time_supp * space_decay)
         
         return score * (1.0 - max_suppression)
 
-    def _cleanup_weak_ior(self):
+    def cleanup_weak_ior(self):
         """Remove locations with negligible suppression."""
         if not self.enable_ior:
             return
@@ -199,21 +348,28 @@ class SimpleAttention(Node):
         self.visited_locations = [
             (yaw, pitch, ts) 
             for yaw, pitch, ts in self.visited_locations
-            if self._calculate_ior_suppression(current_time - ts) >= self.ior_cleanup_threshold
+            if self.calculate_ior_suppression(current_time - ts) >= self.ior_cleanup_threshold
         ][:self.ior_max_locations]
 
     def on_saliency(self, msg: Float32MultiArray):
-        """Priority 2: Saliency with cooldown + IOR."""
+        """Priority 3: Saliency with cooldown + IOR (only when no faces detected)."""
         if self.fx is None or self._head_yaw is None:
             return
         
+        # Check if we have recent faces - if so, ignore saliency
         if time.time() - self.last_face_time < self.face_timeout:
             return
+        
+        # Clear face state if we're switching to saliency
+        if self.current_face_id is not None:
+            self.get_logger().info(f"No recent faces, switching to saliency (was tracking: {self.current_face_id})")
+            self.current_face_id = None
+            self.current_face_location = None
         
         if len(msg.data) < 3:
             return
         
-        self._cleanup_weak_ior()
+        self.cleanup_weak_ior()
         
         # Convert all candidates to world angles with IOR
         candidates = []
@@ -229,7 +385,7 @@ class SimpleAttention(Node):
             world_pitch = cam_pitch + self._head_pitch
             
             # Apply IOR
-            score = self._apply_ior_filter(world_yaw, world_pitch, score)
+            score = self.apply_ior_filter(world_yaw, world_pitch, score)
             
             if score >= self.saliency_min:
                 candidates.append((world_yaw, world_pitch, score))
@@ -309,8 +465,7 @@ class SimpleAttention(Node):
         self.pub_target.publish(target_msg)
         
         self.get_logger().info(
-            f"[{source}] → yaw={math.degrees(yaw):.1f}°, pitch={math.degrees(pitch):.1f}°, score={score:.2f}"
-        )
+            f"[{source}] → yaw={math.degrees(yaw):.1f}°, pitch={math.degrees(pitch):.1f}°, score={score:.2f}")
 
 
 def main(args=None):
