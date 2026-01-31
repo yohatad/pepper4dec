@@ -226,7 +226,7 @@ class GestureExecutionSystem(Node):
         self.create_subscription(Pose2D, topics["RobotPose"], self.robot_pose_callback, 10)
         
         # Publishers - FIXED: Correct topic name
-        self.joint_traj_pub = self.create_publisher(JointAnglesTrajectory, '/joint_angle_trajectory', 10)
+        self.joint_traj_pub = self.create_publisher(JointAnglesTrajectory, '/joint_angles_trajectory', 10)
         self.cmd_vel_pub = self.create_publisher(Twist, topics["Wheels"], 10)
         
         # Services
