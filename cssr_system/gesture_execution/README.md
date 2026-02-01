@@ -1,277 +1,250 @@
 <div align="center">
-  <h1>Overt Attention</h1>
+<h1> Gesture Execution for Pepper Robot (ROS2) </h1>
 </div>
-
 
 <div align="center">
-   <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:50%; height:auto;">
+  <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:50%; height:auto;">
 </div>
 
-The `overtAttention` ROS node enhances the Pepper humanoid robot's ability to perform meaningful and dynamic attention behaviors, improving its interactive capabilities. This ROS node hosts a service that allows users to invoke a variety of attention behaviors, including looking at faces, scanning the environment, and focusing on a particular location.
-The package leverages biological motion profiles to ensure natural and fluid execution, making interactions more engaging and lifelike. Attention behaviors are executed using the robot's built-in kinematic capabilities, and the system ensures that the motions are aligned with the robot's physical constraints.
-This package is designed for use with thr physical Pepper robots, allowing seamless integration into larger robotics applications through ROS topic and service interfaces.
+The **Gesture Execution** package is a **ROS2** package designed to execute various types of gestures on the Pepper humanoid robot. It provides a service interface for executing deictic (pointing), iconic (predefined arm motions), bowing, and nodding gestures with smooth Bézier interpolation for natural motion.
 
-# Documentation
-Accompanying this code is the deliverable report that provides a detailed explanation of the code and how to run the tests. The deliverable report can be found in [D5.3 Overt Attention](https://cssr4africa.github.io/deliverables/CSSR4Africa_Deliverable_D5.3.pdf).
+## Key Features
+- **ROS2 Native**: Built for ROS2 Humble
+- **Multiple Gesture Types**: Supports deictic (pointing), iconic, bowing, and nodding gestures
+- **Smooth Motion**: Uses Bézier interpolation for natural, fluid movements
+- **Inverse Kinematics**: Calculates joint angles for pointing to specific 3D locations
+- **Configurable**: YAML-based configuration and gesture definitions
+- **Service Interface**: ROS2 service for easy gesture triggering
+- **Real-time Adaptation**: Adapts pointing gestures based on robot's current pose
+- **Joint Limit Safety**: Validates all motions against robot joint limits
 
+# 🛠️ Installation 
 
- 
-# Run the Overt Attention Node
-## Physical Robot 
-### Steps
-1. **Install the required software components:**
-   
-   Set up the development environment for controlling the Pepper robot. Use the [CSSR4Africa Software Installation Manual](https://cssr4africa.github.io/deliverables/CSSR4Africa_Deliverable_D3.3.pdf). 
+## Prerequisites
+- **ROS2 Humble** or newer
+- **Python 3.10** or compatible version
+- **Pepper Robot** or simulator with NAOqi bridge
+- **cssr_interfaces** package for service definitions
 
-2. **Clone and build the project (if not already cloned)**:
-   - Move to the source directory of the workspace
-      ```bash 
-      cd $HOME/workspace/pepper_rob_ws/src
-       ```
-   - Clone the `CSSR4Africa` software from the GitHub repository
-      ```bash 
-      git clone https://github.com/cssr4africa/cssr4africa.git
-       ```
-   - Build the source files
-      ```bash 
-      cd .. && catkin_make && source devel/setup.bash 
-       ```
-       
-3. **Update Configuration File:**
-   
-   <div style="background-color: #1e1e1e; padding: 15px; border-radius: 4px; border: 1px solid #404040; margin: 10px 0;">
-      <span style="color: #ff3333; font-weight: bold;">NOTE: </span>
-      <span style="color: #cccccc;">If you need to update the configuration values, please refer to the <a href="https://cssr4africa.github.io/deliverables/CSSR4Africa_Deliverable_D5.3.pdf" style="color: #66b3ff;">D5.3 Overt Attention</a>. Otherwise, the recommended values are the ones already set in the configuration file.</span>
-   </div>
+## Package Installation
 
-   Navigate to the configuration file located at `$HOME/workspace/pepper_rob_ws/src/cssr4africa/gestureExecution/config/gestureExecutionConfiguration.ini` and update the configuration according to the key-value pairs below:
+1. **Clone and Build the Workspace**
+```bash
+# Clone the repository (if not already done)
+cd ~/ros2_ws/src
+git clone <repository-url>
 
-   | Parameter | Description | Values |
-   |-----------|-------------|---------|
-   | `camera` | Sensing device | `FrontCamera`, `RealSenseCamera` |
-   | `realignmentThreshold` | Threshold on the angular difference between head and base that must be met before the head and base are re-aligned | `degree` |
-   | `xOffsetToHeadYaw` | calibration constant that defines the conversion of the offset in the (horizontal) x-axis of an image | `degree` |
-   | `yOffsetToHeadPitch` | calibration constant that defines the conversion of the offset in the (vertical) y-axis of an image | `degree` |
-   | `robotTopics` | Physical robot topic mapping file | `pepperTopics.dat` |
-   | `simulatorTopics` | Physical robot topic mapping file | `simulatorTopics.dat` |
-   | `socialAttentionMode` | Simulator robot topic mapping file | `saliency`, `random` |
-   | `verboseMode` | Diagnostic info printing | `true`, `false` |
-
-   <!-- - To execute the overtAttention on the physical platform, change the first line of `overtAttentionConfiguration.ini` file in the config folder to “`platform robot`”.  -->
-   - Change the second line of `overtAttentionConfiguration.ini` file in the config folder, "`camera`" parameter, to the desired camera sensor.
-   - Modify the "`realignmentThreshold`" parameter on the third line of `overtAttentionConfiguration.ini` file to the angle where the head and the body need to be re-aligned.
-   - Set the `xOffsetToHeadYaw` parameter on the fourth line of `overtAttentionConfiguration.ini` file to offset for the horizontal distance between the camera sensor and the "eyes" of the pepper robot.
-   - Set the `yOffsetToHeadPitch` parameter on the fifth line of `overtAttentionConfiguration.ini` file to offset for the vertical distance between the camera sensor and the "eyes" of the pepper robot.
-   - All actuators have a topic, through which actiuation is carried out. These topics are specified in a key-value pair format in a file which is defined by the "`robotTopics`" parameter and "`simulatorTopics`" parameter in the `overtAttentionConfiguration.ini` file for the physical and simulator robot respectively. These files are found in the data folder. The files are specified as "`simulatorTopics simulatorTopics.dat`" and "`pepperTopics pepperTopics.dat`".	
-   - Change the `socialAttentionMode` parameter in the `overtAttentionConfiguration.ini` file to to the desired method for social attention.
-   - The system is capable of printing diagnostic informqation to the terminal. This behaviour is controlled by the last key-value pair in the `overtAttentionConfiguration.ini` file, "`verboseMode`" parameter key.
-
-4. **Run the `overtAttention` from the `cssr_system`  package:**
-   
-   Follow below steps, run in different terminals.
-    -  Source the workspace in first terminal:
-        ```bash
-         cd $HOME/workspace/pepper_rob_ws && source devel/setup.bash
-        ```
-    -  Launch the robot:
-        ```bash
-         roslaunch cssr_system cssrSystemLaunchRobot.launch robot_ip:=<robot_ip> roscore_ip:=<roscore_ip> network_interface:=<network_interface>
-        ```
-        <div style="background-color: #1e1e1e; padding: 15px; border-radius: 4px; border: 1px solid #404040; margin: 10px 0;">
-         <span style="color: #ff3333; font-weight: bold;">NOTE: </span>
-         <span style="color: #cccccc;">Ensure that the IP addresses <code>robot_ip</code>, <code>roscore_ip</code> and the network interface <code>network_interface</code> are correctly set based on your robot's configuration and your computer's network interface. </span>
-        </div>
-    - Open a new terminal to launch the `overtAttention` node.
-        <div style="background-color: #1e1e1e; padding: 15px; border-radius: 4px; border: 1px solid #404040; margin: 10px 0;">
-         <span style="color: #ff3333; font-weight: bold;">NOTE: </span>
-          <span style="color: #cccccc;">Running the <code>overtAttention</code> node requires the <code>/faceDetection/data</code>, <code>/soundDetection/direction</code>, and the <code>robotLocalization/pose</code> topics to be available, which can be hosted by running the <code>faceDetection</code>, <code>soundDetection</code>, and <code>robotLocalization</code> node in the <code>cssr_system</code> package or running the <code>overtAttentionTestDriver</code> in the <code>unit_tests</code> package before running the <code>overtAttention</code>  node: </span>
-
-         - <span style="color: #cccccc; font-weight: bold">(Option 1A):</span>  Run the <code>faceDetection</code> node of the <code>cssr_system</code> package (in a new terminal):
-            ```sh
-            cd $HOME/workspace/pepper_rob_ws && source devel/setup.bash && rosrun cssr_system face_detetection_application.py
-            ``` 
-         - <span style="color: #cccccc; font-weight: bold">(Option 1B):</span> Run the <code>soundDetection</code> node of the <code>cssr_system</code> package (in a new terminal): 
-            ```sh
-            cd $HOME/workspace/pepper_rob_ws && source devel/setup.bash && rosrun cssr_system sound_detection_application.py
-            ```
-         - <span style="color: #cccccc; font-weight: bold">(Option 1C):</span> Run the <code>robotLocalization</code> node of the <code>cssr_system</code> package (in a new terminal): 
-            ```sh
-            cd $HOME/workspace/pepper_rob_ws && source devel/setup.bash && rosrun cssr_system robotLocalization
-            ```
-         - <span style="color: #cccccc; font-weight: bold">(Option 2): </span> Run the <code>overtAttentionTestDriver</code> of the <code>unit_tests</code> package (in a new terminal) passing the robot pose (robot_x, robot_y, robot_theta) as arguments:
-            ```sh
-            cd $HOME/workspace/pepper_rob_ws && source devel/setup.bash && rosrun unit_tests overtAttentionTestDriver <robot_x> <robot_y> <robot_theta>
-            ```
-            <div style="background-color: #1e1e1e; padding: 15px; border-radius: 4px; border: 1px solid #404040; margin: 10px 0;">
-               <span style="color: #ff3333; font-weight: bold;">NOTE: </span>
-               <span style="color: #cccccc;">Ensure that the robot pose <code>robot_x</code>, <code>robot_y</code> and <code>robot_theta</code> are correctly set based on your robot's position in the world. If these arguments are not supplied, the robot assumes its position as origin <code>(0, 0, 0)</code> </span>
-            </div>
-         </div>
-         
-        ```bash
-          cd $HOME/workspace/pepper_rob_ws && source devel/setup.bash && rosrun cssr_system overtAttention
-        ```
-<!--       
-
-## Simulator Robot
-
-### Steps
-1. **Install the required software components:**
-   
-   Set up the development environment for controlling the Pepper robot in the simulated environment. Use the [CSSR4Africa Software Installation Manual](https://cssr4africa.github.io/deliverables/CSSR4Africa_Deliverable_D3.3.pdf).
-
-2. **Clone and build the project (if not already cloned):**
-   - Move to the source directory of the workspace:
-      ```bash
-      cd $HOME/workspace/pepper_sim_ws/src
-      ```
-   - Clone the `CSSR4Africa` software from the GitHub repository:
-      ```bash
-      git clone https://github.com/cssr4africa/cssr4africa.git
-      ```
-   - Build the source files:
-      ```bash 
-      cd .. && catkin_make && source devel/setup.bash 
-      ```
-
-3. **Update Configuration File:**
-   
-   <div style="background-color: #1e1e1e; padding: 15px; border-radius: 4px; border: 1px solid #404040; margin: 10px 0;">
-      <span style="color: #ff3333; font-weight: bold;">NOTE: </span>
-      <span style="color: #cccccc;">If you need to update the configuration values, please refer to the <a href="https://cssr4africa.github.io/deliverables/CSSR4Africa_Deliverable_D5.3.pdf" style="color: #66b3ff;">D5.3 Overt Attention</a>. Otherwise, the recommended values are the ones already set in the configuration file.</span>
-   </div>
-
-   Navigate to the configuration file located at `$HOME/workspace/pepper_sim_ws/src/cssr4africa/gestureExecution/config/gestureExecutionConfiguration.ini` and update the configuration according to the key-value pairs below:
-
-   | Parameter | Description | Values |
-   |-----------|-------------|---------|
-   | `platform` | Target platform | `robot` or `simulator` |
-   | `camera` | Sensing device | `FrontCamera`, `RealSenseCamera` |
-   | `realignmentThreshold` | Threshold on the angular difference between head and base that must be met before the head and base are re-aligned | `degree` |
-   | `xOffsetToHeadYaw` | calibration constant that defines the conversion of the offset in the (horizontal) x-axis of an image | `degree` |
-   | `yOffsetToHeadPitch` | calibration constant that defines the conversion of the offset in the (vertical) y-axis of an image | `degree` |
-   | `robotTopics` | Physical robot topic mapping file | `pepperTopics.dat` |
-   | `simulatorTopics` | Physical robot topic mapping file | `simulatorTopics.dat` |
-   | `socialAttentionMode` | Simulator robot topic mapping file | `saliency`, `random` |
-   | `verboseMode` | Diagnostic info printing | `true`, `false` |
-
-   - To execute the overtAttention on the physical platform, change the first line of `overtAttentionConfiguration.ini` file in the config folder to “`platform robot`”. 
-   - Change the second line of `overtAttentionConfiguration.ini` file in the config folder, "`camera`" parameter, to the desired camera sensor.
-   - Modify the "`realignmentThreshold`" parameter on the third line of `overtAttentionConfiguration.ini` file to the angle where the head and the body need to be re-aligned.
-   - Set the `xOffsetToHeadYaw` parameter on the fourth line of `overtAttentionConfiguration.ini` file to offset for the horizontal distance between the camera sensor and the "eyes" of the pepper robot.
-   - Set the `yOffsetToHeadPitch` parameter on the fifth line of `overtAttentionConfiguration.ini` file to offset for the vertical distance between the camera sensor and the "eyes" of the pepper robot.
-   - All actuators have a topic, through which actiuation is carried out. These topics are specified in a key-value pair format in a file which is defined by the "`robotTopics`" parameter and "`simulatorTopics`" parameter in the `overtAttentionConfiguration.ini` file for the physical and simulator robot respectively. These files are found in the data folder. The files are specified as "`simulatorTopics simulatorTopics.dat`" and "`pepperTopics pepperTopics.dat`".	
-   - Change the `socialAttentionMode` parameter in the `overtAttentionConfiguration.ini` file to to the desired method for social attention.
-   - The system is capable of printing diagnostic informqation to the terminal. This behaviour is controlled by the last key-value pair in the `overtAttentionConfiguration.ini` file, "`verboseMode`" parameter key.
-
-
-4. **Run the `overtAttention` from the `cssr_system` package:**:
-   
-   Follow below steps, run in different terminals.
-    -  Source the workspace in first terminal:
-        ```bash
-         cd $HOME/workspace/pepper_sim_ws && source devel/setup.bash
-        ```
-    -  Launch the simulator robot:
-        ```bash
-         roslaunch cssr_system cssrSystemLaunchSimulator.launch
-        ```
-    - Open a new terminal to launch the `overtAttention` node.
-        <div style="background-color: #1e1e1e; padding: 15px; border-radius: 4px; border: 1px solid #404040; margin: 10px 0;">
-         <span style="color: #ff3333; font-weight: bold;">NOTE: </span>
-          <span style="color: #cccccc;">Running the <code>overtAttention</code> node requires the <code>/faceDetection/data</code>, <code>/soundDetection/direction</code>, and the <code>robotLocalization/pose</code> topics to be available, which can be hosted by running the <code>faceDetection</code>, <code>soundDetection</code>, and <code>robotLocalization</code> node in the <code>cssr_system</code> package or running the <code>overtAttentionTestDriver</code> in the <code>unit_tests</code> package before running the <code>overtAttention</code>  node: </span>
-
-         - <span style="color: #cccccc; font-weight: bold">(Option 1A):</span>  Run the <code>faceDetection</code> node of the <code>cssr_system</code> package (in a new terminal):
-            ```sh
-            cd $HOME/workspace/pepper_sim_ws && source devel/setup.bash && rosrun cssr_system face_detetection_application.py
-            ``` 
-         - <span style="color: #cccccc; font-weight: bold">(Option 1B):</span> Run the <code>soundDetection</code> node of the <code>cssr_system</code> package (in a new terminal): 
-            ```sh
-            cd $HOME/workspace/pepper_sim_ws && source devel/setup.bash && rosrun cssr_system sound_detection_application.py
-            ```
-         - <span style="color: #cccccc; font-weight: bold">(Option 1C):</span> Run the <code>robotLocalization</code> node of the <code>cssr_system</code> package (in a new terminal): 
-            ```sh
-            cd $HOME/workspace/pepper_sim_ws && source devel/setup.bash && rosrun cssr_system robotLocalization
-            ```
-         - <span style="color: #cccccc; font-weight: bold">(Option 2): </span> Run the <code>overtAttentionTestDriver</code> of the <code>unit_tests</code> package (in a new terminal) passing the robot pose (robot_x, robot_y, robot_theta) as arguments:
-            ```sh
-            cd $HOME/workspace/pepper_sim_ws && source devel/setup.bash && rosrun unit_tests overtAttentionTestDriver <robot_x> <robot_y> <robot_theta>
-            ```
-            <div style="background-color: #1e1e1e; padding: 15px; border-radius: 4px; border: 1px solid #404040; margin: 10px 0;">
-               <span style="color: #ff3333; font-weight: bold;">NOTE: </span>
-               <span style="color: #cccccc;">Ensure that the robot pose <code>robot_x</code>, <code>robot_y</code> and <code>robot_theta</code> are correctly set based on your robot's position in the world. If these arguments are not supplied, the robot assumes its position as origin <code>(0, 0, 0)</code> </span>
-            </div>
-         </div>
-
-        ```bash
-         cd $HOME/workspace/pepper_sim_ws && source devel/setup.bash && rosrun cssr_system overtAttention
-        ```
-         -->
-
-
-## Executing Attention
-Upon launching the node, the hosted service (`/overtAttention/set_mode`) is available and ready to be invoked. This can be verified by running the following command in a new terminal:
-
-   ```sh
-   rostopic list | grep /overtAttention/set_mode
-   ```
-
-The command below invokes the service to execute a gesture (run in a new terminal) with the request parameters defined below:
-
-   ```sh
-   rosservice call /overtAttention/set_mode -- "state: <mode> location_x: <x_coordinate> location_y: <y_coordinate> location_z: <z_coordinate> 
-   ```
-   
-### Service Request Parameters
-#### 1. State (mode)
-- `scanning`: Scan the environment and look at interesting things.
-- `location`: Look at a particular location.
-- `social`: Look for faces and voices.
-- `seeking`: Seek for mutual gaze.
-- `disabled`: Disable the node.
-
-#### 2. Attention Location (in meters)
-- `location_x`: x coordinate of real world location to look at
-- `location_y`: y coordinate of real world location to look at
-- `location_z`: z coordinate of real world location to look at
-
-### Sample Invocations
-- <span style="color: #cccccc; font-weight: bold;">Location mode at (`3, 3, 0.82`): </span>
-```sh
-rosservice call /overtAttention/set_mode "state: 'location'  location_x: 3 location_y: 3 location_z: 0.82"
-```
-- <span style="color: #cccccc; font-weight: bold;">Scanning mode: </span>
-```sh
-rosservice call /overtAttention/set_mode "state: 'scanning'  location_x: 0 location_y: 0 location_z: 0"
-```
-- <span style="color: #cccccc; font-weight: bold;">Social mode: </span>
-```sh
-rosservice call /overtAttention/set_mode "state: 'social'  location_x: 0 location_y: 0 location_z: 0"
-```
-- <span style="color: #cccccc; font-weight: bold;">Seeking mode: </span>
-```sh
-rosservice call /overtAttention/set_mode "state: 'seeking'  location_x: 0 location_y: 0 location_z: 0"
-```
-- <span style="color: #cccccc; font-weight: bold;">Disabled mode: </span>
-```sh
-rosservice call /overtAttention/set_mode "state: 'disabled'  location_x: 0 location_y: 0 location_z: 0"
+# Build the workspace
+cd ~/ros2_ws
+colcon build --packages-select gesture_execution cssr_interfaces
+source install/setup.bash
 ```
 
-## 
-<div style="background-color: #1e1e1e; padding: 15px; border-radius: 4px; border: 1px solid #404040; margin: 10px 0;">
-      <span style="color: #ff3333; font-weight: bold;">NOTE: </span>
-      <span style="color: #cccccc;">To fully understand the configuration values, data requirements, attention modes, debugging processes, and the overall functionality of the overtAttention node, please refer to the <a href="https://cssr4africa.github.io/deliverables/CSSR4Africa_Deliverable_D5.3.pdf" style="color: #66b3ff;">D5.3 Overt Attention</a>.These manuals provide comprehensive explanations and step-by-step instructions essential for effective use and troubleshooting.</span>
-  </div>
-  
-## Support
+2. **Install Python Dependencies**
+```bash
+# Install required Python packages
+pip install PyYAML
+```
+
+# 🔧 Configuration Parameters
+The configuration is managed via `config/gesture_execution_configuration.yaml`:
+
+| Parameter | Description | Values | Default |
+|-----------|-------------|---------|---------|
+| `gestureDescriptors` | Path to gesture descriptor file | string | `gestureDescriptors.dat` |
+| `robotTopics` | Path to robot topic mapping file | string | `pepperTopics.dat` |
+| `verboseMode` | Enable detailed logging and debugging | `true`, `false` | `false` |
+
+## Gesture Definitions
+Gestures are defined in `data/gesture.yaml` with the following structure:
+```yaml
+gestures:
+  wave:
+    id: 2
+    joints: ["RArm"]
+    joint_angles:
+      RArm:
+        - [1.7410, -0.09664, 1.6981, 0.09664, -0.05679]  # Waypoint 1
+        - [0.0414, -0.7725, 1.4900, 0.5236, 0.0]          # Waypoint 2
+    times:
+      RArm: [1.0, 2.0]  # Timing for each waypoint
+```
+
+## Topic Mappings
+Robot topics are configured in `data/pepper_topics.yaml`:
+```yaml
+topics:
+  JointAngles: "/joint_angles"
+  Wheels: "/cmd_vel"
+  JointStates: "/joint_states"
+  RobotPose: "/robotLocalization/pose"
+```
+
+# 🚀 Running the Node
+
+## Building the Package
+```bash
+# Build the gesture_execution package
+cd ~/ros2_ws
+colcon build --packages-select gesture_execution
+source install/setup.bash
+```
+
+## Starting the Node
+```bash
+# Run the gesture execution node
+ros2 run gesture_execution gesture_execution
+```
+
+## Verification
+To verify the node is running and services are available:
+```bash
+# Check node status
+ros2 node list
+
+# Check available services
+ros2 service list | grep gesture
+
+# Expected output:
+# /gesture_execution/perform_gesture
+```
+
+# 🖥️ Service Interface
+The node provides a single service `/gesture_execution/perform_gesture` with the following request parameters:
+
+## Service Request (`cssr_interfaces/srv/PerformGesture`)
+
+| Parameter | Type | Description | Constraints |
+|-----------|------|-------------|-------------|
+| `gesture_type` | string | Type of gesture to execute | `"deictic"`, `"iconic"`, `"bow"`, `"nod"` |
+| `gesture_id` | int32 | ID of predefined gesture (for iconic gestures) | Positive integer |
+| `speed` | int32 | Duration of gesture in milliseconds | 1000-10000 ms |
+| `bow_nod_angle` | int32 | Angle for bowing/nodding in degrees | 5-45° for bow, 5-30° for nod |
+| `location_x` | float32 | X coordinate for pointing (meters) | Any real number |
+| `location_y` | float32 | Y coordinate for pointing (meters) | Any real number |
+| `location_z` | float32 | Z coordinate for pointing (meters) | Any real number |
+
+## Service Response
+- `gesture_success`: 1 for success, 0 for failure
+
+# 📋 Gesture Types
+
+## 1. Deictic Gestures (Pointing)
+Points to a specific 3D location in the environment. The robot uses inverse kinematics to calculate the appropriate joint angles.
+
+**Example Service Call:**
+```bash
+ros2 service call /gesture_execution/perform_gesture cssr_interfaces/srv/PerformGesture \
+  "{gesture_type: 'deictic', gesture_id: 0, speed: 2000, bow_nod_angle: 0, \
+    location_x: 2.0, location_y: 1.5, location_z: 0.8}"
+```
+
+## 2. Iconic Gestures (Predefined Arm Motions)
+Executes predefined arm motions from the gesture.yaml file. Currently supported gestures:
+- `id: 1` - Welcome gesture (both arms)
+- `id: 2` - Wave gesture (right arm)
+- `id: 3` - Handshake gesture (both arms)
+
+**Example Service Call:**
+```bash
+ros2 service call /gesture_execution/perform_gesture cssr_interfaces/srv/PerformGesture \
+  "{gesture_type: 'iconic', gesture_id: 2, speed: 3000, bow_nod_angle: 0, \
+    location_x: 0.0, location_y: 0.0, location_z: 0.0}"
+```
+
+## 3. Bowing Gestures
+Bows the robot forward at a specified angle.
+
+**Example Service Call:**
+```bash
+ros2 service call /gesture_execution/perform_gesture cssr_interfaces/srv/PerformGesture \
+  "{gesture_type: 'bow', gesture_id: 0, speed: 2500, bow_nod_angle: 30, \
+    location_x: 0.0, location_y: 0.0, location_z: 0.0}"
+```
+
+## 4. Nodding Gestures
+Nods the robot's head at a specified angle.
+
+**Example Service Call:**
+```bash
+ros2 service call /gesture_execution/perform_gesture cssr_interfaces/srv/PerformGesture \
+  "{gesture_type: 'nod', gesture_id: 0, speed: 1500, bow_nod_angle: 15, \
+    location_x: 0.0, location_y: 0.0, location_z: 0.0}"
+```
+
+# 🏗️ Architecture
+
+## Core Components
+1. **GestureExecutionSystem**: Main ROS2 node managing service interface and gesture execution
+2. **GestureDescriptorManager**: Loads and manages gesture definitions from YAML files
+3. **ConfigManager**: Handles configuration and topic mappings
+4. **PepperKinematicsUtilities**: Provides inverse kinematics for pointing gestures
+
+## Motion Execution Pipeline
+1. **Service Request**: Receive gesture parameters via ROS2 service
+2. **Gesture Validation**: Validate parameters against constraints
+3. **Trajectory Generation**: Calculate joint trajectories using Bézier interpolation
+4. **Joint Limit Checking**: Ensure all motions are within safe limits
+5. **Motion Execution**: Publish joint trajectories to robot controllers
+6. **Response**: Return success/failure status
+
+## Bézier Interpolation
+The system uses cubic Bézier curves for smooth motion between waypoints, providing:
+- Continuous velocity and acceleration profiles
+- Natural-looking movements
+- Reduced stress on robot joints
+- Precise timing control
+
+# ⚙️ Technical Details
+
+## Joint Coordinate System
+The system uses the following joint order for each arm:
+1. ShoulderPitch
+2. ShoulderRoll  
+3. ElbowYaw
+4. ElbowRoll
+5. WristYaw
+
+## Kinematic Parameters
+- Upper arm length: 150 mm
+- Shoulder offsets: X=-57.0mm, Y=±149.74mm, Z=86.82mm
+- Torso height: 0.0mm (adjustable based on robot configuration)
+
+## Safety Limits
+- **Shoulder Pitch**: ±2.0857 rad (±119.5°)
+- **Shoulder Roll**: Right: -1.5621 to -0.0087 rad, Left: 0.0087 to 1.5621 rad
+- **Bowing Angle**: 5-45 degrees
+- **Nodding Angle**: 5-30 degrees
+- **Gesture Duration**: 1000-10000 milliseconds
+
+# 🐛 Debugging and Troubleshooting
+
+## Enabling Verbose Mode
+Set `verboseMode: true` in `config/gesture_execution_configuration.yaml` to enable detailed logging.
+
+## Common Issues
+1. **Service Not Found**: Ensure the node is running and the workspace is sourced
+2. **Joint Limit Errors**: Check that pointing locations are within reachable workspace
+3. **Configuration Errors**: Verify YAML file syntax and file paths
+4. **Motion Execution Failures**: Check robot connection and joint state topics
+
+## Logging
+The node provides different log levels:
+- **INFO**: General operation messages
+- **WARNING**: Parameter validation issues
+- **ERROR**: Execution failures
+- **DEBUG**: Detailed trajectory information (with verbose mode)
+
+# 💡 Support
 
 For issues or questions:
 - Create an issue on GitHub
-- Contact: <a href="mailto:dvernon@andrew.cmu.edu">dvernon@andrew.cmu.edu</a>, <a href="mailto:mdanso@andrew.cmu.edu">mdanso@andrew.cmu.edu</a><br>, <a href="mailto:aakinade@andrew.cmu.edu">aakinade@andrew.cmu.edu</a><br>
+- Contact: <a href="mailto:yohanneh@andrew.cmu.edu">yohanneh@andrew.cmu.edu</a><br>
 - Visit: <a href="http://www.cssr4africa.org">www.cssr4africa.org</a>
 
-## License  
+# 📜 License
+Copyright (C) 2025 Upanzi Network   
 Funded by African Engineering and Technology Network (Afretec)  
 Inclusive Digital Transformation Research Grant Programme
 
-Date:   2025-01-10
+2025-10-11

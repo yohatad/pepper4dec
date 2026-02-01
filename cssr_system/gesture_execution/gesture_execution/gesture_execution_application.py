@@ -34,23 +34,27 @@ def main(args=None):
     
     print(copyright_message)
 
+    gesture_system = None  # Initialize to None
+    
     try:
         gesture_system = GestureExecutionSystem()
-        gesture_system.get_logger().info("Gesture Execution System started - waiting for service calls")
         
         # Spin to handle service calls
         rclpy.spin(gesture_system)
         
     except KeyboardInterrupt:
-        pass
+        print("\nShutting down gesture execution system...")
     except Exception as e:
         print(f"Error running gesture execution system: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
-        try:
+        # Clean shutdown
+        if gesture_system is not None:
             gesture_system.destroy_node()
-        except:
-            pass
-        rclpy.shutdown()
+        
+        if rclpy.ok():  # Only shutdown if not already shut down
+            rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

@@ -23,10 +23,15 @@ from ament_index_python.packages import get_package_share_directory
 
 # ROS2 messages and services
 from sensor_msgs.msg import JointState
-from geometry_msgs.msg import Pose2D, Twist
+from geometry_msgs.msg import Pose2D, Twist, Point, Vector3
+from visualization_msgs.msg import Marker
+from std_msgs.msg import ColorRGBA
 from naoqi_bridge_msgs.msg import JointAnglesTrajectory
 from cssr_interfaces.srv import PerformGesture
 from .pepper_kinematics_utilities import PepperKinematicsUtilities, RIGHT_ARM, LEFT_ARM
+
+# Import builtin_interfaces for time
+from builtin_interfaces.msg import Time
 
 # Constants
 MIN_GESTURE_DURATION = 1000  # milliseconds
@@ -91,8 +96,8 @@ class ConfigManager:
         
         # Default values
         config = {
-            "gestureDescriptors": "gestureDescriptors.dat",
-            "robotTopics": "pepperTopics.dat", 
+            "gestureDescriptors": "gesture.yaml",
+            "robotTopics": "pepperTopics.yaml", 
             "verboseMode": True  # Changed to True for debugging
         }
         
@@ -193,12 +198,13 @@ class GestureExecutionSystem(Node):
         self.init_joint_states()
         
         self.setup_ros_interfaces()
-        self.get_logger().info("Gesture Execution System initialized")
         self.get_logger().info("Gesture Execution System started - waiting for service calls")
     
     def init_joint_states(self):
         """Initialize joint state storage"""
         # FIXED: Consistent joint order matching home_positions
+        # Pepper hand joints: RHand and LHand range from 0.0 (closed) to 1.0 (open)
+        # Home position is typically 0.67 (partially open)
         self.joint_states = {
             'HeadPitch': self.joint_limits.DEFAULT_HEAD_PITCH,
             'HeadYaw': self.joint_limits.DEFAULT_HEAD_YAW,
@@ -212,6 +218,8 @@ class GestureExecutionSystem(Node):
             'LElbowYaw': self.descriptor_manager.home_positions['LArm'][2],
             'LElbowRoll': self.descriptor_manager.home_positions['LArm'][3],
             'LWristYaw': self.descriptor_manager.home_positions['LArm'][4],
+            'RHand': 0.67,  # Pepper hand home position (partially open)
+            'LHand': 0.67,  # Pepper hand home position (partially open)
             'HipPitch': self.descriptor_manager.home_positions['Leg'][0],
             'HipRoll': self.descriptor_manager.home_positions['Leg'][1],
             'KneePitch': self.descriptor_manager.home_positions['Leg'][2]
@@ -220,15 +228,18 @@ class GestureExecutionSystem(Node):
     def setup_ros_interfaces(self):
         """Initialize ROS publishers, subscribers, and services"""
         topics = self.config_manager.topics
-        
+
         # Subscribers
         self.create_subscription(JointState, topics["JointStates"], self.joint_states_callback, 10)
         self.create_subscription(Pose2D, topics["RobotPose"], self.robot_pose_callback, 10)
-        
+
         # Publishers - FIXED: Correct topic name
         self.joint_traj_pub = self.create_publisher(JointAnglesTrajectory, '/joint_angles_trajectory', 10)
         self.cmd_vel_pub = self.create_publisher(Twist, topics["Wheels"], 10)
         
+        # RViz2 visualization publishers
+        self.marker_pub = self.create_publisher(Marker, "/gesture_execution/visualization", 10)
+
         # Services
         self.create_service(PerformGesture, "/gesture_execution/perform_gesture", self.perform_gesture_callback)
     
@@ -310,6 +321,75 @@ class GestureExecutionSystem(Node):
             self.get_logger().warning(f"Unsupported gesture type: '{gesture_type}'")
             return False
     
+    def execute_pointing_motion(self, arm: int, shoulder_pitch: float, shoulder_roll: float, 
+                           duration: int, pointing_x: float, pointing_y: float, 
+                           pointing_z: float) -> bool:
+        """Execute the actual pointing motion with smooth Bezier interpolation including head movement"""
+        try:
+            duration_sec = duration / 1000.0
+            
+            # Calculate head angles to look at target
+            head_pitch, head_yaw = self.calculate_head_angles_to_target(pointing_x, pointing_y, pointing_z)
+            
+            if self.verbose_mode:
+                self.get_logger().info(
+                    f"Head angles - Pitch: {math.degrees(head_pitch):.1f}°, "
+                    f"Yaw: {math.degrees(head_yaw):.1f}°"
+                )
+            
+            # FIXED: Consistent joint order - ShoulderPitch, ShoulderRoll, ElbowYaw, ElbowRoll, WristYaw
+            if arm == RIGHT_ARM:
+                arm_joint_names = ['RShoulderPitch', 'RShoulderRoll', 'RElbowYaw', 'RElbowRoll', 'RWristYaw']
+                # For deictic gestures, open the hand by setting wrist yaw to 0 (straight hand)
+                # Home wrist yaw is -0.05679, pointing wrist yaw should be 0 for open hand
+                pointing_angles = [shoulder_pitch, shoulder_roll, 2.0857, 0.0, -1.0]
+                home_position = self.descriptor_manager.home_positions['RArm']
+                # Add right hand joint for opening/closing
+                hand_joint_name = 'RHand'
+            else:
+                arm_joint_names = ['LShoulderPitch', 'LShoulderRoll', 'LElbowYaw', 'LElbowRoll', 'LWristYaw']
+                # For deictic gestures, open the hand by setting wrist yaw to 0 (straight hand)
+                # Home wrist yaw is 0.06592, pointing wrist yaw should be 0 for open hand
+                pointing_angles = [shoulder_pitch, shoulder_roll, -1.5620, -0.0, -1.0]
+                home_position = self.descriptor_manager.home_positions['LArm']
+                # Add left hand joint for opening/closing
+                hand_joint_name = 'LHand'
+            
+            # Add head joints
+            head_joint_names = ['HeadPitch', 'HeadYaw']
+            head_home = self.descriptor_manager.home_positions['Head']
+            head_pointing = [head_pitch, head_yaw]
+            
+            # Hand positions: 0.0 = closed, 1.0 = fully open, 0.67 = home (partially open)
+            # For pointing: hand should be fully open (1.0)
+            hand_home_position = [0.67]  # Pepper hand home position (partially open)
+            hand_open_position = [1.0]    # Fully open for pointing
+            
+            # Combine all joints: arm + head + hand
+            joint_names = arm_joint_names + head_joint_names + [hand_joint_name]
+            
+            # Create synchronized trajectory: home -> pointing -> home
+            # Home waypoint: arm home + head home + hand home (partially open)
+            home_waypoint = home_position + head_home + hand_home_position
+            # Pointing waypoint: pointing angles + head pointing + hand open
+            pointing_waypoint = pointing_angles + head_pointing + hand_open_position
+            # Return waypoint: arm home + head home + hand home (partially open)
+            return_waypoint = home_position + head_home + hand_home_position
+            
+            waypoints = [home_waypoint, pointing_waypoint, return_waypoint]
+            
+            # Execute smooth pointing gesture with head tracking and hand opening
+            self.move_joints_bezier(joint_names, waypoints, duration_sec * 2, use_bezier=True)
+            time.sleep(duration_sec * 2)
+            
+            return True
+            
+        except Exception as e:
+            self.get_logger().error(f"Pointing motion failed: {e}")
+            self.get_logger().error(traceback.format_exc())
+            return False
+    
+    
     def execute_deictic_gesture(self, point_x: float, point_y: float, point_z: float, duration: int) -> bool:
         """Execute pointing gesture to specific location"""
         try:
@@ -329,28 +409,16 @@ class GestureExecutionSystem(Node):
             if self.verbose_mode:
                 self.get_logger().info(f"Pointing coordinates: ({pointing_x:.1f}, {pointing_y:.1f}, {pointing_z:.1f})")
             
-            # Determine which arm to use and if rotation is needed
-            rotation_angle = 0.0
-            pose_achievable = True
+            # Check if target is in front of robot
+            if pointing_x < 0.0:
+                self.get_logger().error(
+                    f"Pointing target is out of bounds (behind robot): "
+                    f"x={pointing_x:.1f}mm. Robot cannot point backwards."
+                )
+                return False
             
-            if pointing_x >= 0.0:
-                # Target in front - choose arm based on y coordinate
-                pointing_arm = RIGHT_ARM if pointing_y <= 0.0 else LEFT_ARM
-            else:
-                # Target behind - need to rotate robot
-                pose_achievable = False
-                if pointing_y <= 0.0:
-                    rotation_angle = -90.0  # Rotate right
-                    pointing_arm = RIGHT_ARM
-                    temp = pointing_x
-                    pointing_x = -pointing_y
-                    pointing_y = temp
-                else:
-                    rotation_angle = 90.0   # Rotate left
-                    pointing_arm = LEFT_ARM
-                    temp = pointing_x
-                    pointing_x = pointing_y
-                    pointing_y = -temp
+            # Determine which arm to use based on y coordinate
+            pointing_arm = RIGHT_ARM if pointing_y <= 0.0 else LEFT_ARM
             
             # Calculate elbow position for inverse kinematics
             shoulder_x = SHOULDER_OFFSET_X
@@ -370,66 +438,55 @@ class GestureExecutionSystem(Node):
                 pointing_arm, elbow_x, elbow_y, elbow_z
             )
             
+            # Check for invalid angles
+            if math.isnan(shoulder_pitch) or math.isnan(shoulder_roll):
+                self.get_logger().error(
+                    f"Pointing target is out of bounds (unreachable): "
+                    f"Invalid joint angles calculated for target ({pointing_x:.1f}, {pointing_y:.1f}, {pointing_z:.1f})mm"
+                )
+                return False
+            
             # Check joint limits
             if pointing_arm == RIGHT_ARM:
                 if (shoulder_pitch < MIN_RSHOULDER_PITCH or shoulder_pitch > MAX_RSHOULDER_PITCH or
                     shoulder_roll < MIN_RSHOULDER_ROLL or shoulder_roll > MAX_RSHOULDER_ROLL):
-                    self.get_logger().error("Pointing target outside joint limits")
+                    self.get_logger().error(
+                        f"Pointing target is out of bounds (joint limits exceeded): "
+                        f"Right arm - Pitch: {math.degrees(shoulder_pitch):.1f}° "
+                        f"[{math.degrees(MIN_RSHOULDER_PITCH):.1f}° to {math.degrees(MAX_RSHOULDER_PITCH):.1f}°], "
+                        f"Roll: {math.degrees(shoulder_roll):.1f}° "
+                        f"[{math.degrees(MIN_RSHOULDER_ROLL):.1f}° to {math.degrees(MAX_RSHOULDER_ROLL):.1f}°]"
+                    )
                     return False
             else:
                 if (shoulder_pitch < MIN_LSHOULDER_PITCH or shoulder_pitch > MAX_LSHOULDER_PITCH or
                     shoulder_roll < MIN_LSHOULDER_ROLL or shoulder_roll > MAX_LSHOULDER_ROLL):
-                    self.get_logger().error("Pointing target outside joint limits")
+                    self.get_logger().error(
+                        f"Pointing target is out of bounds (joint limits exceeded): "
+                        f"Left arm - Pitch: {math.degrees(shoulder_pitch):.1f}° "
+                        f"[{math.degrees(MIN_LSHOULDER_PITCH):.1f}° to {math.degrees(MAX_LSHOULDER_PITCH):.1f}°], "
+                        f"Roll: {math.degrees(shoulder_roll):.1f}° "
+                        f"[{math.degrees(MIN_LSHOULDER_ROLL):.1f}° to {math.degrees(MAX_LSHOULDER_ROLL):.1f}°]"
+                    )
                     return False
             
-            if math.isnan(shoulder_pitch) or math.isnan(shoulder_roll):
-                self.get_logger().error("Invalid joint angles calculated")
-                return False
+            # Publish visualization markers before executing the gesture
+            self._publish_deictic_visualization(
+                pointing_x, pointing_y, pointing_z,
+                shoulder_x, shoulder_y, shoulder_z,
+                pointing_arm
+            )
             
-            # Rotate robot if needed
-            if not pose_achievable:
-                self.rotate_robot(rotation_angle)
-            
-            # Execute pointing motion
-            success = self.execute_pointing_motion(pointing_arm, shoulder_pitch, shoulder_roll, duration)
-            
-            # Rotate back if needed
-            if not pose_achievable:
-                self.rotate_robot(-rotation_angle)
+            # Execute pointing motion with head tracking
+            success = self.execute_pointing_motion(
+                pointing_arm, shoulder_pitch, shoulder_roll, duration,
+                pointing_x, pointing_y, pointing_z
+            )
             
             return success
             
         except Exception as e:
             self.get_logger().error(f"Deictic gesture execution failed: {e}")
-            self.get_logger().error(traceback.format_exc())
-            return False
-    
-    def execute_pointing_motion(self, arm: int, shoulder_pitch: float, shoulder_roll: float, duration: int) -> bool:
-        """Execute the actual pointing motion with smooth Bezier interpolation"""
-        try:
-            duration_sec = duration / 1000.0
-            
-            # FIXED: Consistent joint order - ShoulderPitch, ShoulderRoll, ElbowYaw, ElbowRoll, WristYaw
-            if arm == RIGHT_ARM:
-                joint_names = ['RShoulderPitch', 'RShoulderRoll', 'RElbowYaw', 'RElbowRoll', 'RWristYaw']
-                pointing_angles = [shoulder_pitch, shoulder_roll, 2.0857, 0.0, -0.05679]
-                home_position = self.descriptor_manager.home_positions['RArm']
-            else:
-                joint_names = ['LShoulderPitch', 'LShoulderRoll', 'LElbowYaw', 'LElbowRoll', 'LWristYaw']
-                pointing_angles = [shoulder_pitch, shoulder_roll, -1.5620, -0.0, 0.06592]
-                home_position = self.descriptor_manager.home_positions['LArm']
-            
-            # Create smooth trajectory: home -> pointing -> home
-            waypoints = [home_position, pointing_angles, home_position]
-            
-            # Execute smooth pointing gesture
-            self.move_joints_bezier(joint_names, waypoints, duration_sec * 2, use_bezier=True)
-            time.sleep(duration_sec * 2)
-            
-            return True
-            
-        except Exception as e:
-            self.get_logger().error(f"Pointing motion failed: {e}")
             self.get_logger().error(traceback.format_exc())
             return False
     
@@ -482,6 +539,8 @@ class GestureExecutionSystem(Node):
                     joint_names = ['RShoulderPitch', 'RShoulderRoll', 'RElbowYaw', 'RElbowRoll', 'RWristYaw']
                 elif arm_name == "LArm":
                     joint_names = ['LShoulderPitch', 'LShoulderRoll', 'LElbowYaw', 'LElbowRoll', 'LWristYaw']
+                elif arm_name == "Leg":
+                    joint_names = ['HipPitch', 'HipRoll', 'KneePitch']
                 else:
                     self.get_logger().warning(f"Unknown arm: {arm_name}")
                     continue
@@ -555,6 +614,43 @@ class GestureExecutionSystem(Node):
             self.get_logger().error(traceback.format_exc())
             return False
 
+    def calculate_head_angles_to_target(self, target_x: float, target_y: float, target_z: float) -> Tuple[float, float]:
+        """
+        Calculate head yaw and pitch angles to look at a target point
+        
+        Args:
+            target_x, target_y, target_z: Target coordinates in robot's local frame (mm)
+        
+        Returns:
+            Tuple of (head_pitch, head_yaw) in radians
+        """
+        # Calculate distance in XY plane
+        distance_xy = math.sqrt(target_x**2 + target_y**2)
+        
+        # Calculate head yaw (rotation around Z axis)
+        head_yaw = math.atan2(target_y, target_x)
+        
+        # Calculate head pitch (rotation around Y axis)
+        # Adjust target_z for head height (approximately 300mm from base)
+        HEAD_HEIGHT = 300.0  # mm - adjust based on Pepper's actual head height
+        adjusted_z = target_z - HEAD_HEIGHT
+        
+        # FIX: Head pitch sign was reversed
+        # For Pepper robot: 
+        # - Positive pitch = looking down (head tilting forward)
+        # - Negative pitch = looking up (head tilting back)
+        # When target is above head (adjusted_z > 0), robot should look UP (negative pitch)
+        # When target is below head (adjusted_z < 0), robot should look DOWN (positive pitch)
+        head_pitch = -math.atan2(adjusted_z, distance_xy)
+        
+        # Clamp to joint limits
+        head_yaw = max(self.joint_limits.HEAD_YAW_RANGE[0], 
+                    min(head_yaw, self.joint_limits.HEAD_YAW_RANGE[1]))
+        head_pitch = max(self.joint_limits.HEAD_PITCH_RANGE[0], 
+                        min(head_pitch, self.joint_limits.HEAD_PITCH_RANGE[1]))
+        
+        return head_pitch, head_yaw
+    
     def execute_nodding_gesture(self, nod_angle: int, duration: int) -> bool:
         """Execute nodding gesture with smooth Bezier interpolation"""
         try:
@@ -571,6 +667,7 @@ class GestureExecutionSystem(Node):
             # Smooth nod: home -> nod -> home
             waypoints = [home_position, nod_position, home_position]
             self.move_joints_bezier(joint_names, waypoints, duration_sec * 2, use_bezier=True)
+            time.sleep(duration_sec * 2)
             
             return True
             
@@ -578,30 +675,6 @@ class GestureExecutionSystem(Node):
             self.get_logger().error(f"Nodding gesture failed: {e}")
             self.get_logger().error(traceback.format_exc())
             return False
-    
-    def rotate_robot(self, angle_degrees: float):
-        """Rotate robot by specified angle"""
-        try:
-            duration = abs(angle_degrees) / 30.0  # 30 degrees per second
-            angular_velocity = math.radians(30.0) if angle_degrees > 0 else -math.radians(30.0)
-            
-            twist = Twist()
-            twist.angular.z = angular_velocity
-            
-            start_time = time.time()
-            while time.time() - start_time < duration:
-                self.cmd_vel_pub.publish(twist)
-                time.sleep(0.1)
-            
-            # Stop rotation
-            twist.angular.z = 0.0
-            self.cmd_vel_pub.publish(twist)
-            
-            if self.verbose_mode:
-                self.get_logger().info(f"Robot rotated {angle_degrees} degrees")
-                
-        except Exception as e:
-            self.get_logger().error(f"Robot rotation failed: {e}")
     
     def move_joints_bezier(self, joint_names: List[str], 
                    joint_angles: Union[List[List[float]], List[float]], 
@@ -696,4 +769,148 @@ class GestureExecutionSystem(Node):
                 
         except Exception as e:
             self.get_logger().error(f"Bezier trajectory failed: {e}")
+            self.get_logger().error(traceback.format_exc())
+
+    def _publish_deictic_visualization(self, 
+                                    target_x: float, target_y: float, target_z: float,
+                                    shoulder_x: float, shoulder_y: float, shoulder_z: float,
+                                    arm: int):
+        """
+        Publish RViz2 markers for deictic gesture visualization
+        
+        Args:
+            target_x, target_y, target_z: Target point coordinates in mm
+            shoulder_x, shoulder_y, shoulder_z: Shoulder position in mm  
+            arm: RIGHT_ARM or LEFT_ARM indicating which arm is pointing
+        """
+        try:
+            stamp = self.get_clock().now().to_msg()
+            
+            # 1. Target point marker (sphere) - bright red for better visibility
+            target_marker = Marker()
+            target_marker.header.stamp = stamp
+            target_marker.header.frame_id = "base_link"  # Robot base frame
+            target_marker.ns = "deictic_target"
+            target_marker.id = 0
+            target_marker.type = Marker.SPHERE
+            target_marker.action = Marker.ADD
+            target_marker.pose.position.x = target_x / 1000.0  # Convert mm to meters
+            target_marker.pose.position.y = target_y / 1000.0
+            target_marker.pose.position.z = target_z / 1000.0
+            target_marker.pose.orientation.w = 1.0
+            target_marker.scale.x = 0.1  # 10cm sphere (increased from 5cm)
+            target_marker.scale.y = 0.1
+            target_marker.scale.z = 0.1
+            target_marker.color.r = 1.0  # Bright red for target
+            target_marker.color.g = 0.0
+            target_marker.color.b = 0.0
+            target_marker.color.a = 1.0  # Fully opaque
+            # Set lifetime properly with both sec and nanosec
+            target_marker.lifetime.sec = 10  # 10 seconds (increased from 3)
+            target_marker.lifetime.nanosec = 0
+            
+            self.marker_pub.publish(target_marker)
+            
+            # 2. Shoulder position marker (sphere) - bright colors for better visibility
+            shoulder_marker = Marker()
+            shoulder_marker.header.stamp = stamp
+            shoulder_marker.header.frame_id = "base_link"
+            shoulder_marker.ns = "deictic_shoulder"
+            shoulder_marker.id = 1
+            shoulder_marker.type = Marker.SPHERE
+            shoulder_marker.action = Marker.ADD
+            shoulder_marker.pose.position.x = shoulder_x / 1000.0
+            shoulder_marker.pose.position.y = shoulder_y / 1000.0
+            shoulder_marker.pose.position.z = shoulder_z / 1000.0
+            shoulder_marker.pose.orientation.w = 1.0
+            shoulder_marker.scale.x = 0.06  # 6cm sphere (increased from 3cm)
+            shoulder_marker.scale.y = 0.06
+            shoulder_marker.scale.z = 0.06
+            # Bright colors based on arm (green for left, blue for right)
+            if arm == LEFT_ARM:
+                shoulder_marker.color.r = 0.0
+                shoulder_marker.color.g = 1.0  # Bright green
+                shoulder_marker.color.b = 0.0
+            else:  # RIGHT_ARM
+                shoulder_marker.color.r = 0.0
+                shoulder_marker.color.g = 0.0
+                shoulder_marker.color.b = 1.0  # Bright blue
+            shoulder_marker.color.a = 1.0  # Fully opaque
+            shoulder_marker.lifetime.sec = 10
+            shoulder_marker.lifetime.nanosec = 0
+            
+            self.marker_pub.publish(shoulder_marker)
+            
+            # 3. Pointing line from shoulder to target (arrow) - thicker and brighter
+            line_marker = Marker()
+            line_marker.header.stamp = stamp
+            line_marker.header.frame_id = "base_link"
+            line_marker.ns = "deictic_line"
+            line_marker.id = 2
+            line_marker.type = Marker.ARROW
+            line_marker.action = Marker.ADD
+            
+            start_point = Point()
+            start_point.x = shoulder_x / 1000.0
+            start_point.y = shoulder_y / 1000.0
+            start_point.z = shoulder_z / 1000.0
+            end_point = Point()
+            end_point.x = target_x / 1000.0
+            end_point.y = target_y / 1000.0
+            end_point.z = target_z / 1000.0
+            
+            line_marker.points.append(start_point)
+            line_marker.points.append(end_point)
+            
+            # Bright colors based on arm (green for left, blue for right)
+            if arm == LEFT_ARM:
+                line_marker.color.r = 0.0
+                line_marker.color.g = 1.0  # Bright green
+                line_marker.color.b = 0.0
+            else:  # RIGHT_ARM
+                line_marker.color.r = 0.0
+                line_marker.color.g = 0.0
+                line_marker.color.b = 1.0  # Bright blue
+            line_marker.color.a = 0.8  # Slightly transparent for better visibility
+            line_marker.scale.x = 0.03  # Shaft diameter (increased from 0.02)
+            line_marker.scale.y = 0.06  # Head diameter (increased from 0.04)
+            line_marker.scale.z = 0.12  # Head length (increased from 0.1)
+            line_marker.lifetime.sec = 10
+            line_marker.lifetime.nanosec = 0
+            
+            self.marker_pub.publish(line_marker)
+            
+            # 4. Text label showing coordinates - larger and brighter
+            text_marker = Marker()
+            text_marker.header.stamp = stamp
+            text_marker.header.frame_id = "base_link"
+            text_marker.ns = "deictic_text"
+            text_marker.id = 3
+            text_marker.type = Marker.TEXT_VIEW_FACING
+            text_marker.action = Marker.ADD
+            # Position text slightly above target
+            text_marker.pose.position.x = target_x / 1000.0
+            text_marker.pose.position.y = target_y / 1000.0
+            text_marker.pose.position.z = (target_z / 1000.0) + 0.15  # 15cm above target
+            text_marker.pose.orientation.w = 1.0
+            text_marker.text = f"Target: ({target_x/1000:.2f}, {target_y/1000:.2f}, {target_z/1000:.2f}) m"
+            text_marker.scale.z = 0.07  # Text height (increased from 0.05)
+            text_marker.color.r = 1.0
+            text_marker.color.g = 1.0
+            text_marker.color.b = 1.0  # White text for better visibility
+            text_marker.color.a = 1.0  # Fully opaque
+            text_marker.lifetime.sec = 10
+            text_marker.lifetime.nanosec = 0
+            
+            self.marker_pub.publish(text_marker)
+            
+            if self.verbose_mode:
+                arm_name = "left" if arm == LEFT_ARM else "right"
+                self.get_logger().info(f"Published deictic visualization markers for {arm_name} arm pointing")
+                self.get_logger().info(f"  Target: ({target_x/1000:.2f}, {target_y/1000:.2f}, {target_z/1000:.2f}) m")
+                self.get_logger().info(f"  Shoulder: ({shoulder_x/1000:.2f}, {shoulder_y/1000:.2f}, {shoulder_z/1000:.2f}) m")
+                self.get_logger().info(f"  Markers will be visible for 10 seconds")
+                
+        except Exception as e:
+            self.get_logger().error(f"Failed to publish deictic visualization: {e}")
             self.get_logger().error(traceback.format_exc())
