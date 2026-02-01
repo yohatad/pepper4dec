@@ -14,7 +14,7 @@ import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Pose2D
-from tf_transformations import euler_from_quaternion
+from transforms3d.euler import quat2euler
 
 
 class RobotLocalization(Node):
@@ -93,9 +93,10 @@ class RobotLocalization(Node):
             odom_y = msg.pose.pose.position.y
             
             # Extract orientation (yaw) from quaternion
+            # Extract orientation (yaw) from quaternion
             orientation_q = msg.pose.pose.orientation
-            orientation_list = [orientation_q.x, orientation_q.y, orientation_q.z, orientation_q.w]
-            (_, _, odom_theta) = euler_from_quaternion(orientation_list)
+            # transforms3d uses [w, x, y, z] order (note the difference!)
+            (roll, pitch, odom_theta) = quat2euler([orientation_q.w, orientation_q.x, orientation_q.y, orientation_q.z])
             
             # Initialize on first message
             if not self.odom_initialized:
