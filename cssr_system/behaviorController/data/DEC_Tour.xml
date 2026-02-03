@@ -7,8 +7,17 @@
       <Action ID="StartOfTree" name="initialize_tour"/>
       <SubTree ID="DetectVisitor"/>
       <SubTree ID="EngageVisitor"/>
-      <SubTree ID="QueryVisitorResponse"/>
-      <SubTree ID="VisitExhibit"/>
+      
+      <!-- Handle visitor response - if they decline, skip to EndTour gracefully -->
+      <Fallback name="TourDecision">
+        <Sequence name="AcceptedTour">
+          <SubTree ID="QueryVisitorResponse"/>
+          <SubTree ID="VisitExhibit"/>
+        </Sequence>
+        <!-- If QueryVisitorResponse fails (visitor declined), we still end gracefully -->
+        <Action ID="SetBlackboardValue" key="tour_declined" value="true"/>
+      </Fallback>
+      
       <SubTree ID="EndTour"/>
     </Sequence>
   </BehaviorTree>
@@ -37,18 +46,22 @@
       <!-- Welcome speech -->
       <Action ID="SayText" 
               text_id="welcome_speech" 
-              speech_file="welcome.wav"
+              speech_file="{speech_base_path}/welcome.wav" 
               wait_for_completion="true"/>
       
-      <!-- Establish mutual gaze -->
+      <!-- Establish mutual gaze with fallback -->
       <Action ID="SetOvertAttentionMode" mode="seeking"/>
-      <Condition ID="IsMutualGazeDiscovered" timeout="10.0"/>
+      <Fallback name="EstablishGaze">
+        <Condition ID="IsMutualGazeDiscovered" timeout="10.0"/>
+        <!-- If gaze not established, continue anyway but log -->
+        <Action ID="LogEvent" level="warn" message="Mutual gaze not established, continuing"/>
+      </Fallback>
       <Action ID="SetOvertAttentionMode" mode="social"/>
       
       <!-- Query for tour -->
       <Action ID="SayText" 
-              text_id="query_tour_speech"
-              speech_file="query_tour.wav"
+              text_id="query_tour_speech" 
+              speech_file="{speech_base_path}/query_tour.wav" 
               wait_for_completion="true"/>
     </Sequence>
   </BehaviorTree>
@@ -71,7 +84,7 @@
           <Sequence>
             <Action ID="SayText" 
                     text_id="press_yes_no_speech"
-                    speech_file="press_button.wav"
+                    speech_file="{speech_base_path}/press_button.wav"
                     wait_for_completion="true"/>
             <Action ID="PressYesNoDialogue" timeout="15.0"/>
           </Sequence>
@@ -79,16 +92,19 @@
       </Fallback>
       
       <!-- Process response -->
-      <Fallback name="ProcessResponse">
+      <IfThenElse name="ProcessResponse">
         <Condition ID="IsVisitorResponseYes"/>
+        <!-- THEN: Visitor wants tour - return SUCCESS -->
+        <Action ID="LogEvent" level="info" message="Visitor accepted tour"/>
+        <!-- ELSE: Visitor declined - say goodbye phrase and return FAILURE -->
         <Sequence name="DeclineTour">
           <Action ID="SayText" 
                   text_id="maybe_another_time_speech"
-                  speech_file="decline.wav"
+                  speech_file="{speech_base_path}/decline.wav"
                   wait_for_completion="true"/>
           <AlwaysFailure/>
         </Sequence>
-      </Fallback>
+      </IfThenElse>
     </Sequence>
   </BehaviorTree>
 
@@ -102,21 +118,23 @@
               pose_topic="/robot_pose"
               timeout="3.0"/>
       
-      <!-- Loop through exhibits -->
-      <RepeatUntilFailure name="ExhibitLoop">
+      <!-- Loop through exhibits using WhileDoElse for cleaner exit -->
+      <WhileDoElse name="ExhibitLoop">
+        <!-- While condition: check if exhibits remain -->
+        <Condition ID="IsListWithExhibit"/>
+        
+        <!-- Do: visit exhibit -->
         <Sequence name="SingleExhibitVisit">
-          <Condition ID="IsListWithExhibit"/>
-          
           <!-- Select and navigate to exhibit -->
           <Action ID="SelectExhibit" 
                   selection_strategy="sequential"
                   exhibit_param="/current_exhibit"/>
           <Action ID="SayText" 
                   text_id="follow_me_speech"
-                  speech_file="follow_me.wav"
+                  speech_file="{speech_base_path}/follow_me.wav"
                   wait_for_completion="true"/>
           
-          <!-- Navigate to location -->
+          <!-- Navigate to location with recovery -->
           <SubTree ID="NavigateToLocation"/>
           
           <!-- Present exhibit -->
@@ -138,18 +156,37 @@
                     speech_part="details"
                     wait_for_completion="true"/>
           </Sequence>
+          
+          <!-- Mark exhibit as visited -->
+          <Action ID="PopExhibitFromList"/>
         </Sequence>
-      </RepeatUntilFailure>
+        
+        <!-- Else: no more exhibits, log and exit cleanly -->
+        <Action ID="LogEvent" level="info" message="All exhibits visited"/>
+      </WhileDoElse>
     </Sequence>
   </BehaviorTree>
 
   <!-- V. End Tour -->
   <BehaviorTree ID="EndTour">
     <Sequence name="EndTourSequence">
-      <Action ID="SayText" 
-              text_id="goodbye_speech"
-              speech_file="goodbye.wav"
-              wait_for_completion="true"/>
+      <!-- Different goodbye based on whether tour was completed or declined -->
+      <Fallback name="SelectGoodbye">
+        <Sequence name="DeclinedGoodbye">
+          <Condition ID="CheckBlackboard" key="tour_declined" expected="true"/>
+          <Action ID="SayText" 
+                  text_id="brief_goodbye_speech"
+                  speech_file="{speech_base_path}/brief_goodbye.wav"
+                  wait_for_completion="true"/>
+        </Sequence>
+        <Sequence name="FullGoodbye">
+          <Action ID="SayText" 
+                  text_id="goodbye_speech"
+                  speech_file="{speech_base_path}/goodbye.wav"
+                  wait_for_completion="true"/>
+        </Sequence>
+      </Fallback>
+      
       <Action ID="PerformIconicGesture" 
               gesture_type="goodbye"
               duration="2.0"/>
@@ -159,21 +196,41 @@
     </Sequence>
   </BehaviorTree>
 
-  <!-- Navigation Subtree -->
+  <!-- Navigation Subtree with Recovery -->
   <BehaviorTree ID="NavigateToLocation">
     <Sequence name="NavigationSequence">
       <Action ID="SetOvertAttentionMode" mode="disabled"/>
       <Action ID="SetAnimateBehavior" animate_enabled="false"/>
       
-      <Action ID="Navigate" 
-              goal_topic="/navigate_to_pose"
-              feedback_topic="/navigation_feedback"
-              timeout="60.0"
-              distance_tolerance="0.2"
-              angle_tolerance="0.1"/>
+      <!-- Navigation with retry and recovery -->
+      <RetryUntilSuccessful num_attempts="3" name="NavigationWithRetry">
+        <Fallback name="NavigationAttempt">
+          <Action ID="Navigate" 
+                  goal_topic="/navigate_to_pose"
+                  feedback_topic="/navigation_feedback"
+                  timeout="60.0"
+                  distance_tolerance="0.2"
+                  angle_tolerance="0.1"/>
+          
+          <!-- Recovery behavior if navigation fails -->
+          <Sequence name="NavigationRecovery">
+            <Action ID="LogEvent" level="warn" message="Navigation failed, attempting recovery"/>
+            <Action ID="ClearCostmaps"/>
+            <Action ID="BackUp" distance="0.3" timeout="5.0"/>
+            <AlwaysFailure/> <!-- Force retry -->
+          </Sequence>
+        </Fallback>
+      </RetryUntilSuccessful>
       
+      <!-- Re-enable attention and animations -->
+      <Action ID="SetAnimateBehavior" animate_enabled="true"/>
       <Action ID="SetOvertAttentionMode" mode="seeking"/>
-      <Condition ID="IsMutualGazeDiscovered" timeout="10.0"/>
+      
+      <!-- Try to establish gaze, but don't fail if we can't -->
+      <Fallback name="PostNavigationGaze">
+        <Condition ID="IsMutualGazeDiscovered" timeout="10.0"/>
+        <Action ID="LogEvent" level="info" message="Proceeding without mutual gaze"/>
+      </Fallback>
     </Sequence>
   </BehaviorTree>
 
@@ -204,7 +261,7 @@
     
     <Action ID="SayText">
       <input_port name="text_id">Unique identifier for speech</input_port>
-      <input_port name="speech_file">Path to audio file</input_port>
+      <input_port name="speech_file">Path to audio file (supports {speech_base_path} variable)</input_port>
       <input_port name="wait_for_completion" default="true">Wait for speech to complete</input_port>
     </Action>
     
@@ -255,6 +312,29 @@
       <input_port name="event_enabled" default="true">Enable/disable speech event</input_port>
     </Action>
     
+    <Action ID="LogEvent">
+      <input_port name="level" default="info">Log level: debug, info, warn, error</input_port>
+      <input_port name="message">Log message</input_port>
+    </Action>
+    
+    <Action ID="SetBlackboardValue">
+      <input_port name="key">Blackboard key</input_port>
+      <input_port name="value">Value to set</input_port>
+    </Action>
+    
+    <Action ID="PopExhibitFromList">
+      <output_port name="remaining_count">Number of exhibits remaining</output_port>
+    </Action>
+    
+    <Action ID="ClearCostmaps">
+      <input_port name="timeout" default="5.0">Timeout for clearing costmaps</input_port>
+    </Action>
+    
+    <Action ID="BackUp">
+      <input_port name="distance" default="0.3">Distance to back up in meters</input_port>
+      <input_port name="timeout" default="5.0">Timeout for backup action</input_port>
+    </Action>
+    
     <!-- Conditions -->
     <Condition ID="IsVisitorDiscovered">
       <input_port name="timeout" default="30.0">Discovery timeout</input_port>
@@ -269,6 +349,10 @@
     <Condition ID="IsListWithExhibit"/>
     
     <Condition ID="IsVisitorResponseYes"/>
+    <Condition ID="CheckBlackboard">
+      <input_port name="key">Blackboard key to check</input_port>
+      <input_port name="expected">Expected value</input_port>
+    </Condition>
   </TreeNodesModel>
 
 </root>
