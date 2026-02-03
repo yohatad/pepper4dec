@@ -1,4 +1,4 @@
-#include "behavior_manager/behavior_manager.cpp"
+#include "behavior_manager/behavior_manager.hpp"
 #include <behaviortree_cpp/bt_factory.h>
 
 
@@ -15,13 +15,13 @@ int main(int argc, char** argv)
 
   nav2_params.nh = node;
   llm_prompt_params.nh = node;
-  
+
   nav2_params.default_port_value = "navigate_to_pose";
   llm_prompt_params.default_port_value = "/conversationManagement/prompt";
 
   // Register custom nodes from behavior_manager
-  factory.registerRosServiceNode<behavior_manager::LLMPromptServiceNode>("LLMPromptServiceNode", llm_prompt_params);
-  factory.registerRosAction<behavior_manager::NavToPoseAction>("NavToPose", nav2_params);
+  factory.registerNodeType<behavior_manager::LLMPromptServiceNode>("LLMPromptServiceNode", llm_prompt_params);
+  factory.registerNodeType<behavior_manager::NavToPoseAction>("NavToPose", nav2_params);
 
   // Load and create the Behavior Tree from XML
   auto tree = factory.createTreeFromFile("behavior_tree.xml");

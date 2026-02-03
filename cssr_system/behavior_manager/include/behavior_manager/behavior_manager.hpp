@@ -1,24 +1,24 @@
 #ifndef BEHAVIOR_MANAGER_NODE_HPP_
 #define BEHAVIOR_MANAGER_NODE_HPP_
 
-#include "behaviortree_ros2/plugins/ros_action_node.hpp"
-#include "behaviortree_ros2/plugins/ros_service_node.hpp"
-#include "cssr_interfaces/action/SpeechRecognition.hpp"
-#include "cssr_interfaces/srv/LanguageModelPrompt.hpp"
+#include "cssr_interfaces/action/speech_recognition.hpp"
+#include "cssr_interfaces/srv/language_model_prompt.hpp"
+#include "behaviortree_ros2/bt_service_node.hpp"
 #include "nav2_msgs/action/navigate_to_pose.hpp"
+#include "behaviortree_ros2/bt_action_node.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 
 namespace behavior_manager
 {
 using namespace BT;
-using Prompt = CSSR_interfaces::srv::LanguageModelPrompt;
-using ASR = CSSR_interfaces::action::SpeechRecognition;
+using Prompt = cssr_interfaces::srv::LanguageModelPrompt;
+using ASR = cssr_interfaces::action::SpeechRecognition;
 
 class LLMPromptServiceNode : public RosServiceNode<Prompt>
 {
 public:
   LLMPromptServiceNode(const std::string& name, const NodeConfig& conf, const RosNodeParams& params)
-    : LLMPromptServiceNode<Prompt>(name, conf, params) {}
+    : RosServiceNode<Prompt>(name, conf, params) {}
 
   // Define input/output ports for the BT Blackboard
   static PortsList providedPorts() {
