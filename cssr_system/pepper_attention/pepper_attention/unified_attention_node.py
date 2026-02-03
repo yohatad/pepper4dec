@@ -1,43 +1,24 @@
 #!/usr/bin/env python3
 """
-Unified Attention Controller for Pepper Robot
-Priority: Faces → Saliency → Audio → Idle/Home
-With unified IOR and scene change detection
+Improved Attention Controller for Pepper Robot
+Priority 1: Engaged Faces | Priority 2: Detected Faces | Priority 3: Saliency (with cooldown + IOR)
 """
 
 import math
 import time
-import random
-import collections
-import numpy as np
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
-from std_msgs.msg import Float32, Float32MultiArray
-from sensor_msgs.msg import CameraInfo, JointState, Image, CompressedImage
-from threading import Lock
 
-import cv2
-from cv_bridge import CvBridge
-
+from std_msgs.msg import Float32MultiArray
+from sensor_msgs.msg import CameraInfo, JointState
 from naoqi_bridge_msgs.msg import JointAnglesWithSpeed
 from geometry_msgs.msg import Vector3
-from nav_msgs.msg import Odometry
 from cssr_interfaces.msg import FaceDetection
-
-
-# ============ Helpers ============
-
-def get_image_topic(base_topic: str, use_compressed: bool, is_depth: bool = False) -> str:
-    """Construct full topic name based on compression setting."""
-    if use_compressed:
-        suffix = "/compressedDepth" if is_depth else "/compressed"
-        return base_topic + suffix
-    return base_topic
+from std_srvs.srv import SetBool
 
 
 def get_image_qos() -> QoSProfile:
-    """QoS for image transport over WiFi."""
     return QoSProfile(
         reliability=ReliabilityPolicy.BEST_EFFORT,
         durability=DurabilityPolicy.VOLATILE,
@@ -50,701 +31,521 @@ def clamp(x, lo, hi):
     return max(lo, min(hi, x))
 
 
-def depth_bonus(Z, depth_min, depth_max):
-    """Linear bonus favoring closer targets within valid range.
-    
-    Returns 1.0 at depth_min (close), 0.0 at depth_max (far).
-    Returns 0.0 if Z is None.
-    """
-    if Z is None:
-        return 0.0
-    return (depth_max - Z) / (depth_max - depth_min)
-
-
 def pixel_to_angles(u, v, fx, fy, cx, cy):
-    """Convert pixel to angles (pinhole model)."""
-    return math.atan2((u - cx) / fx, 1.0), math.atan2((v - cy) / fy, 1.0)
+    """Convert pixel to camera-relative angles."""
+    x, y = (u - cx) / fx, (v - cy) / fy
+    return -math.atan2(x, 1.0), math.atan2(y, 1.0)
 
 
-def uvZ_to_angles(u, v, Z, fx, fy, cx, cy):
-    """Convert pixel + depth to angles."""
-    Xc = (u - cx) / fx * Z
-    Yc = (v - cy) / fy * Z
-    return math.atan2(Xc, Z), math.atan2(Yc, Z)
-
-
-# ============ Track Class ============
-class Track:
-    """Represents a face track."""
-    
-    def __init__(self, tid, u, v, w, h, mutual, smoothing=0.4):
-        self.id = tid
-        self.u, self.v = float(u), float(v)
-        self.w, self.h = float(w), float(h)
-        self.mutual = bool(mutual)
-        self.last_seen = time.time()
-        self.Z = None
-        self.score = 0.0
-        self._alpha = smoothing  # EMA smoothing factor (0 = no smoothing, 1 = no history)
-
-    def update(self, u, v, w, h, mutual):
-        """Update track with new detection, applying EMA smoothing."""
-        self.u = self._alpha * u + (1 - self._alpha) * self.u
-        self.v = self._alpha * v + (1 - self._alpha) * self.v
-        self.w, self.h = float(w), float(h)
-        self.mutual = bool(mutual)
-        self.last_seen = time.time()
-
-# ============ Main Node ============
-
-class UnifiedAttention(Node):
+class SimpleAttention(Node):
     def __init__(self):
-        super().__init__("pepper_unified_attention")
+        super().__init__("simple_attention")
         
-        self.cv_bridge = CvBridge()
-        
-        self._declare_parameters()
-        self._load_parameters()
-        
-        qos_img = get_image_qos()
-        
-        # Subscriptions
-        self.create_subscription(FaceDetection, self.face_topic, self._on_faces, 10)
-        self.create_subscription(Float32MultiArray, self.saliency_topic, self._on_saliency, 10)
-        self.create_subscription(Float32, self.audio_topic, self._on_audio, 10)
-        self.create_subscription(CameraInfo, self.camera_info_topic, self._on_caminfo, qos_img)
-        self.create_subscription(JointState, '/joint_states', self._on_joint_states, 10)
-        self.create_subscription(Odometry, self.odom_topic, self._on_odom, 10)
-        
-        # Depth subscription
-        depth_topic = get_image_topic(self.depth_image_topic, self.use_compressed, is_depth=True)
-        if self.use_compressed:
-            self.create_subscription(CompressedImage, depth_topic, self._on_depth_compressed, qos_img)
-        else:
-            self.create_subscription(Image, depth_topic, self._on_depth_raw, qos_img)
-        self.get_logger().info(f"Subscribing to depth: {depth_topic}")
-        
-        # Publishers
-        self.pub_js = self.create_publisher(JointAnglesWithSpeed, self.js_topic, 10)
-        self.pub_dbg = self.create_publisher(Vector3, "/attn/target_angles", 10)
-        
-        # Thread-safe state
-        self._depth_lock = Lock()
-        self._depth_image = None
-        self._depth_stamp = None
-        
-        self._tracks_lock = Lock()
-        self._tracks = {}
-        
-        self._saliency_lock = Lock()
-        self._saliency_peak = None  # (u, v, score) or None
-        
-        # Camera intrinsics
-        self.fx = self.fy = self.cx = self.cy = None
-        
-        # Attention state
-        self._current_face_id = None
-        self._face_since = time.time()
-        self._current_source = None  # 'face', 'saliency', 'audio', or None
-        
-        # IOR queue: (yaw, pitch, timestamp, source) - stored in robot base frame
-        self._ior = collections.deque(maxlen=20)
-        
-        # Saliency tracking for IOR
-        self._saliency_target = None  # (yaw, pitch, start_time) or None
-        
-        # Audio state
-        self._audio_azimuth = None
-        self._audio_until = 0.0
-        
-        # Head state
-        self._head_yaw = 0.0
-        self._head_pitch = 0.0
-        self._head_velocity = 0.0
-        self._head_settled_time = time.time()
-        
-        # Base odometry for IOR reset
-        self._base_x = 0.0
-        self._base_y = 0.0
-        self._base_x_at_ior_reset = 0.0
-        self._base_y_at_ior_reset = 0.0
-        
-        # Idle state
-        self._idle_target = (self.home_yaw, self.home_pitch)
-        self._next_idle_scan = 0.0
-        self._next_micro_saccade = 0.0
-        
-        # Timers
-        self.create_timer(1.0 / 20.0, self._tick)
-        self.create_timer(2.0, self._cleanup_tracks)
-        
-        self.get_logger().info(
-            f"Unified attention ready (IOR in base frame, "
-            f"radius={math.degrees(self.ior_radius):.1f}°, "
-            f"timeout={self.ior_timeout}s)"
-        )
-
-    def _declare_parameters(self):
-        """Declare all ROS parameters."""
-        # Common
-        self.declare_parameter("use_compressed", True)
-        self.declare_parameter("depth_image_topic", "/camera/depth/image_rect_raw")
-        self.declare_parameter("depth_scale", 0.001)
+        # Topics
         self.declare_parameter("face_topic", "/faceDetection/data")
         self.declare_parameter("saliency_topic", "/attn/saliency_peak")
-        self.declare_parameter("audio_topic", "/audio/azimuth_rad")
         self.declare_parameter("camera_info_topic", "/camera/color/camera_info")
-        self.declare_parameter("odom_topic", "/odom")  # For base movement detection
+        self.declare_parameter("head_command_topic", "/joint_angles")
+        self.declare_parameter("target_topic", "/attn/target_angles")
         
-        # Command output
-        self.declare_parameter("joint_names", ["HeadYaw", "HeadPitch"])
-        self.declare_parameter("joint_state_topic", "/joint_angles")
+        # System parameters
+        self.declare_parameter("start_enabled", True)  # Start with attention enabled
+        self.declare_parameter("move_to_default_on_disable", True)  # Move to default position when disabled
+        self.declare_parameter("default_yaw", 0.0)  # Default head yaw position (radians)
+        self.declare_parameter("default_pitch", -0.2)  # Default head pitch position (radians)
+        self.declare_parameter("default_move_speed", 0.1)  # Speed for moving to default position
         
-        # Scoring
-        self.declare_parameter("bias_face", 2.0)
-        self.declare_parameter("mutual_gaze_bonus", 0.6)
-        self.declare_parameter("saliency_min_score", 0.30)
-        
-        # Depth
-        self.declare_parameter("depth_min", 0.3)   # Closer than this = sensor noise
-        self.declare_parameter("depth_max", 3.0)   # Farther than this = not interacting
-        self.declare_parameter("depth_roi_px", 5)
-        self.declare_parameter("track_timeout_s", 5.0)
-        
-        # Hysteresis
-        self.declare_parameter("hysteresis_delta", 1.2)
-        self.declare_parameter("hysteresis_hold_s", 1.2)
-        self.declare_parameter("dwell_cap_s", 8.0)
-        
-        # IOR (stored in robot base frame as yaw, pitch angles)
-        self.declare_parameter("ior_radius_rad", 0.15)  # ~8.5 degrees
-        self.declare_parameter("ior_timeout_s", 30.0)   # IOR entries expire after this
-        self.declare_parameter("ior_penalty", 2.0)
-        self.declare_parameter("saliency_dwell_for_ior", 2.5)
-        self.declare_parameter("base_move_threshold", 0.1)  # meters - reset IOR if base moves
-        
-        # Audio
-        self.declare_parameter("audio_hold_s", 2.0)
-        
-        # Motion gating
-        self.declare_parameter("head_velocity_threshold", 0.08)
-        self.declare_parameter("head_settle_time", 0.5)  # Reduced from 5.0
-        self.declare_parameter("deadband_yaw", 0.06)
-        self.declare_parameter("deadband_pitch", 0.06)
-        
-        # Idle
-        self.declare_parameter("home_yaw", 0.0)
-        self.declare_parameter("home_pitch", -0.05)
-        self.declare_parameter("idle_scan_period_min", 3.0)
-        self.declare_parameter("idle_scan_period_max", 6.0)
-        self.declare_parameter("idle_scan_yaw_deg", 20.0)
-        self.declare_parameter("idle_scan_pitch_deg", 8.0)
-        self.declare_parameter("micro_saccade_deg", 0.4)
-        self.declare_parameter("micro_period_min", 3.0)
-        self.declare_parameter("micro_period_max", 5.0)
-        
-        # Limits
+        # Joint limits
         self.declare_parameter("yaw_lim", 1.8)
         self.declare_parameter("pitch_up", 0.4)
         self.declare_parameter("pitch_dn", -0.7)
-
-    def _load_parameters(self):
-        """Load parameters into instance variables."""
-        self.use_compressed = self.get_parameter("use_compressed").value
-        self.depth_image_topic = self.get_parameter("depth_image_topic").value
-        self.depth_scale = self.get_parameter("depth_scale").value
+        
+        # Face parameters
+        self.declare_parameter("face_timeout", 2.0)
+        self.declare_parameter("engaged_priority_bonus", 2.0)
+        self.declare_parameter("face_switch_cooldown", 1.0)
+        self.declare_parameter("same_face_threshold_deg", 8.0)
+        self.declare_parameter("prefer_closer_faces", True)
+        self.declare_parameter("max_face_distance", 5.0)
+        
+        # Saliency parameters
+        self.declare_parameter("saliency_min_score", 0.30)
+        self.declare_parameter("saliency_min_cooldown", 1.5)
+        self.declare_parameter("saliency_max_dwell", 3.0)
+        self.declare_parameter("switch_score_ratio", 1.4)
+        self.declare_parameter("same_target_threshold_deg", 5.0)
+        
+        # IOR parameters
+        self.declare_parameter("enable_ior", True)
+        self.declare_parameter("ior_max_suppression", 0.9)
+        self.declare_parameter("ior_half_life", 3.0)
+        self.declare_parameter("ior_radius_deg", 15.0)
+        self.declare_parameter("ior_cleanup_threshold", 0.05)
+        self.declare_parameter("ior_max_locations", 20)
+        
+        # Load parameters
         self.face_topic = self.get_parameter("face_topic").value
         self.saliency_topic = self.get_parameter("saliency_topic").value
-        self.audio_topic = self.get_parameter("audio_topic").value
         self.camera_info_topic = self.get_parameter("camera_info_topic").value
-        self.odom_topic = self.get_parameter("odom_topic").value
+        self.head_cmd_topic = self.get_parameter("head_command_topic").value
+        self.target_topic = self.get_parameter("target_topic").value
         
-        self.joint_names = list(self.get_parameter("joint_names").value)
-        self.js_topic = self.get_parameter("joint_state_topic").value
-        
-        self.bias_face = self.get_parameter("bias_face").value
-        self.mutual_bonus = self.get_parameter("mutual_gaze_bonus").value
-        self.saliency_min = self.get_parameter("saliency_min_score").value
-        
-        self.depth_min = self.get_parameter("depth_min").value
-        self.depth_max = self.get_parameter("depth_max").value
-        self.depth_roi = self.get_parameter("depth_roi_px").value
-        self.track_timeout = self.get_parameter("track_timeout_s").value
-        
-        self.hyst_delta = self.get_parameter("hysteresis_delta").value
-        self.hyst_hold = self.get_parameter("hysteresis_hold_s").value
-        self.dwell_cap = self.get_parameter("dwell_cap_s").value
-        
-        self.ior_radius = self.get_parameter("ior_radius_rad").value
-        self.ior_timeout = self.get_parameter("ior_timeout_s").value
-        self.ior_penalty = self.get_parameter("ior_penalty").value
-        self.saliency_dwell_for_ior = self.get_parameter("saliency_dwell_for_ior").value
-        self.base_move_threshold = self.get_parameter("base_move_threshold").value
-        
-        self.audio_hold = self.get_parameter("audio_hold_s").value
-        
-        self.vel_threshold = self.get_parameter("head_velocity_threshold").value
-        self.settle_time = self.get_parameter("head_settle_time").value
-        self.deadband_yaw = self.get_parameter("deadband_yaw").value
-        self.deadband_pitch = self.get_parameter("deadband_pitch").value
-        
-        self.home_yaw = self.get_parameter("home_yaw").value
-        self.home_pitch = self.get_parameter("home_pitch").value
-        self.idle_min = self.get_parameter("idle_scan_period_min").value
-        self.idle_max = self.get_parameter("idle_scan_period_max").value
-        self.idle_yaw_deg = self.get_parameter("idle_scan_yaw_deg").value
-        self.idle_pitch_deg = self.get_parameter("idle_scan_pitch_deg").value
-        self.micro_deg = self.get_parameter("micro_saccade_deg").value
-        self.micro_min = self.get_parameter("micro_period_min").value
-        self.micro_max = self.get_parameter("micro_period_max").value
+        self.move_to_default_on_disable = self.get_parameter("move_to_default_on_disable").value
+        self.default_yaw = self.get_parameter("default_yaw").value
+        self.default_pitch = self.get_parameter("default_pitch").value
+        self.default_move_speed = self.get_parameter("default_move_speed").value
         
         self.yaw_lim = self.get_parameter("yaw_lim").value
         self.pitch_up = self.get_parameter("pitch_up").value
         self.pitch_dn = self.get_parameter("pitch_dn").value
-
-    # ============ Depth Handling ============
-    
-    def _on_depth_raw(self, msg: Image):
-        """Handle raw depth image."""
-        try:
-            depth = self.cv_bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
-            with self._depth_lock:
-                self._depth_image = depth
-                self._depth_stamp = msg.header.stamp
-        except Exception as e:
-            self.get_logger().warn(f"Depth conversion failed: {e}")
-
-    def _on_depth_compressed(self, msg: CompressedImage):
-        """Handle compressed depth image."""
-        try:
-            if len(msg.data) <= 12:
-                return
-            depth = cv2.imdecode(np.frombuffer(msg.data[12:], np.uint8), cv2.IMREAD_UNCHANGED)
-            if depth is not None:
-                with self._depth_lock:
-                    self._depth_image = depth
-                    self._depth_stamp = msg.header.stamp
-        except Exception as e:
-            self.get_logger().warn(f"Compressed depth failed: {e}")
-
-    def _get_depth_at(self, u, v) -> float | None:
-        """Get depth in meters at pixel, using ROI median."""
-        with self._depth_lock:
-            if self._depth_image is None:
-                return None
-            depth = self._depth_image.copy()
         
-        h, w = depth.shape[:2]
-        ui, vi = int(round(u)), int(round(v))
+        self.face_timeout = self.get_parameter("face_timeout").value
+        self.engaged_bonus = self.get_parameter("engaged_priority_bonus").value
+        self.face_switch_cooldown = self.get_parameter("face_switch_cooldown").value
+        self.same_face_threshold = math.radians(self.get_parameter("same_face_threshold_deg").value)
+        self.prefer_closer = self.get_parameter("prefer_closer_faces").value
+        self.max_face_distance = self.get_parameter("max_face_distance").value
         
-        if not (0 <= ui < w and 0 <= vi < h):
-            return None
+        self.saliency_min = self.get_parameter("saliency_min_score").value
+        self.min_cooldown = self.get_parameter("saliency_min_cooldown").value
+        self.max_dwell = self.get_parameter("saliency_max_dwell").value
+        self.switch_ratio = self.get_parameter("switch_score_ratio").value
+        self.same_target_threshold = math.radians(self.get_parameter("same_target_threshold_deg").value)
         
-        # Extract ROI
-        half = self.depth_roi // 2
-        roi = depth[max(0, vi - half):min(h, vi + half + 1),
-                    max(0, ui - half):min(w, ui + half + 1)]
+        self.enable_ior = self.get_parameter("enable_ior").value
+        self.ior_max_suppression = self.get_parameter("ior_max_suppression").value
+        self.ior_half_life = self.get_parameter("ior_half_life").value
+        self.ior_radius = math.radians(self.get_parameter("ior_radius_deg").value)
+        self.ior_cleanup_threshold = self.get_parameter("ior_cleanup_threshold").value
+        self.ior_max_locations = self.get_parameter("ior_max_locations").value
         
-        # Filter invalid
-        if roi.dtype in (np.float32, np.float64):
-            valid = roi[np.isfinite(roi) & (roi > 0)]
-        else:
-            valid = roi[roi > 0]
+        # Enable/disable state
+        self.attention_enabled = self.get_parameter("start_enabled").value
         
-        if len(valid) == 0:
-            return None
+        # Camera intrinsics
+        self.fx = self.fy = self.cx = self.cy = None
         
-        Z = float(np.median(valid)) * self.depth_scale
+        # Head state
+        self._head_yaw = self._head_pitch = None
         
-        if not (self.depth_min <= Z <= self.depth_max):
-            return None
+        # Face state
+        self.last_face_time = 0.0
+        self.last_face_switch_time = 0.0
+        self.current_face_id = None
+        self.current_face_location = None
         
-        return Z
-
-    # ============ IOR Management ============
-    
-    def _pixel_to_base_angles(self, u, v, Z=None) -> tuple[float, float]:
-        """Convert pixel coordinates to angles in robot base frame.
+        # Saliency state
+        self.last_saliency_cmd_time = 0.0
+        self.current_saliency_target = None
+        self.current_saliency_score = 0.0
         
-        Returns (yaw, pitch) relative to robot base (head angles + camera angles).
-        """
-        if Z and self.depth_min <= Z <= self.depth_max:
-            cam_yaw, cam_pitch = uvZ_to_angles(u, v, Z, self.fx, self.fy, self.cx, self.cy)
-        else:
-            cam_yaw, cam_pitch = pixel_to_angles(u, v, self.fx, self.fy, self.cx, self.cy)
+        # IOR state
+        self.visited_locations = []
         
-        # Convert from camera frame to robot base frame
-        # Camera angles are relative to head, so add current head position
-        base_yaw = self._head_yaw + cam_yaw
-        base_pitch = self._head_pitch + cam_pitch
+        # Subscriptions
+        qos_img = get_image_qos()
+        self.create_subscription(FaceDetection, self.face_topic, self.on_faces, 10)
+        self.create_subscription(Float32MultiArray, self.saliency_topic, self.on_saliency, 10)
+        self.create_subscription(CameraInfo, self.camera_info_topic, self.on_caminfo, qos_img)
+        self.create_subscription(JointState, '/joint_states', self.on_joint_states, 10)
         
-        return base_yaw, base_pitch
-    
-    def _add_ior(self, yaw, pitch, source):
-        """Add location to IOR (in robot base frame angles)."""
-        self._ior.append((yaw, pitch, time.time(), source))
-        self.get_logger().info(
-            f"IOR added: {source} at ({math.degrees(yaw):.1f}°, {math.degrees(pitch):.1f}°), "
-            f"total={len(self._ior)}"
+        # Publishers
+        self.pub_head = self.create_publisher(JointAnglesWithSpeed, self.head_cmd_topic, 10)
+        self.pub_target = self.create_publisher(Vector3, self.target_topic, 10)
+        
+        # Services
+        self.srv_enable = self.create_service(
+            SetBool,
+            '/attn/set_enabled',
+            self.handle_set_enabled
         )
-    
-    def _add_ior_from_pixel(self, u, v, source, Z=None):
-        """Convert pixel to base frame angles and add to IOR."""
-        yaw, pitch = self._pixel_to_base_angles(u, v, Z)
-        self._add_ior(yaw, pitch, source)
+        
+        status = "ENABLED" if self.attention_enabled else "DISABLED"
+        default_mode = "move to default" if self.move_to_default_on_disable else "hold position"
+        self.get_logger().info(f"Improved attention controller ready ({status})")
+        self.get_logger().info(f"Service: /attn/set_enabled (std_srvs/SetBool)")
+        self.get_logger().info(f"Disable mode: {default_mode} (yaw={math.degrees(self.default_yaw):.1f}°, pitch={math.degrees(self.default_pitch):.1f}°)")
 
-    def _is_suppressed_angles(self, yaw, pitch) -> tuple[bool, str | None]:
-        """Check if base-frame angles are suppressed by IOR."""
-        now = time.time()
-        for (ior_yaw, ior_pitch, t, source) in self._ior:
-            # Skip expired entries
-            if now - t > self.ior_timeout:
-                continue
-            # Check angular distance
-            dist = np.hypot(yaw - ior_yaw, pitch - ior_pitch)
-            if dist < self.ior_radius:
-                return True, source
-        return False, None
-    
-    def _is_suppressed_pixel(self, u, v, Z=None) -> tuple[bool, str | None]:
-        """Check if pixel location is suppressed by IOR."""
-        yaw, pitch = self._pixel_to_base_angles(u, v, Z)
-        return self._is_suppressed_angles(yaw, pitch)
-
-    def _reset_ior(self, reason: str):
-        """Clear IOR (scene/source changed)."""
-        if self._ior:
-            self.get_logger().info(f"IOR reset ({len(self._ior)} cleared): {reason}")
-            self._ior.clear()
-        self._base_x_at_ior_reset = self._base_x
-        self._base_y_at_ior_reset = self._base_y
-    
-    def _set_attention_source(self, new_source: str):
-        """Track attention source and reset IOR on source switch."""
-        if self._current_source and self._current_source != new_source:
-            self._reset_ior(f"Source switch: {self._current_source} → {new_source}")
-        self._current_source = new_source
-
-    # ============ Track Management ============
-    
-    def _cleanup_tracks(self):
-        """Remove stale tracks."""
-        now = time.time()
-        with self._tracks_lock:
-            stale = [tid for tid, t in self._tracks.items() if now - t.last_seen > self.track_timeout]
-            for tid in stale:
-                del self._tracks[tid]
-
-    # ============ Callbacks ============
-    
-    def _on_caminfo(self, msg: CameraInfo):
-        """Store camera intrinsics."""
-        self.fx, self.fy = msg.k[0], msg.k[4]
-        self.cx, self.cy = msg.k[2], msg.k[5]
-
-    def _on_joint_states(self, msg: JointState):
-        """Track head state for coordinate transforms."""
-        try:
-            yaw_idx = msg.name.index('HeadYaw')
-            pitch_idx = msg.name.index('HeadPitch')
-            
-            self._head_yaw = msg.position[yaw_idx]
-            self._head_pitch = msg.position[pitch_idx]
-            
-            # Get velocity (handle NaN)
-            yaw_vel = msg.velocity[yaw_idx]
-            pitch_vel = msg.velocity[pitch_idx]
-            yaw_vel = 0.0 if math.isnan(yaw_vel) else yaw_vel
-            pitch_vel = 0.0 if math.isnan(pitch_vel) else pitch_vel
-            
-            self._head_velocity = np.hypot(yaw_vel, pitch_vel)
-            
-            if self._head_velocity > self.vel_threshold:
-                self._head_settled_time = time.time()
+    def handle_set_enabled(self, request, response):
+        """Service callback to enable/disable attention system."""
+        old_state = self.attention_enabled
+        self.attention_enabled = request.data
+        
+        if old_state != self.attention_enabled:
+            if self.attention_enabled:
+                self.get_logger().info("Attention system ENABLED")
+                response.success = True
+                response.message = "Attention system enabled"
+            else:
+                # Clear all tracking state
+                self.current_face_id = None
+                self.current_face_location = None
+                self.current_saliency_target = None
+                self.visited_locations = []
                 
+                if self.move_to_default_on_disable:
+                    # Move to default position
+                    self.move_head_to_default()
+                    self.get_logger().info(
+                        f"Attention system DISABLED - moving to default position "
+                        f"(yaw={math.degrees(self.default_yaw):.1f}°, pitch={math.degrees(self.default_pitch):.1f}°)"
+                    )
+                    response.success = True
+                    response.message = (
+                        f"Attention system disabled - moving to default position "
+                        f"(yaw={math.degrees(self.default_yaw):.1f}°, pitch={math.degrees(self.default_pitch):.1f}°)"
+                    )
+                else:
+                    # Hold current position
+                    current_yaw = self._head_yaw if self._head_yaw is not None else 0.0
+                    current_pitch = self._head_pitch if self._head_pitch is not None else 0.0
+                    self.get_logger().info(
+                        f"Attention system DISABLED - holding current position "
+                        f"(yaw={math.degrees(current_yaw):.1f}°, pitch={math.degrees(current_pitch):.1f}°)"
+                    )
+                    response.success = True
+                    response.message = (
+                        f"Attention system disabled - holding position at "
+                        f"yaw={math.degrees(current_yaw):.1f}°, pitch={math.degrees(current_pitch):.1f}°"
+                    )
+        else:
+            status = "enabled" if self.attention_enabled else "disabled"
+            response.success = True
+            response.message = f"Attention system already {status}"
+        
+        return response
+
+    def on_caminfo(self, msg: CameraInfo):
+        if self.fx is None:
+            self.fx, self.fy = msg.k[0], msg.k[4]
+            self.cx, self.cy = msg.k[2], msg.k[5]
+            self.get_logger().info(f"Camera: fx={self.fx:.1f}, fy={self.fy:.1f}")
+
+    def on_joint_states(self, msg: JointState):
+        try:
+            self._head_yaw = msg.position[msg.name.index('HeadYaw')]
+            self._head_pitch = msg.position[msg.name.index('HeadPitch')]
         except (ValueError, IndexError):
             pass
-    
-    def _on_odom(self, msg: Odometry):
-        """Track base position and reset IOR if robot moves."""
-        self._base_x = msg.pose.pose.position.x
-        self._base_y = msg.pose.pose.position.y
+
+    def move_head_to_default(self):
+        """Move head to default position."""
+        msg = JointAnglesWithSpeed()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.joint_names = ['HeadYaw', 'HeadPitch']
+        msg.joint_angles = [float(self.default_yaw), float(self.default_pitch)]
+        msg.speed = float(self.default_move_speed)
+        msg.relative = False
         
-        # Check if base moved significantly
-        moved = np.hypot(
-            self._base_x - self._base_x_at_ior_reset,
-            self._base_y - self._base_y_at_ior_reset
-        )
-        if moved > self.base_move_threshold:
-            self._reset_ior(f"Base moved {moved:.2f}m")
+        self.pub_head.publish(msg)
+        
+        # Also publish to target topic for visualization
+        target_msg = Vector3()
+        target_msg.x = 0.0  # Camera-relative (default is centered)
+        target_msg.y = 0.0
+        target_msg.z = 0.0
+        self.pub_target.publish(target_msg)
 
-    def _on_audio(self, msg: Float32):
-        """Store audio azimuth."""
-        self._audio_azimuth = float(msg.data)
-        self._audio_until = time.time() + self.audio_hold
+    def calculate_face_priority(self, centroid, mutual_gaze, face_id, is_current_face):
+        """Calculate priority score for a face based on multiple factors."""
+        # Base score
+        score = 1.0
+        
+        # Factor 1: Engagement bonus
+        if mutual_gaze:
+            score *= self.engaged_bonus
+        
+        # Factor 2: Distance from center
+        dist_from_center = math.sqrt((centroid.x - self.cx)**2 + (centroid.y - self.cy)**2)
+        max_dist = math.sqrt(self.cx**2 + self.cy**2)
+        center_score = 1.0 - (dist_from_center / max_dist)
+        score *= (0.5 + 0.5 * center_score)
+        
+        # Factor 3: Depth bonus
+        if self.prefer_closer and centroid.z > 0:
+            if centroid.z <= self.max_face_distance:
+                depth_bonus = 1.5 - (centroid.z / self.max_face_distance)
+                score *= max(0.5, depth_bonus)
+            else:
+                score *= 0.3
+        
+        # Factor 4: Continuity bonus
+        if is_current_face:
+            time_since_switch = time.time() - self.last_face_switch_time
+            if time_since_switch < self.face_switch_cooldown:
+                score *= 1.5
+            else:
+                score *= 1.1
+        
+        return score
 
-    def _on_saliency(self, msg: Float32MultiArray):
-        """Process saliency peaks (3 values per peak: u, v, score)."""
-        if len(msg.data) < 3:
-            with self._saliency_lock:
-                self._saliency_peak = None
+    def on_faces(self, msg: FaceDetection):
+        """Priority 1: Face detection with engagement awareness."""
+        # Check if attention is enabled
+        if not self.attention_enabled:
             return
         
-        best = None
-        best_score = 0.0
+        if self.fx is None or self._head_yaw is None or self._head_pitch is None:
+            return
         
-        # Parse peaks (stride of 3)
+        if not msg.centroids:
+            # No faces detected - clear state
+            if self.current_face_id is not None:
+                self.get_logger().info(f"Lost face: {self.current_face_id}")
+                self.current_face_id = None
+                self.current_face_location = None
+            return
+        
+        current_time = time.time()
+        
+        # Build candidate list with priorities
+        candidates = []
+        for i, centroid in enumerate(msg.centroids):
+            face_id = msg.face_label_id[i] if i < len(msg.face_label_id) else f"unknown_{i}"
+            mutual_gaze = msg.mutual_gaze[i] if i < len(msg.mutual_gaze) else False
+            
+            is_current = (face_id == self.current_face_id)
+            priority = self.calculate_face_priority(centroid, mutual_gaze, face_id, is_current)
+            
+            cam_yaw, cam_pitch = pixel_to_angles(centroid.x, centroid.y, 
+                                                 self.fx, self.fy, self.cx, self.cy)
+            world_yaw = cam_yaw + self._head_yaw
+            world_pitch = cam_pitch + self._head_pitch
+            
+            candidates.append({
+                'face_id': face_id,
+                'centroid': centroid,
+                'world_yaw': world_yaw,
+                'world_pitch': world_pitch,
+                'mutual_gaze': mutual_gaze,
+                'priority': priority,
+                'is_current': is_current
+            })
+        
+        # Select best face
+        best_face = max(candidates, key=lambda f: f['priority'])
+        
+        # Check if we should switch faces
+        should_switch = False
+        switch_reason = ""
+        
+        if self.current_face_id is None:
+            should_switch = True
+            switch_reason = "initial"
+        elif best_face['is_current']:
+            should_switch = True
+            switch_reason = "refresh"
+        else:
+            time_since_switch = current_time - self.last_face_switch_time
+            current_face = next((f for f in candidates if f['is_current']), None)
+            
+            if current_face is None:
+                should_switch = True
+                switch_reason = "lost_current"
+            elif time_since_switch < self.face_switch_cooldown:
+                if best_face['priority'] > current_face['priority'] * 1.5:
+                    should_switch = True
+                    switch_reason = "much_better"
+            else:
+                if best_face['priority'] > current_face['priority'] * 1.1:
+                    should_switch = True
+                    switch_reason = "better"
+        
+        if not should_switch:
+            self.last_face_time = current_time
+            return
+        
+        # Update state
+        is_new_face = (best_face['face_id'] != self.current_face_id)
+        
+        if is_new_face:
+            self.last_face_switch_time = current_time
+            self.get_logger().info(
+                f"Switching to face: {best_face['face_id']} "
+                f"(engaged={best_face['mutual_gaze']}, "
+                f"depth={best_face['centroid'].z:.2f}m, "
+                f"priority={best_face['priority']:.2f}, "
+                f"reason={switch_reason})"
+            )
+        
+        self.current_face_id = best_face['face_id']
+        self.current_face_location = (best_face['world_yaw'], best_face['world_pitch'])
+        self.last_face_time = current_time
+        
+        # Clamp and publish
+        yaw = clamp(best_face['world_yaw'], -self.yaw_lim, self.yaw_lim)
+        pitch = clamp(best_face['world_pitch'], self.pitch_dn, self.pitch_up)
+        
+        source = f"face[{best_face['face_id']}]"
+        if best_face['mutual_gaze']:
+            source += "_engaged"
+        if switch_reason:
+            source += f"({switch_reason})"
+        
+        self.publish_head(yaw, pitch, score=best_face['priority'], source=source)
+
+    def calculate_ior_suppression(self, age_seconds):
+        """Exponential decay: suppression = max * exp(-ln(2) * age / half_life)"""
+        decay = math.log(2) / self.ior_half_life
+        return self.ior_max_suppression * math.exp(-decay * age_seconds)
+
+    def apply_ior_filter(self, world_yaw, world_pitch, score):
+        """Apply IOR suppression (expects world coordinates)."""
+        if not self.enable_ior or not self.visited_locations:
+            return score
+        
+        current_time = time.time()
+        max_suppression = 0.0
+        
+        for v_yaw, v_pitch, timestamp in self.visited_locations:
+            age = current_time - timestamp
+            dist = math.sqrt((world_yaw - v_yaw)**2 + (world_pitch - v_pitch)**2)
+            
+            if dist < self.ior_radius:
+                time_supp = self.calculate_ior_suppression(age)
+                space_decay = 1.0 - (dist / self.ior_radius)
+                max_suppression = max(max_suppression, time_supp * space_decay)
+        
+        return score * (1.0 - max_suppression)
+
+    def cleanup_weak_ior(self):
+        """Remove locations with negligible suppression."""
+        if not self.enable_ior:
+            return
+        
+        current_time = time.time()
+        self.visited_locations = [
+            (yaw, pitch, ts) 
+            for yaw, pitch, ts in self.visited_locations
+            if self.calculate_ior_suppression(current_time - ts) >= self.ior_cleanup_threshold
+        ][:self.ior_max_locations]
+
+    def on_saliency(self, msg: Float32MultiArray):
+        """Priority 3: Saliency with cooldown + IOR."""
+        # Check if attention is enabled
+        if not self.attention_enabled:
+            return
+        
+        if self.fx is None or self._head_yaw is None:
+            return
+        
+        if time.time() - self.last_face_time < self.face_timeout:
+            return
+        
+        if self.current_face_id is not None:
+            self.get_logger().info(f"No recent faces, switching to saliency (was tracking: {self.current_face_id})")
+            self.current_face_id = None
+            self.current_face_location = None
+        
+        if len(msg.data) < 3:
+            return
+        
+        self.cleanup_weak_ior()
+        
+        # Convert all candidates to world angles with IOR
+        candidates = []
         for i in range(0, len(msg.data) - 2, 3):
             u, v, score = msg.data[i], msg.data[i + 1], msg.data[i + 2]
             
-            # Check IOR suppression (convert pixel to base frame)
-            suppressed, _ = self._is_suppressed_pixel(u, v)
-            if suppressed:
+            if score < self.saliency_min:
                 continue
             
-            if score > best_score and score >= self.saliency_min:
-                best = (u, v, score)
-                best_score = score
-        
-        with self._saliency_lock:
-            self._saliency_peak = best
-
-    def _on_faces(self, msg: FaceDetection):
-        """Process face detections (Priority 1)."""
-        if self.fx is None:
-            self.get_logger().warn_once("Waiting for camera info...")
-            return
-        
-        now = time.time()
-        n = len(msg.centroids)
-        
-        if n == 0:
-            return
-        
-        # Update tracks
-        with self._tracks_lock:
-            for i in range(n):
-                fid = msg.face_label_id[i] if i < len(msg.face_label_id) else str(i)
-                c = msg.centroids[i]
-                w = msg.width[i] if i < len(msg.width) else 80.0
-                h = msg.height[i] if i < len(msg.height) else 80.0
-                mg = msg.mutual_gaze[i] if i < len(msg.mutual_gaze) else False
-                
-                if fid not in self._tracks:
-                    self._tracks[fid] = Track(fid, c.x, c.y, w, h, mg)
-                else:
-                    self._tracks[fid].update(c.x, c.y, w, h, mg)
+            cam_yaw, cam_pitch = pixel_to_angles(u, v, self.fx, self.fy, self.cx, self.cy)
+            world_yaw = cam_yaw + self._head_yaw
+            world_pitch = cam_pitch + self._head_pitch
             
-            # Get candidates and copy their data for scoring outside lock
-            candidates = []
-            for t in self._tracks.values():
-                if now - t.last_seen < 0.3:
-                    candidates.append(t)
+            score = self.apply_ior_filter(world_yaw, world_pitch, score)
+            
+            if score >= self.saliency_min:
+                candidates.append((world_yaw, world_pitch, score))
         
         if not candidates:
             return
         
-        # Score candidates (outside lock to avoid blocking)
-        for t in candidates:
-            t.Z = self._get_depth_at(t.u, t.v)
-            
-            s = self.bias_face
-            if t.mutual:
-                s += self.mutual_bonus
-            if t.Z:
-                s += depth_bonus(t.Z, self.depth_min, self.depth_max)
-            
-            # Check IOR suppression (in base frame)
-            suppressed, _ = self._is_suppressed_pixel(t.u, t.v, t.Z)
-            if suppressed:
-                s -= self.ior_penalty
-            
-            t.score = s
+        best_yaw, best_pitch, best_score = max(candidates, key=lambda x: x[2])
         
-        # Select target with hysteresis
-        target = self._select_face(candidates, now)
-        if not target:
-            return
+        # Check if same target as current
+        is_same = False
+        if self.current_saliency_target:
+            curr_yaw, curr_pitch = self.current_saliency_target
+            dist = math.sqrt((best_yaw - curr_yaw)**2 + (best_pitch - curr_pitch)**2)
+            is_same = dist < self.same_target_threshold
         
-        # Set attention source (will reset IOR if switching from saliency)
-        self._set_attention_source('face')
+        # Cooldown logic
+        time_on_target = time.time() - self.last_saliency_cmd_time
         
-        # Clear saliency tracking
-        self._saliency_target = None
-        
-        # Compute angles using smoothed track position
-        if target.Z:
-            yaw, pitch = uvZ_to_angles(target.u, target.v, target.Z, self.fx, self.fy, self.cx, self.cy)
+        if not self.current_saliency_target:
+            should_switch = True
+            reason = "initial"
+        elif is_same:
+            should_switch = True
+            reason = "refresh"
+        elif time_on_target < self.min_cooldown:
+            should_switch = best_score > self.current_saliency_score * self.switch_ratio
+            reason = "early" if should_switch else None
+        elif time_on_target > self.max_dwell:
+            should_switch = not is_same
+            reason = "max_dwell" if should_switch else None
         else:
-            yaw, pitch = pixel_to_angles(target.u, target.v, self.fx, self.fy, self.cx, self.cy)
+            should_switch = best_score > self.current_saliency_score * 1.15
+            reason = "better" if should_switch else None
         
-        self._publish_head(yaw, pitch)
+        if not should_switch:
+            return
+        
+        # Update state
+        self.current_saliency_target = (best_yaw, best_pitch)
+        self.current_saliency_score = best_score
+        self.last_saliency_cmd_time = time.time()
+        
+        if self.enable_ior:
+            self.visited_locations.append((best_yaw, best_pitch, time.time()))
+        
+        # Clamp and publish
+        yaw = clamp(best_yaw, -self.yaw_lim, self.yaw_lim)
+        pitch = clamp(best_pitch, self.pitch_dn, self.pitch_up)
+        self.publish_head(yaw, pitch, score=best_score, source=f'saliency({reason})')
 
-    def _select_face(self, candidates, now) -> Track | None:
-        """Select best face with hysteresis and dwell cap."""
-        best = max(candidates, key=lambda t: t.score)
+    def publish_head(self, yaw, pitch, score=0.0, source='unknown'):
+        """Send absolute head command and publish camera-relative target for visualization."""
+        msg = JointAnglesWithSpeed()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.joint_names = ['HeadYaw', 'HeadPitch']
+        msg.joint_angles = [float(yaw), float(pitch)]
+        msg.speed = 0.1
+        msg.relative = False
         
-        # Hysteresis: prefer current target
-        if self._current_face_id and self._current_face_id != best.id:
-            with self._tracks_lock:
-                prev = self._tracks.get(self._current_face_id)
-            if prev and prev in candidates:
-                if best.score < prev.score + self.hyst_delta:
-                    if now - self._face_since < self.hyst_hold:
-                        return prev
+        self.pub_head.publish(msg)
         
-        # Dwell cap: add to IOR if staring too long
-        if self._current_face_id:
-            if now - self._face_since > self.dwell_cap:
-                with self._tracks_lock:
-                    prev = self._tracks.get(self._current_face_id)
-                if prev:
-                    self._add_ior_from_pixel(prev.u, prev.v, "face_dwell", prev.Z)
-                self._current_face_id = None
+        # Publish target for visualization
+        if self._head_yaw is not None and self._head_pitch is not None:
+            cam_relative_yaw = yaw - self._head_yaw
+            cam_relative_pitch = pitch - self._head_pitch
+        else:
+            cam_relative_yaw = yaw
+            cam_relative_pitch = pitch
         
-        # Switch target
-        if self._current_face_id != best.id:
-            # Add old target to IOR
-            if self._current_face_id:
-                with self._tracks_lock:
-                    prev = self._tracks.get(self._current_face_id)
-                if prev:
-                    self._add_ior_from_pixel(prev.u, prev.v, "face_switch", prev.Z)
-            
-            self._current_face_id = best.id
-            self._face_since = now
+        target_msg = Vector3()
+        target_msg.x = float(cam_relative_yaw)
+        target_msg.y = float(cam_relative_pitch)
+        target_msg.z = float(score)
+        self.pub_target.publish(target_msg)
         
-        return best
-
-    def _tick(self):
-        """Main attention loop for saliency/audio/idle."""
-        if self.fx is None:
-            return
-        
-        now = time.time()
-        
-        # Wait for head to settle
-        if now - self._head_settled_time < self.settle_time:
-            return
-        
-        # If recent face detection handled it, skip
-        if self._current_face_id:
-            with self._tracks_lock:
-                t = self._tracks.get(self._current_face_id)
-            if t and now - t.last_seen < 0.2:
-                return
-        
-        # Priority 2: Saliency
-        with self._saliency_lock:
-            peak = self._saliency_peak
-        
-        if peak:
-            u, v, score = peak
-            
-            # Get depth for angle calculation
-            Z = self._get_depth_at(u, v)
-            
-            # Convert to base frame for tracking
-            base_yaw, base_pitch = self._pixel_to_base_angles(u, v, Z)
-            
-            # Track saliency target for IOR (in base frame)
-            if self._saliency_target:
-                old_yaw, old_pitch, start = self._saliency_target
-                dist = np.hypot(base_yaw - old_yaw, base_pitch - old_pitch)
-                
-                if dist > 0.1:  # ~6 degrees - new target
-                    # Add old to IOR if dwelled
-                    if now - start >= self.saliency_dwell_for_ior:
-                        self._add_ior(old_yaw, old_pitch, "saliency")
-                    self._saliency_target = (base_yaw, base_pitch, now)
-            else:
-                self._saliency_target = (base_yaw, base_pitch, now)
-            
-            # Set attention source (will reset IOR if switching from face)
-            self._set_attention_source('saliency')
-            
-            # Compute camera-relative angles for head command
-            if Z:
-                yaw, pitch = uvZ_to_angles(u, v, Z, self.fx, self.fy, self.cx, self.cy)
-            else:
-                yaw, pitch = pixel_to_angles(u, v, self.fx, self.fy, self.cx, self.cy)
-            
-            self._publish_head(yaw, pitch)
-            return
-        
-        # No saliency - add last target to IOR if dwelled
-        if self._saliency_target:
-            old_yaw, old_pitch, start = self._saliency_target
-            if now - start >= self.saliency_dwell_for_ior:
-                self._add_ior(old_yaw, old_pitch, "saliency")
-            self._saliency_target = None
-        
-        # Priority 3: Audio
-        if self._audio_azimuth is not None and now < self._audio_until:
-            self._set_attention_source('audio')
-            yaw = clamp(self._audio_azimuth, -self.yaw_lim, self.yaw_lim)
-            pitch = clamp(self.home_pitch, self.pitch_dn, self.pitch_up)
-            self._publish_head(yaw, pitch)
-            return
-        
-        # Priority 4: Idle
-        self._set_attention_source(None)
-        yaw, pitch = self._idle_behavior(now)
-        self._publish_head(yaw, pitch)
-
-    def _idle_behavior(self, now) -> tuple[float, float]:
-        """Generate idle scan with micro-saccades."""
-        # Periodic scan
-        if now >= self._next_idle_scan:
-            dyaw = math.radians(random.uniform(-self.idle_yaw_deg, self.idle_yaw_deg))
-            dpitch = math.radians(random.uniform(-self.idle_pitch_deg, self.idle_pitch_deg))
-            
-            self._idle_target = (
-                clamp(self.home_yaw + dyaw, -self.yaw_lim, self.yaw_lim),
-                clamp(self.home_pitch + dpitch, self.pitch_dn, self.pitch_up)
-            )
-            self._next_idle_scan = now + random.uniform(self.idle_min, self.idle_max)
-        
-        yaw, pitch = self._idle_target
-        
-        # Micro-saccade
-        if now >= self._next_micro_saccade:
-            myaw = math.radians(self.micro_deg) * random.choice([-1, 1])
-            mpitch = math.radians(self.micro_deg) * random.choice([-1, 1])
-            yaw = clamp(yaw + myaw, -self.yaw_lim, self.yaw_lim)
-            pitch = clamp(pitch + mpitch, self.pitch_dn, self.pitch_up)
-            self._next_micro_saccade = now + random.uniform(self.micro_min, self.micro_max)
-        
-        return yaw, pitch
-
-    def _publish_head(self, yaw, pitch):
-        """Publish head command with deadband."""
-        yaw = clamp(float(yaw), -self.yaw_lim, self.yaw_lim)
-        pitch = clamp(float(pitch), self.pitch_dn, self.pitch_up)
-        
-        if (abs(yaw - self._head_yaw) < self.deadband_yaw and 
-            abs(pitch - self._head_pitch) < self.deadband_pitch):
-            return
-        
-        js = JointAnglesWithSpeed()
-        js.header.stamp = self.get_clock().now().to_msg()
-        js.joint_names = self.joint_names
-        js.joint_angles = [yaw, pitch]
-        js.speed = 0.1
-        js.relative = False
-        self.pub_js.publish(js)
-        
-        # Debug
-        v = Vector3(x=float(yaw), y=float(pitch), z=0.0)
-        self.pub_dbg.publish(v)
+        self.get_logger().info(
+            f"[{source}] → yaw={math.degrees(yaw):.1f}°, pitch={math.degrees(pitch):.1f}°, score={score:.2f}")
 
 
 def main(args=None):
     rclpy.init(args=args)
-    node = UnifiedAttention()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    node = SimpleAttention()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":

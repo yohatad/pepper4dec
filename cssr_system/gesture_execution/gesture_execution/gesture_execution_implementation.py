@@ -24,7 +24,7 @@ from ament_index_python.packages import get_package_share_directory
 # ROS2 messages and services
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import Pose2D, Twist
-from naoqi_bridge_msgs.msg import JointAngleTrajectory
+from naoqi_bridge_msgs.msg import JointAnglesTrajectory
 from cssr_interfaces.srv import PerformGesture
 from .pepper_kinematics_utilities import PepperKinematicsUtilities, RIGHT_ARM, LEFT_ARM
 
@@ -226,7 +226,7 @@ class GestureExecutionSystem(Node):
         self.create_subscription(Pose2D, topics["RobotPose"], self.robot_pose_callback, 10)
         
         # Publishers - FIXED: Correct topic name
-        self.joint_traj_pub = self.create_publisher(JointAngleTrajectory, '/joint_angle_trajectory', 10)
+        self.joint_traj_pub = self.create_publisher(JointAnglesTrajectory, '/joint_angles_trajectory', 10)
         self.cmd_vel_pub = self.create_publisher(Twist, topics["Wheels"], 10)
         
         # Services
@@ -676,7 +676,7 @@ class GestureExecutionSystem(Node):
                 self.get_logger().error("No joint angles provided")
                 return
             
-            msg = JointAngleTrajectory()
+            msg = JointAnglesTrajectory()
             msg.header.stamp = self.get_clock().now().to_msg()
             msg.joint_names = joint_names
             msg.relative = 0

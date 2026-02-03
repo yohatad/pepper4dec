@@ -3,7 +3,7 @@
 # ===========================================
 /**:
   ros__parameters:
-    use_compressed: true
+    use_compressed: false
 
 # ===========================================
 # Laptop saliency node params
@@ -38,76 +38,76 @@ saliency_node:
 # ===========================================
 # Laptop unified attention node params
 # ===========================================
-# unified_attention_node:
-#   ros__parameters:
-#     # Depth image configuration
-#     depth_image_topic: "/camera/aligned_depth_to_color/image_raw"  # Adds /compressedDepth if use_compressed: true
-#     depth_scale: 0.001  # Scale to convert depth values to meters (0.001 for mm, 1.0 for meters)
+unified_attention_node:
+  ros__parameters:
+    # Depth image configuration
+    depth_image_topic: "/camera/aligned_depth_to_color/image_raw"  # Adds /compressedDepth if use_compressed: true
+    depth_scale: 0.001  # Scale to convert depth values to meters (0.001 for mm, 1.0 for meters)
     
-#     # Input topics
-#     face_topic: "/faceDetection/data"
-#     saliency_topic: "/attn/saliency_peak"
-#     audio_topic: "/audio/azimuth_rad"
-#     camera_info_topic: "/camera/color/camera_info"
+    # Input topics
+    face_topic: "/faceDetection/data"
+    saliency_topic: "/attn/saliency_peak"
+    audio_topic: "/audio/azimuth_rad"
+    camera_info_topic: "/camera/color/camera_info"
     
-#     # Output configuration
-#     command_mode: "joint_state"  # or "trajectory"
-#     joint_names: ["HeadYaw", "HeadPitch"]
-#     joint_state_topic: "/head_cmd/joint_states"
-#     trajectory_topic: "/head_controller/joint_trajectory"
+    # Output configuration
+    command_mode: "joint_state"  # or "trajectory"
+    joint_names: ["HeadYaw", "HeadPitch"]
+    joint_state_topic: "/head_cmd/joint_states"
+    trajectory_topic: "/head_controller/joint_trajectory"
     
-#     # Face scoring
-#     bias_face: 2.0
-#     mutual_gaze_bonus: 0.6
-#     saliency_min_score: 0.30
+    # Face scoring
+    bias_face: 2.0
+    mutual_gaze_bonus: 0.6
+    saliency_min_score: 0.30
     
-#     # Depth filtering
-#     depth_lo: 0.6             # Preferred depth range lower (meters)
-#     depth_hi: 1.8             # Preferred depth range upper (meters)
-#     depth_min: 0.35           # Minimum valid depth (meters)
-#     depth_max: 4.0            # Maximum valid depth (meters)
-#     depth_roi_px: 5           # ROI size for median filtering
-#     track_timeout_s: 5.0      # Remove tracks not seen for this long
+    # Depth filtering
+    depth_lo: 0.6             # Preferred depth range lower (meters)
+    depth_hi: 1.8             # Preferred depth range upper (meters)
+    depth_min: 0.35           # Minimum valid depth (meters)
+    depth_max: 4.0            # Maximum valid depth (meters)
+    depth_roi_px: 5           # ROI size for median filtering
+    track_timeout_s: 5.0      # Remove tracks not seen for this long
     
-#     # Target selection hysteresis
-#     hysteresis_delta: 1.2
-#     hysteresis_hold_ms: 1200
-#     dwell_cap_s: 8.0
+    # Target selection hysteresis
+    hysteresis_delta: 1.2
+    hysteresis_hold_ms: 1200
+    dwell_cap_s: 8.0
     
-#     # Inhibition of Return (IOR)
-#     ior_px_radius: 60.0
-#     ior_penalty: 2.0
+    # Inhibition of Return (IOR)
+    ior_px_radius: 60.0
+    ior_penalty: 2.0
     
-#     # Scene change detection
-#     head_move_reset_threshold: 0.5  # radians (~30 degrees)
+    # Scene change detection
+    head_move_reset_threshold: 0.5  # radians (~30 degrees)
     
-#     # Audio
-#     audio_hold_s: 2.0
+    # Audio
+    audio_hold_s: 2.0
     
-#     # Motion gating
-#     head_velocity_threshold: 0.08
-#     head_settle_time: 5.0
-#     deadband_yaw: 0.06
-#     deadband_pitch: 0.06
+    # Motion gating
+    head_velocity_threshold: 0.08
+    head_settle_time: 5.0
+    deadband_yaw: 0.06
+    deadband_pitch: 0.06
     
-#     # Saliency dwell
-#     saliency_dwell_time: 2.5
+    # Saliency dwell
+    saliency_dwell_time: 2.5
     
-#     # Idle behavior
-#     home_yaw: 0.0
-#     home_pitch: -0.05
-#     idle_scan_period_min: 3.0
-#     idle_scan_period_max: 6.0
-#     idle_scan_yaw_deg: 20.0
-#     idle_scan_pitch_deg: 8.0
-#     micro_saccade_deg: 0.4
-#     micro_saccade_period_min: 3.0
-#     micro_saccade_period_max: 5.0
+    # Idle behavior
+    home_yaw: 0.0
+    home_pitch: -0.05
+    idle_scan_period_min: 3.0
+    idle_scan_period_max: 6.0
+    idle_scan_yaw_deg: 20.0
+    idle_scan_pitch_deg: 8.0
+    micro_saccade_deg: 0.4
+    micro_saccade_period_min: 3.0
+    micro_saccade_period_max: 5.0
     
-#     # Joint limits
-#     yaw_lim: 1.8
-#     pitch_up: 0.4
-#     pitch_dn: -0.7
+    # Joint limits
+    yaw_lim: 1.8
+    pitch_up: 0.4
+    pitch_dn: -0.7
 
 # ===========================================
 # Visualization node params

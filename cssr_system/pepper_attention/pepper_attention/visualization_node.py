@@ -1,43 +1,19 @@
 #!/usr/bin/env python3
-
 """
-Visualization Node for Pepper Attention System
-- Overlays attention targets on camera feed
-- Publishes RViz markers for 3D visualization
-- Real-time metrics dashboard
+Improved Visualization for Pepper Attention System
+Shows faces with tracking IDs, engagement status, depth, saliency peaks, and current head target
 """
 
 import cv2
 import numpy as np
-import time
-import collections
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from sensor_msgs.msg import CompressedImage, Image, CameraInfo
-from geometry_msgs.msg import Vector3, Point, Pose, PoseStamped
-from std_msgs.msg import Float32MultiArray, ColorRGBA
-from visualization_msgs.msg import Marker, MarkerArray
-from cv_bridge import CvBridge
+from geometry_msgs.msg import Vector3
+from std_msgs.msg import Float32MultiArray
 from cssr_interfaces.msg import FaceDetection
-
-# ============ Helper Functions ============
-def get_image_topic(base_topic: str, use_compressed: bool, is_depth: bool = False) -> str:
-    """
-    Construct the full topic name based on compression setting.
-    
-    Args:
-        base_topic: Base topic name (e.g., "/camera/color/image_raw")
-        use_compressed: Whether to use compressed transport
-        is_depth: Whether this is a depth image (uses /compressedDepth instead of /compressed)
-    
-    Returns:
-        Full topic name with appropriate suffix
-    """
-    if use_compressed:
-        suffix = "/compressedDepth" if is_depth else "/compressed"
-        return base_topic + suffix
-    return base_topic
+from cv_bridge import CvBridge
 
 
 def get_image_qos() -> QoSProfile:
@@ -49,479 +25,500 @@ def get_image_qos() -> QoSProfile:
         depth=1
     )
 
-class AttentionVisualization(Node):
-    def __init__(self):
-        super().__init__('attention_visualization')
-        
-        # Declare and load parameters
-        self.declare_all_parameters()
-        self.load_parameters()
-        
-        # QoS
-        qos = get_image_qos()
-        
-        # Subscribers - image topic uses shared use_compressed
-        image_topic = get_image_topic(self.image_topic_base, self.use_compressed, is_depth=False)
-        if self.use_compressed:
-            self.sub_img = self.create_subscription(CompressedImage, image_topic, self.on_image, qos)
-        else:
-            self.sub_img = self.create_subscription(Image, image_topic, self.on_image_raw, qos)
-        
-        self.get_logger().info(f"Subscribing to image: {image_topic}")
-        
-        self.sub_faces = self.create_subscription(FaceDetection, self.face_topic, self.on_faces, 10)
-        self.sub_sal = self.create_subscription(Float32MultiArray, self.saliency_topic, self.on_saliency, 10)
-        self.sub_target = self.create_subscription(Vector3, self.target_topic, self.on_target, 10)
-        self.sub_caminfo = self.create_subscription(CameraInfo, self.camera_info_topic, self.on_caminfo, qos)
-        
-        # Publishers
-        if self.publish_overlay:
-            self.pub_overlay = self.create_publisher(CompressedImage, '/attn/visualization/compressed', 10)
-        
-        if self.publish_markers:
-            self.pub_markers = self.create_publisher(MarkerArray, '/attn/markers', 10)
-            self.pub_target_pose = self.create_publisher(PoseStamped, '/attn/target_pose', 10)
-        
-        # State
-        self.bridge = CvBridge()
-        self.current_frame = None
-        self.faces = []
-        self.saliency_peaks = []  # Support multiple peaks
-        self.current_target = None  # (yaw, pitch, score)
-        self.fx = self.fy = self.cx = self.cy = None
-        
-        # Metrics
-        self.frame_times = collections.deque(maxlen=30)
-        self.last_frame_t = time.time()
-        self.target_history = collections.deque(maxlen=100)
-        self.switch_times = []
-        self.last_target_id = None
-        
-        self.get_logger().info(
-            f"Attention visualization ready "
-            f"(use_compressed={self.use_compressed})"
-        )
 
-    def declare_all_parameters(self):
-        """Declare all ROS parameters with defaults"""
-        # Global shared parameter
+def generate_color_from_id(face_id: str) -> tuple:
+    """Generate a consistent color for a face ID using hash."""
+    # Hash the ID to get a consistent number
+    hash_val = hash(face_id)
+    
+    # Generate RGB values that are reasonably bright
+    r = (hash_val & 0xFF)
+    g = ((hash_val >> 8) & 0xFF)
+    b = ((hash_val >> 16) & 0xFF)
+    
+    # Ensure minimum brightness
+    brightness = 0.299 * r + 0.587 * g + 0.114 * b
+    if brightness < 100:
+        # Boost all channels proportionally
+        scale = 150 / max(brightness, 1)
+        r = min(255, int(r * scale))
+        g = min(255, int(g * scale))
+        b = min(255, int(b * scale))
+    
+    return (b, g, r)  # BGR for OpenCV
+
+
+class SimpleVisualization(Node):
+    def __init__(self):
+        super().__init__('simple_visualization')
+        
+        # Parameters
         self.declare_parameter('use_compressed', True)
-        
-        # Image topic (base, without /compressed suffix)
-        self.declare_parameter('image_topic_base', '/camera/color/image_raw')
-        
-        # Other topic parameters
+        self.declare_parameter('image_topic_base', '/camera/color/image_raw_custom')
         self.declare_parameter('face_topic', '/faceDetection/data')
         self.declare_parameter('saliency_topic', '/attn/saliency_peak')
         self.declare_parameter('target_topic', '/attn/target_angles')
         self.declare_parameter('camera_info_topic', '/camera/color/camera_info')
+        self.declare_parameter('show_face_ids', True)
+        self.declare_parameter('show_depth', True)
+        self.declare_parameter('show_engagement', True)
         
-        # Feature flags
-        self.declare_parameter('publish_overlay', True)
-        self.declare_parameter('publish_markers', True)
-        self.declare_parameter('show_metrics', True)
-
-    def load_parameters(self):
-        """Load all parameters into instance variables"""
-        # Global shared parameter
+        # Load parameters
         self.use_compressed = self.get_parameter('use_compressed').value
-        
-        # Topics
-        self.image_topic_base = self.get_parameter('image_topic_base').value
+        image_base = self.get_parameter('image_topic_base').value
         self.face_topic = self.get_parameter('face_topic').value
         self.saliency_topic = self.get_parameter('saliency_topic').value
         self.target_topic = self.get_parameter('target_topic').value
         self.camera_info_topic = self.get_parameter('camera_info_topic').value
+        self.show_face_ids = self.get_parameter('show_face_ids').value
+        self.show_depth = self.get_parameter('show_depth').value
+        self.show_engagement = self.get_parameter('show_engagement').value
         
-        # Feature flags
-        self.publish_overlay = self.get_parameter('publish_overlay').value
-        self.publish_markers = self.get_parameter('publish_markers').value
-        self.show_metrics = self.get_parameter('show_metrics').value
+        # Construct image topic
+        if self.use_compressed:
+            self.image_topic = image_base + "/compressed"
+        else:
+            self.image_topic = image_base
+        
+        # QoS
+        qos = get_image_qos()
+        
+        # Subscriptions
+        if self.use_compressed:
+            self.create_subscription(CompressedImage, self.image_topic, self.on_image_compressed, qos)
+        else:
+            self.create_subscription(Image, self.image_topic, self.on_image_raw, qos)
+        
+        self.get_logger().info(f"Subscribing to image: {self.image_topic}")
+        self.create_subscription(FaceDetection, self.face_topic, self.on_faces, 10)
+        self.create_subscription(Float32MultiArray, self.saliency_topic, self.on_saliency, 10)
+        self.create_subscription(Vector3, self.target_topic, self.on_target, 10)
+        self.create_subscription(CameraInfo, self.camera_info_topic, self.on_caminfo, qos)
+        
+        # Publisher
+        self.pub_overlay = self.create_publisher(Image, '/attn/visualization', 10)
+        
+        # State
+        self.bridge = CvBridge()
+        self.faces = []
+        self.saliency_peaks = []
+        self.current_target = None
+        self.target_face_id = None  # Track which face is currently targeted
+        self.fx = None
+        self.fy = None
+        self.cx = None
+        self.cy = None
+        
+        # Face color cache (for consistent colors across frames)
+        self.face_colors = {}
+        
+        # Counters for debugging
+        self.image_count = 0
+        self.face_count = 0
+        self.saliency_count = 0
+        self.target_count = 0
+        
+        self.get_logger().info("Improved visualization ready (Faces w/ Tracking + Engagement + Saliency)")
 
     def on_caminfo(self, msg: CameraInfo):
-        self.fx, self.fy = msg.k[0], msg.k[4]
-        self.cx, self.cy = msg.k[2], msg.k[5]
-
-    def on_image(self, msg: CompressedImage):
-        np_arr = np.frombuffer(msg.data, np.uint8)
-        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-        if frame is not None:
-            self.process_visualization(frame, msg.header.stamp)
-
-    def on_image_raw(self, msg: Image):
-        frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-        self.process_visualization(frame, msg.header.stamp)
+        """Store camera intrinsics."""
+        if self.fx is None:
+            self.fx, self.fy = msg.k[0], msg.k[4]
+            self.cx, self.cy = msg.k[2], msg.k[5]
+            self.get_logger().info(
+                f"Camera info: fx={self.fx:.1f}, fy={self.fy:.1f}, "
+                f"cx={self.cx:.1f}, cy={self.cy:.1f}"
+            )
 
     def on_faces(self, msg: FaceDetection):
+        """Store face detections with tracking IDs, engagement, and depth."""
+        self.face_count += 1
         self.faces = []
+        
         n = len(msg.centroids)
         for i in range(n):
-            fid = msg.face_label_id[i] if i < len(msg.face_label_id) else str(i)
-            c = msg.centroids[i]
-            w = msg.width[i] if i < len(msg.width) else 80.0
-            h = msg.height[i] if i < len(msg.height) else 80.0
-            mg = msg.mutual_gaze[i] if i < len(msg.mutual_gaze) else False
+            u = msg.centroids[i].x
+            v = msg.centroids[i].y
+            depth = msg.centroids[i].z
+            w = msg.width[i] if i < len(msg.width) else 80
+            h = msg.height[i] if i < len(msg.height) else 80
+            face_id = msg.face_label_id[i] if i < len(msg.face_label_id) else f"unknown_{i}"
+            engaged = msg.mutual_gaze[i] if i < len(msg.mutual_gaze) else False
+            
+            # Generate consistent color for this face ID
+            if face_id not in self.face_colors:
+                self.face_colors[face_id] = generate_color_from_id(face_id)
             
             self.faces.append({
-                'id': fid,
-                'u': int(c.x),
-                'v': int(c.y),
+                'u': int(u),
+                'v': int(v),
                 'w': int(w),
                 'h': int(h),
-                'mutual_gaze': mg
+                'depth': depth,
+                'face_id': face_id,
+                'engaged': engaged,
+                'color': self.face_colors[face_id]
             })
+        
+        if self.face_count == 1:
+            self.get_logger().info(f"First face message received: {len(self.faces)} faces")
 
     def on_saliency(self, msg: Float32MultiArray):
-        """Handle multiple saliency peaks: [u1, v1, s1, u2, v2, s2, ...]"""
+        """Store saliency peaks: [u1, v1, s1, u2, v2, s2, ...]"""
+        self.saliency_count += 1
         self.saliency_peaks = []
         
-        if len(msg.data) >= 3:
-            for i in range(0, len(msg.data), 3):
-                if i + 2 < len(msg.data):
-                    self.saliency_peaks.append({
-                        'u': int(msg.data[i]),
-                        'v': int(msg.data[i + 1]),
-                        'score': msg.data[i + 2]
-                    })
+        for i in range(0, len(msg.data) - 2, 3):
+            u, v, score = msg.data[i], msg.data[i + 1], msg.data[i + 2]
+            self.saliency_peaks.append({
+                'u': int(u),
+                'v': int(v),
+                'score': score
+            })
+        
+        if self.saliency_count == 1:
+            self.get_logger().info(f"First saliency message received: {len(self.saliency_peaks)} peaks")
 
     def on_target(self, msg: Vector3):
+        """Store current target angles and try to determine which face is targeted."""
+        self.target_count += 1
         self.current_target = {
             'yaw': msg.x,
             'pitch': msg.y,
             'score': msg.z
         }
         
-        # Track switches
-        current_id = f"{msg.x:.2f}_{msg.y:.2f}"
-        if self.last_target_id and current_id != self.last_target_id:
-            self.switch_times.append(time.time())
-            # Keep only last 60s
-            cutoff = time.time() - 60.0
-            self.switch_times = [t for t in self.switch_times if t > cutoff]
-        self.last_target_id = current_id
+        # Try to determine which face is being targeted (if any)
+        self._update_target_face()
         
-        self.target_history.append((msg.x, msg.y))
+        if self.target_count == 1:
+            self.get_logger().info(
+                f"First target received: yaw={np.degrees(msg.x):.1f}°, "
+                f"pitch={np.degrees(msg.y):.1f}°"
+            )
 
-    def process_visualization(self, frame, stamp):
-        """Main visualization pipeline"""
-        now = time.time()
-        dt = now - self.last_frame_t
-        self.frame_times.append(dt)
-        self.last_frame_t = now
+    def _update_target_face(self):
+        """Determine which face (if any) is currently being targeted."""
+        if not self.current_target or not self.faces or self.fx is None:
+            self.target_face_id = None
+            return
         
+        # Convert target angles to pixel coordinates
+        yaw = self.current_target['yaw']
+        pitch = self.current_target['pitch']
+        
+        x_norm = -np.tan(yaw)
+        y_norm = np.tan(pitch)
+        target_u = x_norm * self.fx + self.cx
+        target_v = y_norm * self.fy + self.cy
+        
+        # Find closest face to target
+        min_dist = float('inf')
+        closest_face_id = None
+        
+        for face in self.faces:
+            dist = np.sqrt((face['u'] - target_u)**2 + (face['v'] - target_v)**2)
+            if dist < min_dist and dist < 100:  # Within 100 pixels
+                min_dist = dist
+                closest_face_id = face['face_id']
+        
+        self.target_face_id = closest_face_id
+
+    def on_image_compressed(self, msg: CompressedImage):
+        """Process compressed image."""
+        try:
+            np_arr = np.frombuffer(msg.data, np.uint8)
+            frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            
+            if frame is None:
+                self.get_logger().warn("Failed to decode compressed image")
+                return
+            
+            self.process_frame(frame, msg.header.stamp)
+            
+        except Exception as e:
+            self.get_logger().error(f"Error processing compressed image: {e}")
+
+    def on_image_raw(self, msg: Image):
+        """Process raw image."""
+        try:
+            frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+            self.process_frame(frame, msg.header.stamp)
+            
+        except Exception as e:
+            self.get_logger().error(f"Error processing raw image: {e}")
+
+    def process_frame(self, frame, stamp):
+        """Process and visualize frame."""
+        self.image_count += 1
+        
+        # Log first image
+        if self.image_count == 1:
+            h, w = frame.shape[:2]
+            self.get_logger().info(f"First image received: {w}x{h}")
+        
+        # Draw visualizations
         vis = frame.copy()
         H, W = vis.shape[:2]
         
-        # Draw faces
-        for face in self.faces:
-            self._draw_face(vis, face)
+        # Draw saliency peaks first (so they're under faces)
+        for i, peak in enumerate(self.saliency_peaks):
+            self._draw_saliency_peak(vis, peak, i)
         
-        # Draw all saliency peaks
-        for idx, sal in enumerate(self.saliency_peaks):
-            self._draw_saliency(vis, sal, idx)
+        # Draw faces (Priority 1)
+        for face in self.faces:
+            is_targeted = (face['face_id'] == self.target_face_id)
+            self._draw_face(vis, face, is_targeted)
         
         # Draw current target
-        if self.current_target and self.fx:
+        if self.current_target and self.fx is not None:
             self._draw_target(vis, self.current_target, W, H)
         
-        # Draw metrics
-        if self.show_metrics:
-            self._draw_metrics(vis)
+        # Draw info overlay
+        self._draw_info(vis)
         
-        # Publish overlay
-        if self.publish_overlay and self.pub_overlay:
-            enc = cv2.imencode('.jpg', vis, [cv2.IMWRITE_JPEG_QUALITY, 85])[1]
-            msg = CompressedImage()
-            msg.format = 'jpeg'
-            msg.header.stamp = stamp
-            msg.data = enc.tobytes()
-            self.pub_overlay.publish(msg)
-        
-        # Publish RViz markers
-        if self.publish_markers:
-            self._publish_markers(stamp)
+        # Publish as RAW Image
+        try:
+            out_msg = self.bridge.cv2_to_imgmsg(vis, encoding='bgr8')
+            out_msg.header.stamp = stamp
+            out_msg.header.frame_id = "camera_color_optical_frame"
+            self.pub_overlay.publish(out_msg)
+            
+            # Log first publish
+            if self.image_count == 1:
+                self.get_logger().info("First visualization published to /attn/visualization")
+                
+        except Exception as e:
+            self.get_logger().error(f"Error publishing visualization: {e}")
 
-    def _draw_face(self, vis, face):
-        """Draw face bounding box with labels"""
+    def _draw_face(self, vis, face, is_targeted=False):
+        """Draw face bounding box with tracking ID, engagement, and depth."""
         u, v = face['u'], face['v']
-        w2, h2 = face['w']//2, face['h']//2
+        w2, h2 = face['w'] // 2, face['h'] // 2
         
-        # Color based on mutual gaze
-        color = (0, 255, 0) if face['mutual_gaze'] else (255, 100, 0)
+        color = face['color']
+        engaged = face['engaged']
+        face_id = face['face_id']
+        depth = face['depth']
         
-        # Bounding box
-        cv2.rectangle(
-            vis,
-            (u - w2, v - h2),
-            (u + w2, v + h2),
-            color, 2
-        )
+        # Thicker box if targeted or engaged
+        thickness = 5 if (is_targeted or engaged) else 3
+        
+        # Draw bounding box
+        x1, y1 = u - w2, v - h2
+        x2, y2 = u + w2, v + h2
+        cv2.rectangle(vis, (x1, y1), (x2, y2), color, thickness)
+        
+        # Draw engagement indicator (filled circle) if engaged
+        if engaged:
+            # Draw a glowing effect for engaged faces
+            cv2.circle(vis, (u, v), 25, (0, 255, 0), 3)
+            cv2.circle(vis, (u, v), 15, (0, 255, 0), 2)
+            cv2.putText(
+                vis, "ENGAGED",
+                (x1, y1 - 60),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7,
+                (0, 255, 0), 2, cv2.LINE_AA
+            )
         
         # Center cross
         cv2.drawMarker(
             vis, (u, v), color,
             markerType=cv2.MARKER_CROSS,
-            markerSize=12, thickness=2
+            markerSize=15, thickness=3
         )
         
-        # Label
-        label = f"ID:{face['id']}"
-        if face['mutual_gaze']:
-            label += " [GAZE]"
-        
-        (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-        cv2.rectangle(
-            vis,
-            (u - w2, v - h2 - th - 8),
-            (u - w2 + tw + 8, v - h2),
-            color, -1
-        )
-        cv2.putText(
-            vis, label,
-            (u - w2 + 4, v - h2 - 4),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-            (0, 0, 0), 1, cv2.LINE_AA
-        )
-
-    def _draw_saliency(self, vis, sal, rank=0):
-        """Draw saliency peak with rank indicator"""
-        u, v = sal['u'], sal['v']
-        score = sal['score']
-        
-        # Colors by rank (top peak is brightest)
-        colors = [
-            (0, 255, 255),    # Yellow - highest
-            (0, 200, 200),    # Darker yellow
-            (0, 150, 150),    # Even darker
-            (0, 100, 100),    # Dim
-            (0, 80, 80)       # Dimmest
-        ]
-        color = colors[rank] if rank < len(colors) else (0, 60, 60)
-        
-        # Circle with score-based size
-        radius = int(15 + score * 25) if rank == 0 else int(10 + score * 15)
-        
-        overlay = vis.copy()
-        cv2.circle(overlay, (u, v), radius, color, 2)
-        cv2.circle(overlay, (u, v), 3, color, -1)
-        
-        # Alpha decreases with rank
-        alpha = max(0.2, 0.5 - rank * 0.1)
-        cv2.addWeighted(overlay, alpha, vis, 1 - alpha, 0, vis)
-        
-        # Label (only for top peak or if high score)
-        if rank == 0 or score > 0.5:
-            label = f"SAL{rank+1}: {score:.2f}"
-            cv2.putText(
-                vis, label,
-                (u + 20, v + rank * 15),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.4,
-                color, 1, cv2.LINE_AA
-            )
-
-    def _draw_target(self, vis, target, W, H):
-        """Draw current attention target"""
-        yaw, pitch = target['yaw'], target['pitch']
-        
-        # Project back to pixel
-        x_norm = np.tan(yaw)
-        y_norm = np.tan(pitch)
-        u = int(x_norm * self.fx + self.cx)
-        v = int(y_norm * self.fy + self.cy)
-        
-        if 0 <= u < W and 0 <= v < H:
-            # Target reticle
-            color = (0, 0, 255)
-            size = 30
+        # Draw face ID if enabled
+        if self.show_face_ids:
+            id_text = f"ID: {face_id}"
+            if is_targeted:
+                id_text = ">>> " + id_text + " <<<"
             
-            # Crosshair
-            cv2.line(vis, (u - size, v), (u + size, v), color, 2)
-            cv2.line(vis, (u, v - size), (u, v + size), color, 2)
-            cv2.circle(vis, (u, v), size, color, 2)
-            
-            # Label
-            label = f"TARGET ({yaw*180/np.pi:.1f}, {pitch*180/np.pi:.1f})"
             cv2.putText(
-                vis, label,
-                (u + 35, v - 35),
+                vis, id_text,
+                (x1, y1 - 35),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6,
                 color, 2, cv2.LINE_AA
             )
         
-        # Draw trajectory history
-        if len(self.target_history) > 1:
-            pts = []
-            for y, p in self.target_history:
-                x_n = np.tan(y)
-                y_n = np.tan(p)
-                pu = int(x_n * self.fx + self.cx)
-                pv = int(y_n * self.fy + self.cy)
-                if 0 <= pu < W and 0 <= pv < H:
-                    pts.append((pu, pv))
-            
-            if len(pts) > 1:
-                pts = np.array(pts, np.int32).reshape((-1, 1, 2))
-                cv2.polylines(vis, [pts], False, (255, 0, 255), 1, cv2.LINE_AA)
+        # Draw depth if enabled and available
+        if self.show_depth and depth > 0:
+            depth_text = f"{depth:.2f}m"
+            cv2.putText(
+                vis, depth_text,
+                (x1, y2 + 25),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                color, 2, cv2.LINE_AA
+            )
+        
+        # Draw "FACE" label
+        label = "FACE"
+        if is_targeted:
+            label = "TARGETED FACE"
+        
+        cv2.putText(
+            vis, label,
+            (x1, y1 - 10),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+            color, 2, cv2.LINE_AA
+        )
 
-    def _draw_metrics(self, vis):
-        """Draw performance metrics overlay"""
+    def _draw_saliency_peak(self, vis, peak, rank):
+        """Draw a saliency peak."""
+        u, v = peak['u'], peak['v']
+        score = peak['score']
+        
+        # Color by rank (brightest for highest)
+        if rank == 0:
+            color = (0, 255, 255)  # Yellow - highest
+            radius = int(20 + score * 30)
+        else:
+            alpha = max(0.3, 1.0 - rank * 0.2)
+            color = (int(alpha * 0), int(alpha * 200), int(alpha * 200))
+            radius = int(15 + score * 20)
+        
+        # Draw circle
+        cv2.circle(vis, (u, v), radius, color, 2)
+        cv2.circle(vis, (u, v), 3, color, -1)
+        
+        # Label
+        label = f"SAL #{rank+1}: {score:.2f}"
+        cv2.putText(
+            vis, label,
+            (u + 25, v + 5 + rank * 20),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+            color, 1, cv2.LINE_AA
+        )
+
+    def _draw_target(self, vis, target, W, H):
+        """Draw current attention target."""
+        yaw, pitch = target['yaw'], target['pitch']
+        score = target.get('score', 0.0)
+        
+        # Project angles back to pixel coordinates
+        x_norm = -np.tan(yaw)
+        y_norm = np.tan(pitch)
+        u = int(x_norm * self.fx + self.cx)
+        v = int(y_norm * self.fy + self.cy)
+        
+        # Draw even if off-screen (with indicator)
+        if not (0 <= u < W and 0 <= v < H):
+            cv2.putText(
+                vis, "TARGET OFF-SCREEN",
+                (W//2 - 100, 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7,
+                (0, 0, 255), 2, cv2.LINE_AA
+            )
+            return
+        
+        # Draw target reticle
+        color = (0, 0, 255)  # Red
+        size = 40
+        
+        # Crosshair
+        cv2.line(vis, (u - size, v), (u + size, v), color, 3)
+        cv2.line(vis, (u, v - size), (u, v + size), color, 3)
+        cv2.circle(vis, (u, v), size, color, 3)
+        cv2.circle(vis, (u, v), 5, color, -1)
+        
+        # Label
+        label = f"TARGET: ({np.degrees(yaw):.1f}°, {np.degrees(pitch):.1f}°)"
+        if score > 0:
+            label += f" s={score:.2f}"
+        
+        # Add face ID if targeting a face
+        if self.target_face_id:
+            label += f" [{self.target_face_id}]"
+        
+        cv2.putText(
+            vis, label,
+            (u + 50, v - 50),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.7,
+            color, 2, cv2.LINE_AA
+        )
+
+    def _draw_info(self, vis):
+        """Draw info overlay."""
         H, W = vis.shape[:2]
+        
+        # Count engaged faces
+        engaged_count = sum(1 for f in self.faces if f['engaged'])
         
         # Semi-transparent background
         overlay = vis.copy()
-        cv2.rectangle(overlay, (10, 10), (300, 170), (0, 0, 0), -1)
-        cv2.addWeighted(overlay, 0.6, vis, 0.4, 0, vis)
+        info_height = 200 if engaged_count > 0 else 180
+        cv2.rectangle(overlay, (10, 10), (450, info_height), (0, 0, 0), -1)
+        cv2.addWeighted(overlay, 0.7, vis, 0.3, 0, vis)
         
-        # FPS
-        fps = 1.0 / np.mean(self.frame_times) if len(self.frame_times) > 0 else 0
-        
-        # Switch rate (per minute)
-        switch_rate = len(self.switch_times)
-        
-        # Metrics text
-        y = 30
-        metrics = [
-            f"FPS: {fps:.1f}",
-            f"Faces: {len(self.faces)}",
+        # Info text
+        y = 35
+        info = [
+            f"Faces: {len(self.faces)} ({engaged_count} engaged)",
             f"Saliency peaks: {len(self.saliency_peaks)}",
-            f"Switches/min: {switch_rate}",
-            f"Target: {self.current_target['yaw']*180/np.pi:.1f}, {self.current_target['pitch']*180/np.pi:.1f}" if self.current_target else "Target: None"
+            f"Target: {self.target_face_id if self.target_face_id else 'Saliency' if self.current_target else 'None'}"
         ]
         
-        for text in metrics:
+        # Add tracked face IDs
+        if self.faces:
+            face_ids = [f['face_id'] for f in self.faces]
+            info.append(f"Tracked IDs: {', '.join(face_ids[:5])}")  # Show first 5
+            if len(face_ids) > 5:
+                info.append(f"  ... and {len(face_ids) - 5} more")
+        
+        for text in info:
+            color = (0, 255, 0)
+            # Highlight engaged faces in green
+            if "engaged)" in text and engaged_count > 0:
+                color = (0, 255, 0)
+            
             cv2.putText(
                 vis, text,
                 (20, y),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                (0, 255, 0), 1, cv2.LINE_AA
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                color, 2, cv2.LINE_AA
             )
-            y += 25
-
-    def _publish_markers(self, stamp):
-        """Publish RViz markers"""
-        markers = MarkerArray()
+            y += 30
         
-        # Face markers
-        for i, face in enumerate(self.faces):
-            marker = Marker()
-            marker.header.frame_id = "camera_color_optical_frame"
-            marker.header.stamp = stamp
-            marker.ns = "faces"
-            marker.id = i
-            marker.type = Marker.SPHERE
-            marker.action = Marker.ADD
-            
-            # Position (approximate depth = 1.5m)
-            if self.fx and self.cy:
-                Z = 1.5
-                X = (face['u'] - self.cx) / self.fx * Z
-                Y = (face['v'] - self.cy) / self.fy * Z
-                
-                marker.pose.position.x = Z
-                marker.pose.position.y = -X
-                marker.pose.position.z = -Y
-            
-            marker.scale.x = marker.scale.y = marker.scale.z = 0.2
-            
-            # Color
-            if face['mutual_gaze']:
-                marker.color = ColorRGBA(r=0.0, g=1.0, b=0.0, a=0.8)
-            else:
-                marker.color = ColorRGBA(r=1.0, g=0.5, b=0.0, a=0.6)
-            
-            markers.markers.append(marker)
+        # Legend
+        y += 10
+        cv2.putText(
+            vis, "Legend:",
+            (20, y),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+            (200, 200, 200), 1, cv2.LINE_AA
+        )
+        y += 20
         
-        # Saliency markers (all peaks)
-        for i, sal in enumerate(self.saliency_peaks):
-            if self.fx:
-                marker = Marker()
-                marker.header.frame_id = "camera_color_optical_frame"
-                marker.header.stamp = stamp
-                marker.ns = "saliency"
-                marker.id = i
-                marker.type = Marker.CYLINDER
-                marker.action = Marker.ADD
-                
-                Z = 2.0
-                X = (sal['u'] - self.cx) / self.fx * Z
-                Y = (sal['v'] - self.cy) / self.fy * Z
-                
-                marker.pose.position.x = Z
-                marker.pose.position.y = -X
-                marker.pose.position.z = -Y
-                
-                # Size decreases with rank
-                scale = 0.3 - i * 0.05
-                marker.scale.x = marker.scale.y = max(0.1, scale)
-                marker.scale.z = 0.1
-                
-                # Alpha decreases with rank
-                alpha = max(0.2, 0.6 - i * 0.1)
-                marker.color = ColorRGBA(r=1.0, g=1.0, b=0.0, a=alpha)
-                
-                markers.markers.append(marker)
+        legend_items = [
+            ("Green Glow", "Engaged (mutual gaze)", (0, 255, 0)),
+            ("Colored Box", "Tracked face", (255, 255, 255)),
+            ("Red Cross", "Attention target", (0, 0, 255)),
+            ("Yellow Circle", "Top saliency", (0, 255, 255))
+        ]
         
-        # Target marker (arrow)
-        if self.current_target:
-            marker = Marker()
-            marker.header.frame_id = "Head"
-            marker.header.stamp = stamp
-            marker.ns = "target"
-            marker.id = 0
-            marker.type = Marker.ARROW
-            marker.action = Marker.ADD
-            
-            # Arrow from head origin in target direction
-            yaw, pitch = self.current_target['yaw'], self.current_target['pitch']
-            length = 0.5
-            
-            # Start point
-            p1 = Point()
-            p1.x = p1.y = p1.z = 0.0
-            
-            # End point
-            p2 = Point()
-            p2.x = length * np.cos(pitch) * np.cos(yaw)
-            p2.y = length * np.cos(pitch) * np.sin(yaw)
-            p2.z = length * np.sin(pitch)
-            
-            marker.points = [p1, p2]
-            marker.scale.x = 0.02  # shaft diameter
-            marker.scale.y = 0.04  # head diameter
-            marker.color = ColorRGBA(r=1.0, g=0.0, b=0.0, a=1.0)
-            
-            markers.markers.append(marker)
-        
-        self.pub_markers.publish(markers)
-        
-        # Target pose for RViz camera plugin
-        if self.current_target and self.pub_target_pose:
-            pose = PoseStamped()
-            pose.header.frame_id = "Head"
-            pose.header.stamp = stamp
-            
-            yaw, pitch = self.current_target['yaw'], self.current_target['pitch']
-            
-            # Convert to quaternion (simplified - yaw around Z, pitch around Y)
-            cy = np.cos(yaw * 0.5)
-            sy = np.sin(yaw * 0.5)
-            cp = np.cos(pitch * 0.5)
-            sp = np.sin(pitch * 0.5)
-            
-            pose.pose.orientation.w = cy * cp
-            pose.pose.orientation.x = cy * sp
-            pose.pose.orientation.y = sy * cp
-            pose.pose.orientation.z = sy * sp
-            
-            self.pub_target_pose.publish(pose)
+        for label, desc, color in legend_items:
+            # Draw small colored box
+            cv2.rectangle(vis, (20, y - 10), (35, y + 5), color, -1)
+            cv2.putText(
+                vis, f"{label}: {desc}",
+                (45, y),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4,
+                (200, 200, 200), 1, cv2.LINE_AA
+            )
+            y += 18
 
 
 def main(args=None):
     rclpy.init(args=args)
-    node = AttentionVisualization()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    node = SimpleVisualization()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':

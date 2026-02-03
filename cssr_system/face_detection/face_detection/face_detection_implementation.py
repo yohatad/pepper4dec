@@ -3,7 +3,7 @@ face_detection_implementation.py Implementation code for running the Face and Mu
 
 Author: Yohannes Tadesse Haile
 Date: April 18, 2025
-Version: v1.2
+Version: v1.0
 
 This program comes with ABSOLUTELY NO WARRANTY.
 """
@@ -17,7 +17,6 @@ import multiprocessing
 import yaml
 import random
 import threading
-import copy
 from ament_index_python.packages import get_package_share_directory
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.node import Node
@@ -29,6 +28,7 @@ from geometry_msgs.msg import Point
 from typing import Tuple, List, Dict, Optional
 from cssr_interfaces.msg import FaceDetection, ObjectDetection
 from scipy.optimize import linear_sum_assignment
+from builtin_interfaces.msg import Time
 
 def load_configuration() -> Dict:
     """
@@ -46,7 +46,9 @@ def load_configuration() -> Dict:
         'imageTimeout': 2.0,
         'sixdrepnetConfidence': 0.65,
         'sixdrepnetHeadposeAngle': 10,
-        'requirePersonDetection': True  # New parameter
+        'requirePersonDetection': True,
+        'objectDetectionTimeout': 0.5,  # Max age for object detection data
+        'prioritizeFaceDepth': True  # Prioritize face depth over person depth
     }
     
     try:
@@ -86,6 +88,8 @@ class FaceDetectionNode(Node):
         self.verbose_mode = config['verboseMode']
         self.image_timeout = config['imageTimeout']
         self.require_person_detection = config.get('requirePersonDetection', True)
+        self.object_detection_timeout = config.get('objectDetectionTimeout', 0.5)
+        self.prioritize_face_depth = config.get('prioritizeFaceDepth', True)
         
         self.node_name = self.get_name()
         self.timer_start = self.get_clock().now()
@@ -97,11 +101,14 @@ class FaceDetectionNode(Node):
 
         # Object detection related attributes
         self.latest_object_detections = None
+        self.latest_object_detections_timestamp = None
         self.object_detections_lock = threading.Lock()
         
-        # Face ID counter for standalone mode
-        self.next_face_id = 1
-        self.face_id_map = {}  # Maps face tracking across frames
+        # Face colors keyed by person tracking ID (from object detection)
+        self.face_colors: Dict[str, Tuple[int, int, int]] = {}
+        
+        # Simple face ID counter for standalone mode only
+        self.next_standalone_face_id = 1
         
         # Only subscribe to object detection if required
         if self.require_person_detection:
@@ -113,6 +120,7 @@ class FaceDetectionNode(Node):
             )
             if self.verbose_mode:
                 self.get_logger().info(f"{self.node_name}: Person detection ENABLED - subscribed to /objectDetection/data")
+                self.get_logger().info(f"{self.node_name}: Using object detection tracking IDs for face identification")
         else:
             if self.verbose_mode:
                 self.get_logger().info(f"{self.node_name}: Person detection DISABLED - running standalone face detection")
@@ -147,15 +155,15 @@ class FaceDetectionNode(Node):
             except Exception as e:
                 self.get_logger().warn(f"imshow failed (likely headless): {e}")
 
-            try:
-                if color_frame is not None:
-                    msg = self.bridge.cv2_to_imgmsg(color_frame, encoding="bgr8")
-                    self.debug_pub.publish(msg)
-                if depth_vis is not None:
-                    dmsg = self.bridge.cv2_to_imgmsg(depth_vis, encoding="bgr8")
-                    self.depth_debug_pub.publish(dmsg)
-            except Exception as e:
-                self.get_logger().error(f"Failed to publish debug images: {e}")
+        try:
+            if color_frame is not None:
+                msg = self.bridge.cv2_to_imgmsg(color_frame, encoding="bgr8")
+                self.debug_pub.publish(msg)
+            if depth_vis is not None:
+                dmsg = self.bridge.cv2_to_imgmsg(depth_vis, encoding="bgr8")
+                self.depth_debug_pub.publish(dmsg)
+        except Exception as e:
+            self.get_logger().error(f"Failed to publish debug images: {e}")
 
     def get_topic_names(self) -> Tuple[str, str]:
         """Get RGB and depth topic names based on camera type."""
@@ -437,9 +445,16 @@ class FaceDetectionNode(Node):
         self.pub_gaze.publish(face_msg)
 
     def object_detection_callback(self, msg: ObjectDetection):
-        """Callback for object detection messages. Thread-safe storage with deep copy."""
+        """Callback for object detection messages. Thread-safe storage with timestamp."""
         with self.object_detections_lock:
-            self.latest_object_detections = copy.deepcopy(msg)
+            self.latest_object_detections = {
+                'object_label_id': list(msg.object_label_id),
+                'class_names': list(msg.class_names),
+                'centroids': [Point(x=c.x, y=c.y, z=c.z) for c in msg.centroids],
+                'width': list(msg.width),
+                'height': list(msg.height)
+            }
+            self.latest_object_detections_timestamp = self.get_clock().now()
 
     def cleanup(self):
         """Clean up resources."""
@@ -620,7 +635,7 @@ class SixDrepNet(FaceDetectionNode):
         distance = np.sqrt((face_cx - person_cx)**2 + (face_cy - person_cy)**2)
         normalized_distance = distance / np.sqrt(person_area)
         
-        # 2. Calculate vertical position penalty
+        # 2. Calculate vertical position penalty (faces should be in upper portion)
         person_upper_third_y = py1 + person_height * 0.33
         if face_cy < person_upper_third_y:
             vertical_penalty = 0.0
@@ -654,6 +669,7 @@ class SixDrepNet(FaceDetectionNode):
                                          img_h: int, img_w: int) -> List[Tuple[int, int]]:
         """
         Use Hungarian algorithm to optimally match faces to persons.
+        Handles multiple faces per person by allowing multiple matches.
         
         Args:
             faces: List of face detections
@@ -680,16 +696,74 @@ class SixDrepNet(FaceDetectionNode):
         try:
             face_indices, person_indices = linear_sum_assignment(cost_matrix)
             
-            # Filter out impossible matches
+            # Filter out impossible matches and collect valid ones
             matches = []
             for f_idx, p_idx in zip(face_indices, person_indices):
                 if cost_matrix[f_idx, p_idx] < np.inf:
                     matches.append((f_idx, p_idx))
             
+            # Additional pass: check for multiple faces in same person box
+            # that weren't matched in the first pass
+            matched_face_indices = set(f_idx for f_idx, _ in matches)
+            for f_idx, face in enumerate(faces):
+                if f_idx in matched_face_indices:
+                    continue
+                
+                # Find best person box this face falls into
+                best_cost = np.inf
+                best_person_idx = None
+                for p_idx, person in enumerate(persons):
+                    cost = self.calculate_matching_cost(face, person, img_h, img_w)
+                    if cost < best_cost and cost < np.inf:
+                        best_cost = cost
+                        best_person_idx = p_idx
+                
+                if best_person_idx is not None:
+                    matches.append((f_idx, best_person_idx))
+                    if self.verbose_mode:
+                        self.get_logger().info(
+                            f"Additional face {f_idx} matched to person {persons[best_person_idx]['id']} "
+                            f"(multiple faces in same box)"
+                        )
+            
             return matches
         except Exception as e:
             self.get_logger().error(f"Hungarian algorithm failed: {e}")
             return []
+
+    def get_best_depth_estimate(self, face_cx: float, face_cy: float, 
+                                face_width: float, face_height: float,
+                                person_depth: Optional[float]) -> float:
+        """
+        Get best depth estimate, prioritizing face-region depth over person depth.
+        
+        Args:
+            face_cx, face_cy: Face centroid coordinates
+            face_width, face_height: Face dimensions
+            person_depth: Depth from person detection (may be None or 0)
+            
+        Returns:
+            float: Best depth estimate in meters
+        """
+        # Try to get face-region depth first
+        face_depth = self.get_depth_in_region(face_cx, face_cy, face_width, face_height)
+        
+        if self.prioritize_face_depth:
+            # Prioritize face depth, use person depth as fallback
+            if face_depth is not None and face_depth > 0:
+                return face_depth
+            elif person_depth is not None and person_depth > 0:
+                return person_depth
+            else:
+                return 0.0
+        else:
+            # Use person depth if available, otherwise face depth
+            if person_depth is not None and person_depth > 0:
+                return person_depth
+            elif face_depth is not None and face_depth > 0:
+                return face_depth
+            else:
+                return 0.0
 
     def process_images(self):
         """Process synchronized RGB + depth images for SixDrepNet."""
@@ -710,16 +784,13 @@ class SixDrepNet(FaceDetectionNode):
         img_h, img_w = debug_image.shape[:2]
         tracking_data = []
 
-        if not hasattr(self, "face_colors"):
-            self.face_colors = {}
-
         # Run face detection on full image
         face_boxes, face_scores = self.yolo_model(cv_image)
 
         if self.verbose_mode:
             self.get_logger().info(f"Standalone mode: {len(face_boxes)} faces detected")
 
-        # Process all detected faces
+        # Process all detected faces (simple sequential IDs without tracking)
         for idx, (box, score) in enumerate(zip(face_boxes, face_scores)):
             fx1, fy1, fx2, fy2 = box
             face_cx = (fx1 + fx2) // 2
@@ -735,7 +806,7 @@ class SixDrepNet(FaceDetectionNode):
             if not (0 <= fx1 < fx2 <= img_w and 0 <= fy1 < fy2 <= img_h):
                 continue
 
-            # Assign a simple face ID (could be improved with tracking)
+            # Simple sequential ID for standalone mode
             face_id = f"face_{idx}"
             
             if face_id not in self.face_colors:
@@ -793,55 +864,78 @@ class SixDrepNet(FaceDetectionNode):
         return debug_image
 
     def process_frame_with_person_detection(self, cv_image):
-        """Process frame with person-constrained face detection (original logic)."""
+        """Process frame with person-constrained face detection using object detection tracking IDs."""
         debug_image = cv_image.copy()
         img_h, img_w = debug_image.shape[:2]
         tracking_data = []
 
-        if not hasattr(self, "face_colors"):
-            self.face_colors = {}
-
-        # Thread-safe retrieval of object detections
+        # Thread-safe retrieval of object detections with timestamp validation
         with self.object_detections_lock:
-            if self.latest_object_detections is None:
+            if self.latest_object_detections is None or self.latest_object_detections_timestamp is None:
                 if self.verbose_mode:
                     self.get_logger().warn("No object detection data available")
                 self.publish_face_detection([])
                 return debug_image
-            object_detections = copy.deepcopy(self.latest_object_detections)
+            
+            # Check if object detection data is too old
+            current_time = self.get_clock().now()
+            detection_age = (current_time - self.latest_object_detections_timestamp).nanoseconds / 1e9
+            
+            if detection_age > self.object_detection_timeout:
+                if self.verbose_mode:
+                    self.get_logger().warn(
+                        f"Object detection data is stale ({detection_age:.2f}s old, "
+                        f"timeout={self.object_detection_timeout}s)"
+                    )
+                self.publish_face_detection([])
+                return debug_image
+            
+            # Make efficient copy of only needed data
+            object_detections = {
+                'object_label_id': list(self.latest_object_detections['object_label_id']),
+                'class_names': list(self.latest_object_detections['class_names']),
+                'centroids': [Point(x=c.x, y=c.y, z=c.z) for c in self.latest_object_detections['centroids']],
+                'width': list(self.latest_object_detections['width']),
+                'height': list(self.latest_object_detections['height'])
+            }
 
-        # Validate array consistency
-        n_detections = len(object_detections.object_label_id)
+        # Validate array consistency including object_label_id
+        n_detections = len(object_detections['object_label_id'])
         
         if self.verbose_mode and n_detections > 0:
-            person_count = sum(1 for cn in object_detections.class_names if cn == 'person')
-            self.get_logger().info(f"Object detection: {n_detections} total objects, {person_count} persons")
+            person_count = sum(1 for cn in object_detections['class_names'] if cn == 'person')
+            self.get_logger().info(
+                f"Object detection: {n_detections} total objects, {person_count} persons "
+                f"(age: {detection_age:.2f}s)"
+            )
         
         if n_detections == 0:
             if self.verbose_mode:
                 self.get_logger().debug("No objects in object detection message")
             self.publish_face_detection([])
+            # Clear face colors when no persons detected
             self.face_colors.clear()
             return debug_image
             
+        # Validate all arrays have same length
         if not all(len(arr) == n_detections for arr in [
-            object_detections.class_names,
-            object_detections.centroids,
-            object_detections.width,
-            object_detections.height
+            object_detections['class_names'],
+            object_detections['centroids'],
+            object_detections['width'],
+            object_detections['height']
         ]):
             self.get_logger().error("Inconsistent object detection array lengths")
             self.publish_face_detection([])
             return debug_image
 
-        # Collect person detections
+        # Collect person detections with their tracking IDs
         persons = []
         active_person_ids = set()
         for i in range(n_detections):
-            if object_detections.class_names[i] == 'person':
-                centroid = object_detections.centroids[i]
-                width = object_detections.width[i]
-                height = object_detections.height[i]
+            if object_detections['class_names'][i] == 'person':
+                centroid = object_detections['centroids'][i]
+                width = object_detections['width'][i]
+                height = object_detections['height'][i]
                 
                 x1 = max(0, int(centroid.x - width / 2))
                 y1 = max(0, int(centroid.y - height / 2))
@@ -863,24 +957,28 @@ class SixDrepNet(FaceDetectionNode):
                         self.get_logger().warn(f"Skipping out-of-frame person box")
                     continue
                 
-                person_id = object_detections.object_label_id[i]
-                active_person_ids.add(str(person_id))
+                # Use object detection tracking ID directly
+                person_tracking_id = object_detections['object_label_id'][i]
+                active_person_ids.add(str(person_tracking_id))
                 
                 if self.verbose_mode:
-                    self.get_logger().info(f"Person {person_id}: box=({x1},{y1},{x2},{y2}), depth={centroid.z:.2f}m")
+                    self.get_logger().info(
+                        f"Person tracking_id={person_tracking_id}: box=({x1},{y1},{x2},{y2}), "
+                        f"depth={centroid.z:.2f}m"
+                    )
                 
                 persons.append({
-                    'id': person_id,
+                    'tracking_id': person_tracking_id,  # This is the key from object detection
                     'box': (x1, y1, x2, y2),
                     'depth': centroid.z,
-                    'assigned_face_idx': None
+                    'assigned_faces': []  # List to support multiple faces per person
                 })
 
-        # Clean up stale face colors
-        if hasattr(self, 'face_colors'):
-            stale_ids = set(self.face_colors.keys()) - active_person_ids
-            if stale_ids and self.verbose_mode:
-                self.get_logger().info(f"Cleaning up stale face IDs: {stale_ids}")
+        # Clean up stale face colors for persons that are no longer tracked
+        stale_ids = set(self.face_colors.keys()) - active_person_ids
+        if stale_ids:
+            if self.verbose_mode:
+                self.get_logger().info(f"Cleaning up colors for lost person IDs: {stale_ids}")
             for stale_id in stale_ids:
                 del self.face_colors[stale_id]
 
@@ -889,7 +987,6 @@ class SixDrepNet(FaceDetectionNode):
             if self.verbose_mode:
                 self.get_logger().info(f"No valid persons detected (total objects: {n_detections})")
             self.publish_face_detection([])
-            self.face_colors.clear()
             return debug_image
 
         # Run face detection
@@ -929,7 +1026,7 @@ class SixDrepNet(FaceDetectionNode):
                 for person in persons:
                     px1, py1, px2, py2 = person['box']
                     cv2.rectangle(debug_image, (px1, py1), (px2, py2), (128, 128, 128), 1)
-                    cv2.putText(debug_image, f"P:{person['id']}", (px1 + 5, py1 - 5),
+                    cv2.putText(debug_image, f"P:{person['tracking_id']}", (px1 + 5, py1 - 5),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (128, 128, 128), 1)
             return debug_image
 
@@ -951,11 +1048,11 @@ class SixDrepNet(FaceDetectionNode):
                 for person in persons:
                     px1, py1, px2, py2 = person['box']
                     cv2.rectangle(debug_image, (px1, py1), (px2, py2), (255, 0, 0), 2)
-                    cv2.putText(debug_image, f"Person:{person['id']}", (px1 + 5, py1 - 5),
+                    cv2.putText(debug_image, f"Person:{person['tracking_id']}", (px1 + 5, py1 - 5),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
             return debug_image
 
-        # Process matched pairs
+        # Process matched pairs - using object detection tracking IDs
         for face_idx, person_idx in matches:
             face = faces[face_idx]
             person = persons[person_idx]
@@ -964,12 +1061,21 @@ class SixDrepNet(FaceDetectionNode):
             face_cx, face_cy = face['centroid']
             face_width, face_height = face['size']
             
-            person['assigned_face_idx'] = face_idx
-            face_id = str(person['id'])
+            # Track assigned faces (for multiple faces per person)
+            person['assigned_faces'].append(face_idx)
             
-            if face_id not in self.face_colors:
-                self.face_colors[face_id] = self.generate_dark_color()
-            face_color = self.face_colors[face_id]
+            # Use person's tracking ID from object detection directly
+            # For multiple faces per person, add suffix
+            if len(person['assigned_faces']) == 1:
+                face_id = str(person['tracking_id'])
+            else:
+                face_id = f"{person['tracking_id']}_f{len(person['assigned_faces'])}"
+            
+            # Assign consistent color based on tracking ID
+            base_id = str(person['tracking_id'])
+            if base_id not in self.face_colors:
+                self.face_colors[base_id] = self.generate_dark_color()
+            face_color = self.face_colors[base_id]
 
             # Crop face
             face_image = cv_image[fy1:fy2, fx1:fx2]
@@ -991,17 +1097,14 @@ class SixDrepNet(FaceDetectionNode):
 
             self.draw_axis(debug_image, yaw_deg, pitch_deg, roll_deg, face_cx, face_cy, size=50)
 
-            # Get depth
-            cz = person['depth'] if person['depth'] > 0 else 0.0
-            if cz == 0.0:
-                cz_depth = self.get_depth_in_region(face_cx, face_cy, face_width, face_height)
-                cz = cz_depth if cz_depth is not None else 0.0
+            # Get best depth estimate (prioritizing face depth)
+            cz = self.get_best_depth_estimate(face_cx, face_cy, face_width, face_height, person['depth'])
 
             # Mutual gaze
             mutual_gaze = abs(yaw_deg) < self.sixdrep_angle and abs(pitch_deg) < self.sixdrep_angle
 
             tracking_data.append({
-                'face_id': face_id,
+                'face_id': face_id,  # This is now based on object detection tracking ID
                 'centroid': Point(x=float(face_cx), y=float(face_cy), z=float(cz)),
                 'width': float(face_width),
                 'height': float(face_height),
@@ -1022,9 +1125,12 @@ class SixDrepNet(FaceDetectionNode):
         if self.verbose_mode:
             for person in persons:
                 px1, py1, px2, py2 = person['box']
-                color = (0, 255, 0) if person['assigned_face_idx'] is not None else (128, 128, 128)
+                color = (0, 255, 0) if person['assigned_faces'] else (128, 128, 128)
                 cv2.rectangle(debug_image, (px1, py1), (px2, py2), color, 1)
-                cv2.putText(debug_image, f"P:{person['id']}", (px1 + 5, py1 - 5),
+                label = f"P:{person['tracking_id']}"
+                if person['assigned_faces']:
+                    label += f" ({len(person['assigned_faces'])} faces)"
+                cv2.putText(debug_image, label, (px1 + 5, py1 - 5),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
         self.publish_face_detection(tracking_data)
