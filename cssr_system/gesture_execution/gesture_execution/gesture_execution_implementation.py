@@ -471,7 +471,7 @@ class GestureExecutionSystem(Node):
                     return False
             
             # Publish visualization markers before executing the gesture
-            self._publish_deictic_visualization(
+            self.publish_deictic_visualization(
                 pointing_x, pointing_y, pointing_z,
                 shoulder_x, shoulder_y, shoulder_z,
                 pointing_arm
@@ -771,7 +771,7 @@ class GestureExecutionSystem(Node):
             self.get_logger().error(f"Bezier trajectory failed: {e}")
             self.get_logger().error(traceback.format_exc())
 
-    def _publish_deictic_visualization(self, 
+    def publish_deictic_visualization(self, 
                                     target_x: float, target_y: float, target_z: float,
                                     shoulder_x: float, shoulder_y: float, shoulder_z: float,
                                     arm: int):
