@@ -29,6 +29,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/Gesture.action"
   "action/Navigation.action"
   "action/SpeechRecognition.action"
+  "action/TTS.action"
   DEPENDENCIES builtin_interfaces std_msgs geometry_msgs
 )
 
