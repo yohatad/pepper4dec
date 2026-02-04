@@ -8,7 +8,7 @@ import tempfile
 import wave
 import numpy as np
 from queue import Queue
-from ament_index_python.packages import get_package_share_directory
+from ament_index_python.packages import get_package_share_directory, get_package_prefix
 
 try:
     from RealtimeTTS import TextToAudioStream, CoquiEngine
@@ -29,10 +29,25 @@ class TTSProcessor:
         self.nao_port = node.declare_parameter("nao_port", 9559).value
         self.chunk_duration = node.declare_parameter("chunk_duration", 15.0).value
         
-        # Paths
-        package_path = get_package_share_directory("tts")
-        self.python2_script = os.path.join(package_path, "scripts", 'send_and_play_audio.py')
-        voice_path = os.path.join(package_path, "voice_clones", "pepper.wav")
+        # Paths - FIXED
+        package_share = get_package_share_directory("tts")
+        package_prefix = get_package_prefix("tts")
+        
+        # Python2 script is installed in lib directory
+        self.python2_script = os.path.join(package_prefix, "lib", "tts", "send_and_play_audio.py")
+        
+        # Voice clone is in share directory
+        voice_path = os.path.join(package_share, "voice_clones", "pepper.wav")
+        
+        # Log the paths for debugging
+        self.logger.info(f"Python2 script path: {self.python2_script}")
+        self.logger.info(f"Voice clone path: {voice_path}")
+        
+        # Verify files exist
+        if not os.path.exists(self.python2_script):
+            self.logger.error(f"Python2 script not found at: {self.python2_script}")
+        if not os.path.exists(voice_path):
+            self.logger.error(f"Voice clone not found at: {voice_path}")
 
         if not REALTIME_TTS_AVAILABLE:
             self.logger.error("RealtimeTTS not installed.")

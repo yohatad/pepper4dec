@@ -3,7 +3,7 @@ from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 from cssr_interfaces.action import TTS
-from .implementation import TTSProcessor
+from .tts_implementation import TTSProcessor
 
 class RobotTTSActionServer(Node):
     def __init__(self):
