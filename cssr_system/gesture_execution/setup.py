@@ -16,7 +16,7 @@ setup(
     entry_points={
         "console_scripts": [
             "gesture_execution = gesture_execution.gesture_execution_application:main",
-            "test_visualization = gesture_execution.test_visualization:main",
+            "test_visualization = gesture_execution.gesture_test_visualization:main",
         ],
     },
     data_files=[
