@@ -1,7 +1,7 @@
 /* behaviorControllerInterface.h 
  *
  * Author: Yohannes Tadesse Haile
- * Date: July 25, 2025
+ * Date: Feb 07, 2026
  * Version: v1.0
  *
  * Copyright (C) 2025 CyLab Carnegie Mellon University Africa
@@ -11,13 +11,20 @@
 #define BEHAVIOR_CONTROLLER_INTERFACE_H
 
 // ROS includes
-#include "rclcpp/rclcpp.hpp"
-#include "std_msgs/msg/string.hpp"
-#include "ament_index_cpp/get_package_share_directory.hpp"
+#include <rclcpp/rclcpp.hpp>
+#include <rclcpp_action/rclcpp_action.hpp>
+#include <std_msgs/msg/string.hpp>
+#include <ament_index_cpp/get_package_share_directory.hpp>
 
-// BehaviorTree includes
+// BehaviorTree.CPP includes
 #include <behaviortree_cpp/bt_factory.h>
 #include <behaviortree_cpp/loggers/groot2_publisher.h>
+
+// BehaviorTree.ROS2 includes
+#include <behaviortree_ros2/bt_service_node.hpp>
+#include <behaviortree_ros2/bt_action_node.hpp>
+#include <behaviortree_ros2/ros_node_params.hpp>
+#include <behaviortree_ros2/plugins.hpp>
 
 // Standard includes
 #include <string>
@@ -29,7 +36,6 @@
 #include <chrono>
 #include <optional>
 #include <csignal>
-#include <yaml-cpp/yaml.h>
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -37,18 +43,28 @@
 #include <thread>
 #include <iomanip>
 
-// Custom message/service includes
-#include "cssr_system/msg/face_detection_data.hpp"
-#include "cssr_system/msg/overt_attention_mode.hpp"
-#include "cssr_system/srv/animate_behavior_set_activation.hpp"
-#include "cssr_system/srv/gesture_execution_perform_gesture.hpp"
-#include "cssr_system/srv/overt_attention_set_mode.hpp"
-#include "cssr_system/srv/robot_localization_reset_pose.hpp"
-#include "cssr_system/srv/robot_navigation_set_goal.hpp"
-#include "cssr_system/srv/speech_event_set_enabled.hpp"
-#include "cssr_system/srv/speech_event_set_language.hpp"
-#include "cssr_system/srv/tablet_event_prompt_and_get_response.hpp"
-#include "cssr_system/srv/text_to_speech_say_text.hpp"
+// YAML includes
+#include <yaml-cpp/yaml.h>
+
+// Custom message/service/action includes from cssr_interfaces package
+// Messages
+#include "cssr_interfaces/msg/face_detection.hpp"
+#include "cssr_interfaces/msg/object_detection.hpp"
+#include "cssr_interfaces/msg/overt_attention_status.hpp"
+// Actions
+#include "cssr_interfaces/action/tts.hpp"
+#include "cssr_interfaces/action/gesture.hpp"
+#include "cssr_interfaces/action/navigation.hpp"
+#include "cssr_interfaces/action/animate_behavior.hpp"
+#include "cssr_interfaces/action/speech_recognition.hpp"
+// Services
+#include "cssr_interfaces/srv/overt_attention_set_mode.hpp"
+#include "cssr_interfaces/srv/conversation_manager_create_collection.hpp"
+#include "cssr_interfaces/srv/conversation_manager_prompt.hpp"
+#include "cssr_interfaces/srv/perform_gesture.hpp"
+#include "cssr_interfaces/srv/get_depth_at_pixel.hpp"
+#include "cssr_interfaces/srv/language_model_create_collection.hpp"
+#include "cssr_interfaces/srv/language_model_prompt.hpp"
 
 //=============================================================================
 // Constants
@@ -111,6 +127,8 @@ public:
     bool isTestMode() const;
     std::string getLanguage() const;
     std::string getNodeName() const;
+    std::string getCultureKnowledgeBasePath() const;
+    std::string getEnvironmentKnowledgeBasePath() const;
 
 private:
     ConfigManager() = default;
@@ -162,13 +180,14 @@ public:
     void info(const std::string& msg);
     void warn(const std::string& msg);
     void error(const std::string& msg);
+    void debug(const std::string& msg);
 
 private:
     std::shared_ptr<rclcpp::Node> node_;
     std::string formatMessage(const std::string& msg);
 };
 
-// Service Manager
+// Service Manager (for non-BT service calls)
 class ServiceManager {
 public:
     explicit ServiceManager(std::shared_ptr<rclcpp::Node> node);
@@ -179,10 +198,13 @@ public:
                     typename ServiceType::Response::SharedPtr& response);
     
     bool checkServicesAvailable(const std::vector<std::string>& services);
+    bool waitForService(const std::string& serviceName, 
+                       std::chrono::seconds timeout = std::chrono::seconds(5));
 
 private:
     std::shared_ptr<rclcpp::Node> node_;
     std::unordered_map<std::string, rclcpp::ClientBase::SharedPtr> clients_;
+    std::mutex clientsMutex_;
     
     template<typename ServiceType>
     std::shared_ptr<rclcpp::Client<ServiceType>> getClient(const std::string& serviceName);
@@ -192,37 +214,23 @@ private:
 class TopicMonitor {
 public:
     explicit TopicMonitor(std::shared_ptr<rclcpp::Node> node);
+    
+    bool isTopicAvailable(const std::string& topicName);
     bool checkTopicsAvailable(const std::vector<std::string>& topics);
+    bool waitForTopic(const std::string& topicName,
+                     std::chrono::seconds timeout = std::chrono::seconds(5));
 
 private:
     std::shared_ptr<rclcpp::Node> node_;
-    bool isTopicAvailable(const std::string& topicName);
 };
 
-//=============================================================================
-// Base Node Class for Behavior Tree Nodes
-//=============================================================================
-class BaseTreeNode {
-protected:
-    std::shared_ptr<rclcpp::Node>   node_;
-    std::unique_ptr<Logger>         logger_;
-    std::unique_ptr<ServiceManager> serviceManager_;
-
+// Text Utilities
+class TextUtils {
 public:
-    /** 
-     * Construct by retrieving the ROS2 node handle from the BT blackboard.
-     * Throws if someone forgot to put "node" into the blackboard before tree creation.
-     */
-    explicit BaseTreeNode(const BT::NodeConfiguration &config);
-
-    virtual ~BaseTreeNode() = default;
-
-protected:
-    template<typename ServiceType>
-    bool callServiceSafely(const std::string                        &serviceName,
-                           typename ServiceType::Request::SharedPtr  request,
-                           typename ServiceType::Response::SharedPtr &response,
-                           const std::string                        &treeNodeName);
+    static bool containsAnyWord(const std::string& text, const std::vector<std::string>& words);
+    static std::string toLowerCase(const std::string& text);
+    static std::vector<std::string> split(const std::string& text, char delimiter);
+    static std::string trim(const std::string& text);
 };
 
 //=============================================================================
@@ -231,25 +239,92 @@ protected:
 namespace behavior_controller {
 
 /**
- * @brief Build and register all ROS2‑aware and custom BehaviorTree.CPP nodes,
- *        load the XML file for the given scenario, and return a ready‑to‑tick tree.
+ * @brief Build and register all ROS2-aware and custom BehaviorTree nodes,
+ *        load the XML file for the given scenario, and return a ready-to-tick tree.
  *
- * @param scenario      Base name (without “.xml”) of the tree file under data/
- * @param node_handle   Shared pointer to your ROS2 node (injected into every BT node)
+ * This function creates a BehaviorTreeFactory, registers all custom nodes
+ * (both RosServiceNode-based and BtActionNode-based), and loads the XML
+ * behavior tree definition for the specified scenario.
+ *
+ * @param scenario      Base name (without ".xml") of the tree file under data/
+ * @param node_handle   Shared pointer to your ROS2 node (used by all BT nodes)
  * @return BT::Tree     The fully constructed behavior tree
  * @throws std::runtime_error if the XML file cannot be found or loaded
  */
-BT::Tree initializeTree(
-    const std::string &scenario,
-    std::shared_ptr<rclcpp::Node> node_handle);
+BT::Tree initializeTree(const std::string& scenario,
+                        std::shared_ptr<rclcpp::Node> node_handle);
 
-}
+} // namespace behavior_controller
 
+//=============================================================================
+// Utility Functions
+//=============================================================================
+
+/**
+ * @brief Get a configuration value from the YAML config file
+ * @param key The configuration key to retrieve
+ * @return The value as a string
+ * @throws std::runtime_error if key not found or file cannot be read
+ */
 std::string getConfigValue(const std::string& key);
+
+/**
+ * @brief Validate the configuration file has all required fields
+ * @param configPath Path to the configuration YAML file
+ * @return true if valid, false otherwise
+ */
+bool validateConfigurationFile(const std::string& configPath);
+
+/**
+ * @brief Log system information (ROS distribution, available services/topics)
+ * @param node The ROS2 node to query
+ */
+void logSystemInfo(std::shared_ptr<rclcpp::Node> node);
+
+/**
+ * @brief Check if a language is supported
+ * @param language The language code to check
+ * @return true if supported, false otherwise
+ */
+bool isValidLanguage(const std::string& language);
+
+/**
+ * @brief Get list of supported languages
+ * @return Vector of supported language codes
+ */
+std::vector<std::string> getSupportedLanguages();
+
+/**
+ * @brief Check if a file exists
+ * @param filepath Path to the file
+ * @return true if file exists, false otherwise
+ */
+bool fileExists(const std::string& filepath);
+
+/**
+ * @brief Get absolute path to a file relative to package share directory
+ * @param relativePath Path relative to package share directory
+ * @return Absolute path to the file
+ */
+std::string getPackageDataPath(const std::string& relativePath);
+
+/**
+ * @brief Print node information to logs
+ * @param node The ROS2 node
+ */
+void printNodeInfo(std::shared_ptr<rclcpp::Node> node);
+
+/**
+ * @brief Convert BehaviorTree NodeStatus to string
+ * @param status The NodeStatus to convert
+ * @return String representation of the status
+ */
+std::string nodeStatusToString(BT::NodeStatus status);
 
 //=============================================================================
 // Template Implementations
 //=============================================================================
+
 template<typename ServiceT>
 bool ServiceManager::callService(
     const std::string& service_name,
@@ -293,7 +368,9 @@ bool ServiceManager::callService(
 }
 
 template<typename ServiceType>
-std::shared_ptr<rclcpp::Client<ServiceType>> ServiceManager::getClient(const std::string& serviceName) {
+std::shared_ptr<rclcpp::Client<ServiceType>> 
+ServiceManager::getClient(const std::string& serviceName) 
+{
     std::lock_guard<std::mutex> lock(clientsMutex_);
     
     auto it = clients_.find(serviceName);
@@ -304,19 +381,6 @@ std::shared_ptr<rclcpp::Client<ServiceType>> ServiceManager::getClient(const std
     auto client = node_->create_client<ServiceType>(serviceName);
     clients_[serviceName] = client;
     return client;
-}
-
-template<typename ServiceType>
-bool BaseTreeNode::callServiceSafely(const std::string& serviceName,
-                                     typename ServiceType::Request::SharedPtr request,
-                                     typename ServiceType::Response::SharedPtr& response,
-                                     const std::string& treeNodeName) {
-    try {
-        return serviceManager_->callService<ServiceType>(serviceName, request, response);
-    } catch (const std::exception& e) {
-        logger_->error("Exception in " + treeNodeName + " service call: " + e.what());
-        return false;
-    }
 }
 
 #endif // BEHAVIOR_CONTROLLER_INTERFACE_H

@@ -32,8 +32,7 @@ from geometry_msgs.msg import Pose2D, Point
 from visualization_msgs.msg import Marker
 from naoqi_bridge_msgs.msg import JointAnglesTrajectory
 
-# Action definition - you'll need to create this
-from pepper_interfaces.action import GestureExecution
+from cssr_interfaces.action import Gesture
 
 from .pepper_kinematics_utilities import PepperKinematicsUtilities, RIGHT_ARM, LEFT_ARM
 
@@ -196,7 +195,7 @@ class GestureDescriptorManager:
         return max_duration
 
 
-class GestureActionServer(Node):
+class GestureExecutionSystem(Node):
     """ROS2 Action Server for gesture execution with elapsed time feedback"""
     
     def __init__(self):
@@ -229,7 +228,7 @@ class GestureActionServer(Node):
         # Create action server
         self._action_server = ActionServer(
             self,
-            GestureExecution,
+            Gesture,
             '/gesture_execution/execute',
             execute_callback=self.execute_callback,
             goal_callback=self.goal_callback,
@@ -320,7 +319,7 @@ class GestureActionServer(Node):
         self._feedback_stop.clear()
         
         request = goal_handle.request
-        result = GestureExecution.Result()
+        result = Gesture.Result()
         
         try:
             gesture_type = request.gesture_type.strip().lower()
@@ -382,7 +381,7 @@ class GestureActionServer(Node):
     
     def _publish_elapsed_feedback(self, goal_handle, start_time: float):
         """Publish elapsed time at regular intervals"""
-        feedback = GestureExecution.Feedback()
+        feedback = Gesture.Feedback()
         
         while not self._feedback_stop.is_set():
             feedback.elapsed_seconds = time.time() - start_time
@@ -938,25 +937,3 @@ class GestureActionServer(Node):
                 
         except Exception as e:
             self.get_logger().error(f"Visualization failed: {e}")
-
-
-def main(args=None):
-    rclpy.init(args=args)
-    
-    node = GestureActionServer()
-    
-    # Use MultiThreadedExecutor for action server
-    executor = MultiThreadedExecutor(num_threads=4)
-    executor.add_node(node)
-    
-    try:
-        executor.spin()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
-
-
-if __name__ == '__main__':
-    main()
