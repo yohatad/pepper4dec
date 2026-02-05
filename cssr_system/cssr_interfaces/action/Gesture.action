@@ -1,0 +1,14 @@
+# Request
+string gesture_type
+int64 gesture_id
+int64 gesture_duration
+float64 bow_nod_angle
+float64 location_x
+float64 location_y
+float64 location_z
+---
+# Result
+bool gesture_success
+---
+# Feedback
+string status
