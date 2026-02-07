@@ -33,6 +33,9 @@ ROS2 Libraries:
 BehaviorTree Libraries:
     - behaviortree_cpp/bt_factory.h
     - behaviortree_cpp/loggers/groot2_publisher.h
+    - behaviortree_ros2/bt_service_node.hpp
+    - behaviortree_ros2/bt_action_node.hpp
+    - behaviortree_ros2/ros_node_params.hpp
 
 External Libraries:
     - yaml-cpp/yaml.h
@@ -64,19 +67,18 @@ Configuration File Parameters:
 Behavior Tree Node Types:
     Action Nodes:
         - StartOfTree: Initialize mission and test sequence
-        - SayText: Execute text-to-speech with utility phrases
-        - Navigate: Move robot to specified locations
-        - GetVisitorResponse: Capture and process speech input
+        - SayTextRosService: Execute text-to-speech with utility phrases
+        - NavigateRosService: Move robot to specified locations
         - SelectExhibit: Choose next tour location
         - RetrieveListOfExhibits: Load tour specification
-        - PerformDeicticGesture: Execute pointing gestures
-        - PerformIconicGesture: Execute welcome/goodbye gestures
-        - DescribeExhibitSpeech: Deliver location-specific content
-        - SetSpeechEvent: Configure speech recognition
-        - SetOvertAttentionMode: Control robot attention system
-        - SetAnimateBehavior: Activate robot animations
-        - ResetRobotPose: Reset robot localization
-        - PressYesNoDialogue: Display tablet interface
+        - PerformDeicticGestureRosService: Execute pointing gestures
+        - PerformIconicGestureRosService: Execute welcome/goodbye gestures
+        - DescribeExhibitSpeechRosService: Deliver location-specific content
+        - SetSpeechEventRosService: Configure speech recognition
+        - SetOvertAttentionModeRosService: Control robot attention system
+        - SetAnimateBehaviorRosService: Activate robot animations
+        - ResetRobotPoseRosService: Reset robot localization
+        - PressYesNoDialogueRosService: Display tablet interface
         - HandleFallBack: Error recovery mechanism
 
     Condition Nodes:
@@ -84,7 +86,6 @@ Behavior Tree Node Types:
         - IsMutualGazeDiscovered: Verify eye contact establishment
         - IsVisitorResponseYes: Validate affirmative responses
         - IsListWithExhibit: Check tour completion status
-        - IsASREnabled: Verify speech recognition availability
 
 Subscribed Topics and Message Types:
     Topic Name                      Message Type                            Description
@@ -145,168 +146,162 @@ System Architecture Integration:
 Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
 Email: yohanneh@andrew.cmu.edu
 Date: July 25, 2025
-Version: v1.0
+Version: v2.0 - Updated to use BehaviorTree.ROS2
 */
 
 #include "behaviorController/behaviorControllerInterface.h"
+#include <rclcpp/rclcpp.hpp>
+#include <ament_index_cpp/get_package_share_directory.hpp>
+#include <behaviortree_cpp/bt_factory.h>
+#include <behaviortree_cpp/loggers/groot2_publisher.h>
 
-void displayStartupInfo() {
-    std::string softwareVersion = "1.0";
-    std::string indent = "\n\t\t";
+void displayStartupInfo(const rclcpp::Logger& logger) {
+    std::string softwareVersion = "2.0";
     
-    // RCLCPP_INFO("fix this", "\n"
-    //      "**************************************************************************************************\n"
-    //      "%s%s\tv%s"
-    //      "%sCopyright (C) 2025 CyLab Carnegie Mellon University Africa"
-    //      "%sThis program comes with ABSOLUTELY NO WARRANTY."
-    //      "\n\n**************************************************************************************************\n\n",
-    //      indent.c_str(), softwareVersion.c_str(),
-    //      indent.c_str(), indent.c_str()
-    // );
+    RCLCPP_INFO(logger, "\n"
+         "**************************************************************************************************\n"
+         "\t\tBehavior Controller v%s (BehaviorTree.ROS2)\n"
+         "\t\tCopyright (C) 2025 CyLab Carnegie Mellon University Africa\n"
+         "\t\tThis program comes with ABSOLUTELY NO WARRANTY.\n"
+         "**************************************************************************************************\n",
+         softwareVersion.c_str()
+    );
 }
 
-bool initializeSystem() {
-    // Logger logger(node);
-    
+bool initializeSystem(const rclcpp::Logger& logger) {
     // Load configuration
     std::string packagePath = ament_index_cpp::get_package_share_directory("cssr_system");
     std::string configPath = packagePath + "/behaviorController/config/behaviorControllerConfiguration.yaml";
     
     if (!ConfigManager::instance().loadFromFile(configPath)) {
-        // logger.error("Failed to load configuration from: " + configPath);
+        RCLCPP_ERROR(logger, "Failed to load configuration from: %s", configPath.c_str());
         return false;
     }
     
     // Load knowledge base
     if (!KnowledgeManager::instance().loadFromPackage(packagePath)) {
-        // logger.error("Failed to load knowledge base from: " + packagePath);
+        RCLCPP_ERROR(logger, "Failed to load knowledge base from: %s", packagePath.c_str());
         return false;
     }
     
     // Log configuration
-    // auto& config = ConfigManager::instance();
-    // logger.info("ASR Enabled: " + std::string(config.isAsrEnabled() ? "Yes" : "No"));
-    // logger.info("Verbose Mode: " + std::string(config.isVerbose() ? "Yes" : "No"));
+    auto& config = ConfigManager::instance();
+    RCLCPP_INFO(logger, "ASR Enabled: %s", config.isAsrEnabled() ? "Yes" : "No");
+    RCLCPP_INFO(logger, "Verbose Mode: %s", config.isVerbose() ? "Yes" : "No");
+    RCLCPP_INFO(logger, "Language: %s", config.getLanguage().c_str());
 
     return true;
 }
 
-// bool checkSystemRequirements() {
-//     // Logger logger(node);
-//     ServiceManager serviceManager(node);
-//     TopicMonitor topicMonitor(node);
-    
-//     // Required services
-//     std::vector<std::string> requiredServices = {
-//         "/animateBehaviour/setActivation",
-//         "/gestureExecution/perform_gesture",
-//         "/overtAttention/set_mode",
-//         "/robotLocalization/reset_pose",
-//         "/robotNavigation/set_goal",
-//         "/speechEvent/set_language",
-//         "/speechEvent/set_enabled",
-//         "/tabletEvent/prompt_and_get_response",
-//         "/textToSpeech/say_text"
-//     };
-    
-//     // Required topics
-//     std::vector<std::string> requiredTopics = {
-//         "/faceDetection/data",
-//         "/overtAttention/mode",
-//         "/speechEvent/text"
-//     };
-    
-//     logger.info("Checking Services...");
-    
-//     if (!serviceManager.checkServicesAvailable(requiredServices)) {
-//         logger.error("Not all required services are available");
-//         return false;
-//     }
+std::string getScenarioSpecification(const rclcpp::Logger& logger) {
+    std::string scenario = "lab_tour"; // Default scenario
 
-//     logger.info("All required services are available");
-    
-//     logger.info("Checking Topics...");
-    
-//     if (!topicMonitor.checkTopicsAvailable(requiredTopics)) {
-//         logger.error("Not all required topics are available");
-//         return false;
-//     }
-
-//     logger.info("All required topics are available");
-    
-//     return true;
-// }
-
-int main(int argc, char** argv) {
-    
-        // logger.info("startup");
-        // displayStartupInfo(node);
-
-        std::string scenario = "lab_tour"; // Default scenario
-
-        try {
+    try {
         scenario = getConfigValue("scenario_specification");
         
         if (scenario.empty()) {
             throw std::runtime_error("Scenario specification is empty");
         }
-        } catch (const std::exception& e) {
-            // logger.error("Fatal Error retrieving scenario: " + std::string(e.what()));
-            return 1; // Exit if scenario retrieval fails
-        }
-
-    
-        // // Initialize system
-        // if (!initializeSystem(node)) {
-        //     return 1; // Exit if initialization fails
-        // }
         
-        // // Check system requirements (skip in standalone mode for testing)
-        // if (!checkSystemRequirements(node)) {
-        //     return 1; // Exit if requirements are not met
-        // }
-    
-        // Initialize ROS
+        RCLCPP_INFO(logger, "Scenario Specification: %s", scenario.c_str());
+        return scenario;
+        
+    } catch (const std::exception& e) {
+        RCLCPP_ERROR(logger, "Error retrieving scenario (using default): %s", e.what());
+        return scenario; // Return default
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
+        // Initialize ROS2
         rclcpp::init(argc, argv);
         
         // Create node
         auto node = rclcpp::Node::make_shared("behaviorController");
-
-        BT::Tree tree;
-
-        try {
-        tree = behavior_controller::initializeTree(scenario, node);
-        }
-        catch (const std::exception &e) {
-            RCLCPP_FATAL(node->get_logger(), "Failed to init tree: %s", e.what());
+        auto logger = node->get_logger();
+        
+        // Display startup information
+        displayStartupInfo(logger);
+        
+        // Initialize system (configuration and knowledge base)
+        if (!initializeSystem(logger)) {
+            RCLCPP_FATAL(logger, "System initialization failed");
+            rclcpp::shutdown();
             return 1;
         }
-
-        // registerRos2Nodes(factory);
-
-        // (Optional) visualize in Groot:
-        BT::Groot2Publisher publisher(tree);
-                    
-        // logger.info("Scenario Specification: " + scenario);
         
-        // 7) Execute the tree in a loop until it returns SUCCESS or FAILURE
-        rclcpp::Rate rate(Constants::LOOP_RATE_HZ);  // 10 Hz tick rate
+        // Get scenario specification
+        std::string scenario = getScenarioSpecification(logger);
+        
+        // Initialize behavior tree
+        RCLCPP_INFO(logger, "Initializing behavior tree for scenario: %s", scenario.c_str());
+        BT::Tree tree;
+        
+        try {
+            tree = behavior_controller::initializeTree(scenario, node);
+            RCLCPP_INFO(logger, "Behavior tree initialized successfully");
+        }
+        catch (const std::exception& e) {
+            RCLCPP_FATAL(logger, "Failed to initialize tree: %s", e.what());
+            rclcpp::shutdown();
+            return 1;
+        }
+        
+        // Optional: Enable Groot2 visualization
+        BT::Groot2Publisher publisher(tree);
+        RCLCPP_INFO(logger, "Groot2 publisher enabled - connect on port 1667");
+        
+        // Execute the tree
+        RCLCPP_INFO(logger, "Starting behavior tree execution...");
+        rclcpp::Rate rate(Constants::LOOP_RATE_HZ);  // Default: 10 Hz
+        
+        int tick_count = 0;
+        auto start_time = std::chrono::steady_clock::now();
+        
         while (rclcpp::ok()) {
+            // Tick the tree once
             auto status = tree.tickOnce();
-            if (status != BT::NodeStatus::RUNNING) break;
+            tick_count++;
+            
+            // Log periodic status if verbose mode is enabled
+            if (ConfigManager::instance().isVerbose() && tick_count % 100 == 0) {
+                auto current_time = std::chrono::steady_clock::now();
+                auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                    current_time - start_time).count();
+                    
+                RCLCPP_INFO(logger, 
+                    "Behavior tree running - Status: %s, Ticks: %d, Elapsed: %ld seconds",
+                    status == BT::NodeStatus::RUNNING ? "RUNNING" :
+                    status == BT::NodeStatus::SUCCESS ? "SUCCESS" : "FAILURE",
+                    tick_count, elapsed);
+            }
+            
+            // Check if tree has finished
+            if (status != BT::NodeStatus::RUNNING) {
+                if (status == BT::NodeStatus::SUCCESS) {
+                    RCLCPP_INFO(logger, "Behavior tree completed successfully after %d ticks", tick_count);
+                } else {
+                    RCLCPP_WARN(logger, "Behavior tree failed after %d ticks", tick_count);
+                }
+                break;
+            }
+            
+            // Process ROS callbacks
             rclcpp::spin_some(node);
+            
+            // Sleep to maintain loop rate
             rate.sleep();
         }
-
-        // 8) Shutdown ROS and exit
+        
+        // Cleanup
+        RCLCPP_INFO(logger, "Shutting down behavior controller...");
         rclcpp::shutdown();
         return 0;
         
-        // // Periodic status logging
-        // if (ConfigManager::instance().isVerbose()) {
-        //     static int counter = 0;
-        //     if (++counter % 100 == 0) { // Log every 10 seconds at 10Hz
-        //         logger.info("running");
-        //     }
-        // }
+    } catch (const std::exception& e) {
+        std::cerr << "Fatal exception in main: " << e.what() << std::endl;
+        rclcpp::shutdown();
+        return 1;
+    }
 }

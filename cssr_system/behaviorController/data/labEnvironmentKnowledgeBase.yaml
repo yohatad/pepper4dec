@@ -1,0 +1,83 @@
+# Environment Knowledge Base
+tour_specification: [1, 2, 3, 4, 5]
+
+locations:
+  1:
+    robot_location_description: "Pepper's starting location"
+    robot_location_pose:
+      x: 4.4
+      y: 7.8
+      theta: 270.0
+    gesture_target:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+    pre_gesture_message_english: "Welcome the the robotics lab at Carnegie Mellon University Africa."
+    pre_gesture_message_kinyarwanda: "Murakazaneza muri laboratwari ya robotikisi muri kaneji meloni iniverisite yafurika"
+    post_gesture_message_english: "I will give you a short tour. I hope you enjoy it"
+    post_gesture_message_kinyarwanda: "Ngiye kubatemberezaho gato, nizereko muribuze kuryoherwa"
+    cultural_knowledge: ["SymbolicShapeRespect", "BowExtentRespect"]
+
+  2:
+    robot_location_description: "The (other) Pepper robot"
+    robot_location_pose:
+      x: 3.5
+      y: 6.3
+      theta: 180.0
+    gesture_target:
+      x: 2.0
+      y: 7.8
+      z: 0.82
+    pre_gesture_message_english: "This is the Pepper humanoid robot"
+    pre_gesture_message_kinyarwanda: "Iyi yitwa pepa humanoyidi roboti"
+    post_gesture_message_english: "We use it for research in social robotics and human-robot interaction"
+    post_gesture_message_kinyarwanda: "Tuyikoresha mubushakashatsi mubijyanye nimibanire hamwe nimikoranire hagati yabantu ndetse naza robo"
+    cultural_knowledge: ["DeicticShape"]
+
+  3:
+    robot_location_description: "Lynxmotion"
+    robot_location_pose:
+      x: 1.7
+      y: 6.0
+      theta: 270.0
+    gesture_target:
+      x: 0.6
+      y: 4.8
+      z: 0.82
+    pre_gesture_message_english: "This is the Lynxmotion robot"
+    pre_gesture_message_kinyarwanda: "Iyi robo ni likisi moshoni"
+    post_gesture_message_english: "We use it for teaching robot manipulation"
+    post_gesture_message_kinyarwanda: "Tuyikoresha mukwigisha roboti manipileshoni"
+    cultural_knowledge: ["DeicticShape"]
+
+  4:
+    robot_location_description: "Roomba"
+    robot_location_pose:
+      x: 2.3
+      y: 5.1
+      theta: 270.0
+    gesture_target:
+      x: 3.2
+      y: 3.0
+      z: 0.82
+    pre_gesture_message_english: "This is the Roomba"
+    pre_gesture_message_kinyarwanda: "Iyiyo yitwa rumba"
+    post_gesture_message_english: "We use it for teaching mobile robotics"
+    post_gesture_message_kinyarwanda: "Tuyikoresha mukwigisha mobile robotikisi"
+    cultural_knowledge: ["DeicticShape"]
+
+  5:
+    robot_location_description: "Pepper's starting location"
+    robot_location_pose:
+      x: 4.4
+      y: 7.8
+      theta: 270.0
+    gesture_target:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+    pre_gesture_message_english: "I hope you enjoyed the tour"
+    pre_gesture_message_kinyarwanda: "Nizereko mwaryohewe no gutemberezwa"
+    post_gesture_message_english: "See you again soon"
+    post_gesture_message_kinyarwanda: "Tuzongere kubonana ubutaha"
+    cultural_knowledge: ["IconicShape"]
