@@ -39,7 +39,7 @@ def generate_launch_description():
     
     # Tour Guide BehaviorTree Node
     tour_guide_node = Node(
-        package='behavior_controller',
+        package='behavior_controller_py',
         executable='tour_guide_node',
         name='behavior_controller_node',
         output='screen',

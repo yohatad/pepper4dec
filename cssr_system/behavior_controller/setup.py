@@ -2,7 +2,7 @@ from setuptools import setup
 import os
 from glob import glob
 
-package_name = 'behavior_controller'
+package_name = 'behavior_controller_py'
 
 setup(
     name=package_name,
