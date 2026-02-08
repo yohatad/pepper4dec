@@ -26,10 +26,8 @@ def get_image_qos() -> QoSProfile:
         depth=1
     )
 
-
 def clamp(x, lo, hi):
     return max(lo, min(hi, x))
-
 
 def pixel_to_angles(u, v, fx, fy, cx, cy):
     """Convert pixel to camera-relative angles."""
