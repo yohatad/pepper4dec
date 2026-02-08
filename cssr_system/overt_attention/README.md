@@ -1,277 +1,285 @@
 <div align="center">
-  <h1>Overt Attention</h1>
+<h1> Overt Visual Attention System (ROS2) </h1>
 </div>
-
 
 <div align="center">
-  <img src="CSSR4AfricaLogo.svg" alt="CSSR4Africa Logo" style="width:50%; height:auto;">
+  <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:50%; height:auto;">
 </div>
 
-The `overtAttention` ROS node enhances the Pepper humanoid robot's ability to perform meaningful and dynamic attention behaviors, improving its interactive capabilities. This ROS node hosts a service that allows users to invoke a variety of attention behaviors, including looking at faces, scanning the environment, and focusing on a particular location.
-The package leverages biological motion profiles to ensure natural and fluid execution, making interactions more engaging and lifelike. Attention behaviors are executed using the robot's built-in kinematic capabilities, and the system ensures that the motions are aligned with the robot's physical constraints.
-This package is designed for use with thr physical Pepper robots, allowing seamless integration into larger robotics applications through ROS topic and service interfaces.
+The **Overt Visual Attention System** package is a **ROS2** package designed to implement a unified visual attention controller for robot heads. It integrates multiple attention cues including **face detection with engagement awareness**, **bottom-up visual saliency**, and optional **audio localization** to generate natural, human-like head movements. The system prioritizes engaged faces, then detected faces, and finally saliency peaks with inhibition of return (IOR) to prevent repetitive scanning of the same locations.
 
-# Documentation
-Accompanying this code is the deliverable report that provides a detailed explanation of the code and how to run the tests. The deliverable report can be found in [D5.3 Overt Attention](https://cssr4africa.github.io/deliverables/CSSR4Africa_Deliverable_D5.3.pdf).
+## Key Features
+- **ROS2 Native**: Built for ROS2 Humble
+- **Multi-modal Attention**: Integrates face detection, visual saliency, and audio cues
+- **Engagement Awareness**: Prioritizes faces with mutual gaze (engaged attention)
+- **Boolean Map Saliency (BMS)**: Computes bottom-up visual attention using state-of-the-art saliency detection
+- **Inhibition of Return (IOR)**: Prevents repetitive scanning of the same locations
+- **Real-time Processing**: Processes multiple attention cues simultaneously
+- **Configurable**: Extensive parameter tuning via YAML configuration
+- **Visualization**: Real-time visualization of attention targets, faces, and saliency peaks
+- **Robot Agnostic**: Works with any robot with head pan-tilt capabilities (Pepper, NAO, etc.)
 
+# 🛠️ Installation 
 
- 
-# Run the Overt Attention Node
-## Physical Robot 
-### Steps
-1. **Install the required software components:**
-   
-   Set up the development environment for controlling the Pepper robot. Use the [CSSR4Africa Software Installation Manual](https://cssr4africa.github.io/deliverables/CSSR4Africa_Deliverable_D3.3.pdf). 
+## Prerequisites
+- **ROS2 Humble** or newer
+- **Python 3.10** or compatible version
+- **OpenCV** and **NumPy** for image processing
+- **Face Detection Node**: Requires the `face_detection` package for face input
+- **Camera System**: RGB camera (RealSense, Pepper camera, or similar)
+- **Robot Head Control**: NAOqi bridge or similar head control interface
 
-2. **Clone and build the project (if not already cloned)**:
-   - Move to the source directory of the workspace
-      ```bash 
-      cd $HOME/workspace/pepper_rob_ws/src
-       ```
-   - Clone the `CSSR4Africa` software from the GitHub repository
-      ```bash 
-      git clone https://github.com/cssr4africa/cssr4africa.git
-       ```
-   - Build the source files
-      ```bash 
-      cd .. && catkin_make && source devel/setup.bash 
-       ```
-       
-3. **Update Configuration File:**
-   
-   <div style="background-color: #1e1e1e; padding: 15px; border-radius: 4px; border: 1px solid #404040; margin: 10px 0;">
-      <span style="color: #ff3333; font-weight: bold;">NOTE: </span>
-      <span style="color: #cccccc;">If you need to update the configuration values, please refer to the <a href="https://cssr4africa.github.io/deliverables/CSSR4Africa_Deliverable_D5.3.pdf" style="color: #66b3ff;">D5.3 Overt Attention</a>. Otherwise, the recommended values are the ones already set in the configuration file.</span>
-   </div>
+## Package Installation
 
-   Navigate to the configuration file located at `$HOME/workspace/pepper_rob_ws/src/cssr4africa/gestureExecution/config/gestureExecutionConfiguration.ini` and update the configuration according to the key-value pairs below:
+1. **Clone and Build the Workspace**
+```bash
+# Clone the repository (if not already done)
+cd ~/ros2_ws/src
+git clone <repository-url>
 
-   | Parameter | Description | Values |
-   |-----------|-------------|---------|
-   | `camera` | Sensing device | `FrontCamera`, `RealSenseCamera` |
-   | `realignmentThreshold` | Threshold on the angular difference between head and base that must be met before the head and base are re-aligned | `degree` |
-   | `xOffsetToHeadYaw` | calibration constant that defines the conversion of the offset in the (horizontal) x-axis of an image | `degree` |
-   | `yOffsetToHeadPitch` | calibration constant that defines the conversion of the offset in the (vertical) y-axis of an image | `degree` |
-   | `robotTopics` | Physical robot topic mapping file | `pepperTopics.dat` |
-   | `simulatorTopics` | Physical robot topic mapping file | `simulatorTopics.dat` |
-   | `socialAttentionMode` | Simulator robot topic mapping file | `saliency`, `random` |
-   | `verboseMode` | Diagnostic info printing | `true`, `false` |
-
-   <!-- - To execute the overtAttention on the physical platform, change the first line of `overtAttentionConfiguration.ini` file in the config folder to “`platform robot`”.  -->
-   - Change the second line of `overtAttentionConfiguration.ini` file in the config folder, "`camera`" parameter, to the desired camera sensor.
-   - Modify the "`realignmentThreshold`" parameter on the third line of `overtAttentionConfiguration.ini` file to the angle where the head and the body need to be re-aligned.
-   - Set the `xOffsetToHeadYaw` parameter on the fourth line of `overtAttentionConfiguration.ini` file to offset for the horizontal distance between the camera sensor and the "eyes" of the pepper robot.
-   - Set the `yOffsetToHeadPitch` parameter on the fifth line of `overtAttentionConfiguration.ini` file to offset for the vertical distance between the camera sensor and the "eyes" of the pepper robot.
-   - All actuators have a topic, through which actiuation is carried out. These topics are specified in a key-value pair format in a file which is defined by the "`robotTopics`" parameter and "`simulatorTopics`" parameter in the `overtAttentionConfiguration.ini` file for the physical and simulator robot respectively. These files are found in the data folder. The files are specified as "`simulatorTopics simulatorTopics.dat`" and "`pepperTopics pepperTopics.dat`".	
-   - Change the `socialAttentionMode` parameter in the `overtAttentionConfiguration.ini` file to to the desired method for social attention.
-   - The system is capable of printing diagnostic informqation to the terminal. This behaviour is controlled by the last key-value pair in the `overtAttentionConfiguration.ini` file, "`verboseMode`" parameter key.
-
-4. **Run the `overtAttention` from the `cssr_system`  package:**
-   
-   Follow below steps, run in different terminals.
-    -  Source the workspace in first terminal:
-        ```bash
-         cd $HOME/workspace/pepper_rob_ws && source devel/setup.bash
-        ```
-    -  Launch the robot:
-        ```bash
-         roslaunch cssr_system cssrSystemLaunchRobot.launch robot_ip:=<robot_ip> roscore_ip:=<roscore_ip> network_interface:=<network_interface>
-        ```
-        <div style="background-color: #1e1e1e; padding: 15px; border-radius: 4px; border: 1px solid #404040; margin: 10px 0;">
-         <span style="color: #ff3333; font-weight: bold;">NOTE: </span>
-         <span style="color: #cccccc;">Ensure that the IP addresses <code>robot_ip</code>, <code>roscore_ip</code> and the network interface <code>network_interface</code> are correctly set based on your robot's configuration and your computer's network interface. </span>
-        </div>
-    - Open a new terminal to launch the `overtAttention` node.
-        <div style="background-color: #1e1e1e; padding: 15px; border-radius: 4px; border: 1px solid #404040; margin: 10px 0;">
-         <span style="color: #ff3333; font-weight: bold;">NOTE: </span>
-          <span style="color: #cccccc;">Running the <code>overtAttention</code> node requires the <code>/faceDetection/data</code>, <code>/soundDetection/direction</code>, and the <code>robotLocalization/pose</code> topics to be available, which can be hosted by running the <code>faceDetection</code>, <code>soundDetection</code>, and <code>robotLocalization</code> node in the <code>cssr_system</code> package or running the <code>overtAttentionTestDriver</code> in the <code>unit_tests</code> package before running the <code>overtAttention</code>  node: </span>
-
-         - <span style="color: #cccccc; font-weight: bold">(Option 1A):</span>  Run the <code>faceDetection</code> node of the <code>cssr_system</code> package (in a new terminal):
-            ```sh
-            cd $HOME/workspace/pepper_rob_ws && source devel/setup.bash && rosrun cssr_system face_detetection_application.py
-            ``` 
-         - <span style="color: #cccccc; font-weight: bold">(Option 1B):</span> Run the <code>soundDetection</code> node of the <code>cssr_system</code> package (in a new terminal): 
-            ```sh
-            cd $HOME/workspace/pepper_rob_ws && source devel/setup.bash && rosrun cssr_system sound_detection_application.py
-            ```
-         - <span style="color: #cccccc; font-weight: bold">(Option 1C):</span> Run the <code>robotLocalization</code> node of the <code>cssr_system</code> package (in a new terminal): 
-            ```sh
-            cd $HOME/workspace/pepper_rob_ws && source devel/setup.bash && rosrun cssr_system robotLocalization
-            ```
-         - <span style="color: #cccccc; font-weight: bold">(Option 2): </span> Run the <code>overtAttentionTestDriver</code> of the <code>unit_tests</code> package (in a new terminal) passing the robot pose (robot_x, robot_y, robot_theta) as arguments:
-            ```sh
-            cd $HOME/workspace/pepper_rob_ws && source devel/setup.bash && rosrun unit_tests overtAttentionTestDriver <robot_x> <robot_y> <robot_theta>
-            ```
-            <div style="background-color: #1e1e1e; padding: 15px; border-radius: 4px; border: 1px solid #404040; margin: 10px 0;">
-               <span style="color: #ff3333; font-weight: bold;">NOTE: </span>
-               <span style="color: #cccccc;">Ensure that the robot pose <code>robot_x</code>, <code>robot_y</code> and <code>robot_theta</code> are correctly set based on your robot's position in the world. If these arguments are not supplied, the robot assumes its position as origin <code>(0, 0, 0)</code> </span>
-            </div>
-         </div>
-         
-        ```bash
-          cd $HOME/workspace/pepper_rob_ws && source devel/setup.bash && rosrun cssr_system overtAttention
-        ```
-<!--       
-
-## Simulator Robot
-
-### Steps
-1. **Install the required software components:**
-   
-   Set up the development environment for controlling the Pepper robot in the simulated environment. Use the [CSSR4Africa Software Installation Manual](https://cssr4africa.github.io/deliverables/CSSR4Africa_Deliverable_D3.3.pdf).
-
-2. **Clone and build the project (if not already cloned):**
-   - Move to the source directory of the workspace:
-      ```bash
-      cd $HOME/workspace/pepper_sim_ws/src
-      ```
-   - Clone the `CSSR4Africa` software from the GitHub repository:
-      ```bash
-      git clone https://github.com/cssr4africa/cssr4africa.git
-      ```
-   - Build the source files:
-      ```bash 
-      cd .. && catkin_make && source devel/setup.bash 
-      ```
-
-3. **Update Configuration File:**
-   
-   <div style="background-color: #1e1e1e; padding: 15px; border-radius: 4px; border: 1px solid #404040; margin: 10px 0;">
-      <span style="color: #ff3333; font-weight: bold;">NOTE: </span>
-      <span style="color: #cccccc;">If you need to update the configuration values, please refer to the <a href="https://cssr4africa.github.io/deliverables/CSSR4Africa_Deliverable_D5.3.pdf" style="color: #66b3ff;">D5.3 Overt Attention</a>. Otherwise, the recommended values are the ones already set in the configuration file.</span>
-   </div>
-
-   Navigate to the configuration file located at `$HOME/workspace/pepper_sim_ws/src/cssr4africa/gestureExecution/config/gestureExecutionConfiguration.ini` and update the configuration according to the key-value pairs below:
-
-   | Parameter | Description | Values |
-   |-----------|-------------|---------|
-   | `platform` | Target platform | `robot` or `simulator` |
-   | `camera` | Sensing device | `FrontCamera`, `RealSenseCamera` |
-   | `realignmentThreshold` | Threshold on the angular difference between head and base that must be met before the head and base are re-aligned | `degree` |
-   | `xOffsetToHeadYaw` | calibration constant that defines the conversion of the offset in the (horizontal) x-axis of an image | `degree` |
-   | `yOffsetToHeadPitch` | calibration constant that defines the conversion of the offset in the (vertical) y-axis of an image | `degree` |
-   | `robotTopics` | Physical robot topic mapping file | `pepperTopics.dat` |
-   | `simulatorTopics` | Physical robot topic mapping file | `simulatorTopics.dat` |
-   | `socialAttentionMode` | Simulator robot topic mapping file | `saliency`, `random` |
-   | `verboseMode` | Diagnostic info printing | `true`, `false` |
-
-   - To execute the overtAttention on the physical platform, change the first line of `overtAttentionConfiguration.ini` file in the config folder to “`platform robot`”. 
-   - Change the second line of `overtAttentionConfiguration.ini` file in the config folder, "`camera`" parameter, to the desired camera sensor.
-   - Modify the "`realignmentThreshold`" parameter on the third line of `overtAttentionConfiguration.ini` file to the angle where the head and the body need to be re-aligned.
-   - Set the `xOffsetToHeadYaw` parameter on the fourth line of `overtAttentionConfiguration.ini` file to offset for the horizontal distance between the camera sensor and the "eyes" of the pepper robot.
-   - Set the `yOffsetToHeadPitch` parameter on the fifth line of `overtAttentionConfiguration.ini` file to offset for the vertical distance between the camera sensor and the "eyes" of the pepper robot.
-   - All actuators have a topic, through which actiuation is carried out. These topics are specified in a key-value pair format in a file which is defined by the "`robotTopics`" parameter and "`simulatorTopics`" parameter in the `overtAttentionConfiguration.ini` file for the physical and simulator robot respectively. These files are found in the data folder. The files are specified as "`simulatorTopics simulatorTopics.dat`" and "`pepperTopics pepperTopics.dat`".	
-   - Change the `socialAttentionMode` parameter in the `overtAttentionConfiguration.ini` file to to the desired method for social attention.
-   - The system is capable of printing diagnostic informqation to the terminal. This behaviour is controlled by the last key-value pair in the `overtAttentionConfiguration.ini` file, "`verboseMode`" parameter key.
-
-
-4. **Run the `overtAttention` from the `cssr_system` package:**:
-   
-   Follow below steps, run in different terminals.
-    -  Source the workspace in first terminal:
-        ```bash
-         cd $HOME/workspace/pepper_sim_ws && source devel/setup.bash
-        ```
-    -  Launch the simulator robot:
-        ```bash
-         roslaunch cssr_system cssrSystemLaunchSimulator.launch
-        ```
-    - Open a new terminal to launch the `overtAttention` node.
-        <div style="background-color: #1e1e1e; padding: 15px; border-radius: 4px; border: 1px solid #404040; margin: 10px 0;">
-         <span style="color: #ff3333; font-weight: bold;">NOTE: </span>
-          <span style="color: #cccccc;">Running the <code>overtAttention</code> node requires the <code>/faceDetection/data</code>, <code>/soundDetection/direction</code>, and the <code>robotLocalization/pose</code> topics to be available, which can be hosted by running the <code>faceDetection</code>, <code>soundDetection</code>, and <code>robotLocalization</code> node in the <code>cssr_system</code> package or running the <code>overtAttentionTestDriver</code> in the <code>unit_tests</code> package before running the <code>overtAttention</code>  node: </span>
-
-         - <span style="color: #cccccc; font-weight: bold">(Option 1A):</span>  Run the <code>faceDetection</code> node of the <code>cssr_system</code> package (in a new terminal):
-            ```sh
-            cd $HOME/workspace/pepper_sim_ws && source devel/setup.bash && rosrun cssr_system face_detetection_application.py
-            ``` 
-         - <span style="color: #cccccc; font-weight: bold">(Option 1B):</span> Run the <code>soundDetection</code> node of the <code>cssr_system</code> package (in a new terminal): 
-            ```sh
-            cd $HOME/workspace/pepper_sim_ws && source devel/setup.bash && rosrun cssr_system sound_detection_application.py
-            ```
-         - <span style="color: #cccccc; font-weight: bold">(Option 1C):</span> Run the <code>robotLocalization</code> node of the <code>cssr_system</code> package (in a new terminal): 
-            ```sh
-            cd $HOME/workspace/pepper_sim_ws && source devel/setup.bash && rosrun cssr_system robotLocalization
-            ```
-         - <span style="color: #cccccc; font-weight: bold">(Option 2): </span> Run the <code>overtAttentionTestDriver</code> of the <code>unit_tests</code> package (in a new terminal) passing the robot pose (robot_x, robot_y, robot_theta) as arguments:
-            ```sh
-            cd $HOME/workspace/pepper_sim_ws && source devel/setup.bash && rosrun unit_tests overtAttentionTestDriver <robot_x> <robot_y> <robot_theta>
-            ```
-            <div style="background-color: #1e1e1e; padding: 15px; border-radius: 4px; border: 1px solid #404040; margin: 10px 0;">
-               <span style="color: #ff3333; font-weight: bold;">NOTE: </span>
-               <span style="color: #cccccc;">Ensure that the robot pose <code>robot_x</code>, <code>robot_y</code> and <code>robot_theta</code> are correctly set based on your robot's position in the world. If these arguments are not supplied, the robot assumes its position as origin <code>(0, 0, 0)</code> </span>
-            </div>
-         </div>
-
-        ```bash
-         cd $HOME/workspace/pepper_sim_ws && source devel/setup.bash && rosrun cssr_system overtAttention
-        ```
-         -->
-
-
-## Executing Attention
-Upon launching the node, the hosted service (`/overtAttention/set_mode`) is available and ready to be invoked. This can be verified by running the following command in a new terminal:
-
-   ```sh
-   rostopic list | grep /overtAttention/set_mode
-   ```
-
-The command below invokes the service to execute a gesture (run in a new terminal) with the request parameters defined below:
-
-   ```sh
-   rosservice call /overtAttention/set_mode -- "state: <mode> location_x: <x_coordinate> location_y: <y_coordinate> location_z: <z_coordinate> 
-   ```
-   
-### Service Request Parameters
-#### 1. State (mode)
-- `scanning`: Scan the environment and look at interesting things.
-- `location`: Look at a particular location.
-- `social`: Look for faces and voices.
-- `seeking`: Seek for mutual gaze.
-- `disabled`: Disable the node.
-
-#### 2. Attention Location (in meters)
-- `location_x`: x coordinate of real world location to look at
-- `location_y`: y coordinate of real world location to look at
-- `location_z`: z coordinate of real world location to look at
-
-### Sample Invocations
-- <span style="color: #cccccc; font-weight: bold;">Location mode at (`3, 3, 0.82`): </span>
-```sh
-rosservice call /overtAttention/set_mode "state: 'location'  location_x: 3 location_y: 3 location_z: 0.82"
-```
-- <span style="color: #cccccc; font-weight: bold;">Scanning mode: </span>
-```sh
-rosservice call /overtAttention/set_mode "state: 'scanning'  location_x: 0 location_y: 0 location_z: 0"
-```
-- <span style="color: #cccccc; font-weight: bold;">Social mode: </span>
-```sh
-rosservice call /overtAttention/set_mode "state: 'social'  location_x: 0 location_y: 0 location_z: 0"
-```
-- <span style="color: #cccccc; font-weight: bold;">Seeking mode: </span>
-```sh
-rosservice call /overtAttention/set_mode "state: 'seeking'  location_x: 0 location_y: 0 location_z: 0"
-```
-- <span style="color: #cccccc; font-weight: bold;">Disabled mode: </span>
-```sh
-rosservice call /overtAttention/set_mode "state: 'disabled'  location_x: 0 location_y: 0 location_z: 0"
+# Build the workspace
+cd ~/ros2_ws
+colcon build --packages-select overt_attention cssr_interfaces
+source install/setup.bash
 ```
 
-## 
-<div style="background-color: #1e1e1e; padding: 15px; border-radius: 4px; border: 1px solid #404040; margin: 10px 0;">
-      <span style="color: #ff3333; font-weight: bold;">NOTE: </span>
-      <span style="color: #cccccc;">To fully understand the configuration values, data requirements, attention modes, debugging processes, and the overall functionality of the overtAttention node, please refer to the <a href="https://cssr4africa.github.io/deliverables/CSSR4Africa_Deliverable_D5.3.pdf" style="color: #66b3ff;">D5.3 Overt Attention</a>.These manuals provide comprehensive explanations and step-by-step instructions essential for effective use and troubleshooting.</span>
-  </div>
-  
-## Support
+2. **Install Python Dependencies**
+```bash
+# Install required Python packages
+pip install opencv-python numpy scipy
+```
+
+3. **Ensure Required Packages are Built**
+The attention system depends on:
+- `cssr_interfaces`: Custom message definitions
+- `face_detection`: For face detection input (optional but recommended)
+- `naoqi_bridge_msgs`: For Pepper/NAO robot control (if using Pepper)
+
+```bash
+# Build all required packages
+cd ~/ros2_ws
+colcon build --packages-select cssr_interfaces overt_attention
+source install/setup.bash
+```
+
+# 🔧 Configuration Parameters
+The configuration is managed via `config/overt_attention_configuration.yaml`. The file contains parameters for three main nodes:
+
+## Shared Parameters
+| Parameter                   | Description                                                      | Range/Values            | Default Value |
+|-----------------------------|------------------------------------------------------------------|-------------------------|---------------|
+| `use_compressed`            | Use compressed ROS image topics                                  | `True`, `False`         | `False`       |
+
+## Saliency Node Parameters
+| Parameter                   | Description                                                      | Range/Values            | Default Value |
+|-----------------------------|------------------------------------------------------------------|-------------------------|---------------|
+| `image_topic_base`          | Base topic for RGB images                                        | String                  | `/camera/color/image_raw` |
+| `publish_map`               | Publish saliency map visualization                               | `True`, `False`         | `True`        |
+| `down_w`, `down_h`          | Downsampled image dimensions for processing                      | Integers                | `160`, `120`  |
+| `min_peak`                  | Minimum saliency score to consider as a peak                     | `[0.0 - 1.0]`           | `0.5`         |
+| `num_peaks`                 | Maximum number of saliency peaks to publish                      | Integer                 | `5`           |
+| `peak_min_distance_px`      | Minimum distance between peaks (in downsampled pixels)           | Integer                 | `100`         |
+
+## Unified Attention Node Parameters
+| Parameter                   | Description                                                      | Range/Values            | Default Value |
+|-----------------------------|------------------------------------------------------------------|-------------------------|---------------|
+| `face_topic`                | Topic for face detection messages                                | String                  | `/faceDetection/data` |
+| `saliency_topic`            | Topic for saliency peak messages                                 | String                  | `/attn/saliency_peak` |
+| `camera_info_topic`         | Topic for camera intrinsics                                      | String                  | `/camera/color/camera_info` |
+| `head_command_topic`        | Topic for head joint commands                                    | String                  | `/joint_angles` |
+| `engaged_priority_bonus`    | Priority multiplier for engaged faces                            | Float                   | `2.0`         |
+| `face_timeout`              | Time after losing faces before switching to saliency (seconds)   | Float                   | `2.0`         |
+| `saliency_min_score`        | Minimum saliency score to consider                               | `[0.0 - 1.0]`           | `0.30`        |
+| `enable_ior`                | Enable Inhibition of Return                                      | `True`, `False`         | `True`        |
+| `ior_half_life`             | Half-life for IOR decay (seconds)                                | Float                   | `3.0`         |
+| `ior_radius_deg`            | Angular radius for IOR suppression (degrees)                     | Float                   | `15.0`        |
+| `yaw_lim`                   | Head yaw joint limit (radians)                                   | Float                   | `1.8`         |
+| `pitch_up`, `pitch_dn`      | Head pitch up/down limits (radians)                              | Float                   | `0.4`, `-0.7` |
+
+## Visualization Node Parameters
+| Parameter                   | Description                                                      | Range/Values            | Default Value |
+|-----------------------------|------------------------------------------------------------------|-------------------------|---------------|
+| `publish_overlay`           | Publish visualization overlay image                              | `True`, `False`         | `True`        |
+| `publish_markers`           | Publish ROS markers for visualization                            | `True`, `False`         | `True`        |
+| `show_metrics`              | Show performance metrics on visualization                        | `True`, `False`         | `True`        |
+
+# 🚀 Running the Node
+
+## Launch All Components
+The launch file starts all three attention system nodes:
+
+```bash
+# Source the workspace
+source ~/ros2_ws/install/setup.bash
+
+# Launch the complete attention system
+ros2 launch overt_attention attention_system.launch.py
+```
+
+## Launch Arguments
+The launch file supports the following arguments:
+
+| Argument        | Description                                      | Default | Example                    |
+|-----------------|--------------------------------------------------|---------|----------------------------|
+| `params_file`   | Path to parameters YAML file                     | Auto-detected | `params_file:=/path/to/custom.yaml` |
+| `enable_viz`    | Enable visualization node                        | `true`  | `enable_viz:=false`        |
+
+### Example: Custom Configuration
+```bash
+ros2 launch overt_attention attention_system.launch.py \
+  params_file:=/path/to/custom_config.yaml \
+  enable_viz:=true
+```
+
+## Manual Node Execution
+You can also run nodes individually:
+
+1. **Start Saliency Node**:
+```bash
+ros2 run overt_attention saliency_node \
+  --ros-args \
+  -p use_compressed:=false \
+  -p image_topic_base:="/camera/color/image_raw"
+```
+
+2. **Start Unified Attention Controller**:
+```bash
+ros2 run overt_attention unified_attention_node \
+  --ros-args \
+  -p face_topic:="/faceDetection/data" \
+  -p saliency_topic:="/attn/saliency_peak" \
+  -p head_command_topic:="/joint_angles"
+```
+
+3. **Start Visualization Node**:
+```bash
+ros2 run overt_attention visualization_node \
+  --ros-args \
+  -p publish_overlay:=true \
+  -p show_metrics:=true
+```
+
+## Required Input Topics
+The attention system requires the following input topics:
+- **Face Detection**: `/faceDetection/data` (`cssr_interfaces/msg/FaceDetection`)
+- **Camera Images**: `/camera/color/image_raw` (`sensor_msgs/msg/Image`)
+- **Camera Info**: `/camera/color/camera_info` (`sensor_msgs/msg/CameraInfo`)
+- **Joint States**: `/joint_states` (`sensor_msgs/msg/JointState`) - for current head position
+
+## Optional Input Topics
+- **Audio Azimuth**: `/audio/azimuth_rad` (`std_msgs/msg/Float32`) - for audio-driven attention
+- **Depth Images**: `/camera/aligned_depth_to_color/image_raw` - for depth-based filtering
+
+# 🖥️ Output
+The system publishes attention commands and visualization data to multiple topics.
+
+## Output Topics
+- **Head Commands**: `/joint_angles` (`naoqi_bridge_msgs/msg/JointAnglesWithSpeed`) - Head joint commands
+- **Attention Targets**: `/attn/target_angles` (`geometry_msgs/msg/Vector3`) - Current attention target (yaw, pitch, score)
+- **Saliency Peaks**: `/attn/saliency_peak` (`std_msgs/msg/Float32MultiArray`) - Detected saliency peaks [u1, v1, score1, u2, v2, score2, ...]
+- **Visualization**: `/attn/visualization` (`sensor_msgs/msg/Image`) - Annotated visualization overlay
+- **Saliency Map**: `/attn/saliency_map/compressed` (`sensor_msgs/msg/CompressedImage`) - Saliency heatmap visualization
+
+## Service
+- **Enable/Disable**: `/attn/set_enabled` (`std_srvs/SetBool`) - Service to enable/disable the attention system
+
+## Verification
+To verify the system is working:
+
+```bash
+# Monitor attention targets
+ros2 topic echo /attn/target_angles
+
+# Monitor head commands
+ros2 topic echo /joint_angles
+
+# Check all nodes are running
+ros2 node list
+
+# Check all topics
+ros2 topic list | grep attn
+
+# Enable/disable attention system
+ros2 service call /attn/set_enabled std_srvs/SetBool "{data: false}"
+ros2 service call /attn/set_enabled std_srvs/SetBool "{data: true}"
+```
+
+# 🏗️ Architecture
+The overt attention system consists of three main nodes:
+
+1. **Saliency Node**: 
+   - Computes bottom-up visual attention using Boolean Map Saliency (BMS)
+   - Publishes multiple saliency peaks with scores
+   - Optional depth-based weighting for proximity bias
+   - Configurable downsampling for performance
+
+2. **Unified Attention Controller**:
+   - **Priority 1**: Engaged faces (mutual gaze) with bonus scoring
+   - **Priority 2**: Detected faces with depth and center bias
+   - **Priority 3**: Saliency peaks with cooldown and Inhibition of Return (IOR)
+   - Implements face switching hysteresis to prevent rapid target changes
+   - Applies joint limits and smooth motion constraints
+   - Supports enable/disable service with default position return
+
+3. **Visualization Node**:
+   - Creates real-time visualization overlay showing:
+     - Face bounding boxes with tracking IDs and engagement status
+     - Saliency peaks with scores
+     - Current attention target
+     - Performance metrics
+   - Publishes annotated image for monitoring
+
+## Attention Prioritization Logic
+1. **Engaged Faces**: Faces with mutual gaze receive highest priority (2x bonus)
+2. **Detected Faces**: Other faces scored by distance from center, depth, and continuity
+3. **Saliency Peaks**: When no recent faces, switches to saliency with IOR cooldown
+4. **Inhibition of Return**: Recently visited locations are suppressed to encourage exploration
+
+# 💡 Usage Examples
+
+## Basic Usage with Pepper Robot
+```bash
+# Start face detection system
+ros2 launch face_detection face_detection_launch_robot.launch.py
+
+# Start attention system
+ros2 launch overt_attention attention_system.launch.py
+
+# Enable attention system (if not auto-started)
+ros2 service call /attn/set_enabled std_srvs/SetBool "{data: true}"
+```
+
+## Testing with Recorded Data
+```bash
+# Play ROS bag with camera data
+ros2 bag play recorded_data.db3
+
+# Launch attention system without camera
+ros2 launch overt_attention attention_system.launch.py
+
+# Monitor visualization
+ros2 run rqt_image_view rqt_image_view /attn/visualization
+```
+
+## Custom Configuration for Different Robots
+Create a custom YAML configuration file:
+```yaml
+unified_attention_node:
+  ros__parameters:
+    yaw_lim: 2.0  # Increased yaw limit
+    pitch_up: 0.5
+    pitch_dn: -0.5
+    head_command_topic: "/custom_head_commands"
+```
+
+# 💡 Support
 
 For issues or questions:
 - Create an issue on GitHub
-- Contact: <a href="mailto:dvernon@andrew.cmu.edu">dvernon@andrew.cmu.edu</a>, <a href="mailto:mdanso@andrew.cmu.edu">mdanso@andrew.cmu.edu</a><br>, <a href="mailto:aakinade@andrew.cmu.edu">aakinade@andrew.cmu.edu</a><br>
+- Contact: <a href="mailto:yohanneh@andrew.cmu.edu">yohanneh@andrew.cmu.edu</a><br>
 - Visit: <a href="http://www.cssr4africa.org">www.cssr4africa.org</a>
 
-## License  
-Funded by African Engineering and Technology Network (Afretec)  
-Inclusive Digital Transformation Research Grant Programme
+# 📜 License
+Copyright (C) 2023 Upanzi Network   
 
-Date:   2025-01-10
+2026-02-08

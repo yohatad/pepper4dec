@@ -8,8 +8,8 @@ from ament_index_python.packages import get_package_share_directory
 import os
 
 def generate_launch_description():
-    pkg_dir = get_package_share_directory('pepper_attention')
-    params_file = os.path.join(pkg_dir, 'config', 'pepper_attention_configuration.yaml')
+    pkg_dir = get_package_share_directory('overt_attention')
+    params_file = os.path.join(pkg_dir, 'config', 'overt_attention_configuration.yaml')
     
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -26,7 +26,7 @@ def generate_launch_description():
         
         # Saliency node (Laptop)
         Node(
-            package='pepper_attention',
+            package='overt_attention',
             executable='saliency_node',
             name='saliency_node',
             parameters=[
@@ -38,7 +38,7 @@ def generate_launch_description():
         
         # Unified attention controller (Laptop)
         Node(
-            package='pepper_attention',
+            package='overt_attention',
             executable='unified_attention_node',
             name='unified_attention_node',
             parameters=[LaunchConfiguration('params_file')],
@@ -47,7 +47,7 @@ def generate_launch_description():
         
         # Visualization (Laptop)
         Node(
-            package='pepper_attention',
+            package='overt_attention',
             executable='visualization_node',
             name='attention_visualization',
             parameters=[LaunchConfiguration('params_file')],

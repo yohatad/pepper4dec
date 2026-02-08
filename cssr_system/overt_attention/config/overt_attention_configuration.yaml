@@ -1,19 +1,124 @@
-# Overt Attention Configuration
-camera: "realsense"  # Options: "realsense", "peppercamera"
-realignment_threshold: 50
-x_offset_to_head_yaw: 0
-y_offset_to_head_pitch: 0
-social_attention_mode: "random"
-num_faces_social_att: 3
-engagement_timeout: 12.0
-use_sound: false
-use_compressed_images: false
-verbose_mode: true
+# ===========================================
+# Shared parameters (used by multiple nodes)
+# ===========================================
+/**:
+  ros__parameters:
+    use_compressed: false
 
-movement_filtering:
-  min_movement_degrees: 5.0        # Minimum movement to trigger
-  movement_cooldown: 1.0           # Seconds between movements  
-  confidence_threshold: 0.8        # Minimum confidence to move
-  stability_time: 0.5              # Time target must be stable
-  focus_duration_min: 2.0          # Minimum focus time on targets
-  focus_duration_max: 8.0          # Maximum focus time before seeking new targets
+# ===========================================
+# Laptop saliency node params
+# ===========================================
+saliency_node:
+  ros__parameters:
+    image_topic_base: "/camera/color/image_raw"  # Adds /compressed if use_compressed: true
+    publish_map: true
+    down_w: 160
+    down_h: 120
+    alpha_static: 0.3
+    beta_motion: 0.6
+    gamma_center: 0.1
+    min_peak: 0.5
+    flow_method: "farneback"  # or "dis"
+    
+    # Motion gating parameters
+    head_motion_threshold: 0.08
+    skip_during_motion: true
+    
+    # Visualization parameters
+    overlay_alpha: 0.4
+    visualize_components: true
+    
+    # Multi-peak parameters
+    num_peaks: 5
+    peak_min_distance_px: 100
+    
+    # Motion focus threshold
+    motion_focus_threshold: 0.3
+
+# ===========================================
+# Laptop unified attention node params
+# ===========================================
+unified_attention_node:
+  ros__parameters:
+    # Depth image configuration
+    depth_image_topic: "/camera/aligned_depth_to_color/image_raw"  # Adds /compressedDepth if use_compressed: true
+    depth_scale: 0.001  # Scale to convert depth values to meters (0.001 for mm, 1.0 for meters)
+    
+    # Input topics
+    face_topic: "/faceDetection/data"
+    saliency_topic: "/attn/saliency_peak"
+    audio_topic: "/audio/azimuth_rad"
+    camera_info_topic: "/camera/color/camera_info"
+    
+    # Output configuration
+    command_mode: "joint_state"  # or "trajectory"
+    joint_names: ["HeadYaw", "HeadPitch"]
+    joint_state_topic: "/head_cmd/joint_states"
+    trajectory_topic: "/head_controller/joint_trajectory"
+    
+    # Face scoring
+    bias_face: 2.0
+    mutual_gaze_bonus: 0.6
+    saliency_min_score: 0.30
+    
+    # Depth filtering
+    depth_lo: 0.6             # Preferred depth range lower (meters)
+    depth_hi: 1.8             # Preferred depth range upper (meters)
+    depth_min: 0.35           # Minimum valid depth (meters)
+    depth_max: 4.0            # Maximum valid depth (meters)
+    depth_roi_px: 5           # ROI size for median filtering
+    track_timeout_s: 5.0      # Remove tracks not seen for this long
+    
+    # Target selection hysteresis
+    hysteresis_delta: 1.2
+    hysteresis_hold_ms: 1200
+    dwell_cap_s: 8.0
+    
+    # Inhibition of Return (IOR)
+    ior_px_radius: 60.0
+    ior_penalty: 2.0
+    
+    # Scene change detection
+    head_move_reset_threshold: 0.5  # radians (~30 degrees)
+    
+    # Audio
+    audio_hold_s: 2.0
+    
+    # Motion gating
+    head_velocity_threshold: 0.08
+    head_settle_time: 5.0
+    deadband_yaw: 0.06
+    deadband_pitch: 0.06
+    
+    # Saliency dwell
+    saliency_dwell_time: 2.5
+    
+    # Idle behavior
+    home_yaw: 0.0
+    home_pitch: -0.05
+    idle_scan_period_min: 3.0
+    idle_scan_period_max: 6.0
+    idle_scan_yaw_deg: 20.0
+    idle_scan_pitch_deg: 8.0
+    micro_saccade_deg: 0.4
+    micro_saccade_period_min: 3.0
+    micro_saccade_period_max: 5.0
+    
+    # Joint limits
+    yaw_lim: 1.8
+    pitch_up: 0.4
+    pitch_dn: -0.7
+
+# ===========================================
+# Visualization node params
+# ===========================================
+attention_visualization:
+  ros__parameters:
+    image_topic_base: "/camera/color/image_raw"  # Adds /compressed if use_compressed: true
+    face_topic: "/faceDetection/data"
+    saliency_topic: "/attn/saliency_peak"
+    target_topic: "/attn/target_angles"
+    camera_info_topic: "/camera/color/camera_info"
+    publish_overlay: true
+    publish_markers: true
+    show_metrics: true

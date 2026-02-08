@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Improved Attention Controller for Pepper Robot
+Improved Attention Controller for Robot Overt Attention
 Priority 1: Engaged Faces | Priority 2: Detected Faces | Priority 3: Saliency (with cooldown + IOR)
 """
 

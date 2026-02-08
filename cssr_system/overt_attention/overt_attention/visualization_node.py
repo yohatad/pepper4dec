@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Improved Visualization for Pepper Attention System
+Improved Visualization for Overt Attention System
 Shows faces with tracking IDs, engagement status, depth, saliency peaks, and current head target
 """
 
