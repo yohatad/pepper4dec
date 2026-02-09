@@ -12,13 +12,15 @@ find_package(geometry_msgs REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/FaceDetection.msg"
   "msg/ObjectDetection.msg"
+  "msg/OvertAttentionStatus.msg"
   "srv/OvertAttentionSetMode.srv"
+  "srv/AnimateBehaviorSetActivation.srv"
+  "srv/ConversationManagerPrompt.srv"
   "action/Navigation.action"
   "action/TTS.action"
   "action/Gesture.action"
+  "action/AnimateBehavior.action"
   "action/SpeechRecognition.action"
-  "srv/ConversationManagerPrompt.srv"
-  "srv/ConversationManagerCreateCollection.srv"
   DEPENDENCIES builtin_interfaces std_msgs geometry_msgs
 )
 

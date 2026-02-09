@@ -1,7 +1,7 @@
 /* behaviorControllerImplementation.cpp
  * Author: Yohannes Tadesse Haile
- * Date: February 08, 2026
- * Version: v1.0
+ * Date: February 09, 2026
+ * Version: v2.0 - Updated to use only valid cssr_interfaces
  */
 
 #include "behaviorController/behaviorControllerInterface.h"
@@ -12,29 +12,42 @@
 
 using namespace BT;
 
+//=============================================================================
+// RosActionNode wrapper implementations (for Actions)
+//=============================================================================
+
 // ——————————————
-// SayTextRosService
+// TTSRosAction - Uses cssr_interfaces/action/TTS
 // ——————————————
-class SayTextRosService : public RosServiceNode<cssr_interfaces::srv::TextToSpeechSayText>
+class TTSRosAction : public RosActionNode<cssr_interfaces::action::TTS>
 {
 public:
-    SayTextRosService(const std::string& name, 
-                      const NodeConfig& conf,
-                      const RosNodeParams& params)
-        : RosServiceNode<cssr_interfaces::srv::TextToSpeechSayText>(name, conf, params)
+    TTSRosAction(const std::string& name, 
+                 const NodeConfig& conf,
+                 const RosNodeParams& params)
+        : RosActionNode<cssr_interfaces::action::TTS>(name, conf, params)
     {}
 
     static PortsList providedPorts()
     {
         return providedBasicPorts({
-            InputPort<std::string>("service_name", "/textToSpeech/say_text", "Service name"),
+            InputPort<std::string>("action_name", "/tts", "Action server name"),
             InputPort<std::string>("phrase_key", "Key for utility phrase"),
+            InputPort<std::string>("text", "Direct text to speak"),
             InputPort<std::string>("language", "Language code")
         });
     }
 
-    bool setRequest(Request::SharedPtr& request) override
+    bool setGoal(Goal& goal) override
     {
+        // Try direct text first
+        std::string text;
+        if (getInput("text", text)) {
+            goal.text = text;
+            return true;
+        }
+        
+        // Otherwise get from phrase key
         std::string phraseKey;
         if (!getInput("phrase_key", phraseKey)) {
             phraseKey = name();
@@ -46,8 +59,7 @@ public:
         }
         
         try {
-            request->language = language;
-            request->message = KnowledgeManager::instance().getUtilityPhrase(phraseKey, language);
+            goal.text = KnowledgeManager::instance().getUtilityPhrase(phraseKey, language);
             return true;
         } catch (const std::exception& e) {
             RCLCPP_ERROR(logger(), "Failed to get utility phrase: %s", e.what());
@@ -55,46 +67,52 @@ public:
         }
     }
 
-    NodeStatus onResponseReceived(const Response::SharedPtr& response) override
+    NodeStatus onResultReceived(const WrappedResult& result) override
     {
-        if (response->success) {
-            RCLCPP_INFO(logger(), "SayText succeeded");
+        if (result.result->success) {
+            RCLCPP_INFO(logger(), "TTS succeeded: %s", result.result->message.c_str());
             return NodeStatus::SUCCESS;
         }
-        RCLCPP_WARN(logger(), "SayText failed");
+        RCLCPP_WARN(logger(), "TTS failed: %s", result.result->message.c_str());
         return NodeStatus::FAILURE;
     }
 
-    NodeStatus onFailure(ServiceNodeErrorCode error) override
+    NodeStatus onFailure(ActionNodeErrorCode error) override
     {
-        RCLCPP_ERROR(logger(), "SayText service error: %d", static_cast<int>(error));
+        RCLCPP_ERROR(logger(), "TTS action error: %d", static_cast<int>(error));
         return NodeStatus::FAILURE;
+    }
+
+    NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override
+    {
+        RCLCPP_DEBUG(logger(), "TTS status: %s", feedback->status.c_str());
+        return NodeStatus::RUNNING;
     }
 };
 
 // ——————————————
-// NavigateRosService
+// NavigateRosAction - Uses cssr_interfaces/action/Navigation
 // ——————————————
-class NavigateRosService : public RosServiceNode<cssr_interfaces::srv::RobotNavigationSetGoal>
+class NavigateRosAction : public RosActionNode<cssr_interfaces::action::Navigation>
 {
 public:
-    NavigateRosService(const std::string& name, 
-                       const NodeConfig& conf,
-                       const RosNodeParams& params)
-        : RosServiceNode<cssr_interfaces::srv::RobotNavigationSetGoal>(name, conf, params)
+    NavigateRosAction(const std::string& name, 
+                      const NodeConfig& conf,
+                      const RosNodeParams& params)
+        : RosActionNode<cssr_interfaces::action::Navigation>(name, conf, params)
     {}
 
     static PortsList providedPorts()
     {
         return providedBasicPorts({
-            InputPort<std::string>("service_name", "/robotNavigation/set_goal", "Service name"),
+            InputPort<std::string>("action_name", "/navigation", "Action server name"),
             InputPort<double>("goal_x", "Goal X coordinate"),
             InputPort<double>("goal_y", "Goal Y coordinate"),
             InputPort<double>("goal_theta", "Goal theta orientation")
         });
     }
 
-    bool setRequest(Request::SharedPtr& request) override
+    bool setGoal(Goal& goal) override
     {
         RobotPose location;
         
@@ -103,17 +121,17 @@ public:
             getInput("goal_y", location.y) &&
             getInput("goal_theta", location.theta)) 
         {
-            request->goal_x = location.x;
-            request->goal_y = location.y;
-            request->goal_theta = location.theta;
+            goal.goal_x = location.x;
+            goal.goal_y = location.y;
+            goal.goal_theta = location.theta;
             return true;
         }
         
         // Fall back to blackboard
         if (config().blackboard->get("exhibitLocation", location)) {
-            request->goal_x = location.x;
-            request->goal_y = location.y;
-            request->goal_theta = location.theta;
+            goal.goal_x = location.x;
+            goal.goal_y = location.y;
+            goal.goal_theta = location.theta;
             return true;
         }
         
@@ -121,62 +139,68 @@ public:
         return false;
     }
 
-    NodeStatus onResponseReceived(const Response::SharedPtr& response) override
+    NodeStatus onResultReceived(const WrappedResult& result) override
     {
-        if (response->navigation_goal_success) {
-            RCLCPP_INFO(logger(), "Navigate succeeded");
+        if (result.result->navigation_goal_success) {
+            RCLCPP_INFO(logger(), "Navigation succeeded");
             return NodeStatus::SUCCESS;
         }
-        RCLCPP_WARN(logger(), "Navigate failed");
+        RCLCPP_WARN(logger(), "Navigation failed");
         return NodeStatus::FAILURE;
     }
 
-    NodeStatus onFailure(ServiceNodeErrorCode error) override
+    NodeStatus onFailure(ActionNodeErrorCode error) override
     {
-        RCLCPP_ERROR(logger(), "Navigate service error: %d", static_cast<int>(error));
+        RCLCPP_ERROR(logger(), "Navigation action error: %d", static_cast<int>(error));
         return NodeStatus::FAILURE;
+    }
+
+    NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override
+    {
+        RCLCPP_DEBUG(logger(), "Navigation progress: %d", feedback->progress);
+        return NodeStatus::RUNNING;
     }
 };
 
 // ——————————————
-// PerformDeicticGestureRosService
+// GestureRosAction - Uses cssr_interfaces/action/Gesture
 // ——————————————
-class PerformDeicticGestureRosService : public RosServiceNode<cssr_interfaces::srv::GestureExecutionPerformGesture>
+class GestureRosAction : public RosActionNode<cssr_interfaces::action::Gesture>
 {
 public:
-    PerformDeicticGestureRosService(const std::string& name, 
-                                    const NodeConfig& conf,
-                                    const RosNodeParams& params)
-        : RosServiceNode<cssr_interfaces::srv::GestureExecutionPerformGesture>(name, conf, params)
+    GestureRosAction(const std::string& name, 
+                     const NodeConfig& conf,
+                     const RosNodeParams& params)
+        : RosActionNode<cssr_interfaces::action::Gesture>(name, conf, params)
     {}
 
     static PortsList providedPorts()
     {
         return providedBasicPorts({
-            InputPort<std::string>("service_name", "/gestureExecution/perform_gesture", "Service name"),
+            InputPort<std::string>("action_name", "/gesture", "Action server name"),
             InputPort<std::string>("gesture_type", "deictic", "Gesture type"),
             InputPort<int>("gesture_id", Constants::DEICTIC_GESTURE_ID, "Gesture ID"),
             InputPort<int>("gesture_duration", Constants::GESTURE_DURATION_MS, "Duration in ms"),
+            InputPort<int>("bow_nod_angle", 0, "Bow/nod angle"),
             InputPort<double>("location_x", "Target X coordinate"),
             InputPort<double>("location_y", "Target Y coordinate"),
-            InputPort<double>("location_z", "Target Z coordinate"),
-            InputPort<double>("bow_nod_angle", 0.0, "Bow/nod angle")
+            InputPort<double>("location_z", "Target Z coordinate")
         });
     }
 
-    bool setRequest(Request::SharedPtr& request) override
+    bool setGoal(Goal& goal) override
     {
         // Set defaults
-        request->gesture_type = "deictic";
-        request->gesture_id = Constants::DEICTIC_GESTURE_ID;
-        request->gesture_duration = Constants::GESTURE_DURATION_MS;
-        request->bow_nod_angle = 0;
+        goal.gesture_type = "deictic";
+        goal.gesture_id = Constants::DEICTIC_GESTURE_ID;
+        goal.gesture_duration = Constants::GESTURE_DURATION_MS;
+        goal.bow_nod_angle = 0;
         
         // Override from ports
-        getInput("gesture_type", request->gesture_type);
-        getInput("gesture_id", request->gesture_id);
-        getInput("gesture_duration", request->gesture_duration);
-        getInput("bow_nod_angle", request->bow_nod_angle);
+        getInput("gesture_type", goal.gesture_type);
+        getInput("gesture_id", goal.gesture_id);
+        getInput("gesture_duration", goal.gesture_duration);
+        getInput("bow_nod_angle", goal.bow_nod_angle);
         
         // Get target location
         Position3D target;
@@ -184,17 +208,17 @@ public:
             getInput("location_y", target.y) &&
             getInput("location_z", target.z)) 
         {
-            request->location_x = target.x;
-            request->location_y = target.y;
-            request->location_z = target.z;
+            goal.location_x = target.x;
+            goal.location_y = target.y;
+            goal.location_z = target.z;
             return true;
         }
         
         // Try blackboard
         if (config().blackboard->get("exhibitGestureTarget", target)) {
-            request->location_x = target.x;
-            request->location_y = target.y;
-            request->location_z = target.z;
+            goal.location_x = target.x;
+            goal.location_y = target.y;
+            goal.location_z = target.z;
             return true;
         }
         
@@ -202,224 +226,165 @@ public:
         return false;
     }
 
-    NodeStatus onResponseReceived(const Response::SharedPtr& response) override
+    NodeStatus onResultReceived(const WrappedResult& result) override
     {
-        if (response->gesture_success) {
-            RCLCPP_INFO(logger(), "PerformDeicticGesture succeeded");
+        if (result.result->success) {
+            RCLCPP_INFO(logger(), "Gesture succeeded: %s (%.2fs)", 
+                       result.result->message.c_str(),
+                       result.result->actual_duration_seconds);
             return NodeStatus::SUCCESS;
         }
-        RCLCPP_WARN(logger(), "PerformDeicticGesture failed");
+        RCLCPP_WARN(logger(), "Gesture failed: %s", result.result->message.c_str());
         return NodeStatus::FAILURE;
     }
 
-    NodeStatus onFailure(ServiceNodeErrorCode error) override
+    NodeStatus onFailure(ActionNodeErrorCode error) override
     {
-        RCLCPP_ERROR(logger(), "PerformDeicticGesture service error: %d", static_cast<int>(error));
+        RCLCPP_ERROR(logger(), "Gesture action error: %d", static_cast<int>(error));
         return NodeStatus::FAILURE;
+    }
+
+    NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override
+    {
+        RCLCPP_DEBUG(logger(), "Gesture elapsed: %.2fs", feedback->elapsed_seconds);
+        return NodeStatus::RUNNING;
     }
 };
 
 // ——————————————
-// PerformIconicGestureRosService
+// SpeechRecognitionRosAction - Uses cssr_interfaces/action/SpeechRecognition
 // ——————————————
-class PerformIconicGestureRosService : public RosServiceNode<cssr_interfaces::srv::GestureExecutionPerformGesture>
+class SpeechRecognitionRosAction : public RosActionNode<cssr_interfaces::action::SpeechRecognition>
 {
 public:
-    PerformIconicGestureRosService(const std::string& name, 
-                                   const NodeConfig& conf,
-                                   const RosNodeParams& params)
-        : RosServiceNode<cssr_interfaces::srv::GestureExecutionPerformGesture>(name, conf, params)
+    SpeechRecognitionRosAction(const std::string& name, 
+                               const NodeConfig& conf,
+                               const RosNodeParams& params)
+        : RosActionNode<cssr_interfaces::action::SpeechRecognition>(name, conf, params)
     {}
 
     static PortsList providedPorts()
     {
         return providedBasicPorts({
-            InputPort<std::string>("service_name", "/gestureExecution/perform_gesture", "Service name"),
-            InputPort<std::string>("gesture_type", "iconic", "Gesture type"),
-            InputPort<int>("gesture_id", "Gesture ID (welcome/goodbye)"),
-            InputPort<int>("gesture_duration", Constants::GESTURE_DURATION_MS, "Duration in ms"),
-            InputPort<double>("bow_nod_angle", 0.0, "Bow/nod angle")
+            InputPort<std::string>("action_name", "/speech_recognition", "Action server name"),
+            InputPort<float>("wait", 5.0, "Wait time in seconds")
         });
     }
 
-    bool setRequest(Request::SharedPtr& request) override
+    bool setGoal(Goal& goal) override
     {
-        request->gesture_type = "iconic";
-        request->gesture_duration = Constants::GESTURE_DURATION_MS;
-        request->bow_nod_angle = 0;
-        request->location_x = request->location_y = request->location_z = 0.0;
-        
-        // Override from ports
-        getInput("gesture_type", request->gesture_type);
-        getInput("gesture_duration", request->gesture_duration);
-        getInput("bow_nod_angle", request->bow_nod_angle);
-        
-        // Determine gesture ID
-        int gestureId = 0;
-        if (!getInput("gesture_id", gestureId)) {
-            std::string nodeName = name();
-            if (nodeName == "welcome") {
-                gestureId = Constants::WELCOME_GESTURE_ID;
-            } else if (nodeName == "goodbye") {
-                gestureId = Constants::GOODBYE_GESTURE_ID;
-            } else {
-                RCLCPP_ERROR(logger(), "Undefined Iconic Gesture Type: %s", nodeName.c_str());
-                return false;
-            }
-        }
-        
-        request->gesture_id = gestureId;
+        float wait = 5.0;
+        getInput("wait", wait);
+        goal.wait = wait;
         return true;
     }
 
-    NodeStatus onResponseReceived(const Response::SharedPtr& response) override
+    NodeStatus onResultReceived(const WrappedResult& result) override
     {
-        if (response->gesture_success) {
-            RCLCPP_INFO(logger(), "PerformIconicGesture succeeded");
+        if (!result.result->transcription.empty()) {
+            RCLCPP_INFO(logger(), "Speech recognized: %s", result.result->transcription.c_str());
+            
+            // Store transcription in blackboard for processing
+            config().blackboard->set("visitorSpeech", result.result->transcription);
+            
+            // Simple yes/no detection (you can make this more sophisticated)
+            std::string lower = result.result->transcription;
+            std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+            
+            if (lower.find("yes") != std::string::npos || lower.find("yeah") != std::string::npos) {
+                config().blackboard->set("visitorResponse", "yes");
+            } else {
+                config().blackboard->set("visitorResponse", "no");
+            }
+            
             return NodeStatus::SUCCESS;
         }
-        RCLCPP_WARN(logger(), "PerformIconicGesture failed");
+        RCLCPP_WARN(logger(), "No speech recognized");
         return NodeStatus::FAILURE;
     }
 
-    NodeStatus onFailure(ServiceNodeErrorCode error) override
+    NodeStatus onFailure(ActionNodeErrorCode error) override
     {
-        RCLCPP_ERROR(logger(), "PerformIconicGesture service error: %d", static_cast<int>(error));
+        RCLCPP_ERROR(logger(), "Speech recognition action error: %d", static_cast<int>(error));
         return NodeStatus::FAILURE;
+    }
+
+    NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override
+    {
+        RCLCPP_DEBUG(logger(), "Speech recognition progress: %d", feedback->progress);
+        return NodeStatus::RUNNING;
     }
 };
 
 // ——————————————
-// DescribeExhibitSpeechRosService
+// AnimateBehaviorRosAction - Uses cssr_interfaces/action/AnimateBehavior
 // ——————————————
-class DescribeExhibitSpeechRosService : public RosServiceNode<cssr_interfaces::srv::TextToSpeechSayText>
+class AnimateBehaviorRosAction : public RosActionNode<cssr_interfaces::action::AnimateBehavior>
 {
 public:
-    DescribeExhibitSpeechRosService(const std::string& name, 
-                                    const NodeConfig& conf,
-                                    const RosNodeParams& params)
-        : RosServiceNode<cssr_interfaces::srv::TextToSpeechSayText>(name, conf, params)
-    {}
-
-    static PortsList providedPorts()
-    {
-        return providedBasicPorts({
-            InputPort<std::string>("service_name", "/textToSpeech/say_text", "Service name"),
-            InputPort<std::string>("message", "Direct message to speak"),
-            InputPort<std::string>("language", "Language code"),
-            InputPort<std::string>("message_type", "Type: 'pre' or 'post'")
-        });
-    }
-
-    bool setRequest(Request::SharedPtr& request) override
-    {
-        std::string language;
-        if (!getInput("language", language)) {
-            language = ConfigManager::instance().getLanguage();
-        }
-        request->language = language;
-        
-        // Try direct message first
-        std::string message;
-        if (getInput("message", message)) {
-            request->message = message;
-            return true;
-        }
-        
-        // Determine message type
-        std::string messageType;
-        if (!getInput("message_type", messageType)) {
-            std::string nodeName = name();
-            if (nodeName == "1" || nodeName.find("pre") != std::string::npos) {
-                messageType = "pre";
-            } else if (nodeName == "2" || nodeName.find("post") != std::string::npos) {
-                messageType = "post";
-            }
-        }
-        
-        // Get from blackboard
-        if (messageType == "pre") {
-            if (config().blackboard->get("exhibitPreGestureMessage", message)) {
-                request->message = message;
-                return true;
-            }
-        } else if (messageType == "post") {
-            if (config().blackboard->get("exhibitPostGestureMessage", message)) {
-                request->message = message;
-                return true;
-            }
-        }
-        
-        RCLCPP_ERROR(logger(), "Cannot get message for DescribeExhibitSpeech");
-        return false;
-    }
-
-    NodeStatus onResponseReceived(const Response::SharedPtr& response) override
-    {
-        if (response->success) {
-            RCLCPP_INFO(logger(), "DescribeExhibitSpeech succeeded");
-            return NodeStatus::SUCCESS;
-        }
-        RCLCPP_WARN(logger(), "DescribeExhibitSpeech failed");
-        return NodeStatus::FAILURE;
-    }
-
-    NodeStatus onFailure(ServiceNodeErrorCode error) override
-    {
-        RCLCPP_ERROR(logger(), "DescribeExhibitSpeech service error: %d", static_cast<int>(error));
-        return NodeStatus::FAILURE;
-    }
-};
-
-// ——————————————
-// SetSpeechEventRosService
-// ——————————————
-class SetSpeechEventRosService : public RosServiceNode<cssr_interfaces::srv::SpeechEventSetEnabled>
-{
-public:
-    SetSpeechEventRosService(const std::string& name, 
+    AnimateBehaviorRosAction(const std::string& name, 
                              const NodeConfig& conf,
                              const RosNodeParams& params)
-        : RosServiceNode<cssr_interfaces::srv::SpeechEventSetEnabled>(name, conf, params)
+        : RosActionNode<cssr_interfaces::action::AnimateBehavior>(name, conf, params)
     {}
 
     static PortsList providedPorts()
     {
         return providedBasicPorts({
-            InputPort<std::string>("service_name", "/speechEvent/set_enabled", "Service name"),
-            InputPort<std::string>("status", "Enable/disable status")
+            InputPort<std::string>("action_name", "/animate_behavior", "Action server name"),
+            InputPort<std::string>("behavior_type", "All", "Behavior type"),
+            InputPort<float>("selected_range", 0.5, "Movement range 0-1"),
+            InputPort<int>("duration_seconds", 0, "Duration (0=infinite)")
         });
     }
 
-    bool setRequest(Request::SharedPtr& request) override
+    bool setGoal(Goal& goal) override
     {
-        std::string status;
-        if (!getInput("status", status)) {
-            status = name();
-        }
-        request->status = status;
+        goal.behavior_type = "All";
+        goal.selected_range = 0.5;
+        goal.duration_seconds = 0;
+        
+        getInput("behavior_type", goal.behavior_type);
+        getInput("selected_range", goal.selected_range);
+        getInput("duration_seconds", goal.duration_seconds);
+        
         return true;
     }
 
-    NodeStatus onResponseReceived(const Response::SharedPtr& response) override
+    NodeStatus onResultReceived(const WrappedResult& result) override
     {
-        if (response->response) {
-            RCLCPP_INFO(logger(), "SetSpeechEvent succeeded");
+        if (result.result->success) {
+            RCLCPP_INFO(logger(), "AnimateBehavior succeeded: %s (%.2fs)", 
+                       result.result->message.c_str(),
+                       result.result->total_duration);
             return NodeStatus::SUCCESS;
         }
-        RCLCPP_WARN(logger(), "SetSpeechEvent failed");
+        RCLCPP_WARN(logger(), "AnimateBehavior failed: %s", result.result->message.c_str());
         return NodeStatus::FAILURE;
     }
 
-    NodeStatus onFailure(ServiceNodeErrorCode error) override
+    NodeStatus onFailure(ActionNodeErrorCode error) override
     {
-        RCLCPP_ERROR(logger(), "SetSpeechEvent service error: %d", static_cast<int>(error));
+        RCLCPP_ERROR(logger(), "AnimateBehavior action error: %d", static_cast<int>(error));
         return NodeStatus::FAILURE;
+    }
+
+    NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override
+    {
+        RCLCPP_DEBUG(logger(), "AnimateBehavior: %s, gestures: %d, elapsed: %.2fs", 
+                    feedback->current_limb.c_str(),
+                    feedback->gestures_completed,
+                    feedback->elapsed_time);
+        return NodeStatus::RUNNING;
     }
 };
 
+//=============================================================================
+// RosServiceNode wrapper implementations
+//=============================================================================
+
 // ——————————————
-// SetOvertAttentionModeRosService
+// SetOvertAttentionModeRosService - Uses cssr_interfaces/srv/OvertAttentionSetMode
 // ——————————————
 class SetOvertAttentionModeRosService : public RosServiceNode<cssr_interfaces::srv::OvertAttentionSetMode>
 {
@@ -435,9 +400,9 @@ public:
         return providedBasicPorts({
             InputPort<std::string>("service_name", "/overtAttention/set_mode", "Service name"),
             InputPort<std::string>("state", "Attention state"),
-            InputPort<double>("location_x", "Location X (for 'location' state)"),
-            InputPort<double>("location_y", "Location Y (for 'location' state)"),
-            InputPort<double>("location_z", "Location Z (for 'location' state)")
+            InputPort<float>("location_x", "Location X"),
+            InputPort<float>("location_y", "Location Y"),
+            InputPort<float>("location_z", "Location Z")
         });
     }
 
@@ -449,6 +414,10 @@ public:
         }
         request->state = state;
         
+        request->location_x = 0.0f;
+        request->location_y = 0.0f;
+        request->location_z = 0.0f;
+        
         if (state == "location") {
             Position3D target;
             
@@ -456,16 +425,16 @@ public:
                 getInput("location_y", target.y) &&
                 getInput("location_z", target.z)) 
             {
-                request->location_x = target.x;
-                request->location_y = target.y;
-                request->location_z = target.z;
+                request->location_x = static_cast<float>(target.x);
+                request->location_y = static_cast<float>(target.y);
+                request->location_z = static_cast<float>(target.z);
                 return true;
             }
             
             if (config().blackboard->get("exhibitGestureTarget", target)) {
-                request->location_x = target.x;
-                request->location_y = target.y;
-                request->location_z = target.z;
+                request->location_x = static_cast<float>(target.x);
+                request->location_y = static_cast<float>(target.y);
+                request->location_z = static_cast<float>(target.z);
                 return true;
             }
             
@@ -494,7 +463,7 @@ public:
 };
 
 // ——————————————
-// SetAnimateBehaviorRosService
+// SetAnimateBehaviorRosService - Uses cssr_interfaces/srv/AnimateBehaviorSetActivation
 // ——————————————
 class SetAnimateBehaviorRosService : public RosServiceNode<cssr_interfaces::srv::AnimateBehaviorSetActivation>
 {
@@ -541,42 +510,53 @@ public:
 };
 
 // ——————————————
-// ResetRobotPoseRosService
+// ConversationPromptRosService - Uses cssr_interfaces/srv/ConversationManagerPrompt
 // ——————————————
-class ResetRobotPoseRosService : public RosServiceNode<cssr_interfaces::srv::RobotLocalizationResetPose>
+class ConversationPromptRosService : public RosServiceNode<cssr_interfaces::srv::ConversationManagerPrompt>
 {
 public:
-    ResetRobotPoseRosService(const std::string& name, 
-                             const NodeConfig& conf,
-                             const RosNodeParams& params)
-        : RosServiceNode<cssr_interfaces::srv::RobotLocalizationResetPose>(name, conf, params)
+    ConversationPromptRosService(const std::string& name, 
+                                 const NodeConfig& conf,
+                                 const RosNodeParams& params)
+        : RosServiceNode<cssr_interfaces::srv::ConversationManagerPrompt>(name, conf, params)
     {}
 
     static PortsList providedPorts()
     {
         return providedBasicPorts({
-            InputPort<std::string>("service_name", "/robotLocalization/reset_pose", "Service name")
+            InputPort<std::string>("service_name", "/conversation/prompt", "Service name"),
+            InputPort<std::string>("prompt", "Conversation prompt")
         });
     }
 
-    bool setRequest(Request::SharedPtr& /*request*/) override
+    bool setRequest(Request::SharedPtr& request) override
     {
+        std::string prompt;
+        if (!getInput("prompt", prompt)) {
+            // Try to get visitor speech from blackboard
+            if (!config().blackboard->get("visitorSpeech", prompt)) {
+                RCLCPP_ERROR(logger(), "No prompt provided");
+                return false;
+            }
+        }
+        request->prompt = prompt;
         return true;
     }
 
     NodeStatus onResponseReceived(const Response::SharedPtr& response) override
     {
-        if (response->success) {
-            RCLCPP_INFO(logger(), "ResetRobotPose succeeded");
+        if (!response->response.empty()) {
+            RCLCPP_INFO(logger(), "Conversation response received");
+            config().blackboard->set("conversationResponse", response->response);
             return NodeStatus::SUCCESS;
         }
-        RCLCPP_WARN(logger(), "ResetRobotPose failed");
+        RCLCPP_WARN(logger(), "Empty conversation response");
         return NodeStatus::FAILURE;
     }
 
     NodeStatus onFailure(ServiceNodeErrorCode error) override
     {
-        RCLCPP_ERROR(logger(), "ResetRobotPose service error: %d", static_cast<int>(error));
+        RCLCPP_ERROR(logger(), "Conversation service error: %d", static_cast<int>(error));
         return NodeStatus::FAILURE;
     }
 };
@@ -604,26 +584,7 @@ public:
         RCLCPP_INFO(logger(), "=== START OF TREE ===");
         try {
             auto& cfg = ConfigManager::instance();
-
-            if (cfg.isAsrEnabled()) {
-                auto client = node_->create_client<cssr_interfaces::srv::SpeechEventSetLanguage>(
-                    "/speechEvent/set_language");
-                
-                if (!client->wait_for_service(std::chrono::seconds(1))) {
-                    RCLCPP_WARN(logger(), "Speech service not available - running in standalone mode");
-                    return NodeStatus::SUCCESS;
-                }
-
-                auto request = std::make_shared<cssr_interfaces::srv::SpeechEventSetLanguage::Request>();
-                request->language = cfg.getLanguage();
-
-                auto future = client->async_send_request(request);
-                if (rclcpp::spin_until_future_complete(node_, future, std::chrono::seconds(5)) ==
-                    rclcpp::FutureReturnCode::SUCCESS) 
-                {
-                    return NodeStatus::SUCCESS;
-                }
-            }
+            RCLCPP_INFO(logger(), "Language: %s", cfg.getLanguage().c_str());
             return NodeStatus::SUCCESS;
         }
         catch (const std::exception& e) {
@@ -636,7 +597,6 @@ public:
 // ——————————————
 // IsVisitorDiscovered
 // ——————————————
-/// TODO: Change this to use of overtAttention instead of face detection.
 class IsVisitorDiscovered : public BtActionNode<>
 {
 public:
@@ -646,9 +606,9 @@ public:
         : BtActionNode<>(name, config, params)
         , discovered_(false)
     {
-        subscriber_ = node_->create_subscription<cssr_interfaces::msg::FaceDetectionData>(
+        subscriber_ = node_->create_subscription<cssr_interfaces::msg::FaceDetection>(
             "/faceDetection/data", 10,
-            [this](cssr_interfaces::msg::FaceDetectionData::SharedPtr msg) {
+            [this](cssr_interfaces::msg::FaceDetection::SharedPtr msg) {
                 if (!msg->face_label_id.empty()) {
                     discovered_ = true;
                 }
@@ -664,7 +624,7 @@ public:
 
 private:
     bool discovered_;
-    rclcpp::Subscription<cssr_interfaces::msg::FaceDetectionData>::SharedPtr subscriber_;
+    rclcpp::Subscription<cssr_interfaces::msg::FaceDetection>::SharedPtr subscriber_;
 };
 
 // ——————————————
@@ -809,14 +769,13 @@ public:
                            const NodeConfig& config,
                            const RosNodeParams& params)
         : BtActionNode<>(name, config, params)
-        , seekingStatus_(0)
+        , gazeDetected_(false)
     {
-        subscriber_ = node_->create_subscription<cssr_interfaces::msg::OvertAttentionMode>(
-            "/overtAttention/mode", 10,
-            [this](const cssr_interfaces::msg::OvertAttentionMode::SharedPtr msg) {
-                if (msg->state == "seeking") {
-                    if (msg->value == 2) seekingStatus_.store(1);
-                    else if (msg->value == 3) seekingStatus_.store(2);
+        subscriber_ = node_->create_subscription<cssr_interfaces::msg::OvertAttentionStatus>(
+            "/overtAttention/status", 10,
+            [this](const cssr_interfaces::msg::OvertAttentionStatus::SharedPtr msg) {
+                if (msg->state == "mutual_gaze_detected") {
+                    gazeDetected_ = true;
                 }
             });
     }
@@ -825,21 +784,17 @@ public:
 
     NodeStatus tick() override 
     {
-        auto status = seekingStatus_.load();
-        if (status == 1) {
+        if (gazeDetected_) {
             RCLCPP_INFO(logger(), "Mutual gaze detected");
+            gazeDetected_ = false; // Reset for next time
             return NodeStatus::SUCCESS;
-        }
-        if (status == 2) {
-            RCLCPP_INFO(logger(), "Mutual gaze detection failed");
-            return NodeStatus::FAILURE;
         }
         return NodeStatus::RUNNING;
     }
 
 private:
-    std::atomic<int> seekingStatus_;
-    rclcpp::Subscription<cssr_interfaces::msg::OvertAttentionMode>::SharedPtr subscriber_;
+    bool gazeDetected_;
+    rclcpp::Subscription<cssr_interfaces::msg::OvertAttentionStatus>::SharedPtr subscriber_;
 };
 
 // ——————————————
@@ -918,17 +873,17 @@ BT::Tree initializeTree(const std::string& scenario,
     params.nh = node_handle;
     params.default_port_value = "service_name";
 
-    // Register all RosServiceNode-based nodes
-    factory.registerNodeType<SayTextRosService>("SayTextRosService", params);
-    factory.registerNodeType<NavigateRosService>("NavigateRosService", params);
-    factory.registerNodeType<PerformDeicticGestureRosService>("PerformDeicticGestureRosService", params);
-    factory.registerNodeType<PerformIconicGestureRosService>("PerformIconicGestureRosService", params);
-    factory.registerNodeType<DescribeExhibitSpeechRosService>("DescribeExhibitSpeechRosService", params);
-    factory.registerNodeType<SetSpeechEventRosService>("SetSpeechEventRosService", params);
+    // Register Action nodes
+    factory.registerNodeType<TTSRosAction>("TTSRosAction", params);
+    factory.registerNodeType<NavigateRosAction>("NavigateRosAction", params);
+    factory.registerNodeType<GestureRosAction>("GestureRosAction", params);
+    factory.registerNodeType<SpeechRecognitionRosAction>("SpeechRecognitionRosAction", params);
+    factory.registerNodeType<AnimateBehaviorRosAction>("AnimateBehaviorRosAction", params);
+
+    // Register Service nodes
     factory.registerNodeType<SetOvertAttentionModeRosService>("SetOvertAttentionModeRosService", params);
     factory.registerNodeType<SetAnimateBehaviorRosService>("SetAnimateBehaviorRosService", params);
-    factory.registerNodeType<ResetRobotPoseRosService>("ResetRobotPoseRosService", params);
-    factory.registerNodeType<PressYesNoDialogueRosService>("PressYesNoDialogueRosService", params);
+    factory.registerNodeType<ConversationPromptRosService>("ConversationPromptRosService", params);
 
     // Register custom action/condition nodes
     factory.registerNodeType<StartOfTree>("StartOfTree", params);
