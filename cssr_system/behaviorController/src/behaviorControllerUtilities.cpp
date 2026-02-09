@@ -1,8 +1,8 @@
 /* behaviorControllerUtilities.cpp - Utility functions and helper classes
  *
  * Author: Yohannes Tadesse Haile
- * Date: Feb 06, 2026
- * Version: v1.0 - Updated for BehaviorTree.ROS2
+ * Date: Feb 09, 2026
+ * Version: v2.0 - Updated for BehaviorTree.ROS2 with valid cssr_interfaces
  *
  * Copyright (C) 2025 CyLab Carnegie Mellon University Africa
  */
@@ -13,9 +13,10 @@
 #include <yaml-cpp/yaml.h>
 #include <algorithm>
 #include <regex>
+#include <fstream>
 
 //=============================================================================
-// Singleton Implementations
+// ConfigManager - Singleton for configuration management
 //=============================================================================
 
 class ConfigManager {
@@ -33,12 +34,15 @@ public:
             verbose_    = config["verbose_mode"].as<bool>(false);
             asrEnabled_ = config["asr_enabled"].as<bool>(false);
             language_   = config["language"].as<std::string>("English");
+            scenarioSpecification_ = config["scenario_specification"].as<std::string>("lab_tour");
             nodeName_   = config["node_name"].as<std::string>("behaviorController");
             cultureKnowledgeBasePath_ = config["culture_knowledge_base"].as<std::string>("cultureKnowledgeBase.yaml");
             environmentKnowledgeBasePath_ = config["environment_knowledge_base"].as<std::string>("labEnvironmentKnowledgeBase.yaml");
+            
+            std::cout << "✓ Configuration loaded from: " << configPath << std::endl;
             return true;
         } catch (const std::exception& e) {
-            std::cerr << "ConfigManager: Failed to load config: " << e.what() << std::endl;
+            std::cerr << "✗ ConfigManager: Failed to load config: " << e.what() << std::endl;
             return false;
         }
     }
@@ -48,6 +52,7 @@ public:
     bool        isAsrEnabled() const { return asrEnabled_; }
     std::string getLanguage()  const { return language_;   }
     std::string getNodeName()  const { return nodeName_;   }
+    std::string getScenarioSpecification() const { return scenarioSpecification_; }
     std::string getCultureKnowledgeBasePath() const { return cultureKnowledgeBasePath_; }
     std::string getEnvironmentKnowledgeBasePath() const { return environmentKnowledgeBasePath_; }
 
@@ -61,11 +66,14 @@ private:
     bool        verbose_    = false;
     bool        asrEnabled_ = false;
     std::string language_   = "English";
+    std::string scenarioSpecification_ = "lab_tour";
     std::string nodeName_   = "behaviorController";
     std::string cultureKnowledgeBasePath_ = "cultureKnowledgeBase.yaml";
     std::string environmentKnowledgeBasePath_ = "labEnvironmentKnowledgeBase.yaml";
 };
 
+//=============================================================================
+// KnowledgeManager - Singleton for knowledge base management
 //=============================================================================
 
 KnowledgeManager& KnowledgeManager::instance() {
@@ -77,8 +85,15 @@ bool KnowledgeManager::loadFromPackage(const std::string& packagePath) {
     std::lock_guard<std::mutex> lock(mutex_);
     try {
         // Load culture knowledge base from configuration
-        std::string cultureFilePath = packagePath + "/data/" + ConfigManager::instance().getCultureKnowledgeBasePath();
+        std::string cultureFilePath = packagePath + "/data/" + 
+                                     ConfigManager::instance().getCultureKnowledgeBasePath();
         std::cout << "Loading culture knowledge base from: " << cultureFilePath << std::endl;
+        
+        if (!fileExists(cultureFilePath)) {
+            std::cerr << "✗ Culture knowledge base file not found: " << cultureFilePath << std::endl;
+            return false;
+        }
+        
         YAML::Node cultureConfig = YAML::LoadFile(cultureFilePath);
         
         if (cultureConfig["utility_phrases"]) {
@@ -93,8 +108,15 @@ bool KnowledgeManager::loadFromPackage(const std::string& packagePath) {
         }
 
         // Load environment knowledge base from configuration
-        std::string envFilePath = packagePath + "/data/" + ConfigManager::instance().getEnvironmentKnowledgeBasePath();
+        std::string envFilePath = packagePath + "/data/" + 
+                                 ConfigManager::instance().getEnvironmentKnowledgeBasePath();
         std::cout << "Loading environment knowledge base from: " << envFilePath << std::endl;
+        
+        if (!fileExists(envFilePath)) {
+            std::cerr << "✗ Environment knowledge base file not found: " << envFilePath << std::endl;
+            return false;
+        }
+        
         YAML::Node envConfig = YAML::LoadFile(envFilePath);
         
         if (envConfig["locations"]) {
@@ -116,11 +138,19 @@ bool KnowledgeManager::loadFromPackage(const std::string& packagePath) {
                 info.gestureTarget.z = location["gesture_target"]["z"].as<double>();
                 
                 // Messages by language
-                info.preMessages["English"] = location["pre_gesture_message_english"].as<std::string>();
-                info.preMessages["Kinyarwanda"] = location["pre_gesture_message_kinyarwanda"].as<std::string>();
+                if (location["pre_gesture_message_english"]) {
+                    info.preMessages["English"] = location["pre_gesture_message_english"].as<std::string>();
+                }
+                if (location["pre_gesture_message_kinyarwanda"]) {
+                    info.preMessages["Kinyarwanda"] = location["pre_gesture_message_kinyarwanda"].as<std::string>();
+                }
                 
-                info.postMessages["English"] = location["post_gesture_message_english"].as<std::string>();
-                info.postMessages["Kinyarwanda"] = location["post_gesture_message_kinyarwanda"].as<std::string>();
+                if (location["post_gesture_message_english"]) {
+                    info.postMessages["English"] = location["post_gesture_message_english"].as<std::string>();
+                }
+                if (location["post_gesture_message_kinyarwanda"]) {
+                    info.postMessages["Kinyarwanda"] = location["post_gesture_message_kinyarwanda"].as<std::string>();
+                }
                 
                 locations_[locationId] = info;
             }
@@ -136,26 +166,31 @@ bool KnowledgeManager::loadFromPackage(const std::string& packagePath) {
         }
 
         loaded_ = true;
-        std::cout << "Knowledge base loaded successfully" << std::endl;
+        std::cout << "✓ Knowledge base loaded successfully" << std::endl;
         std::cout << "  - Locations loaded: " << locations_.size() << std::endl;
+        std::cout << "  - Tour stops: " << (tourSpec_ ? tourSpec_->getCurrentLocationCount() : 0) << std::endl;
         std::cout << "  - Utility phrases loaded: " << utilityPhrases_.size() << std::endl;
         return true;
         
     } catch (const std::exception& e) {
-        std::cerr << "Exception loading knowledge base: " << e.what() << std::endl;
+        std::cerr << "✗ Exception loading knowledge base: " << e.what() << std::endl;
         return false;
     }
 }
 
-std::string KnowledgeManager::getUtilityPhrase(const std::string& phraseId, const std::string& language) {
+std::string KnowledgeManager::getUtilityPhrase(const std::string& phraseId, 
+                                               const std::string& language) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (!loaded_) {
         throw std::runtime_error("Knowledge base not loaded");
     }
     
     std::string lang = language.empty() ? ConfigManager::instance().getLanguage() : language;
+    
+    // Normalize language to lowercase for key lookup
     std::string languageKey = (lang == "English") ? "english" : 
-                             (lang == "Kinyarwanda") ? "kinyarwanda" : "english";
+                             (lang == "Kinyarwanda") ? "kinyarwanda" : 
+                             (lang == "IsiZulu") ? "isizulu" : "english";
     
     std::string key = languageKey + ":" + phraseId;
     auto it = utilityPhrases_.find(key);
@@ -167,11 +202,13 @@ std::string KnowledgeManager::getUtilityPhrase(const std::string& phraseId, cons
     std::string fallbackKey = "english:" + phraseId;
     it = utilityPhrases_.find(fallbackKey);
     if (it != utilityPhrases_.end()) {
-        std::cerr << "Warning: Using English fallback for phrase: " << phraseId << std::endl;
+        std::cerr << "⚠ Warning: Using English fallback for phrase: " << phraseId 
+                  << " (requested language: " << lang << ")" << std::endl;
         return it->second;
     }
     
-    throw std::runtime_error("Utility phrase not found: " + phraseId + " (language: " + lang + ")");
+    throw std::runtime_error("Utility phrase not found: " + phraseId + 
+                           " (language: " + lang + ")");
 }
 
 LocationInfo KnowledgeManager::getLocationInfo(const std::string& locationId) {
@@ -200,7 +237,7 @@ TourSpec KnowledgeManager::getTourSpecification() {
 }
 
 //=============================================================================
-// Utility Classes Implementation
+// Logger - Logging utility with verbose mode support
 //=============================================================================
 
 Logger::Logger(std::shared_ptr<rclcpp::Node> node) : node_(node) {}
@@ -230,6 +267,8 @@ void Logger::debug(const std::string& msg) {
 }
 
 //=============================================================================
+// ServiceManager - Service availability checking and waiting
+//=============================================================================
 
 ServiceManager::ServiceManager(std::shared_ptr<rclcpp::Node> node) : node_(node) {}
 
@@ -242,12 +281,12 @@ bool ServiceManager::checkServicesAvailable(const std::vector<std::string>& serv
         for (const auto& serviceInfo : serviceNamesAndTypes) {
             if (serviceInfo.first == serviceName) {
                 found = true;
-                RCLCPP_DEBUG(node_->get_logger(), "Service found: %s", serviceName.c_str());
+                RCLCPP_DEBUG(node_->get_logger(), "✓ Service found: %s", serviceName.c_str());
                 break;
             }
         }
         if (!found) {
-            RCLCPP_WARN(node_->get_logger(), "Service not found: %s", serviceName.c_str());
+            RCLCPP_WARN(node_->get_logger(), "✗ Service not found: %s", serviceName.c_str());
             allAvailable = false;
         }
     }
@@ -258,16 +297,21 @@ bool ServiceManager::waitForService(const std::string& serviceName,
                                     std::chrono::seconds timeout) {
     auto start = std::chrono::steady_clock::now();
     
+    RCLCPP_INFO(node_->get_logger(), "Waiting for service: %s", serviceName.c_str());
+    
     while (rclcpp::ok()) {
         auto serviceNamesAndTypes = node_->get_service_names_and_types();
         for (const auto& serviceInfo : serviceNamesAndTypes) {
             if (serviceInfo.first == serviceName) {
+                RCLCPP_INFO(node_->get_logger(), "✓ Service available: %s", serviceName.c_str());
                 return true;
             }
         }
         
         auto elapsed = std::chrono::steady_clock::now() - start;
         if (elapsed >= timeout) {
+            RCLCPP_ERROR(node_->get_logger(), 
+                        "✗ Timeout waiting for service: %s", serviceName.c_str());
             return false;
         }
         
@@ -277,6 +321,8 @@ bool ServiceManager::waitForService(const std::string& serviceName,
     return false;
 }
 
+//=============================================================================
+// TopicMonitor - Topic availability checking and monitoring
 //=============================================================================
 
 TopicMonitor::TopicMonitor(std::shared_ptr<rclcpp::Node> node) : node_(node) {}
@@ -295,10 +341,10 @@ bool TopicMonitor::checkTopicsAvailable(const std::vector<std::string>& topics) 
     bool allAvailable = true;
     for (const auto& topicName : topics) {
         if (!isTopicAvailable(topicName)) {
-            RCLCPP_WARN(node_->get_logger(), "Topic not found: %s", topicName.c_str());
+            RCLCPP_WARN(node_->get_logger(), "✗ Topic not found: %s", topicName.c_str());
             allAvailable = false;
         } else {
-            RCLCPP_DEBUG(node_->get_logger(), "Topic found: %s", topicName.c_str());
+            RCLCPP_DEBUG(node_->get_logger(), "✓ Topic found: %s", topicName.c_str());
         }
     }
     return allAvailable;
@@ -308,13 +354,18 @@ bool TopicMonitor::waitForTopic(const std::string& topicName,
                                 std::chrono::seconds timeout) {
     auto start = std::chrono::steady_clock::now();
     
+    RCLCPP_INFO(node_->get_logger(), "Waiting for topic: %s", topicName.c_str());
+    
     while (rclcpp::ok()) {
         if (isTopicAvailable(topicName)) {
+            RCLCPP_INFO(node_->get_logger(), "✓ Topic available: %s", topicName.c_str());
             return true;
         }
         
         auto elapsed = std::chrono::steady_clock::now() - start;
         if (elapsed >= timeout) {
+            RCLCPP_ERROR(node_->get_logger(), 
+                        "✗ Timeout waiting for topic: %s", topicName.c_str());
             return false;
         }
         
@@ -325,8 +376,11 @@ bool TopicMonitor::waitForTopic(const std::string& topicName,
 }
 
 //=============================================================================
+// TextUtils - Text processing utilities
+//=============================================================================
 
-bool TextUtils::containsAnyWord(const std::string& text, const std::vector<std::string>& words) {
+bool TextUtils::containsAnyWord(const std::string& text, 
+                               const std::vector<std::string>& words) {
     std::string lowerText = toLowerCase(text);
     for (const auto& word : words) {
         std::regex wordRegex("\\b" + toLowerCase(word) + "\\b");
@@ -377,8 +431,8 @@ std::string TextUtils::trim(const std::string& text) {
 
 std::string getConfigValue(const std::string& key) {
     try {
-        std::string packagePath = ament_index_cpp::get_package_share_directory("cssr_system");
-        std::string configPath = packagePath + "/behaviorController/config/behaviorControllerConfiguration.yaml";
+        std::string packagePath = ament_index_cpp::get_package_share_directory("behavior_controller");
+        std::string configPath = packagePath + "/config/behaviorControllerConfiguration.yaml";
         YAML::Node config = YAML::LoadFile(configPath);
         
         if (config[key]) {
@@ -395,6 +449,12 @@ std::string getConfigValue(const std::string& key) {
 
 bool validateConfigurationFile(const std::string& configPath) {
     try {
+        if (!fileExists(configPath)) {
+            RCLCPP_ERROR(rclcpp::get_logger("behaviorController"), 
+                        "Configuration file not found: %s", configPath.c_str());
+            return false;
+        }
+        
         YAML::Node config = YAML::LoadFile(configPath);
         
         // Check required fields
@@ -402,13 +462,16 @@ bool validateConfigurationFile(const std::string& configPath) {
             "scenario_specification",
             "verbose_mode",
             "asr_enabled",
-            "language"
+            "language",
+            "node_name",
+            "culture_knowledge_base",
+            "environment_knowledge_base"
         };
         
         for (const auto& field : requiredFields) {
             if (!config[field]) {
                 RCLCPP_ERROR(rclcpp::get_logger("behaviorController"), 
-                           "Missing required configuration field: %s", field.c_str());
+                           "✗ Missing required configuration field: %s", field.c_str());
                 return false;
             }
         }
@@ -417,14 +480,16 @@ bool validateConfigurationFile(const std::string& configPath) {
         std::string language = config["language"].as<std::string>();
         if (!isValidLanguage(language)) {
             RCLCPP_ERROR(rclcpp::get_logger("behaviorController"),
-                        "Invalid language: %s", language.c_str());
+                        "✗ Invalid language: %s", language.c_str());
             return false;
         }
         
+        RCLCPP_INFO(rclcpp::get_logger("behaviorController"), 
+                   "✓ Configuration file validated successfully");
         return true;
     } catch (const YAML::Exception& e) {
         RCLCPP_ERROR(rclcpp::get_logger("behaviorController"), 
-                   "Configuration file validation failed: %s", e.what());
+                   "✗ Configuration file validation failed: %s", e.what());
         return false;
     }
 }
@@ -432,14 +497,17 @@ bool validateConfigurationFile(const std::string& configPath) {
 void logSystemInfo(std::shared_ptr<rclcpp::Node> node) {
     auto logger = node->get_logger();
     
+    RCLCPP_INFO(logger, "=== System Information ===");
+    
     // Log ROS2 distribution
     const char* rosDistro = std::getenv("ROS_DISTRO");
     if (rosDistro) {
         RCLCPP_INFO(logger, "ROS2 Distribution: %s", rosDistro);
     }
     
-    // Log node name
+    // Log node information
     RCLCPP_INFO(logger, "Node name: %s", node->get_name());
+    RCLCPP_INFO(logger, "Node namespace: %s", node->get_namespace());
     
     // Log available services count
     auto services = node->get_service_names_and_types();
@@ -451,10 +519,13 @@ void logSystemInfo(std::shared_ptr<rclcpp::Node> node) {
     
     // Log configuration
     auto& config = ConfigManager::instance();
-    RCLCPP_INFO(logger, "Configuration:");
+    RCLCPP_INFO(logger, "Active Configuration:");
     RCLCPP_INFO(logger, "  - Verbose mode: %s", config.isVerbose() ? "ON" : "OFF");
     RCLCPP_INFO(logger, "  - ASR enabled: %s", config.isAsrEnabled() ? "YES" : "NO");
     RCLCPP_INFO(logger, "  - Language: %s", config.getLanguage().c_str());
+    RCLCPP_INFO(logger, "  - Scenario: %s", config.getScenarioSpecification().c_str());
+    
+    RCLCPP_INFO(logger, "=========================");
 }
 
 bool isValidLanguage(const std::string& language) {
@@ -477,8 +548,8 @@ bool fileExists(const std::string& filepath) {
 }
 
 std::string getPackageDataPath(const std::string& relativePath) {
-    std::string packagePath = ament_index_cpp::get_package_share_directory("cssr_system");
-    return packagePath + "/" + relativePath;
+    std::string packagePath = ament_index_cpp::get_package_share_directory("behavior_controller");
+    return packagePath + "/data/" + relativePath;
 }
 
 void printNodeInfo(std::shared_ptr<rclcpp::Node> node) {
@@ -489,10 +560,10 @@ void printNodeInfo(std::shared_ptr<rclcpp::Node> node) {
     RCLCPP_INFO(logger, "========================================");
     RCLCPP_INFO(logger, "Name: %s", node->get_name());
     RCLCPP_INFO(logger, "Namespace: %s", node->get_namespace());
+    RCLCPP_INFO(logger, "Fully Qualified Name: %s", node->get_fully_qualified_name());
     RCLCPP_INFO(logger, "========================================");
 }
 
-// Helper function to safely convert NodeStatus to string
 std::string nodeStatusToString(BT::NodeStatus status) {
     switch (status) {
         case BT::NodeStatus::SUCCESS:
@@ -506,4 +577,56 @@ std::string nodeStatusToString(BT::NodeStatus status) {
         default:
             return "UNKNOWN";
     }
+}
+
+void logActionServerStatus(std::shared_ptr<rclcpp::Node> node, 
+                           const std::vector<std::string>& actionNames) {
+    auto logger = node->get_logger();
+    
+    RCLCPP_INFO(logger, "=== Action Server Status ===");
+    
+    // List expected action servers
+    std::vector<std::string> expectedActions = {
+        "/tts",
+        "/navigation",
+        "/gesture",
+        "/speech_recognition",
+        "/animate_behavior"
+    };
+    
+    for (const auto& actionName : expectedActions) {
+        RCLCPP_INFO(logger, "  - %s: [checking...]", actionName.c_str());
+    }
+    
+    RCLCPP_INFO(logger, "============================");
+}
+
+void logServiceStatus(std::shared_ptr<rclcpp::Node> node) {
+    auto logger = node->get_logger();
+    
+    RCLCPP_INFO(logger, "=== Service Status ===");
+    
+    // List expected services
+    std::vector<std::string> expectedServices = {
+        "/overtAttention/set_mode",
+        "/animateBehaviour/setActivation",
+        "/conversation/prompt"
+    };
+    
+    ServiceManager serviceMgr(node);
+    for (const auto& serviceName : expectedServices) {
+        auto serviceNamesAndTypes = node->get_service_names_and_types();
+        bool found = false;
+        for (const auto& serviceInfo : serviceNamesAndTypes) {
+            if (serviceInfo.first == serviceName) {
+                found = true;
+                break;
+            }
+        }
+        RCLCPP_INFO(logger, "  - %s: %s", 
+                   serviceName.c_str(), 
+                   found ? "✓ Available" : "✗ Not Found");
+    }
+    
+    RCLCPP_INFO(logger, "======================");
 }

@@ -59,12 +59,8 @@
 #include "cssr_interfaces/action/speech_recognition.hpp"
 // Services
 #include "cssr_interfaces/srv/overt_attention_set_mode.hpp"
-#include "cssr_interfaces/srv/conversation_manager_create_collection.hpp"
+#include "cssr_interfaces/srv/animate_behavior_set_activation.hpp"
 #include "cssr_interfaces/srv/conversation_manager_prompt.hpp"
-#include "cssr_interfaces/srv/perform_gesture.hpp"
-#include "cssr_interfaces/srv/get_depth_at_pixel.hpp"
-#include "cssr_interfaces/srv/language_model_create_collection.hpp"
-#include "cssr_interfaces/srv/language_model_prompt.hpp"
 
 //=============================================================================
 // Constants
