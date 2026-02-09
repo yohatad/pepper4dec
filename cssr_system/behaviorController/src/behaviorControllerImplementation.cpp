@@ -1,7 +1,7 @@
 /* behaviorControllerImplementation.cpp
  * Author: Yohannes Tadesse Haile
- * Date: July 25, 2025
- * Version: v2.0 - Refactored to use BehaviorTree.ROS2
+ * Date: February 08, 2026
+ * Version: v1.0
  */
 
 #include "behaviorController/behaviorControllerInterface.h"
@@ -585,53 +585,6 @@ public:
     }
 };
 
-// ——————————————
-// PressYesNoDialogueRosService
-// ——————————————
-class PressYesNoDialogueRosService : public RosServiceNode<cssr_interfaces::srv::TabletEventPromptAndGetResponse>
-{
-public:
-    PressYesNoDialogueRosService(const std::string& name, 
-                                 const NodeConfig& conf,
-                                 const RosNodeParams& params)
-        : RosServiceNode<cssr_interfaces::srv::TabletEventPromptAndGetResponse>(name, conf, params)
-    {}
-
-    static PortsList providedPorts()
-    {
-        return providedBasicPorts({
-            InputPort<std::string>("service_name", "/tabletEvent/prompt_and_get_response", "Service name"),
-            InputPort<std::string>("message", "'Yes'|'No'", "Prompt message")
-        });
-    }
-
-    bool setRequest(Request::SharedPtr& request) override
-    {
-        std::string message;
-        if (!getInput("message", message)) {
-            message = "'Yes'|'No'";
-        }
-        request->message = message;
-        return true;
-    }
-
-    NodeStatus onResponseReceived(const Response::SharedPtr& response) override
-    {
-        if (response->success) {
-            RCLCPP_INFO(logger(), "PressYesNoDialogue succeeded");
-            return NodeStatus::SUCCESS;
-        }
-        RCLCPP_WARN(logger(), "PressYesNoDialogue failed");
-        return NodeStatus::FAILURE;
-    }
-
-    NodeStatus onFailure(ServiceNodeErrorCode error) override
-    {
-        RCLCPP_ERROR(logger(), "PressYesNoDialogue service error: %d", static_cast<int>(error));
-        return NodeStatus::FAILURE;
-    }
-};
-
 //=============================================================================
 // Custom Action/Condition Nodes using BtActionNode base
 //=============================================================================
@@ -687,6 +640,7 @@ public:
 // ——————————————
 // IsVisitorDiscovered
 // ——————————————
+/// TODO: Change this to use of overtAttention instead of face detection.
 class IsVisitorDiscovered : public BtActionNode<>
 {
 public:
@@ -956,8 +910,8 @@ BT::Tree initializeTree(const std::string& scenario,
                         std::shared_ptr<rclcpp::Node> node_handle)
 {
     // Find XML file
-    auto pkg = ament_index_cpp::get_package_share_directory("cssr_interfaces");
-    std::string xml = pkg + "/behaviorController/data/" + scenario + ".xml";
+    auto pkg = ament_index_cpp::get_package_share_directory("behavior_controller");
+    std::string xml = pkg + "/data/" + scenario + ".xml";
     if (!std::ifstream(xml).good()) {
         throw std::runtime_error("Tree XML not found: " + xml);
     }

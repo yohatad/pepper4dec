@@ -127,6 +127,8 @@ public:
     bool isTestMode() const;
     std::string getLanguage() const;
     std::string getNodeName() const;
+    std::string getCultureKnowledgeBasePath() const;
+    std::string getEnvironmentKnowledgeBasePath() const;
 
 private:
     ConfigManager() = default;

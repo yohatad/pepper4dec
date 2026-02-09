@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(behavior_controller_cpp)
+project(behavior_controller)
 
 # Default to C++17
 if(NOT CMAKE_CXX_STANDARD)

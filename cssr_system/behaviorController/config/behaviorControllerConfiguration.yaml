@@ -1,4 +1,5 @@
 # Behavior Controller Configuration
 scenario_specification: "lab_tour"
+culture_knowledge_base: "cultureKnowledgeBase.yaml"
+environment_knowledge_base: "labEnvironmentKnowledgeBase.yaml"
 verbose_mode: true
-asr_enabled: true

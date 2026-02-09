@@ -170,7 +170,7 @@ void displayStartupInfo(const rclcpp::Logger& logger) {
 
 bool initializeSystem(const rclcpp::Logger& logger) {
     // Load configuration
-    std::string packagePath = ament_index_cpp::get_package_share_directory("cssr_system");
+    std::string packagePath = ament_index_cpp::get_package_share_directory("behavior_controller");
     std::string configPath = packagePath + "/behaviorController/config/behaviorControllerConfiguration.yaml";
     
     if (!ConfigManager::instance().loadFromFile(configPath)) {

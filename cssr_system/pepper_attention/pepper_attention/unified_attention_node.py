@@ -26,16 +26,13 @@ def get_image_qos() -> QoSProfile:
         depth=1
     )
 
-
 def clamp(x, lo, hi):
     return max(lo, min(hi, x))
-
 
 def pixel_to_angles(u, v, fx, fy, cx, cy):
     """Convert pixel to camera-relative angles."""
     x, y = (u - cx) / fx, (v - cy) / fy
     return -math.atan2(x, 1.0), math.atan2(y, 1.0)
-
 
 class SimpleAttention(Node):
     def __init__(self):
