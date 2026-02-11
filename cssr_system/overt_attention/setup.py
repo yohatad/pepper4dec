@@ -14,10 +14,10 @@ setup(
     description='Unified visual attention system for robot overt attention',
     license='MIT',
     entry_points={
-        'console_scripts': [
-            'saliency_node = overt_attention.saliency_node:main',
-            'unified_attention_node = overt_attention.unified_attention_node:main',
-            'visualization_node = overt_attention.visualization_node:main',
+    'console_scripts': [
+        'overt_attention_saliency = overt_attention.overt_attention_saliency:main',
+        'overt_attention_unified_attention = overt_attention.overt_attention_unified_attention:main',
+        'overt_attention_visualization = overt_attention.overt_attention_visualization:main',
         ],
     },
     data_files=[

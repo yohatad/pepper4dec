@@ -507,7 +507,6 @@ class SimpleVisualization(Node):
             )
             y += 18
 
-
 def main(args=None):
     rclpy.init(args=args)
     node = SimpleVisualization()

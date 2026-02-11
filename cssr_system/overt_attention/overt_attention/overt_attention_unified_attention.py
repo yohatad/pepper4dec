@@ -6,6 +6,8 @@ Priority 1: Engaged Faces | Priority 2: Detected Faces | Priority 3: Saliency (w
 
 import math
 import time
+import yaml
+from pathlib import Path
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
@@ -16,6 +18,7 @@ from naoqi_bridge_msgs.msg import JointAnglesWithSpeed
 from geometry_msgs.msg import Vector3
 from cssr_interfaces.msg import FaceDetection
 from std_srvs.srv import SetBool
+from ament_index_python.packages import get_package_share_directory
 
 
 def get_image_qos() -> QoSProfile:
@@ -34,17 +37,25 @@ def pixel_to_angles(u, v, fx, fy, cx, cy):
     x, y = (u - cx) / fx, (v - cy) / fy
     return -math.atan2(x, 1.0), math.atan2(y, 1.0)
 
+def load_topics_config(package_name: str, relative_path: str) -> dict:
+    """Load topics configuration from YAML file using ROS2 package path."""
+    package_share = get_package_share_directory(package_name)
+    config_path = Path(package_share) / relative_path
+    
+    with open(config_path, 'r') as f:
+        return yaml.safe_load(f)
 
 class SimpleAttention(Node):
     def __init__(self):
         super().__init__("simple_attention")
         
-        # Topics
-        self.declare_parameter("face_topic", "/faceDetection/data")
-        self.declare_parameter("saliency_topic", "/attn/saliency_peak")
-        self.declare_parameter("camera_info_topic", "/camera/color/camera_info")
-        self.declare_parameter("head_command_topic", "/joint_angles")
-        self.declare_parameter("target_topic", "/attn/target_angles")
+        # Load topics configuration from YAML file using ROS2 package path
+        try:
+            self.topics_config = load_topics_config('overt_attention', 'data/pepper_topics.yaml')
+            self.get_logger().info("Loaded topics configuration from overt_attention package")
+        except Exception as e:
+            self.get_logger().error(f"Failed to load topics configuration: {e}")
+            raise
         
         # System parameters
         self.declare_parameter("start_enabled", True)  # Start with attention enabled
@@ -81,13 +92,14 @@ class SimpleAttention(Node):
         self.declare_parameter("ior_cleanup_threshold", 0.05)
         self.declare_parameter("ior_max_locations", 20)
         
-        # Load parameters
-        self.face_topic = self.get_parameter("face_topic").value
-        self.saliency_topic = self.get_parameter("saliency_topic").value
-        self.camera_info_topic = self.get_parameter("camera_info_topic").value
-        self.head_cmd_topic = self.get_parameter("head_command_topic").value
-        self.target_topic = self.get_parameter("target_topic").value
+        # Load topics from YAML config
+        self.face_topic = self.topics_config['topics']['face']
+        self.saliency_topic = self.topics_config['topics']['saliency']['peak']
+        self.camera_info_topic = self.topics_config['topics']['camera_info']
+        self.head_cmd_topic = self.topics_config['topics']['joint_angles']
+        self.target_topic = self.topics_config['topics']['target_angles']
         
+        # Load parameters
         self.move_to_default_on_disable = self.get_parameter("move_to_default_on_disable").value
         self.default_yaw = self.get_parameter("default_yaw").value
         self.default_pitch = self.get_parameter("default_pitch").value

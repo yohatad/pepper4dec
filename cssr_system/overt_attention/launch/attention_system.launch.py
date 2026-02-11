@@ -27,7 +27,7 @@ def generate_launch_description():
         # Saliency node (Laptop)
         Node(
             package='overt_attention',
-            executable='saliency_node',
+            executable='overt_attention_saliency',
             name='saliency_node',
             parameters=[
                 LaunchConfiguration('params_file'),
@@ -39,7 +39,7 @@ def generate_launch_description():
         # Unified attention controller (Laptop)
         Node(
             package='overt_attention',
-            executable='unified_attention_node',
+            executable='overt_attention_unified_attention',
             name='unified_attention_node',
             parameters=[LaunchConfiguration('params_file')],
             output='screen'
@@ -48,7 +48,7 @@ def generate_launch_description():
         # Visualization (Laptop)
         Node(
             package='overt_attention',
-            executable='visualization_node',
+            executable='overt_attention_visualization',
             name='attention_visualization',
             parameters=[LaunchConfiguration('params_file')],
             output='screen',

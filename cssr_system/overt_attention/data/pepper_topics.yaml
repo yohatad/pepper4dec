@@ -1,0 +1,17 @@
+topics:
+  image:
+    base: "/camera/color/image_raw"
+    use_compressed: false
+  depth:
+    base: "/camera/aligned_depth_to_color/image_raw"
+    use_compressed: false
+  saliency:
+    peak: "/attn/saliency_peak"
+    map: "/attn/saliency_map/compressed"
+  face: "/faceDetection/data"
+  audio: "/audio/azimuth_rad"
+  camera_info: "/camera/color/camera_info"
+  target_angles: "/attn/target_angles"
+  joint_state: "/head_cmd/joint_states"
+  joint_angles: "/joint_angles"
+  trajectory: "/head_controller/joint_trajectory"

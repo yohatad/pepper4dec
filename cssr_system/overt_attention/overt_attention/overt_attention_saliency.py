@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """
 Saliency Node - Computes bottom-up visual attention using Boolean Map Saliency (BMS)
-Publishes peaks as /attn/saliency_peak
 """
 
 import threading
 import cv2
 import numpy as np
+import yaml
+from pathlib import Path
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from sensor_msgs.msg import CompressedImage, Image
 from std_msgs.msg import Float32MultiArray
+from ament_index_python.packages import get_package_share_directory
 
 
 def get_image_topic(base_topic: str, use_compressed: bool, is_depth: bool = False) -> str:
@@ -30,6 +32,16 @@ def get_image_qos() -> QoSProfile:
         history=HistoryPolicy.KEEP_LAST,
         depth=1
     )
+
+
+def load_topics_config(package_name: str, relative_path: str) -> dict:
+    """Load topics configuration from YAML file using ROS2 package path."""
+    package_share = get_package_share_directory(package_name)
+    config_path = Path(package_share) / relative_path
+    
+    with open(config_path, 'r') as f:
+        return yaml.safe_load(f)
+
 
 class BooleanMapSaliency:
     """
@@ -109,8 +121,16 @@ class SaliencyNode(Node):
     def __init__(self):
         super().__init__('saliency_node')
         
-        self._declare_parameters()
-        self._load_parameters()
+        # Load topics configuration from YAML file using ROS2 package path
+        try:
+            self.topics_config = load_topics_config('overt_attention', 'data/pepper_topics.yaml')
+            self.get_logger().info("Loaded topics configuration from overt_attention package")
+        except Exception as e:
+            self.get_logger().error(f"Failed to load topics configuration: {e}")
+            raise
+        
+        self.setup_parameters()
+        self.load_parameters()
         
         # Initialize dimensions
         self.W = 640
@@ -128,52 +148,57 @@ class SaliencyNode(Node):
         
         qos = get_image_qos()
         
-        # Publishers
-        self.pub_peak = self.create_publisher(Float32MultiArray, '/attn/saliency_peak', 10)
+        # Publishers (using topics from YAML)
+        self.pub_peak = self.create_publisher(
+            Float32MultiArray, 
+            self.topics_config['topics']['saliency']['peak'], 
+            10
+        )
         
         self.pub_map = None
         if self.publish_map_flag:
             self.pub_map = self.create_publisher(
-                CompressedImage, '/attn/saliency_map/compressed', 1)
+                CompressedImage, 
+                self.topics_config['topics']['saliency']['map'], 
+                1
+            )
         
-        # Image subscriber
+        # Image subscriber (using topics from YAML)
         image_topic = get_image_topic(self.image_topic_base, self.use_compressed, is_depth=False)
         if self.use_compressed:
             self.sub = self.create_subscription(
-                CompressedImage, image_topic, self._on_image_compressed, qos)
+                CompressedImage, image_topic, self.on_image_compressed, qos)
         else:
             self.sub = self.create_subscription(
-                Image, image_topic, self._on_image_raw, qos)
+                Image, image_topic, self.on_image_raw, qos)
         
         self.get_logger().info(f"Subscribing to image: {image_topic}")
         
-        # Depth subscriber
+        # Depth subscriber (using topics from YAML)
         if self.use_depth_weighting:
             depth_topic = get_image_topic(self.depth_topic_base, self.use_compressed, is_depth=True)
             if self.use_compressed:
                 self.sub_depth = self.create_subscription(
-                    CompressedImage, depth_topic, self._on_depth_compressed, qos)
+                    CompressedImage, depth_topic, self.on_depth_compressed, qos)
             else:
                 self.sub_depth = self.create_subscription(
-                    Image, depth_topic, self._on_depth_raw, qos)
+                    Image, depth_topic, self.on_depth_raw, qos)
             self.get_logger().info(f"Subscribing to depth: {depth_topic}")
         
         self.bms = BooleanMapSaliency()
         
         # Processing timer
         timer_period = 1.0 / self.process_hz
-        self.create_timer(timer_period, self._timer_callback)
+        self.create_timer(timer_period, self.timer_callback)
         
         self.get_logger().info(
             f"Saliency node ready @ {self.process_hz} Hz "
             f"(depth_weighting={'ON' if self.use_depth_weighting else 'OFF'})"
         )
 
-    def _declare_parameters(self):
+    def setup_parameters(self):
         """Declare all ROS parameters."""
         self.declare_parameter('use_compressed', True)
-        self.declare_parameter('image_topic_base', '/camera/color/image_raw')
-        self.declare_parameter('depth_topic_base', '/camera/depth/image_rect_raw')
         self.declare_parameter('use_depth_weighting', True)
         self.declare_parameter('depth_min_m', 0.3)
         self.declare_parameter('depth_max_m', 10.0)
@@ -187,11 +212,16 @@ class SaliencyNode(Node):
         self.declare_parameter('peak_min_distance_px', 50)
         self.declare_parameter('process_hz', 1.0)
 
-    def _load_parameters(self):
-        """Load parameters into instance variables."""
+    def load_parameters(self):
+        """Load parameters from ROS parameters and topics from YAML config."""
+        # Load compression setting from ROS parameters
         self.use_compressed = self.get_parameter('use_compressed').value
-        self.image_topic_base = self.get_parameter('image_topic_base').value
-        self.depth_topic_base = self.get_parameter('depth_topic_base').value
+        
+        # Load topic base paths from YAML config
+        self.image_topic_base = self.topics_config['topics']['image']['base']
+        self.depth_topic_base = self.topics_config['topics']['depth']['base']
+        
+        # Load all other parameters from ROS
         self.use_depth_weighting = self.get_parameter('use_depth_weighting').value
         self.depth_min_m = self.get_parameter('depth_min_m').value
         self.depth_max_m = self.get_parameter('depth_max_m').value
@@ -207,7 +237,7 @@ class SaliencyNode(Node):
 
     # ============ Image Callbacks (just cache frames) ============
     
-    def _on_image_raw(self, msg: Image):
+    def on_image_raw(self, msg: Image):
         """Handle raw Image messages."""
         if msg.encoding.lower() in ('bgr8', 'rgb8'):
             bgr = np.frombuffer(msg.data, np.uint8).reshape((msg.height, msg.width, 3))
@@ -218,7 +248,7 @@ class SaliencyNode(Node):
                 self._latest_stamp = msg.header.stamp
                 self._latest_size = (msg.width, msg.height)
 
-    def _on_image_compressed(self, msg: CompressedImage):
+    def on_image_compressed(self, msg: CompressedImage):
         """Handle CompressedImage messages."""
         np_arr = np.frombuffer(msg.data, np.uint8)
         bgr = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
@@ -229,7 +259,7 @@ class SaliencyNode(Node):
                 self._latest_stamp = msg.header.stamp
                 self._latest_size = (W, H)
 
-    def _on_depth_raw(self, msg: Image):
+    def on_depth_raw(self, msg: Image):
         """Handle raw depth messages."""
         if msg.encoding.lower() in ('16uc1', 'mono16'):
             depth = np.frombuffer(msg.data, np.uint16).reshape((msg.height, msg.width))
@@ -238,9 +268,9 @@ class SaliencyNode(Node):
             depth_m = np.frombuffer(msg.data, np.float32).reshape((msg.height, msg.width))
         else:
             return
-        self._cache_depth(depth_m)
+        self.cache_depth(depth_m)
 
-    def _on_depth_compressed(self, msg: CompressedImage):
+    def on_depth_compressed(self, msg: CompressedImage):
         """Handle compressedDepth messages."""
         if len(msg.data) <= 12:
             return
@@ -249,9 +279,9 @@ class SaliencyNode(Node):
         depth = cv2.imdecode(np.frombuffer(msg.data[12:], np.uint8), cv2.IMREAD_UNCHANGED)
         if depth is not None:
             depth_m = depth.astype(np.float32) / 1000.0
-            self._cache_depth(depth_m)
+            self.cache_depth(depth_m)
 
-    def _cache_depth(self, depth_m: np.ndarray):
+    def cache_depth(self, depth_m: np.ndarray):
         """Downsample and cache depth."""
         depth_small = cv2.resize(
             depth_m, (self.down_w, self.down_h), 
@@ -261,7 +291,7 @@ class SaliencyNode(Node):
 
     # ============ Timer Callback ============
     
-    def _timer_callback(self):
+    def timer_callback(self):
         """Process latest frame at fixed rate."""
         # Grab latest frame
         with self._frame_lock:
@@ -271,11 +301,11 @@ class SaliencyNode(Node):
             stamp = self._latest_stamp
             full_size = self._latest_size
         
-        self._process_frame(bgr, full_size, stamp)
+        self.process_frame(bgr, full_size, stamp)
 
     # ============ Processing ============
     
-    def _compute_depth_weight(self) -> np.ndarray:
+    def compute_depth_weight(self) -> np.ndarray:
         """Compute depth-based weighting (closer = higher weight)."""
         with self._depth_lock:
             if self._depth_small is None:
@@ -296,7 +326,7 @@ class SaliencyNode(Node):
         
         return weight.astype(np.float32)
 
-    def _find_peaks(self, S: np.ndarray) -> list:
+    def find_peaks(self, S: np.ndarray) -> list:
         """Find top N spatially separated peaks."""
         peaks = []
         S_work = S.copy()
@@ -338,7 +368,7 @@ class SaliencyNode(Node):
         
         return peaks
 
-    def _process_frame(self, bgr: np.ndarray, full_size: tuple, stamp):
+    def process_frame(self, bgr: np.ndarray, full_size: tuple, stamp):
         """Main processing pipeline."""
         self.W, self.H = full_size
         
@@ -350,7 +380,7 @@ class SaliencyNode(Node):
         
         # Apply depth weighting
         if self.use_depth_weighting:
-            S = S * self._compute_depth_weight()
+            S = S * self.compute_depth_weight()
         
         # Smooth and normalize
         S = cv2.GaussianBlur(S, (5, 5), 0)
@@ -361,7 +391,7 @@ class SaliencyNode(Node):
             S = np.zeros_like(S)
         
         # Find peaks
-        peaks = self._find_peaks(S)
+        peaks = self.find_peaks(S)
         
         # Publish peaks (u, v, score) - 3 values per peak
         msg = Float32MultiArray()
@@ -372,9 +402,9 @@ class SaliencyNode(Node):
         
         # Visualization
         if self.pub_map is not None:
-            self._publish_visualization(bgr, S, peaks, stamp)
+            self.publish_visualization(bgr, S, peaks, stamp)
 
-    def _publish_visualization(self, bgr, S, peaks, stamp):
+    def publish_visualization(self, bgr, S, peaks, stamp):
         """Publish saliency visualization."""
         # Resize saliency to full resolution
         vis = cv2.resize((S * 255).astype(np.uint8), (self.W, self.H), interpolation=cv2.INTER_LINEAR)
@@ -396,6 +426,7 @@ class SaliencyNode(Node):
         out.header.stamp = stamp
         out.data = cv2.imencode('.png', vis_color)[1].tobytes()
         self.pub_map.publish(out)
+
 
 def main(args=None):
     rclpy.init(args=args)

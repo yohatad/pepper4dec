@@ -10,30 +10,26 @@
 # ===========================================
 saliency_node:
   ros__parameters:
-    image_topic_base: "/camera/color/image_raw"  # Adds /compressed if use_compressed: true
     publish_map: true
     down_w: 160
     down_h: 120
-    alpha_static: 0.3
-    beta_motion: 0.6
-    gamma_center: 0.1
-    min_peak: 0.5
-    flow_method: "farneback"  # or "dis"
     
-    # Motion gating parameters
-    head_motion_threshold: 0.08
-    skip_during_motion: true
+    # Saliency computation parameters
+    use_depth_weighting: true
+    depth_min_m: 0.3
+    depth_max_m: 10.0
+    depth_weight_min: 0.2
+    min_peak: 0.5
     
     # Visualization parameters
     overlay_alpha: 0.4
-    visualize_components: true
     
     # Multi-peak parameters
     num_peaks: 5
     peak_min_distance_px: 100
     
-    # Motion focus threshold
-    motion_focus_threshold: 0.3
+    # Processing rate
+    process_hz: 1.0
 
 # ===========================================
 # Laptop unified attention node params
@@ -41,20 +37,7 @@ saliency_node:
 unified_attention_node:
   ros__parameters:
     # Depth image configuration
-    depth_image_topic: "/camera/aligned_depth_to_color/image_raw"  # Adds /compressedDepth if use_compressed: true
     depth_scale: 0.001  # Scale to convert depth values to meters (0.001 for mm, 1.0 for meters)
-    
-    # Input topics
-    face_topic: "/faceDetection/data"
-    saliency_topic: "/attn/saliency_peak"
-    audio_topic: "/audio/azimuth_rad"
-    camera_info_topic: "/camera/color/camera_info"
-    
-    # Output configuration
-    command_mode: "joint_state"  # or "trajectory"
-    joint_names: ["HeadYaw", "HeadPitch"]
-    joint_state_topic: "/head_cmd/joint_states"
-    trajectory_topic: "/head_controller/joint_trajectory"
     
     # Face scoring
     bias_face: 2.0
@@ -93,6 +76,10 @@ unified_attention_node:
     # Saliency dwell
     saliency_dwell_time: 2.5
     
+    # Output configuration
+    command_mode: "joint_state"  # or "trajectory"
+    joint_names: ["HeadYaw", "HeadPitch"]
+    
     # Idle behavior
     home_yaw: 0.0
     home_pitch: -0.05
@@ -114,11 +101,6 @@ unified_attention_node:
 # ===========================================
 attention_visualization:
   ros__parameters:
-    image_topic_base: "/camera/color/image_raw"  # Adds /compressed if use_compressed: true
-    face_topic: "/faceDetection/data"
-    saliency_topic: "/attn/saliency_peak"
-    target_topic: "/attn/target_angles"
-    camera_info_topic: "/camera/color/camera_info"
     publish_overlay: true
     publish_markers: true
     show_metrics: true
