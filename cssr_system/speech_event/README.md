@@ -1,127 +1,197 @@
 <div align="center">
-<h1> Speech Recognition and Localization </h1>
+<h1>Speech Event Recognition and Localization</h1>
 </div>
 
 <div align="center">
   <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:50%; height:auto;">
 </div>
 
-The **Sound Detection and Localization** package is a ROS package designed to detect conspicuous sounds, specifically human voices, and determine their direction of arrival in real-time by processing audio signals from the robot's microphones. The package calculates the azimuth angle of arrival, representing the sound's direction on the horizontal plane relative to the robot's Cartesian head frame. It publishes this angle to the **/soundDetection/direction** topic, allowing the robot to direct its gaze toward the detected sound source. Additionally, the captured audio signal is published to the **/soundDetection/signal** topic, from onset to offset of the detected sound. In verbose mode, the module provides diagnostic output to the terminal for debugging. This package enables the robot to localize and respond to human voices, filtering out ambient noise and reverberation to maintain precise and responsive auditory localization in real-time.
+The **Speech Event Recognition and Localization** package is a ROS2 node that provides real‑time speech recognition using Whisper ASR, voice activity detection with Silero VAD, and optional sound‑source localization. It processes the robot's microphone audio (48 kHz), detects speech segments, transcribes them with a low‑latency Whisper model, and publishes the recognized text. The module can also estimate the direction‑of‑arrival of a sound using beamforming on a 4‑microphone array.
 
 # 📄 Documentation
-The main documentation for this deliverable is found in [D4.2.3 Sound Detection and Localization](https://cssr4africa.github.io/deliverables/CSSR4Africa_Deliverable_D4.2.3.pdf) that provides more details.
+The main documentation for this deliverable is found in the CSSR4Africa project deliverables. For technical details about the audio processing pipeline, refer to the source code and inline comments.
 
 # 🛠️ Installation 
 
 Install the required software components to instantiate and set up the development environment for controlling the Pepper robot. Use the [CSSR4Africa Software Installation Manual](https://cssr4africa.github.io/deliverables/CSSR4Africa_Deliverable_D3.3.pdf).
 
-## Installation on Ubuntu (x86-based Systems)
+## Prerequisites
+- Ubuntu 22.04
+- ROS2 Humble
+- Python 3.8+
+- CUDA-capable GPU (optional but recommended for Whisper acceleration)
 
-1. Prerequisites  
-Make sure you are running Ubuntu 20.04. You'll need to set up a Python virtual environment for the sound detection module.
+## Python Environment Setup
 
-2. Install Python Virtual Environment
 ```sh
 # Update system packages
 sudo apt update && sudo apt upgrade -y
 
 # Install Python virtual environment tools
-sudo apt install python3.8-venv -y
+sudo apt install python3.8-venv python3-pip -y
 
 # Create a virtual environment
 cd $HOME/workspace/pepper_rob_ws/src/cssr4africa_virtual_envs/
-python3.8 -m venv cssr4africa_sound_detection_env
+python3.8 -m venv cssr4africa_speech_event_env
 
 # Activate the virtual environment
-source cssr4africa_sound_detection_env/bin/activate
+source cssr4africa_speech_event_env/bin/activate
 
-# Upgrade pip in the virtual environment
+# Upgrade pip
 pip install --upgrade pip
 
-# Install required packages
-pip install -r ~/workspace/pepper_rob_ws/src/cssr4africa/cssr_system/sound_detection/sound_detection_requirements.txt
+# Install required Python packages
+pip install -r ~/workspace/pepper_rob_ws/src/cssr4africa/cssr_system/speech_event/speech_event_requirements.txt
+
+# Additional Whisper dependencies (if not already installed)
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118  # CUDA 11.8
+pip install faster-whisper
+```
+
+## Building the ROS2 Package
+
+```sh
+cd $HOME/workspace/pepper_rob_ws
+source /opt/ros/humble/setup.bash  # or your ROS2 distribution
+colcon build --packages-select speech_event
+source install/setup.bash
 ```
 
 # 🔧 Configuration Parameters  
-The following table provides the key-value pairs used in the configuration file:
+The node is configured via a YAML file (`config/speech_event_configuration.yaml`). Key parameters are:
 
 | Parameter                   | Description                                                     | Range/Values               | Default Value |
 |-----------------------------|-----------------------------------------------------------------|----------------------------|---------------|
-| `intensityThreshold`        | Minimum intensity threshold for audio processing                | Positive float             | `0.0039`      |
-| `distanceBetweenEars`       | Distance between microphones in meters                          | Positive float             | `0.07`        |
-| `localizationBufferSize`    | Size of audio buffer for localization                           | Positive integer           | `8192`        |
-| `vadAggressiveness`         | Voice Activity Detection aggressiveness level                   | `[0-3]`                    | `1`           |
-| `contextDuration`           | Duration (in seconds) of context window for processing          | Positive float (seconds)   | `1.0`         |
-| `useNoiseReduction`         | Enable noise reduction                                          | `True`, `False`            | `True`        |
-| `stationary`                | Assume noise is stationary during noise reduction               | `true`, `false`            | `true`        |
-| `propDecrease`              | Proportion of noise reduction applied to signal                 | `[0.0 - 1.0]`              | `0.9`         |
-| `audioTimeout`              | Timeout (seconds) for shutting down the node after audio ends   | Positive float (seconds)   | `2.0`         |
-| `verboseMode`               | Enable detailed logging and diagnostic information              | `True`, `False`            | `True`        |
+| `sample_rate`               | Target sample rate for VAD/ASR (Hz)                            | 16000, 22050, 44100        | `16000`       |
+| `input_sample_rate`         | Pepper's native microphone rate (Hz)                           | 48000                      | `48000`       |
+| `device`                    | PyTorch device for Whisper                                     | `"cuda"`, `"cpu"`          | `"cuda"`      |
+| `compute_type`              | Whisper computation precision                                  | `"float16"`, `"float32"`   | `"float16"`   |
+| `language`                  | Language code for ASR                                          | `"en"`, `"fr"`, etc.       | `"en"`        |
+| `whisper_model_id`          | Hugging Face model ID                                          | string                     | `"deepdml/faster-whisper-large-v3-turbo-ct2"` |
+| `speech_threshold`          | VAD probability above which speech starts                      | 0.0–1.0                    | `0.7`         |
+| `neg_threshold`             | VAD probability below which silence is counted                 | 0.0–1.0                    | `0.35`        |
+| `min_silence_duration_ms`   | Minimum silence duration to end a segment (ms)                 | positive integer           | `300`         |
+| `max_speech_duration_s`     | Maximum allowed speech duration (seconds)                      | positive float             | `10.0`        |
+| `min_speech_duration`       | Minimum speech duration to keep (seconds)                      | positive float             | `0.3`         |
+| `pre_speech_buffer_ms`      | Audio to prepend before speech onset (ms)                      | positive integer           | `200`         |
+| `intensity_threshold`       | RMS intensity gate to ignore quiet audio                       | positive float             | `0.001`       |
+| `microphone_topic`          | ROS topic for raw audio                                        | string                     | `"/audio"`    |
+| `useBeamforming`            | Enable beamforming for localization                            | `true`, `false`            | `true`        |
+| `whisperModelSize`          | Whisper model size (legacy)                                    | `"tiny"`, `"base"`, etc.   | `"medium"`    |
+| `asrBufferDuration`         | Duration of ASR buffer (seconds)                               | positive float             | `3.0`         |
 
 > **Note:**  
-> Enabling **`verboseMode`** (`True`) will provide detailed diagnostic output to the terminal.
+> The node uses a two‑threshold VAD system: speech starts when probability ≥ `speech_threshold`, and silence is counted when probability < `neg_threshold`. The segment ends after `min_silence_duration_ms` of continuous silence.
 
-# 🚀 Running the node
-**Run the `soundDetection` from the `cssr_system` package:**
+# 🚀 Running the Node
+
+**Run the `speech_event` node from the `speech_event` package:**
 
 Source the workspace in the first terminal:
 ```bash
-cd $HOME/workspace/pepper_rob_ws && source devel/setup.bash
+cd $HOME/workspace/pepper_rob_ws && source install/setup.bash
 ```
 
-Follow below steps, run in different terminals.
-
-1️⃣ Launch the robot:
+## 1️⃣ Launch the robot (if not already running):
 ```bash
-roslaunch cssr_system sound_detection_launch_robot.launch robot_ip:=<robot_ip> roscore_ip:=<roscore_ip> network_interface:=<network_interface>
+ros2 launch cssr_system pepper_bringup.launch.py robot_ip:=<robot_ip>
 ```
 
-2️⃣ Run the Sound Detection and Localization:
+## 2️⃣ Run the Speech Event Recognition node:
 
 In a new terminal, activate the Python environment:
 ```bash
 # Activate the python environment
-source $HOME/workspace/pepper_rob_ws/src/cssr4africa_virtual_envs/cssr4africa_sound_detection_env/bin/activate
+source $HOME/workspace/pepper_rob_ws/src/cssr4africa_virtual_envs/cssr4africa_speech_event_env/bin/activate
 ```
 
 ```bash
-# Command to make application executable
-chmod +x ~/workspace/pepper_rob_ws/src/cssr4africa/cssr_system/sound_detection/src/sound_detection_application.py
+# Run the main speech_event node
+ros2 run speech_event speech_event
 ```
 
+## 3️⃣ Optional: Run the recorder or localization nodes:
 ```bash
-# Run the sound_detection node
-rosrun cssr_system sound_detection_application.py
+# Audio recorder (for debugging)
+ros2 run speech_event speech_event_recorder
+
+# Sound‑source localization (requires 4‑mic array)
+ros2 run speech_event speech_event_localization
 ```
 
-# 🖥️ Output
-The node publishes two types of data:
+# 🖥️ Output Topics and Actions
+The node publishes the following data:
 
-1. **Processed Audio Signal**  
-   Topic: `/soundDetection/signal`  
-   Type: `std_msgs/Float32MultiArray`  
-   Description: Contains the processed audio signal with noise reduction and filtering applied.
+| Topic/Action                    | Type                              | Description                                                                 |
+|---------------------------------|-----------------------------------|-----------------------------------------------------------------------------|
+| `/speech_event/vad_speech_prob` | `std_msgs/Float32`                | Real‑time VAD probability (0–1) for each 512‑sample chunk.                 |
+| `/speech_event/text`            | `std_msgs/String`                 | Recognized speech text (published after each segment ends).                |
+| `/speech_recognition_action`    | `cssr_interfaces/action/SpeechRecognition` | ROS2 action server for synchronous transcription requests.                |
 
-2. **Sound Direction Angle**  
-   Topic: `/soundDetection/direction`  
-   Type: `std_msgs/Float32`  
-   Description: Contains the azimuth angle (in degrees) of the detected sound source relative to the robot's head frame.
-
-You can verify the publication status using the following commands:
+You can monitor the output with:
 ```bash
-rostopic echo /soundDetection/signal
-rostopic echo /soundDetection/direction
+# Listen to VAD probabilities
+ros2 topic echo /speech_event/vad_speech_prob
+
+# Listen to transcribed text
+ros2 topic echo /speech_event/text
 ```
+
+# 🎯 Action Server Interface
+The node provides an action server `/speech_recognition_action` for synchronous speech recognition. A client can send a goal with a `wait` duration (seconds) and receive the transcribed text as a result.
+
+Example action client call (Python):
+```python
+import rclpy
+from rclpy.action import ActionClient
+from cssr_interfaces.action import SpeechRecognition
+
+# Create client
+client = ActionClient(node, SpeechRecognition, '/speech_recognition_action')
+goal_msg = SpeechRecognition.Goal()
+goal_msg.wait = 5.0  # listen for up to 5 seconds
+future = client.send_goal_async(goal_msg)
+```
+
+# 📁 Package Structure
+```
+speech_event/
+├── config/
+│   └── speech_event_configuration.yaml    # Configuration parameters
+├── data/
+│   └── pepper_topics.yaml                 # Topic mappings
+├── models/
+│   └── silero_vad.onnx                    Pre‑trained Silero VAD model
+├── speech_event/
+│   ├── __init__.py
+│   ├── speech_event_application.py        # Main node entry point
+│   ├── speech_event_implementation.py     # Core VAD+ASR implementation
+│   ├── speech_event_localization.py       # Beamforming localization
+│   └── speech_event_recorder.py           # Audio recorder utility
+├── package.xml
+├── setup.py
+├── setup.cfg
+└── speech_event_requirements.txt
+```
+
+# 🔍 Debugging Tips
+- Enable `verboseMode: true` in the configuration for detailed terminal output.
+- Check that the audio topic (`/audio`) is publishing data: `ros2 topic echo /audio --once`
+- Verify the VAD probability stream: `ros2 topic echo /speech_event/vad_speech_prob`
+- If Whisper is slow, ensure CUDA is available: `python3 -c "import torch; print(torch.cuda.is_available())"`
+- For localization, ensure the robot has a 4‑microphone array and that `useBeamforming` is `true`.
+
 # 💡 Support
 
 For issues or questions:
-- Create an issue on GitHub
-- Contact: <a href="mailto:dvernon@andrew.cmu.edu">dvernon@andrew.cmu.edu</a>, <a href="mailto:yohanneh@andrew.cmu.edu">yohanneh@andrew.cmu.edu</a><br>
+- Create an issue on the CSSR4Africa GitHub repository
+- Contact: <a href="mailto:yohanneh@andrew.cmu.edu">yohanneh@andrew.cmu.edu</a><br>
 - Visit: <a href="http://www.cssr4africa.org">www.cssr4africa.org</a>
 
-# 📜License
+# 📜 License
 Copyright (C) 2023 CSSR4Africa Consortium  
 Funded by African Engineering and Technology Network (Afretec)  
 Inclusive Digital Transformation Research Grant Programme
 
-2025-04-27
+2025-11-08
+

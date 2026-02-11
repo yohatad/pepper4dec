@@ -247,8 +247,8 @@ class SpeechRecognitionNode(Node):
             self._init_action_server()
 
         # Publishers
-        self.vad_prob_pub = self.create_publisher(Float32, "/vad/speech_prob", 10)
-        self.asr_pub = self.create_publisher(String, "/asr/text", 10)
+        self.vad_prob_pub = self.create_publisher(Float32, "/speech_event/vad_speech_prob", 10)
+        self.asr_pub = self.create_publisher(String, "/speech_event/text", 10)
         
         # Subscriber
         self.audio_sub = self.create_subscription(AudioBuffer, self.microphone_topic, self.audio_callback, 10)
