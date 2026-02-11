@@ -6,6 +6,8 @@ Shows faces with tracking IDs, engagement status, depth, saliency peaks, and cur
 
 import cv2
 import numpy as np
+import yaml
+from pathlib import Path
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
@@ -14,6 +16,7 @@ from geometry_msgs.msg import Vector3
 from std_msgs.msg import Float32MultiArray
 from cssr_interfaces.msg import FaceDetection
 from cv_bridge import CvBridge
+from ament_index_python.packages import get_package_share_directory
 
 
 def get_image_qos() -> QoSProfile:
@@ -24,6 +27,15 @@ def get_image_qos() -> QoSProfile:
         history=HistoryPolicy.KEEP_LAST,
         depth=1
     )
+
+
+def load_topics_config(package_name: str, relative_path: str) -> dict:
+    """Load topics configuration from YAML file using ROS2 package path."""
+    package_share = get_package_share_directory(package_name)
+    config_path = Path(package_share) / relative_path
+    
+    with open(config_path, 'r') as f:
+        return yaml.safe_load(f)
 
 
 def generate_color_from_id(face_id: str) -> tuple:
@@ -48,17 +60,21 @@ def generate_color_from_id(face_id: str) -> tuple:
     return (b, g, r)  # BGR for OpenCV
 
 
-class SimpleVisualization(Node):
+class VisualizationNode(Node):
     def __init__(self):
-        super().__init__('simple_visualization')
+        super().__init__('visualization_node')
+        
+        # Load topics configuration from YAML file using ROS2 package path
+        try:
+            self.topics_config = load_topics_config('overt_attention', 'data/pepper_topics.yaml')
+            self.get_logger().info("Loaded topics configuration from overt_attention package")
+        except Exception as e:
+            self.get_logger().error(f"Failed to load topics configuration: {e}")
+            raise
         
         # Parameters
         self.declare_parameter('use_compressed', True)
         self.declare_parameter('image_topic_base', '/camera/color/image_raw_custom')
-        self.declare_parameter('face_topic', '/faceDetection/data')
-        self.declare_parameter('saliency_topic', '/attn/saliency_peak')
-        self.declare_parameter('target_topic', '/attn/target_angles')
-        self.declare_parameter('camera_info_topic', '/camera/color/camera_info')
         self.declare_parameter('show_face_ids', True)
         self.declare_parameter('show_depth', True)
         self.declare_parameter('show_engagement', True)
@@ -66,13 +82,15 @@ class SimpleVisualization(Node):
         # Load parameters
         self.use_compressed = self.get_parameter('use_compressed').value
         image_base = self.get_parameter('image_topic_base').value
-        self.face_topic = self.get_parameter('face_topic').value
-        self.saliency_topic = self.get_parameter('saliency_topic').value
-        self.target_topic = self.get_parameter('target_topic').value
-        self.camera_info_topic = self.get_parameter('camera_info_topic').value
         self.show_face_ids = self.get_parameter('show_face_ids').value
         self.show_depth = self.get_parameter('show_depth').value
         self.show_engagement = self.get_parameter('show_engagement').value
+        
+        # Load topics from YAML config
+        self.face_topic = self.topics_config['topics']['face']
+        self.saliency_topic = self.topics_config['topics']['saliency']['peak']
+        self.target_topic = self.topics_config['topics']['target_angles']
+        self.camera_info_topic = self.topics_config['topics']['camera_info']
         
         # Construct image topic
         if self.use_compressed:
@@ -189,7 +207,7 @@ class SimpleVisualization(Node):
         }
         
         # Try to determine which face is being targeted (if any)
-        self._update_target_face()
+        self.update_target_face()
         
         if self.target_count == 1:
             self.get_logger().info(
@@ -197,7 +215,7 @@ class SimpleVisualization(Node):
                 f"pitch={np.degrees(msg.y):.1f}°"
             )
 
-    def _update_target_face(self):
+    def update_target_face(self):
         """Determine which face (if any) is currently being targeted."""
         if not self.current_target or not self.faces or self.fx is None:
             self.target_face_id = None
@@ -263,19 +281,19 @@ class SimpleVisualization(Node):
         
         # Draw saliency peaks first (so they're under faces)
         for i, peak in enumerate(self.saliency_peaks):
-            self._draw_saliency_peak(vis, peak, i)
+            self.draw_saliency_peak(vis, peak, i)
         
         # Draw faces (Priority 1)
         for face in self.faces:
             is_targeted = (face['face_id'] == self.target_face_id)
-            self._draw_face(vis, face, is_targeted)
+            self.draw_face(vis, face, is_targeted)
         
         # Draw current target
         if self.current_target and self.fx is not None:
-            self._draw_target(vis, self.current_target, W, H)
+            self.draw_target(vis, self.current_target, W, H)
         
         # Draw info overlay
-        self._draw_info(vis)
+        self.draw_info(vis)
         
         # Publish as RAW Image
         try:
@@ -291,7 +309,7 @@ class SimpleVisualization(Node):
         except Exception as e:
             self.get_logger().error(f"Error publishing visualization: {e}")
 
-    def _draw_face(self, vis, face, is_targeted=False):
+    def draw_face(self, vis, face, is_targeted=False):
         """Draw face bounding box with tracking ID, engagement, and depth."""
         u, v = face['u'], face['v']
         w2, h2 = face['w'] // 2, face['h'] // 2
@@ -363,7 +381,7 @@ class SimpleVisualization(Node):
             color, 2, cv2.LINE_AA
         )
 
-    def _draw_saliency_peak(self, vis, peak, rank):
+    def draw_saliency_peak(self, vis, peak, rank):
         """Draw a saliency peak."""
         u, v = peak['u'], peak['v']
         score = peak['score']
@@ -390,7 +408,7 @@ class SimpleVisualization(Node):
             color, 1, cv2.LINE_AA
         )
 
-    def _draw_target(self, vis, target, W, H):
+    def draw_target(self, vis, target, W, H):
         """Draw current attention target."""
         yaw, pitch = target['yaw'], target['pitch']
         score = target.get('score', 0.0)
@@ -437,7 +455,7 @@ class SimpleVisualization(Node):
             color, 2, cv2.LINE_AA
         )
 
-    def _draw_info(self, vis):
+    def draw_info(self, vis):
         """Draw info overlay."""
         H, W = vis.shape[:2]
         
@@ -507,9 +525,10 @@ class SimpleVisualization(Node):
             )
             y += 18
 
+
 def main(args=None):
     rclpy.init(args=args)
-    node = SimpleVisualization()
+    node = VisualizationNode()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

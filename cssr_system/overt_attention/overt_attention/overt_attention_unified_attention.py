@@ -45,7 +45,7 @@ def load_topics_config(package_name: str, relative_path: str) -> dict:
     with open(config_path, 'r') as f:
         return yaml.safe_load(f)
 
-class SimpleAttention(Node):
+class OvertAttention(Node):
     def __init__(self):
         super().__init__("simple_attention")
         
@@ -547,7 +547,7 @@ class SimpleAttention(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = SimpleAttention()
+    node = OvertAttention()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
