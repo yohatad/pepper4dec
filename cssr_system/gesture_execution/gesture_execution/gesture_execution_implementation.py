@@ -23,7 +23,6 @@ import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionServer, GoalResponse, CancelResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
-from rclpy.executors import MultiThreadedExecutor
 from ament_index_python.packages import get_package_share_directory
 
 # ROS2 messages and services
@@ -70,7 +69,6 @@ MAX_BOW_ANGLE = 45
 MIN_NOD_ANGLE = 5
 MAX_NOD_ANGLE = 30
 
-
 @dataclass
 class JointLimits:
     """Robot joint limits and constraints"""
@@ -86,7 +84,6 @@ class RobotPose:
     x: float = 0.0
     y: float = 0.0
     theta: float = 0.0
-
 
 class ConfigManager:
     """Handles configuration and topic loading using actual YAML format"""
@@ -137,7 +134,6 @@ class ConfigManager:
             print(f"Warning: Could not load topics {topics_path}: {e}")
         
         return topics
-
 
 class GestureDescriptorManager:
     """Manages gesture descriptor files using YAML format"""
@@ -193,7 +189,6 @@ class GestureDescriptorManager:
                 max_duration = max(max_duration, arm_times[-1])
         
         return max_duration
-
 
 class GestureExecutionSystem(Node):
     """ROS2 Action Server for gesture execution with elapsed time feedback"""
@@ -265,22 +260,12 @@ class GestureExecutionSystem(Node):
         topics = self.config_manager.topics
         
         # Subscribers
-        self.create_subscription(
-            JointState, topics["JointStates"],
-            self.joint_states_callback, 10
-        )
-        self.create_subscription(
-            Pose2D, topics["RobotPose"],
-            self.robot_pose_callback, 10
-        )
+        self.create_subscription(JointState, topics["JointStates"], self.joint_states_callback, 10)
+        self.create_subscription(Pose2D, topics["RobotPose"], self.robot_pose_callback, 10)
         
         # Publishers
-        self.joint_traj_pub = self.create_publisher(
-            JointAnglesTrajectory, '/joint_angles_trajectory', 10
-        )
-        self.marker_pub = self.create_publisher(
-            Marker, "/gesture_execution/visualization", 10
-        )
+        self.joint_traj_pub = self.create_publisher(JointAnglesTrajectory, '/joint_angles_trajectory', 10)
+        self.marker_pub = self.create_publisher(Marker, "/gesture_execution/visualization", 10)
     
     def joint_states_callback(self, msg: JointState):
         """Handle joint state updates"""
@@ -333,7 +318,7 @@ class GestureExecutionSystem(Node):
             
             # Start feedback thread
             feedback_thread = threading.Thread(
-                target=self._publish_elapsed_feedback,
+                target=self.publish_elapsed_feedback,
                 args=(goal_handle, start_time)
             )
             feedback_thread.start()
@@ -379,7 +364,7 @@ class GestureExecutionSystem(Node):
         
         return result
     
-    def _publish_elapsed_feedback(self, goal_handle, start_time: float):
+    def publish_elapsed_feedback(self, goal_handle, start_time: float):
         """Publish elapsed time at regular intervals"""
         feedback = Gesture.Feedback()
         
@@ -394,7 +379,6 @@ class GestureExecutionSystem(Node):
             time.sleep(0.1)  # 10Hz feedback rate
     
     # ==================== Gesture Execution Methods ====================
-    
     def execute_gesture(
         self,
         gesture_type: str,
@@ -409,7 +393,7 @@ class GestureExecutionSystem(Node):
         
         gesture_duration = max(MIN_GESTURE_DURATION, min(gesture_duration, MAX_GESTURE_DURATION))
         
-        if gesture_type in ["deictic", "pointing"]:
+        if gesture_type in ["deictic"]:
             return self.execute_deictic_gesture(
                 location_x, location_y, location_z, gesture_duration
             )
@@ -418,9 +402,9 @@ class GestureExecutionSystem(Node):
         elif gesture_type == "symbolic":
             self.get_logger().warning("Symbolic gestures not implemented yet")
             return False
-        elif gesture_type in ["bow", "bowing"]:
+        elif gesture_type in ["bow"]:
             return self.execute_bowing_gesture(bow_nod_angle, gesture_duration)
-        elif gesture_type in ["nod", "nodding"]:
+        elif gesture_type in ["nod"]:
             return self.execute_nodding_gesture(bow_nod_angle, gesture_duration)
         else:
             self.get_logger().warning(f"Unsupported gesture type: '{gesture_type}'")
@@ -491,7 +475,7 @@ class GestureExecutionSystem(Node):
                 return False
             
             # Check joint limits
-            if not self._check_joint_limits(pointing_arm, shoulder_pitch, shoulder_roll):
+            if not self.check_joint_limits(pointing_arm, shoulder_pitch, shoulder_roll):
                 return False
             
             # Publish visualization
@@ -512,7 +496,7 @@ class GestureExecutionSystem(Node):
             self.get_logger().error(traceback.format_exc())
             return False
     
-    def _check_joint_limits(
+    def check_joint_limits(
         self,
         arm: int,
         shoulder_pitch: float,
