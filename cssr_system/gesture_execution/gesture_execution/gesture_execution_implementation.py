@@ -478,15 +478,15 @@ class GestureExecutionSystem(Node):
             if not self.check_joint_limits(pointing_arm, shoulder_pitch, shoulder_roll):
                 return False
             
-            # Publish visualization markers before executing the gesture
-            self._publish_deictic_visualization(
+            # Publish visualization
+            self.publish_deictic_visualization(
                 pointing_x, pointing_y, pointing_z,
                 shoulder_x, shoulder_y, shoulder_z,
                 pointing_arm
             )
             
-            # Execute pointing motion with head tracking
-            success = self.execute_pointing_motion(
+            # Execute motion
+            return self.execute_pointing_motion(
                 pointing_arm, shoulder_pitch, shoulder_roll, duration,
                 pointing_x, pointing_y, pointing_z
             )
@@ -847,19 +847,18 @@ class GestureExecutionSystem(Node):
         except Exception as e:
             self.get_logger().error(f"Trajectory failed: {e}")
             self.get_logger().error(traceback.format_exc())
-
-    def _publish_deictic_visualization(self, 
-                                    target_x: float, target_y: float, target_z: float,
-                                    shoulder_x: float, shoulder_y: float, shoulder_z: float,
-                                    arm: int):
-        """
-        Publish RViz2 markers for deictic gesture visualization
-        
-        Args:
-            target_x, target_y, target_z: Target point coordinates in mm
-            shoulder_x, shoulder_y, shoulder_z: Shoulder position in mm  
-            arm: RIGHT_ARM or LEFT_ARM indicating which arm is pointing
-        """
+    
+    def publish_deictic_visualization(
+        self,
+        target_x: float,
+        target_y: float,
+        target_z: float,
+        shoulder_x: float,
+        shoulder_y: float,
+        shoulder_z: float,
+        arm: int
+    ):
+        """Publish RViz2 markers for visualization"""
         try:
             stamp = self.get_clock().now().to_msg()
             
