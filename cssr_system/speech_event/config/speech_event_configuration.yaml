@@ -1,16 +1,32 @@
-intensityThreshold: 0.0039
-distanceBetweenEars: 0.07
-localizationBufferSize: 16384
-vadAggressiveness: 1
-contextDuration: 1.0
-useNoiseReduction: true
-stationary: true
-propDecrease: 0.9
-audioTimeout: 2
-verboseMode: true
+# ROS2 Parameters for speech_recognition node
+# This file contains the actual ROS2 parameters used by speech_event_implementation.py
+#
+# Usage:
+#   ros2 run speech_event speech_event --ros-args --params-file config/speech_event_configuration.yaml
+#
+# Or in a launch file:
+#   parameters=[yaml_path]
 
-# keep your existing fields too, e.g.:
-whisperModelSize: medium
-whisperLanguage: en
-asrBufferDuration: 3.0
-useBeamforming: true
+speech_recognition:
+  ros__parameters:
+    # Audio Processing
+    sample_rate: 16000           # Target sample rate for VAD/Whisper (Hz)
+    input_sample_rate: 48000     # Robot's native microphone rate (Hz)
+    microphone_topic: "/audio"   # ROS topic for audio input
+
+    # Whisper ASR Configuration
+    device: "cuda"               # PyTorch device: "cuda" or "cpu"
+    compute_type: "float16"      # Computation precision: "float16" or "float32"
+    language: "en"               # Language code (ISO 639-1): "en", "fr", "es", etc.
+    whisper_model_id: "deepdml/faster-whisper-large-v3-turbo-ct2"  # HuggingFace model ID
+
+    # VAD (Voice Activity Detection) Parameters
+    speech_threshold: 0.7        # Probability above which speech starts (0.0-1.0)
+    neg_threshold: 0.35          # Probability below which silence is counted (0.0-1.0)
+    min_silence_duration_ms: 300 # Minimum silence duration to end segment (ms)
+    min_speech_duration: 0.3     # Minimum speech duration to keep (seconds)
+    max_speech_duration_s: 10.0  # Maximum allowed speech duration (seconds)
+    pre_speech_buffer_ms: 200    # Audio to prepend before speech onset (ms)
+
+    # Audio Gate
+    intensity_threshold: 0.001   # RMS intensity threshold to ignore quiet audio

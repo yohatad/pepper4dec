@@ -71,56 +71,63 @@ class OnnxWrapper():
 
         # Always work with 16kHz (since we resample from 48kHz)
         self.sample_rate = 16000
+        self._lock = threading.Lock()
         self.reset_states()
 
     def reset_states(self, batch_size=1):
-        self._state = torch.zeros((2, batch_size, 128)).float()
-        self._context = torch.zeros(batch_size, 64)  # context_size = 64 for 16kHz
-        self._last_batch_size = batch_size
+        with self._lock:
+            self._state = torch.zeros((2, batch_size, 128)).float()
+            self._context = torch.zeros(batch_size, 64)  # context_size = 64 for 16kHz
+            self._last_batch_size = batch_size
 
     def __call__(self, x: np.ndarray) -> float:
         """
         Process a single 512-sample chunk at 16kHz.
-        
+
         Args:
             x: np.ndarray of shape (512,) at 16kHz
-            
+
         Returns:
             float: Speech probability [0, 1]
         """
-        # Convert to torch tensor
-        if not torch.is_tensor(x):
-            x = torch.from_numpy(x).float()
-        
-        # Ensure 2D: (batch_size, samples)
-        if x.dim() == 1:
-            x = x.unsqueeze(0)
-        
-        batch_size = x.shape[0]
-        
-        # Reset states if batch size changed
-        if batch_size != self._last_batch_size:
-            self.reset_states(batch_size)
-        
-        # Prepend context (64 samples for 16kHz)
-        x_with_context = torch.cat([self._context, x], dim=1)
-        
-        # Run ONNX inference
-        ort_inputs = {
-            'input': x_with_context.numpy(),
-            'state': self._state.numpy(),
-            'sr': np.array(self.sample_rate, dtype='int64')
-        }
-        ort_outs = self.session.run(None, ort_inputs)
-        out, state = ort_outs
-        
-        # Update state and context for next call
-        self._state = torch.from_numpy(state)
-        self._context = x_with_context[:, -64:]  # Keep last 64 samples
-        self._last_batch_size = batch_size
-        
-        # Return speech probability as scalar
-        return float(out.squeeze())
+        with self._lock:
+            # Convert to torch tensor
+            if not torch.is_tensor(x):
+                x = torch.from_numpy(x).float()
+
+            # Ensure 2D: (batch_size, samples)
+            if x.dim() == 1:
+                x = x.unsqueeze(0)
+
+            batch_size = x.shape[0]
+
+            # Reset states if batch size changed
+            if batch_size != self._last_batch_size:
+                # Note: reset_states also acquires lock, but Python's threading.Lock is reentrant for same thread
+                # Actually, we need to avoid nested lock - let's call the internal reset directly
+                self._state = torch.zeros((2, batch_size, 128)).float()
+                self._context = torch.zeros(batch_size, 64)
+                self._last_batch_size = batch_size
+
+            # Prepend context (64 samples for 16kHz)
+            x_with_context = torch.cat([self._context, x], dim=1)
+
+            # Run ONNX inference
+            ort_inputs = {
+                'input': x_with_context.numpy(),
+                'state': self._state.numpy(),
+                'sr': np.array(self.sample_rate, dtype='int64')
+            }
+            ort_outs = self.session.run(None, ort_inputs)
+            out, state = ort_outs
+
+            # Update state and context for next call
+            self._state = torch.from_numpy(state)
+            self._context = x_with_context[:, -64:]  # Keep last 64 samples
+            self._last_batch_size = batch_size
+
+            # Return speech probability as scalar
+            return float(out.squeeze())
 
 
 class SpeechRecognitionNode(Node):
@@ -161,6 +168,47 @@ class SpeechRecognitionNode(Node):
         self.intensity_threshold = float(self.get_parameter("intensity_threshold").value)
         
         self.microphone_topic = self.get_parameter("microphone_topic").value
+
+        # =====================================================
+        # Validate parameters
+        # =====================================================
+        if self.sample_rate <= 0:
+            self.get_logger().error(f"Invalid sample_rate: {self.sample_rate}")
+            raise ValueError("sample_rate must be positive")
+
+        if self.input_sample_rate <= 0:
+            self.get_logger().error(f"Invalid input_sample_rate: {self.input_sample_rate}")
+            raise ValueError("input_sample_rate must be positive")
+
+        if not (0.0 <= self.speech_threshold <= 1.0):
+            self.get_logger().error(f"Invalid speech_threshold: {self.speech_threshold}")
+            raise ValueError("speech_threshold must be between 0.0 and 1.0")
+
+        if not (0.0 <= self.neg_threshold <= 1.0):
+            self.get_logger().error(f"Invalid neg_threshold: {self.neg_threshold}")
+            raise ValueError("neg_threshold must be between 0.0 and 1.0")
+
+        if self.min_silence_duration_ms < 0:
+            self.get_logger().error(f"Invalid min_silence_duration_ms: {self.min_silence_duration_ms}")
+            raise ValueError("min_silence_duration_ms must be non-negative")
+
+        if self.max_speech_duration_s <= 0:
+            self.get_logger().error(f"Invalid max_speech_duration_s: {self.max_speech_duration_s}")
+            raise ValueError("max_speech_duration_s must be positive")
+
+        if self.min_speech_duration < 0:
+            self.get_logger().error(f"Invalid min_speech_duration: {self.min_speech_duration}")
+            raise ValueError("min_speech_duration must be non-negative")
+
+        if self.pre_speech_buffer_ms < 0:
+            self.get_logger().error(f"Invalid pre_speech_buffer_ms: {self.pre_speech_buffer_ms}")
+            raise ValueError("pre_speech_buffer_ms must be non-negative")
+
+        if self.intensity_threshold < 0:
+            self.get_logger().error(f"Invalid intensity_threshold: {self.intensity_threshold}")
+            raise ValueError("intensity_threshold must be non-negative")
+
+        self.get_logger().info("All parameters validated successfully")
 
         package_path = get_package_share_directory('speech_event')
         silero_path = os.path.join(package_path, 'models', 'silero_vad.onnx')
@@ -241,6 +289,11 @@ class SpeechRecognitionNode(Node):
         self.transcription_lock = threading.Lock()
         self.is_transcribing = False
 
+        # Action server synchronization
+        self.action_server_lock = threading.Lock()
+        self.action_goal_complete = threading.Event()
+        self.transcribed_text = ""
+
         # Initialize action server
         if self.action_server:
             self.init_action_server()
@@ -289,22 +342,25 @@ class SpeechRecognitionNode(Node):
         """Handle ASR action goal."""
         self.get_logger().info("ASR Action Goal received.")
         self.action_started = True
-        self.processing_action_goal = True
-        self.max_speech_duration_s = goal_handle.request.wait
-        self.max_speech_chunks = int(self.max_speech_duration_s * self.sample_rate / self.vad_chunk_size)
 
-        # Wait until speech is collected and processed
-        while self._processing_action_goal:
-            rclpy.spin_once(self)
+        with self.action_server_lock:
+            self.processing_action_goal = True
+            self.max_speech_duration_s = goal_handle.request.wait
+            self.max_speech_chunks = int(self.max_speech_duration_s * self.sample_rate / self.vad_chunk_size)
+
+        # Wait for transcription to complete (timeout = wait duration + 5s buffer)
+        timeout = goal_handle.request.wait + 5.0
+        if not self.action_goal_complete.wait(timeout=timeout):
+            self.get_logger().warning(f"Action goal timed out waiting for transcription after {timeout}s")
 
         # Prepare result
         result = SpeechRecognition.Result()
-        transcription = self.transcribed_text if hasattr(self, 'transcribed_text') else ""
-        result.transcription = transcription
-        
+        result.transcription = self.transcribed_text
+
         self.get_logger().info("ASR Action Goal completed.")
         goal_handle.succeed()
         self.action_started = False
+        self.action_goal_complete.clear()  # Reset for next goal
         return result
 
     # =========================================================================
@@ -382,7 +438,7 @@ class SpeechRecognitionNode(Node):
         4. VAD + speech collection
         """
         # Action server guard
-        if self.action_server and not self._action_started:
+        if self.action_server and not self.action_started:
             return
         
         # Parse single-channel audio (keep at 48kHz)
@@ -467,7 +523,9 @@ class SpeechRecognitionNode(Node):
             # =====================================================
             # CHECK: Max duration cutoff
             # =====================================================
-            if self.speech_chunk_count >= self.max_speech_chunks:
+            with self.action_server_lock:
+                max_chunks = self.max_speech_chunks
+            if self.speech_chunk_count >= max_chunks:
                 self.finalize_speech_sync(speech_prob, reason="max_duration")
         
         elif self.speech_active and vad_is_silence:
@@ -479,18 +537,23 @@ class SpeechRecognitionNode(Node):
             # Check if silence duration exceeded threshold
             if self.silence_chunks >= self.min_silence_chunks:
                 self.finalize_speech_sync(speech_prob, reason="silence")
-            
+
             # Also check max duration during silence
-            elif self.speech_chunk_count >= self.max_speech_chunks:
-                self.finalize_speech_sync(speech_prob, reason="max_duration")
+            else:
+                with self.action_server_lock:
+                    max_chunks = self.max_speech_chunks
+                if self.speech_chunk_count >= max_chunks:
+                    self.finalize_speech_sync(speech_prob, reason="max_duration")
         
         elif self.speech_active:
             # In between thresholds - continue collecting, don't increment silence counter
             self.speech_buffer.append(vad_chunk.copy())
             self.speech_chunk_count += 1
-            
+
             # Check max duration
-            if self.speech_chunk_count >= self.max_speech_chunks:
+            with self.action_server_lock:
+                max_chunks = self.max_speech_chunks
+            if self.speech_chunk_count >= max_chunks:
                 self.finalize_speech_sync(speech_prob, reason="max_duration")
 
     def process_vad_chunk(self, vad_chunk: np.ndarray):
@@ -534,11 +597,13 @@ class SpeechRecognitionNode(Node):
             self.speech_buffer.append(vad_chunk.copy())
             self.silence_chunks = 0
             self.speech_chunk_count += 1
-            
+
             # =====================================================
             # CHECK: Max duration cutoff
             # =====================================================
-            if self.speech_chunk_count >= self.max_speech_chunks:
+            with self.action_server_lock:
+                max_chunks = self.max_speech_chunks
+            if self.speech_chunk_count >= max_chunks:
                 self.finalize_speech(speech_prob, reason="max_duration")
         
         elif self.speech_active and vad_is_silence:
@@ -546,22 +611,27 @@ class SpeechRecognitionNode(Node):
             self.speech_buffer.append(vad_chunk.copy())
             self.silence_chunks += 1
             self.speech_chunk_count += 1
-            
+
             # Check if silence duration exceeded threshold
             if self.silence_chunks >= self.min_silence_chunks:
                 self.finalize_speech(speech_prob, reason="silence")
-            
+
             # Also check max duration during silence
-            elif self.speech_chunk_count >= self.max_speech_chunks:
-                self.finalize_speech(speech_prob, reason="max_duration")
+            else:
+                with self.action_server_lock:
+                    max_chunks = self.max_speech_chunks
+                if self.speech_chunk_count >= max_chunks:
+                    self.finalize_speech(speech_prob, reason="max_duration")
         
         elif self.speech_active:
             # In between thresholds - continue collecting, don't increment silence counter
             self.speech_buffer.append(vad_chunk.copy())
             self.speech_chunk_count += 1
-            
+
             # Check max duration
-            if self.speech_chunk_count >= self.max_speech_chunks:
+            with self.action_server_lock:
+                max_chunks = self.max_speech_chunks
+            if self.speech_chunk_count >= max_chunks:
                 self.finalize_speech(speech_prob, reason="max_duration")
 
     def finalize_speech_sync(self, speech_prob: float, reason: str):
@@ -601,7 +671,12 @@ class SpeechRecognitionNode(Node):
         
         # Synchronous transcription for action server
         self.transcribed_text = self.transcribe_sync(speech_audio, duration_s)
-        self.processing_action_goal = False
+
+        with self.action_server_lock:
+            self.processing_action_goal = False
+
+        # Signal action goal completion
+        self.action_goal_complete.set()
 
         self.reset_speech_state()
 
@@ -645,10 +720,15 @@ class SpeechRecognitionNode(Node):
         # =====================================================
         with self.transcription_lock:
             if self.is_transcribing:
-                self.get_logger().warning("Previous transcription still running, queuing...")
+                self.get_logger().warning("Previous transcription still running, skipping...")
+                self.reset_speech_state()
+                return
             self.is_transcribing = True
-        
-        self.transcription_executor.submit(self.transcribe_async, speech_audio, duration_s)
+            try:
+                self.transcription_executor.submit(self.transcribe_async, speech_audio, duration_s)
+            except Exception as e:
+                self.get_logger().error(f"Failed to submit transcription task: {e}")
+                self.is_transcribing = False
 
         self.reset_speech_state()
 

@@ -1,7 +1,16 @@
-scipy 
-soundfile 
-webrtcvad 
-pyYaml 
-noisereduce
-matplotlib
-onnxruntime-gpu
+# Core scientific computing
+numpy==2.2.6
+scipy==1.15.3
+
+# ONNX runtime for Silero VAD
+onnxruntime==1.23.2
+onnxruntime-gpu==1.23.2  # For GPU acceleration
+
+# Speech recognition
+faster-whisper==1.2.1
+
+# Sound localization (SRP-PHAT beamforming)
+pyroomacoustics==0.7.3
+
+# NOTE: PyTorch installation is not included here due to CUDA version dependencies.
+# See README.md for PyTorch installation instructions.

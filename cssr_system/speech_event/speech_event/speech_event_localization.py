@@ -60,6 +60,68 @@ class SoundLocalizationNode(Node):
         self.smoothing_window = int(self.get_parameter("smoothing_window").value)
 
         # =====================================================
+        # Parameter Validation
+        # =====================================================
+        if self.sample_rate <= 0:
+            self.get_logger().error(f"Invalid sample_rate: {self.sample_rate}")
+            raise ValueError("sample_rate must be positive")
+
+        if self.nfft <= 0:
+            self.get_logger().error(f"Invalid nfft: {self.nfft}")
+            raise ValueError("nfft must be positive")
+
+        if self.nfft & (self.nfft - 1) != 0:
+            self.get_logger().warning(
+                f"nfft ({self.nfft}) is not a power of 2. This may reduce FFT efficiency."
+            )
+
+        if self.angular_resolution <= 0:
+            self.get_logger().error(f"Invalid angular_resolution: {self.angular_resolution}")
+            raise ValueError("angular_resolution must be positive")
+
+        if self.freq_min < 0 or self.freq_max < 0:
+            self.get_logger().error(f"Invalid frequency range: [{self.freq_min}, {self.freq_max}]")
+            raise ValueError("Frequency range values must be non-negative")
+
+        if self.freq_min >= self.freq_max:
+            self.get_logger().error(
+                f"Invalid frequency range: freq_min ({self.freq_min}) >= freq_max ({self.freq_max})"
+            )
+            raise ValueError("freq_min must be less than freq_max")
+
+        if self.freq_max > self.sample_rate / 2:
+            self.get_logger().error(
+                f"freq_max ({self.freq_max}) exceeds Nyquist frequency ({self.sample_rate / 2})"
+            )
+            raise ValueError("freq_max must be less than or equal to sample_rate/2")
+
+        if self.num_chunks <= 0:
+            self.get_logger().error(f"Invalid num_chunks_for_localization: {self.num_chunks}")
+            raise ValueError("num_chunks_for_localization must be positive")
+
+        if self.update_rate <= 0:
+            self.get_logger().error(f"Invalid update_rate_hz: {self.update_rate}")
+            raise ValueError("update_rate_hz must be positive")
+
+        if not 0.0 <= self.confidence_threshold <= 1.0:
+            self.get_logger().error(f"Invalid confidence_threshold: {self.confidence_threshold}")
+            raise ValueError("confidence_threshold must be between 0.0 and 1.0")
+
+        if self.intensity_threshold < 0:
+            self.get_logger().error(f"Invalid intensity_threshold: {self.intensity_threshold}")
+            raise ValueError("intensity_threshold must be non-negative")
+
+        if self.smoothing_window <= 0:
+            self.get_logger().error(f"Invalid smoothing_window: {self.smoothing_window}")
+            raise ValueError("smoothing_window must be positive")
+
+        if self.speed_of_sound <= 0:
+            self.get_logger().error(f"Invalid speed_of_sound: {self.speed_of_sound}")
+            raise ValueError("speed_of_sound must be positive")
+
+        self.get_logger().info("All parameters validated successfully")
+
+        # =====================================================
         # Microphone Array Geometry (Pepper, in meters)
         # =====================================================
         self.mic_positions = np.array([
