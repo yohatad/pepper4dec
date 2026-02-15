@@ -27,7 +27,6 @@ from rclpy.node import Node
 from std_msgs.msg import Bool, Float32, String
 from naoqi_bridge_msgs.msg import AudioBuffer
 from faster_whisper import WhisperModel
-from scipy import signal as scipy_signal
 from scipy.signal import resample_poly
 
 
