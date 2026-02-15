@@ -227,10 +227,10 @@ class SoundLocalizationNode(Node):
         time_ready = time_since_last >= self.min_localization_interval
         
         if chunks_accumulated and time_ready:
-            self._perform_localization()
+            self.perform_localization()
             self.last_localization_time = current_time
 
-    def _perform_localization(self):
+    def perform_localization(self):
         """Perform SRP-PHAT sound source localization on accumulated audio."""
         with self.buffer_lock:
             if len(self.audio_buffer[0]) < self.window_samples:
@@ -302,7 +302,7 @@ class SoundLocalizationNode(Node):
                 # Apply smoothing if enabled
                 if self.enable_smoothing:
                     self.azimuth_history.append(azimuth_deg)
-                    azimuth_deg = self._circular_mean(list(self.azimuth_history))
+                    azimuth_deg = self.circular_mean(list(self.azimuth_history))
 
                 # Update state
                 with self.direction_lock:
@@ -311,10 +311,10 @@ class SoundLocalizationNode(Node):
 
                 # Publish if confidence exceeds threshold
                 if confidence >= self.confidence_threshold:
-                    self._publish_results(azimuth_deg, confidence)
-                    
+                    self.publish_results(azimuth_deg, confidence)
+
                     self.get_logger().info(
-                        f"Sound at {azimuth_deg:.1f}° ({self._get_direction_name(azimuth_deg)}), "
+                        f"Sound at {azimuth_deg:.1f}° ({self.get_direction_name(azimuth_deg)}), "
                         f"confidence={confidence:.3f}, processing={elapsed*1000:.1f}ms"
                     )
                 else:
@@ -329,7 +329,7 @@ class SoundLocalizationNode(Node):
             import traceback
             self.get_logger().error(traceback.format_exc())
 
-    def _circular_mean(self, angles_deg: list) -> float:
+    def circular_mean(self, angles_deg: list) -> float:
         """Compute circular mean of angles (handles 0°/360° wraparound)."""
         angles_rad = np.radians(angles_deg)
         sin_sum = np.sum(np.sin(angles_rad))
@@ -337,7 +337,7 @@ class SoundLocalizationNode(Node):
         mean_rad = np.arctan2(sin_sum, cos_sum)
         return float(np.degrees(mean_rad) % 360)
 
-    def _publish_results(self, azimuth_deg: float, confidence: float):
+    def publish_results(self, azimuth_deg: float, confidence: float):
         """Publish localization results (azimuth-only in Head frame)."""
         stamp = self.get_clock().now().to_msg()
 
@@ -378,9 +378,9 @@ class SoundLocalizationNode(Node):
         self.pose_pub.publish(pose_msg)
 
         # Publish visualization marker
-        self._publish_marker(direction_x, direction_y, direction_z, confidence, stamp)
+        self.publish_marker(direction_x, direction_y, direction_z, confidence, stamp)
 
-    def _publish_marker(self, dx: float, dy: float, dz: float, confidence: float, stamp):
+    def publish_marker(self, dx: float, dy: float, dz: float, confidence: float, stamp):
         """Publish RViz marker for sound direction visualization."""
         marker = Marker()
         marker.header.stamp = stamp
@@ -415,7 +415,7 @@ class SoundLocalizationNode(Node):
 
         self.marker_pub.publish(marker)
 
-    def _get_direction_name(self, azimuth_deg: float) -> str:
+    def get_direction_name(self, azimuth_deg: float) -> str:
         """Convert azimuth to human-readable direction name."""
         angle = azimuth_deg % 360
         

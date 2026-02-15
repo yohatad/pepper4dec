@@ -193,7 +193,7 @@ class SpeechRecognitionNode(Node):
         self.get_logger().info("Whisper model loaded.")
         
         # Warmup Whisper to avoid first-inference latency
-        self._warmup_whisper()
+        self.warmup_whisper()
 
         # =====================================================
         # Proper chunk-aligned VAD processing
@@ -230,10 +230,10 @@ class SpeechRecognitionNode(Node):
         # =====================================================
         # Action server flags
         # =====================================================
-        self._action_server = True
-        self._action_started = False
-        self._asr_action_server = None
-        self._processing_action_goal = False
+        self.action_server = True
+        self.action_started = False
+        self.asr_action_server = None
+        self.processing_action_goal = False
 
         # =====================================================
         # Async transcription with thread pool
@@ -243,8 +243,8 @@ class SpeechRecognitionNode(Node):
         self.is_transcribing = False
 
         # Initialize action server
-        if self._action_server:
-            self._init_action_server()
+        if self.action_server:
+            self.init_action_server()
 
         # Publishers
         self.vad_prob_pub = self.create_publisher(Float32, "/speech_event/vad_speech_prob", 10)
@@ -259,7 +259,7 @@ class SpeechRecognitionNode(Node):
                               f"min_speech={self.min_speech_duration}s, max_speech={self.max_speech_duration_s}s")
         self.get_logger().info(f"Pre-speech buffer: {self.pre_speech_buffer_ms}ms ({self.pre_speech_samples} samples)")
 
-    def _warmup_whisper(self):
+    def warmup_whisper(self):
         """Run a dummy transcription to warm up CUDA kernels."""
         self.get_logger().info("Warming up Whisper...")
         dummy_audio = np.zeros(self.sample_rate, dtype=np.float32)  # 1 second of silence
@@ -277,9 +277,9 @@ class SpeechRecognitionNode(Node):
         except Exception as e:
             self.get_logger().warning(f"Whisper warmup failed (non-critical): {e}")
 
-    def _init_action_server(self):
+    def init_action_server(self):
         """Initialize ROS2 Action Server for speech recognition"""
-        self._asr_action_server = ActionServer(
+        self.asr_action_server = ActionServer(
             self,
             SpeechRecognition,
             '/speech_recognition_action',
@@ -289,8 +289,8 @@ class SpeechRecognitionNode(Node):
     def execute_asr_action_callback(self, goal_handle):
         """Handle ASR action goal."""
         self.get_logger().info("ASR Action Goal received.")
-        self._action_started = True
-        self._processing_action_goal = True
+        self.action_started = True
+        self.processing_action_goal = True
         self.max_speech_duration_s = goal_handle.request.wait
         self.max_speech_chunks = int(self.max_speech_duration_s * self.sample_rate / self.vad_chunk_size)
 
@@ -300,12 +300,12 @@ class SpeechRecognitionNode(Node):
 
         # Prepare result
         result = SpeechRecognition.Result()
-        transcription = self._transcribed_text if hasattr(self, '_transcribed_text') else ""
+        transcription = self.transcribed_text if hasattr(self, 'transcribed_text') else ""
         result.transcription = transcription
         
         self.get_logger().info("ASR Action Goal completed.")
         goal_handle.succeed()
-        self._action_started = False
+        self.action_started = False
         return result
 
     # =========================================================================
@@ -383,7 +383,7 @@ class SpeechRecognitionNode(Node):
         4. VAD + speech collection
         """
         # Action server guard
-        if self._action_server and not self._action_started:
+        if self.action_server and not self._action_started:
             return
         
         # Parse single-channel audio (keep at 48kHz)
@@ -418,12 +418,12 @@ class SpeechRecognitionNode(Node):
             self.vad_pending_buffer = self.vad_pending_buffer[self.vad_chunk_size:]
             
             # Run VAD on this chunk
-            if self._action_server and self._action_started:
-                self._process_vad_chunk_sync(vad_chunk)
+            if self.action_server and self.action_started:
+                self.process_vad_chunk_sync(vad_chunk)
             else:
-                self._process_vad_chunk(vad_chunk)
+                self.process_vad_chunk(vad_chunk)
 
-    def _process_vad_chunk_sync(self, vad_chunk: np.ndarray):
+    def process_vad_chunk_sync(self, vad_chunk: np.ndarray):
         """
         Process a single 512-sample VAD chunk through the state machine (sync mode for action server).
         """
@@ -469,7 +469,7 @@ class SpeechRecognitionNode(Node):
             # CHECK: Max duration cutoff
             # =====================================================
             if self.speech_chunk_count >= self.max_speech_chunks:
-                self._finalize_speech_sync(speech_prob, reason="max_duration")
+                self.finalize_speech_sync(speech_prob, reason="max_duration")
         
         elif self.speech_active and vad_is_silence:
             # POSSIBLE END: Below negative threshold
@@ -479,11 +479,11 @@ class SpeechRecognitionNode(Node):
             
             # Check if silence duration exceeded threshold
             if self.silence_chunks >= self.min_silence_chunks:
-                self._finalize_speech_sync(speech_prob, reason="silence")
+                self.finalize_speech_sync(speech_prob, reason="silence")
             
             # Also check max duration during silence
             elif self.speech_chunk_count >= self.max_speech_chunks:
-                self._finalize_speech_sync(speech_prob, reason="max_duration")
+                self.finalize_speech_sync(speech_prob, reason="max_duration")
         
         elif self.speech_active:
             # In between thresholds - continue collecting, don't increment silence counter
@@ -492,9 +492,9 @@ class SpeechRecognitionNode(Node):
             
             # Check max duration
             if self.speech_chunk_count >= self.max_speech_chunks:
-                self._finalize_speech_sync(speech_prob, reason="max_duration")
+                self.finalize_speech_sync(speech_prob, reason="max_duration")
 
-    def _process_vad_chunk(self, vad_chunk: np.ndarray):
+    def process_vad_chunk(self, vad_chunk: np.ndarray):
         """
         Process a single 512-sample VAD chunk through the state machine.
         """
@@ -540,7 +540,7 @@ class SpeechRecognitionNode(Node):
             # CHECK: Max duration cutoff
             # =====================================================
             if self.speech_chunk_count >= self.max_speech_chunks:
-                self._finalize_speech(speech_prob, reason="max_duration")
+                self.finalize_speech(speech_prob, reason="max_duration")
         
         elif self.speech_active and vad_is_silence:
             # POSSIBLE END: Below negative threshold
@@ -550,11 +550,11 @@ class SpeechRecognitionNode(Node):
             
             # Check if silence duration exceeded threshold
             if self.silence_chunks >= self.min_silence_chunks:
-                self._finalize_speech(speech_prob, reason="silence")
+                self.finalize_speech(speech_prob, reason="silence")
             
             # Also check max duration during silence
             elif self.speech_chunk_count >= self.max_speech_chunks:
-                self._finalize_speech(speech_prob, reason="max_duration")
+                self.finalize_speech(speech_prob, reason="max_duration")
         
         elif self.speech_active:
             # In between thresholds - continue collecting, don't increment silence counter
@@ -563,12 +563,12 @@ class SpeechRecognitionNode(Node):
             
             # Check max duration
             if self.speech_chunk_count >= self.max_speech_chunks:
-                self._finalize_speech(speech_prob, reason="max_duration")
+                self.finalize_speech(speech_prob, reason="max_duration")
 
-    def _finalize_speech_sync(self, speech_prob: float, reason: str):
+    def finalize_speech_sync(self, speech_prob: float, reason: str):
         """
         Finalize speech segment and trigger sync transcription (for action server).
-        
+
         Args:
             speech_prob: Current VAD probability
             reason: "silence" or "max_duration"
@@ -588,7 +588,7 @@ class SpeechRecognitionNode(Node):
         # Concatenate speech
         if not self.speech_buffer:
             self.get_logger().warning("Empty speech buffer at finalization")
-            self._reset_speech_state()
+            self.reset_speech_state()
             return
         
         speech_audio = np.concatenate(self.speech_buffer).astype(np.float32)
@@ -597,19 +597,19 @@ class SpeechRecognitionNode(Node):
         # Filter short segments
         if duration_s < self.min_speech_duration:
             self.get_logger().info(f"Ignoring short segment ({duration_s:.2f}s)")
-            self._reset_speech_state()
+            self.reset_speech_state()
             return
         
         # Synchronous transcription for action server
-        self._transcribed_text = self._transcribe_sync(speech_audio, duration_s)
-        self._processing_action_goal = False
-        
-        self._reset_speech_state()
+        self.transcribed_text = self.transcribe_sync(speech_audio, duration_s)
+        self.processing_action_goal = False
 
-    def _finalize_speech(self, speech_prob: float, reason: str):
+        self.reset_speech_state()
+
+    def finalize_speech(self, speech_prob: float, reason: str):
         """
         Finalize speech segment and trigger async transcription.
-        
+
         Args:
             speech_prob: Current VAD probability
             reason: "silence" or "max_duration"
@@ -629,7 +629,7 @@ class SpeechRecognitionNode(Node):
         # Concatenate speech
         if not self.speech_buffer:
             self.get_logger().warning("Empty speech buffer at finalization")
-            self._reset_speech_state()
+            self.reset_speech_state()
             return
         
         speech_audio = np.concatenate(self.speech_buffer).astype(np.float32)
@@ -638,7 +638,7 @@ class SpeechRecognitionNode(Node):
         # Filter short segments
         if duration_s < self.min_speech_duration:
             self.get_logger().info(f"Ignoring short segment ({duration_s:.2f}s)")
-            self._reset_speech_state()
+            self.reset_speech_state()
             return
         
         # =====================================================
@@ -649,21 +649,21 @@ class SpeechRecognitionNode(Node):
                 self.get_logger().warning("Previous transcription still running, queuing...")
             self.is_transcribing = True
         
-        self.transcription_executor.submit(self._transcribe_async, speech_audio, duration_s)
-        
-        self._reset_speech_state()
+        self.transcription_executor.submit(self.transcribe_async, speech_audio, duration_s)
 
-    def _reset_speech_state(self):
+        self.reset_speech_state()
+
+    def reset_speech_state(self):
         """Reset speech collection state."""
         self.speech_buffer = []
         self.silence_chunks = 0
         self.speech_chunk_count = 0
         self.speech_start_time = None
 
-    def _transcribe_sync(self, audio: np.ndarray, duration_s: float) -> str:
+    def transcribe_sync(self, audio: np.ndarray, duration_s: float) -> str:
         """
         Transcribe speech segment with Whisper (synchronous for action server).
-        
+
         This blocks the audio callback.
         """
         try:
@@ -697,10 +697,10 @@ class SpeechRecognitionNode(Node):
             self.get_logger().error(f"[Sync] Transcription error: {e}")
             return ""
 
-    def _transcribe_async(self, audio: np.ndarray, duration_s: float):
+    def transcribe_async(self, audio: np.ndarray, duration_s: float):
         """
         Transcribe speech segment with Whisper (runs in thread pool).
-        
+
         This doesn't block the audio callback, allowing continuous VAD processing.
         """
         try:
