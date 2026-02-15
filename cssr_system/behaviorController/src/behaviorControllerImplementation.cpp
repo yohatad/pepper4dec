@@ -1,7 +1,7 @@
 /* behaviorControllerImplementation.cpp
  * Author: Yohannes Tadesse Haile
  * Date: February 09, 2026
- * Version: v2.0 - Updated to use only valid cssr_interfaces
+ * Version: v1.0
  */
 
 #include "behaviorController/behaviorControllerInterface.h"
@@ -319,65 +319,65 @@ public:
 // ——————————————
 // AnimateBehaviorRosAction - Uses cssr_interfaces/action/AnimateBehavior
 // ——————————————
-class AnimateBehaviorRosAction : public RosActionNode<cssr_interfaces::action::AnimateBehavior>
-{
-public:
-    AnimateBehaviorRosAction(const std::string& name, 
-                             const NodeConfig& conf,
-                             const RosNodeParams& params)
-        : RosActionNode<cssr_interfaces::action::AnimateBehavior>(name, conf, params)
-    {}
+// class AnimateBehaviorRosAction : public RosActionNode<cssr_interfaces::action::AnimateBehavior>
+// {
+// public:
+//     AnimateBehaviorRosAction(const std::string& name, 
+//                              const NodeConfig& conf,
+//                              const RosNodeParams& params)
+//         : RosActionNode<cssr_interfaces::action::AnimateBehavior>(name, conf, params)
+//     {}
 
-    static PortsList providedPorts()
-    {
-        return providedBasicPorts({
-            InputPort<std::string>("action_name", "/animate_behavior", "Action server name"),
-            InputPort<std::string>("behavior_type", "All", "Behavior type"),
-            InputPort<float>("selected_range", 0.5, "Movement range 0-1"),
-            InputPort<int>("duration_seconds", 0, "Duration (0=infinite)")
-        });
-    }
+//     static PortsList providedPorts()
+//     {
+//         return providedBasicPorts({
+//             InputPort<std::string>("action_name", "/animate_behavior", "Action server name"),
+//             InputPort<std::string>("behavior_type", "All", "Behavior type"),
+//             InputPort<float>("selected_range", 0.5, "Movement range 0-1"),
+//             InputPort<int>("duration_seconds", 0, "Duration (0=infinite)")
+//         });
+//     }
 
-    bool setGoal(Goal& goal) override
-    {
-        goal.behavior_type = "All";
-        goal.selected_range = 0.5;
-        goal.duration_seconds = 0;
+//     bool setGoal(Goal& goal) override
+//     {
+//         goal.behavior_type = "All";
+//         goal.selected_range = 0.5;
+//         goal.duration_seconds = 0;
         
-        getInput("behavior_type", goal.behavior_type);
-        getInput("selected_range", goal.selected_range);
-        getInput("duration_seconds", goal.duration_seconds);
+//         getInput("behavior_type", goal.behavior_type);
+//         getInput("selected_range", goal.selected_range);
+//         getInput("duration_seconds", goal.duration_seconds);
         
-        return true;
-    }
+//         return true;
+//     }
 
-    NodeStatus onResultReceived(const WrappedResult& result) override
-    {
-        if (result.result->success) {
-            RCLCPP_INFO(logger(), "AnimateBehavior succeeded: %s (%.2fs)", 
-                       result.result->message.c_str(),
-                       result.result->total_duration);
-            return NodeStatus::SUCCESS;
-        }
-        RCLCPP_WARN(logger(), "AnimateBehavior failed: %s", result.result->message.c_str());
-        return NodeStatus::FAILURE;
-    }
+//     NodeStatus onResultReceived(const WrappedResult& result) override
+//     {
+//         if (result.result->success) {
+//             RCLCPP_INFO(logger(), "AnimateBehavior succeeded: %s (%.2fs)", 
+//                        result.result->message.c_str(),
+//                        result.result->total_duration);
+//             return NodeStatus::SUCCESS;
+//         }
+//         RCLCPP_WARN(logger(), "AnimateBehavior failed: %s", result.result->message.c_str());
+//         return NodeStatus::FAILURE;
+//     }
 
-    NodeStatus onFailure(ActionNodeErrorCode error) override
-    {
-        RCLCPP_ERROR(logger(), "AnimateBehavior action error: %d", static_cast<int>(error));
-        return NodeStatus::FAILURE;
-    }
+//     NodeStatus onFailure(ActionNodeErrorCode error) override
+//     {
+//         RCLCPP_ERROR(logger(), "AnimateBehavior action error: %d", static_cast<int>(error));
+//         return NodeStatus::FAILURE;
+//     }
 
-    NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override
-    {
-        RCLCPP_DEBUG(logger(), "AnimateBehavior: %s, gestures: %d, elapsed: %.2fs", 
-                    feedback->current_limb.c_str(),
-                    feedback->gestures_completed,
-                    feedback->elapsed_time);
-        return NodeStatus::RUNNING;
-    }
-};
+//     NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override
+//     {
+//         RCLCPP_DEBUG(logger(), "AnimateBehavior: %s, gestures: %d, elapsed: %.2fs", 
+//                     feedback->current_limb.c_str(),
+//                     feedback->gestures_completed,
+//                     feedback->elapsed_time);
+//         return NodeStatus::RUNNING;
+//     }
+// };
 
 //=============================================================================
 // RosServiceNode wrapper implementations
@@ -561,102 +561,107 @@ public:
     }
 };
 
-//=============================================================================
-// Custom Action/Condition Nodes using BtActionNode base
-//=============================================================================
-
 // ——————————————
 // StartOfTree
 // ——————————————
-class StartOfTree : public BtActionNode<>
+
+//=============================================================================
+// Custom Action/Condition Nodes
+//=============================================================================
+
+class StartOfTree : public BT::SyncActionNode
 {
 public:
-    StartOfTree(const std::string& name,
-                const NodeConfig& config,
-                const RosNodeParams& params)
-        : BtActionNode<>(name, config, params)
+    StartOfTree(const std::string& name, const BT::NodeConfig& config)
+        : BT::SyncActionNode(name, config)
     {}
 
-    static PortsList providedPorts() { return {}; }
+    static BT::PortsList providedPorts() { return {}; }
 
-    NodeStatus tick() override 
+    BT::NodeStatus tick() override 
     {
-        RCLCPP_INFO(logger(), "=== START OF TREE ===");
-        try {
-            auto& cfg = ConfigManager::instance();
-            RCLCPP_INFO(logger(), "Language: %s", cfg.getLanguage().c_str());
-            return NodeStatus::SUCCESS;
-        }
-        catch (const std::exception& e) {
-            RCLCPP_ERROR(logger(), "Exception in StartOfTree: %s", e.what());
-            return NodeStatus::FAILURE;
-        }
+        auto& cfg = ConfigManager::instance();
+        RCLCPP_INFO(rclcpp::get_logger("StartOfTree"), "=== START OF TREE ===");
+        RCLCPP_INFO(rclcpp::get_logger("StartOfTree"), "Language: %s", cfg.getLanguage().c_str());
+        return BT::NodeStatus::SUCCESS;
     }
 };
 
-// ——————————————
-// IsVisitorDiscovered
-// ——————————————
-class IsVisitorDiscovered : public BtActionNode<>
+class IsVisitorDiscovered : public BT::StatefulActionNode
 {
 public:
     IsVisitorDiscovered(const std::string& name,
-                        const NodeConfig& config,
-                        const RosNodeParams& params)
-        : BtActionNode<>(name, config, params)
+                        const BT::NodeConfig& config,
+                        const BT::RosNodeParams& params)
+        : BT::StatefulActionNode(name, config)
         , discovered_(false)
     {
+        node_ = params.nh.lock();
+        if (!node_) {
+            throw std::runtime_error("Failed to lock node pointer");
+        }
         subscriber_ = node_->create_subscription<cssr_interfaces::msg::FaceDetection>(
             "/faceDetection/data", 10,
             [this](cssr_interfaces::msg::FaceDetection::SharedPtr msg) {
+                std::lock_guard<std::mutex> lock(mutex_);
                 if (!msg->face_label_id.empty()) {
                     discovered_ = true;
                 }
             });
     }
 
-    static PortsList providedPorts() { return {}; }
+    static BT::PortsList providedPorts() { return {}; }
 
-    NodeStatus tick() override 
+    BT::NodeStatus onStart() override { return BT::NodeStatus::RUNNING; }
+    
+    BT::NodeStatus onRunning() override 
     {
-        return discovered_ ? NodeStatus::SUCCESS : NodeStatus::RUNNING;
+        std::lock_guard<std::mutex> lock(mutex_);
+        return discovered_ ? BT::NodeStatus::SUCCESS : BT::NodeStatus::RUNNING;
     }
+    
+    void onHalted() override {}
 
 private:
     bool discovered_;
+    std::mutex mutex_;
+    std::shared_ptr<rclcpp::Node> node_;
     rclcpp::Subscription<cssr_interfaces::msg::FaceDetection>::SharedPtr subscriber_;
 };
 
-// ——————————————
-// SelectExhibit
-// ——————————————
-class SelectExhibit : public BtActionNode<>
+class SelectExhibit : public BT::SyncActionNode
 {
 public:
     SelectExhibit(const std::string& name,
-                  const NodeConfig& config,
-                  const RosNodeParams& params)
-        : BtActionNode<>(name, config, params)
-    {}
-
-    static PortsList providedPorts() { return {}; }
-
-    NodeStatus tick() override 
+                  const BT::NodeConfig& config,
+                  const BT::RosNodeParams& params)
+        : BT::SyncActionNode(name, config)
     {
-        RCLCPP_INFO(logger(), "SelectExhibit Action Node");
+        node_ = params.nh.lock();
+        if (!node_) {
+            throw std::runtime_error("Failed to lock node pointer");
+        }
+    }
+
+    static BT::PortsList providedPorts() { return {}; }
+
+    BT::NodeStatus tick() override 
+    {
+        auto logger = node_->get_logger();
+        RCLCPP_INFO(logger, "SelectExhibit Action Node");
         try {
             int visits = 0;
             if (!config().blackboard->get("visits", visits)) {
-                RCLCPP_WARN(logger(), "Unable to retrieve 'visits' from Blackboard");
-                return NodeStatus::FAILURE;
+                RCLCPP_WARN(logger, "Unable to retrieve 'visits' from Blackboard");
+                return BT::NodeStatus::FAILURE;
             }
 
             auto& knowledge = KnowledgeManager::instance();
             auto tour = knowledge.getTourSpecification();
 
             if (visits >= tour.getCurrentLocationCount()) {
-                RCLCPP_WARN(logger(), "Visit index out of range");
-                return NodeStatus::FAILURE;
+                RCLCPP_WARN(logger, "Visit index out of range");
+                return BT::NodeStatus::FAILURE;
             }
 
             auto locationInfo = knowledge.getLocationInfo(tour.locationIds[visits]);
@@ -667,8 +672,8 @@ public:
             if (preIt == locationInfo.preMessages.end() ||
                 postIt == locationInfo.postMessages.end())
             {
-                RCLCPP_ERROR(logger(), "Messages not found for language: %s", lang.c_str());
-                return NodeStatus::FAILURE;
+                RCLCPP_ERROR(logger, "Messages not found for language: %s", lang.c_str());
+                return BT::NodeStatus::FAILURE;
             }
 
             config().blackboard->set("exhibitPreGestureMessage", preIt->second);
@@ -676,181 +681,215 @@ public:
             config().blackboard->set("exhibitLocation", locationInfo.robotPose);
             config().blackboard->set("exhibitGestureTarget", locationInfo.gestureTarget);
 
-            RCLCPP_INFO(logger(), "Visiting: %s", locationInfo.description.c_str());
+            RCLCPP_INFO(logger, "Visiting: %s", locationInfo.description.c_str());
             config().blackboard->set("visits", ++visits);
 
-            return NodeStatus::SUCCESS;
+            return BT::NodeStatus::SUCCESS;
         }
         catch (const std::exception& e) {
-            RCLCPP_ERROR(logger(), "Exception in SelectExhibit: %s", e.what());
-            return NodeStatus::FAILURE;
+            RCLCPP_ERROR(logger, "Exception in SelectExhibit: %s", e.what());
+            return BT::NodeStatus::FAILURE;
         }
     }
+
+private:
+    std::shared_ptr<rclcpp::Node> node_;
 };
 
-// ——————————————
-// IsListWithExhibit
-// ——————————————
-class IsListWithExhibit : public BtActionNode<>
+class IsListWithExhibit : public BT::SyncActionNode
 {
 public:
     IsListWithExhibit(const std::string& name,
-                      const NodeConfig& config,
-                      const RosNodeParams& params)
-        : BtActionNode<>(name, config, params)
-    {}
-
-    static PortsList providedPorts() { return {}; }
-
-    NodeStatus tick() override 
+                      const BT::NodeConfig& config,
+                      const BT::RosNodeParams& params)
+        : BT::SyncActionNode(name, config)
     {
-        RCLCPP_INFO(logger(), "IsListWithExhibit Condition Node");
+        node_ = params.nh.lock();
+        if (!node_) {
+            throw std::runtime_error("Failed to lock node pointer");
+        }
+    }
+
+    static BT::PortsList providedPorts() { return {}; }
+
+    BT::NodeStatus tick() override 
+    {
+        auto logger = node_->get_logger();
+        RCLCPP_INFO(logger, "IsListWithExhibit Condition Node");
         try {
             int visits = 0;
             if (!config().blackboard->get("visits", visits)) {
-                RCLCPP_ERROR(logger(), "Unable to retrieve 'visits' from Blackboard");
-                return NodeStatus::FAILURE;
+                RCLCPP_ERROR(logger, "Unable to retrieve 'visits' from Blackboard");
+                return BT::NodeStatus::FAILURE;
             }
 
             auto tour = KnowledgeManager::instance().getTourSpecification();
             if (visits < tour.getCurrentLocationCount()) {
-                return NodeStatus::SUCCESS;
+                return BT::NodeStatus::SUCCESS;
             }
-            RCLCPP_INFO(logger(), "ALL LOCATIONS VISITED");
-            return NodeStatus::FAILURE;
+            RCLCPP_INFO(logger, "ALL LOCATIONS VISITED");
+            return BT::NodeStatus::FAILURE;
         }
         catch (const std::exception& e) {
-            RCLCPP_ERROR(logger(), "Exception in IsListWithExhibit: %s", e.what());
-            return NodeStatus::FAILURE;
+            RCLCPP_ERROR(logger, "Exception in IsListWithExhibit: %s", e.what());
+            return BT::NodeStatus::FAILURE;
         }
     }
+
+private:
+    std::shared_ptr<rclcpp::Node> node_;
 };
 
-// ——————————————
-// RetrieveListOfExhibits
-// ——————————————
-class RetrieveListOfExhibits : public BtActionNode<>
+class RetrieveListOfExhibits : public BT::SyncActionNode
 {
 public:
     RetrieveListOfExhibits(const std::string& name,
-                           const NodeConfig& config,
-                           const RosNodeParams& params)
-        : BtActionNode<>(name, config, params)
-    {}
-
-    static PortsList providedPorts() { return {}; }
-
-    NodeStatus tick() override 
+                           const BT::NodeConfig& config,
+                           const BT::RosNodeParams& params)
+        : BT::SyncActionNode(name, config)
     {
-        RCLCPP_INFO(logger(), "RetrieveListOfExhibits Action Node");
+        node_ = params.nh.lock();
+        if (!node_) {
+            throw std::runtime_error("Failed to lock node pointer");
+        }
+    }
+
+    static BT::PortsList providedPorts() { return {}; }
+
+    BT::NodeStatus tick() override 
+    {
+        auto logger = node_->get_logger();
+        RCLCPP_INFO(logger, "RetrieveListOfExhibits Action Node");
         try {
             auto tour = KnowledgeManager::instance().getTourSpecification();
             if (tour.getCurrentLocationCount() == 0) {
-                RCLCPP_ERROR(logger(), "No exhibits found");
-                return NodeStatus::FAILURE;
+                RCLCPP_ERROR(logger, "No exhibits found");
+                return BT::NodeStatus::FAILURE;
             }
             config().blackboard->set("visits", 0);
-            return NodeStatus::SUCCESS;
+            return BT::NodeStatus::SUCCESS;
         }
         catch (const std::exception& e) {
-            RCLCPP_ERROR(logger(), "Exception in RetrieveListOfExhibits: %s", e.what());
-            return NodeStatus::FAILURE;
+            RCLCPP_ERROR(logger, "Exception in RetrieveListOfExhibits: %s", e.what());
+            return BT::NodeStatus::FAILURE;
         }
     }
+
+private:
+    std::shared_ptr<rclcpp::Node> node_;
 };
 
-// ——————————————
-// IsMutualGazeDiscovered
-// ——————————————
-class IsMutualGazeDiscovered : public BtActionNode<>
+class IsMutualGazeDiscovered : public BT::StatefulActionNode
 {
 public:
     IsMutualGazeDiscovered(const std::string& name,
-                           const NodeConfig& config,
-                           const RosNodeParams& params)
-        : BtActionNode<>(name, config, params)
+                           const BT::NodeConfig& config,
+                           const BT::RosNodeParams& params)
+        : BT::StatefulActionNode(name, config)
         , gazeDetected_(false)
     {
+        node_ = params.nh.lock();
+        if (!node_) {
+            throw std::runtime_error("Failed to lock node pointer");
+        }
         subscriber_ = node_->create_subscription<cssr_interfaces::msg::OvertAttentionStatus>(
             "/overtAttention/status", 10,
             [this](const cssr_interfaces::msg::OvertAttentionStatus::SharedPtr msg) {
+                std::lock_guard<std::mutex> lock(mutex_);
                 if (msg->state == "mutual_gaze_detected") {
                     gazeDetected_ = true;
                 }
             });
     }
 
-    static PortsList providedPorts() { return {}; }
+    static BT::PortsList providedPorts() { return {}; }
 
-    NodeStatus tick() override 
+    BT::NodeStatus onStart() override { return BT::NodeStatus::RUNNING; }
+
+    BT::NodeStatus onRunning() override 
     {
+        std::lock_guard<std::mutex> lock(mutex_);
         if (gazeDetected_) {
-            RCLCPP_INFO(logger(), "Mutual gaze detected");
-            gazeDetected_ = false; // Reset for next time
-            return NodeStatus::SUCCESS;
+            RCLCPP_INFO(node_->get_logger(), "Mutual gaze detected");
+            gazeDetected_ = false;
+            return BT::NodeStatus::SUCCESS;
         }
-        return NodeStatus::RUNNING;
+        return BT::NodeStatus::RUNNING;
     }
+    
+    void onHalted() override {}
 
 private:
     bool gazeDetected_;
+    std::mutex mutex_;
+    std::shared_ptr<rclcpp::Node> node_;
     rclcpp::Subscription<cssr_interfaces::msg::OvertAttentionStatus>::SharedPtr subscriber_;
 };
 
-// ——————————————
-// IsVisitorResponseYes
-// ——————————————
-class IsVisitorResponseYes : public BtActionNode<>
+class IsVisitorResponseYes : public BT::SyncActionNode
 {
 public:
     IsVisitorResponseYes(const std::string& name,
-                         const NodeConfig& config,
-                         const RosNodeParams& params)
-        : BtActionNode<>(name, config, params)
-    {}
-
-    static PortsList providedPorts() { return {}; }
-
-    NodeStatus tick() override 
+                         const BT::NodeConfig& config,
+                         const BT::RosNodeParams& params)
+        : BT::SyncActionNode(name, config)
     {
-        RCLCPP_INFO(logger(), "IsVisitorResponseYes Condition Node");
+        node_ = params.nh.lock();
+        if (!node_) {
+            throw std::runtime_error("Failed to lock node pointer");
+        }
+    }
+
+    static BT::PortsList providedPorts() { return {}; }
+
+    BT::NodeStatus tick() override 
+    {
+        auto logger = node_->get_logger();
+        RCLCPP_INFO(logger, "IsVisitorResponseYes Condition Node");
         try {
             std::string visitorResponse;
             if (config().blackboard->get("visitorResponse", visitorResponse) &&
                 visitorResponse == "yes")
             {
-                return NodeStatus::SUCCESS;
+                return BT::NodeStatus::SUCCESS;
             }
-            return NodeStatus::FAILURE;
+            return BT::NodeStatus::FAILURE;
         }
         catch (const std::exception& e) {
-            RCLCPP_ERROR(logger(), "Exception in IsVisitorResponseYes: %s", e.what());
-            return NodeStatus::FAILURE;
+            RCLCPP_ERROR(logger, "Exception in IsVisitorResponseYes: %s", e.what());
+            return BT::NodeStatus::FAILURE;
         }
     }
+
+private:
+    std::shared_ptr<rclcpp::Node> node_;
 };
 
-// ——————————————
-// HandleFallBack
-// ——————————————
-class HandleFallBack : public BtActionNode<>
+class HandleFallBack : public BT::SyncActionNode
 {
 public:
     HandleFallBack(const std::string& name,
-                   const NodeConfig& config,
-                   const RosNodeParams& params)
-        : BtActionNode<>(name, config, params)
-    {}
-
-    static PortsList providedPorts() { return {}; }
-
-    NodeStatus tick() override 
+                   const BT::NodeConfig& config,
+                   const BT::RosNodeParams& params)
+        : BT::SyncActionNode(name, config)
     {
-        RCLCPP_INFO(logger(), "HandleFallBack Action Node");
-        return NodeStatus::SUCCESS;
+        node_ = params.nh.lock();
+        if (!node_) {
+            throw std::runtime_error("Failed to lock node pointer");
+        }
     }
-};
 
+    static BT::PortsList providedPorts() { return {}; }
+
+    BT::NodeStatus tick() override 
+    {
+        RCLCPP_INFO(node_->get_logger(), "HandleFallBack Action Node");
+        return BT::NodeStatus::SUCCESS;
+    }
+
+private:
+    std::shared_ptr<rclcpp::Node> node_;
+};
 //=============================================================================
 // Tree Initialization Function
 //=============================================================================
@@ -873,20 +912,22 @@ BT::Tree initializeTree(const std::string& scenario,
     params.nh = node_handle;
     params.default_port_value = "service_name";
 
-    // Register Action nodes
+    // Register Action nodes (ROS2 Actions)
     factory.registerNodeType<TTSRosAction>("TTSRosAction", params);
     factory.registerNodeType<NavigateRosAction>("NavigateRosAction", params);
     factory.registerNodeType<GestureRosAction>("GestureRosAction", params);
     factory.registerNodeType<SpeechRecognitionRosAction>("SpeechRecognitionRosAction", params);
-    factory.registerNodeType<AnimateBehaviorRosAction>("AnimateBehaviorRosAction", params);
+    // factory.registerNodeType<AnimateBehaviorRosAction>("AnimateBehaviorRosAction", params);
 
-    // Register Service nodes
+    // Register Service nodes (ROS2 Services)
     factory.registerNodeType<SetOvertAttentionModeRosService>("SetOvertAttentionModeRosService", params);
     factory.registerNodeType<SetAnimateBehaviorRosService>("SetAnimateBehaviorRosService", params);
     factory.registerNodeType<ConversationPromptRosService>("ConversationPromptRosService", params);
 
-    // Register custom action/condition nodes
-    factory.registerNodeType<StartOfTree>("StartOfTree", params);
+    // Register custom action/condition nodes (WITHOUT params for StartOfTree)
+    factory.registerNodeType<StartOfTree>("StartOfTree");
+    
+    // Register custom nodes WITH params (these need access to ROS node)
     factory.registerNodeType<IsVisitorDiscovered>("IsVisitorDiscovered", params);
     factory.registerNodeType<SelectExhibit>("SelectExhibit", params);
     factory.registerNodeType<IsListWithExhibit>("IsListWithExhibit", params);

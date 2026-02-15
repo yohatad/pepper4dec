@@ -19,58 +19,71 @@
 // ConfigManager - Singleton for configuration management
 //=============================================================================
 
-class ConfigManager {
-public:
-    // Singleton accessor
-    static ConfigManager& instance() {
-        static ConfigManager inst;
-        return inst;
+ConfigManager& ConfigManager::instance() {
+    static ConfigManager inst;
+    return inst;
+}
+
+bool ConfigManager::loadFromFile(const std::string& configPath) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    try {
+        auto config = YAML::LoadFile(configPath);
+        verbose_    = config["verbose_mode"].as<bool>(false);
+        asrEnabled_ = config["asr_enabled"].as<bool>(false);
+        testMode_   = config["test_mode"].as<bool>(false);
+        language_   = config["language"].as<std::string>("English");
+        scenarioSpecification_ = config["scenario_specification"].as<std::string>("lab_tour");
+        nodeName_   = config["node_name"].as<std::string>("behaviorController");
+        cultureKnowledgeBasePath_ = config["culture_knowledge_base"].as<std::string>("cultureKnowledgeBase.yaml");
+        environmentKnowledgeBasePath_ = config["environment_knowledge_base"].as<std::string>("labEnvironmentKnowledgeBase.yaml");
+        
+        std::cout << "✓ Configuration loaded from: " << configPath << std::endl;
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "✗ ConfigManager: Failed to load config: " << e.what() << std::endl;
+        return false;
     }
+}
 
-    // Call once (e.g. in main()) before spawning threads
-    bool loadFromFile(const std::string& configPath) {
-        try {
-            auto config = YAML::LoadFile(configPath);
-            verbose_    = config["verbose_mode"].as<bool>(false);
-            asrEnabled_ = config["asr_enabled"].as<bool>(false);
-            language_   = config["language"].as<std::string>("English");
-            scenarioSpecification_ = config["scenario_specification"].as<std::string>("lab_tour");
-            nodeName_   = config["node_name"].as<std::string>("behaviorController");
-            cultureKnowledgeBasePath_ = config["culture_knowledge_base"].as<std::string>("cultureKnowledgeBase.yaml");
-            environmentKnowledgeBasePath_ = config["environment_knowledge_base"].as<std::string>("labEnvironmentKnowledgeBase.yaml");
-            
-            std::cout << "✓ Configuration loaded from: " << configPath << std::endl;
-            return true;
-        } catch (const std::exception& e) {
-            std::cerr << "✗ ConfigManager: Failed to load config: " << e.what() << std::endl;
-            return false;
-        }
-    }
+bool ConfigManager::isVerbose() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return verbose_;
+}
 
-    // Simple, inline getters
-    bool        isVerbose()    const { return verbose_;    }
-    bool        isAsrEnabled() const { return asrEnabled_; }
-    std::string getLanguage()  const { return language_;   }
-    std::string getNodeName()  const { return nodeName_;   }
-    std::string getScenarioSpecification() const { return scenarioSpecification_; }
-    std::string getCultureKnowledgeBasePath() const { return cultureKnowledgeBasePath_; }
-    std::string getEnvironmentKnowledgeBasePath() const { return environmentKnowledgeBasePath_; }
+bool ConfigManager::isAsrEnabled() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return asrEnabled_;
+}
 
-private:
-    ConfigManager() = default;
-    ~ConfigManager() = default;
-    ConfigManager(const ConfigManager&)            = delete;
-    ConfigManager& operator=(const ConfigManager&) = delete;
+bool ConfigManager::isTestMode() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return testMode_;
+}
 
-    // Storage for settings
-    bool        verbose_    = false;
-    bool        asrEnabled_ = false;
-    std::string language_   = "English";
-    std::string scenarioSpecification_ = "lab_tour";
-    std::string nodeName_   = "behaviorController";
-    std::string cultureKnowledgeBasePath_ = "cultureKnowledgeBase.yaml";
-    std::string environmentKnowledgeBasePath_ = "labEnvironmentKnowledgeBase.yaml";
-};
+std::string ConfigManager::getLanguage() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return language_;
+}
+
+std::string ConfigManager::getNodeName() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return nodeName_;
+}
+
+std::string ConfigManager::getScenarioSpecification() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return scenarioSpecification_;
+}
+
+std::string ConfigManager::getCultureKnowledgeBasePath() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return cultureKnowledgeBasePath_;
+}
+
+std::string ConfigManager::getEnvironmentKnowledgeBasePath() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return environmentKnowledgeBasePath_;
+}
 
 //=============================================================================
 // KnowledgeManager - Singleton for knowledge base management
@@ -499,16 +512,6 @@ void logSystemInfo(std::shared_ptr<rclcpp::Node> node) {
     
     RCLCPP_INFO(logger, "=== System Information ===");
     
-    // Log ROS2 distribution
-    const char* rosDistro = std::getenv("ROS_DISTRO");
-    if (rosDistro) {
-        RCLCPP_INFO(logger, "ROS2 Distribution: %s", rosDistro);
-    }
-    
-    // Log node information
-    RCLCPP_INFO(logger, "Node name: %s", node->get_name());
-    RCLCPP_INFO(logger, "Node namespace: %s", node->get_namespace());
-    
     // Log available services count
     auto services = node->get_service_names_and_types();
     RCLCPP_INFO(logger, "Available services: %zu", services.size());
@@ -579,27 +582,27 @@ std::string nodeStatusToString(BT::NodeStatus status) {
     }
 }
 
-void logActionServerStatus(std::shared_ptr<rclcpp::Node> node, 
-                           const std::vector<std::string>& actionNames) {
-    auto logger = node->get_logger();
+// void logActionServerStatus(std::shared_ptr<rclcpp::Node> node, 
+//                            const std::vector<std::string>& actionNames) {
+//     auto logger = node->get_logger();
     
-    RCLCPP_INFO(logger, "=== Action Server Status ===");
+//     RCLCPP_INFO(logger, "=== Action Server Status ===");
     
-    // List expected action servers
-    std::vector<std::string> expectedActions = {
-        "/tts",
-        "/navigation",
-        "/gesture",
-        "/speech_recognition",
-        "/animate_behavior"
-    };
+//     // List expected action servers
+//     std::vector<std::string> expectedActions = {
+//         "/tts",
+//         "/navigation",
+//         "/gesture",
+//         "/speech_recognition",
+//         "/animate_behavior"
+//     };
     
-    for (const auto& actionName : expectedActions) {
-        RCLCPP_INFO(logger, "  - %s: [checking...]", actionName.c_str());
-    }
+//     for (const auto& actionName : expectedActions) {
+//         RCLCPP_INFO(logger, "  - %s: [checking...]", actionName.c_str());
+//     }
     
-    RCLCPP_INFO(logger, "============================");
-}
+//     RCLCPP_INFO(logger, "============================");
+// }
 
 void logServiceStatus(std::shared_ptr<rclcpp::Node> node) {
     auto logger = node->get_logger();

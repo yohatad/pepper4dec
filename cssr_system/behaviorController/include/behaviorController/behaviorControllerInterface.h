@@ -123,17 +123,21 @@ public:
     bool isTestMode() const;
     std::string getLanguage() const;
     std::string getNodeName() const;
+    std::string getScenarioSpecification() const;
     std::string getCultureKnowledgeBasePath() const;
     std::string getEnvironmentKnowledgeBasePath() const;
 
 private:
     ConfigManager() = default;
-    mutable std::mutex mutex_;
+    mutable std::mutex mutex_; 
     bool verbose_ = false;
     bool asrEnabled_ = false;
     bool testMode_ = false;
     std::string language_ = "English";
     std::string nodeName_ = "behaviorController";
+    std::string scenarioSpecification_ = "lab_tour";
+    std::string cultureKnowledgeBasePath_ = "cultureKnowledgeBase.yaml";
+    std::string environmentKnowledgeBasePath_ = "labEnvironmentKnowledgeBase.yaml";
     
     // Non-copyable
     ConfigManager(const ConfigManager&) = delete;
