@@ -14,24 +14,39 @@ Version: v1.0
 """
 
 import rclpy
+from rclpy.executors import MultiThreadedExecutor
 from .animate_behavior_implementation import AnimateBehaviorServer
 
 
 def main(args=None):
     rclpy.init(args=args)
-    
+
+    action_server = AnimateBehaviorServer()
+    executor = MultiThreadedExecutor(num_threads=4)
+    executor.add_node(action_server)
+
     try:
-        action_server = AnimateBehaviorServer()
-        
-        try:
-            rclpy.spin(action_server)
-        except KeyboardInterrupt:
-            action_server.get_logger().info('Keyboard interrupt')
-        finally:
-            action_server._stop_execution()
-            action_server.destroy_node()
+        executor.spin()
+    except KeyboardInterrupt:
+        pass  # Don't log here - context may be shutting down
     finally:
-        rclpy.shutdown()
+        # Cleanup before destroying node
+        try:
+            action_server.cleanup()
+        except Exception:
+            pass  # Ignore cleanup errors during shutdown
+
+        # Destroy node and shutdown
+        try:
+            action_server.destroy_node()
+        except Exception:
+            pass
+
+        try:
+            if rclpy.ok():
+                rclpy.shutdown()
+        except Exception:
+            pass
 
 if __name__ == '__main__':
     main()
