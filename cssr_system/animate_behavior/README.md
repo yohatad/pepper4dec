@@ -1,5 +1,5 @@
 <div align="center">
-<h1>Animate Behavior for Human-Robot Interaction</h1>
+<h1>Animate Behavior</h1>
 </div>
 
 <div align="center">
@@ -313,13 +313,6 @@ The animation system uses a sophisticated motion generation approach:
 3. **Natural Bias:** 30% probability of returning toward home position to create natural oscillatory motion
 4. **Range Limiting:** All movements constrained by joint limits and scaled by `selected_range` parameter
 5. **Staggered Timing:** Limb animations start with random time offsets for asynchronous, natural motion
-
-## Thread Safety
-
-- Uses `MultiThreadedExecutor` with 4 threads for concurrent callback processing
-- `ReentrantCallbackGroup` enables thread-safe timer and action callbacks
-- Thread synchronization via `threading.Event` for goal completion signaling
-- Safe shutdown handling with exception guards for cleanup operations
 
 ## Performance Characteristics
 
