@@ -2,8 +2,6 @@
 """
 Simplified RAG ROS 2 Node for Pepper Robot Lab Assistant
 
-The application controls when to call the RAG service.
-
 Environment Variables:
     LLM_API_KEY: API key for LLM service (MUST be exported)
     LLM_BASE_URL: LLM API endpoint
@@ -31,6 +29,13 @@ from .conversation_manager_implementation import (
 )
 
 PACKAGE_PATH = Path(get_package_share_directory('conversation_manager'))
+
+# Static config options (not set via config file)
+NODE_NAME = "conversation_management"
+GET_INTENT_SERVICE = "/conversationManagement/get_intent"
+PROMPT_SERVICE = "/conversationManagement/prompt"
+CREATE_COLLECTION = "/conversationManagement/create_collection"
+HEARTBEAT_MSG_PERIOD = 10  # seconds
 
 class SimpleRAGNode(Node):
     """
@@ -74,7 +79,6 @@ class SimpleRAGNode(Node):
         self.declare_parameter('verbose', False)
         
         # Log configuration (hide API key)
-        config = get_config()
         self.get_logger().info(f"LLM URL: {config.llm_base_url}")
         self.get_logger().info(f"LLM Model: {config.llm_model}")
         self.get_logger().info(f"LLM API Key: {'***' + config.llm_api_key[-4:] if len(config.llm_api_key) > 4 else '(default)'}")
@@ -90,8 +94,9 @@ class SimpleRAGNode(Node):
         self.load_collection(collection_name)
         
         # Services - use the correct imported service types
-        self.create_service(LanguageModelPrompt, 'rag_prompt', self.prompt_callback)
-        self.create_service(LanguageModelCreateCollection, 'create_collection', self.create_collection_callback)
+        self.create_service(LanguageModelPrompt, PROMPT_SERVICE, self.prompt_callback)
+        self.create_service(LanguageModelPrompt, GET_INTENT_SERVICE, self.get_intent_callback)
+        self.create_service(LanguageModelCreateCollection, CREATE_COLLECTION, self.create_collection_callback)
         
         status = f"Collection: {collection_name}" if self.collection else "Collection: Not loaded"
         self.get_logger().info(f"RAG Node ready. {status}")
@@ -135,10 +140,10 @@ class SimpleRAGNode(Node):
             response.response = "Knowledge base not initialized. Please set up the collection first."
             return response
         
-        query = request.prompt.strip() if request.prompt else ""
+        query = request.prompt.strip()
         if not query:
             self.log_verbose("Empty query received")
-            response.response = "I didn't catch that. Could you repeat?"
+            response.response = "I didn't catch that. Could you please repeat it?"
             return response
         
         self.log_verbose(f"Processing query: '{query}'")
@@ -154,15 +159,14 @@ class SimpleRAGNode(Node):
             )
             
             # Update history
-            self.conversation_history.append({
-                'query': query,
-                'response': result['response']
-            })
+            self.conversation_history.append({"role": "user", "content": request.prompt})
+            self.conversation_history.append({"role": "assistant", "content": result['response']})
             
+            config = get_config()
             # Keep history manageable
-            if len(self.conversation_history) > 5:
-                self.log_verbose(f"Truncating conversation history from {len(self.conversation_history)} to 5")
-                self.conversation_history = self.conversation_history[-5:]
+            if len(self.conversation_history) > config.max_history_turns:
+                self.log_verbose(f"Truncating conversation history from {len(self.conversation_history)} to {config.max_history_turns} turns")
+                self.conversation_history = self.conversation_history[-config.max_history_turns:]
             
             self.log_verbose(f"Response generated: {result['response'][:200]}...")
             self.log_verbose(f"Sources used: {result['sources']}")
@@ -178,6 +182,45 @@ class SimpleRAGNode(Node):
         self.log_verbose("Prompt callback completed")
         return response
     
+    def get_intent_callback(self, request, response):
+        """Handle intent extraction"""
+        
+        self.log_verbose(f"Get intent callback invoked with request: {request}")
+        
+        # Check collection
+        if self.collection is None:
+            self.log_verbose("Collection is None - knowledge base not initialized")
+            response.response = "Knowledge base not initialized. Please set up the collection first."
+            return response
+        
+        query = request.prompt.strip()
+        if not query:
+            self.log_verbose("Empty query received for intent extraction")
+            response.response = "I didn't catch that. Could you please repeat it?"
+            return response
+        
+        self.log_verbose(f"Processing intent extraction for query: '{query}'")
+        
+        try:
+            # Handle query for intent
+            self.log_verbose("Calling handle_query for intent extraction...")
+            result = handle_query(
+                collection=self.collection,
+                query=query,
+                get_intent=True
+            )
+            
+            self.log_verbose(f"Intent extracted: {result['response']}")
+            response.response = result['response']
+            
+        except Exception as e:
+            self.get_logger().error(f"Intent extraction error: {e}")
+            self.log_verbose(f"Detailed error in get_intent_callback: {str(e)}")
+            response.response = "Something went wrong during intent extraction. Please try again."
+        
+        self.log_verbose("Get intent callback completed")
+        return response
+
     def create_collection_callback(self, request, response):
         """Create and populate collection"""
         
