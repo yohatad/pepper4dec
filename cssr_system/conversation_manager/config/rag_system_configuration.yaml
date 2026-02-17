@@ -1,7 +1,7 @@
 # LLM Settings
 llm:
-  base_url: https://api.deepseek.com/v1
-  model: deepseek-chat
+  base_url: http://127.0.0.1:8080/v1/
+  model: meta-llama/Llama-3.1-8B-Instruct
 
 # Embedding Model
 embedding:

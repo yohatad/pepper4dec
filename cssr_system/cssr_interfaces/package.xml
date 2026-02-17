@@ -4,7 +4,7 @@
   <version>0.0.1</version>
   <description>Messages, services and actions for DEC</description>
 
-  <maintainer email="you@example.com">Your Name</maintainer>
+  <maintainer email="mahadanso79@gmail.com.com">Muhammed Danso and Yohannes</maintainer>
   <license>Apache-2.0</license>
 
   <!-- Build tools -->
@@ -16,6 +16,7 @@
   <depend>std_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>action_msgs</depend>
+  <depend>python3-numpy</depend>
 
   <!-- Runtime for generated code -->
   <exec_depend>rosidl_default_runtime</exec_depend>

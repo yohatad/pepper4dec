@@ -2,15 +2,13 @@
 string gesture_type
 int64 gesture_id
 int64 gesture_duration
-int64 bow_nod_angle
+float64 bow_nod_angle
 float64 location_x
 float64 location_y
 float64 location_z
 ---
 # Result
-bool success
-string message
-float32 actual_duration_seconds
+bool gesture_success
 ---
 # Feedback
-float32 elapsed_seconds
+string status

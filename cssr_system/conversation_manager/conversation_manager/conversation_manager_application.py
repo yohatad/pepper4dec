@@ -37,6 +37,13 @@ PROMPT_SERVICE = "/conversationManagement/prompt"
 CREATE_COLLECTION = "/conversationManagement/create_collection"
 HEARTBEAT_MSG_PERIOD = 10  # seconds
 
+# Static config options (not set via config file)
+NODE_NAME = "conversation_management"
+GET_INTENT_SERVICE = "/conversationManagement/get_intent"
+PROMPT_SERVICE = "/conversationManagement/prompt"
+CREATE_COLLECTION = "/conversationManagement/create_collection"
+HEARTBEAT_MSG_PERIOD = 10  # seconds
+
 class SimpleRAGNode(Node):
     """
     Simple RAG Node for Pepper robot.

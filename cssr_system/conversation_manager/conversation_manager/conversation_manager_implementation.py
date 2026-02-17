@@ -248,8 +248,8 @@ class RAGConfig:
         if not self.llm_base_url:
             errors.append("llm_base_url cannot be empty")
         
-        if not self.llm_api_key or self.llm_api_key == DEFAULT_LLM_API_KEY:
-            errors.append("LLM_API_KEY must be exported as environment variable")
+        if not self.llm_api_key:
+            errors.append("LLM_API_KEY cannot be empty")
         
         if not self.llm_model:
             errors.append("llm_model cannot be empty")
@@ -310,7 +310,7 @@ def set_config(config: RAGConfig) -> None:
     Raises:
         ConfigError: If configuration validation fails
     """
-    global global_config, openai_client_instance, chroma_client_instance, embedding_function_instance
+    global global_config
     
     is_valid, errors = config.validate()
     if not is_valid:
@@ -318,11 +318,6 @@ def set_config(config: RAGConfig) -> None:
     
     with config_lock:
         global_config = config
-    
-    with client_lock:
-        openai_client_instance = None
-        chroma_client_instance = None
-        embedding_function_instance = None
     
     log_verbose(f"Configuration updated: llm_base_url={config.llm_base_url}, llm_model={config.llm_model}")
 
@@ -332,14 +327,13 @@ def get_openai_client() -> openai.OpenAI:
     
     if openai_client_instance is None:
         with client_lock:
-            if openai_client_instance is None:
-                config = get_config()
-                log_verbose(f"Creating OpenAI client with base_url: {config.llm_base_url}")
-                openai_client_instance = openai.OpenAI(
-                    base_url=config.llm_base_url,
-                    api_key=config.llm_api_key,
-                    timeout=30.0
-                )
+            config = get_config()
+            log_verbose(f"Creating OpenAI client with base_url: {config.llm_base_url}")
+            openai_client_instance = openai.OpenAI(
+                base_url=config.llm_base_url,
+                api_key=config.llm_api_key,
+                timeout=30.0
+            )
     return openai_client_instance
 
 def get_chroma_client() -> chromadb.PersistentClient:
@@ -348,13 +342,12 @@ def get_chroma_client() -> chromadb.PersistentClient:
     
     if chroma_client_instance is None:
         with client_lock:
-            if chroma_client_instance is None:
-                config = get_config()
-                try:
-                    log_verbose(f"Creating ChromaDB client with path: {config.chroma_path}")
-                    chroma_client_instance = chromadb.PersistentClient(path=config.chroma_path)
-                except Exception as e:
-                    raise RAGError(f"Failed to initialize ChromaDB: {e}")
+            config = get_config()
+            try:
+                log_verbose(f"Creating ChromaDB client with path: {config.chroma_path}")
+                chroma_client_instance = chromadb.PersistentClient(path=config.chroma_path)
+            except Exception as e:
+                raise RAGError(f"Failed to initialize ChromaDB: {e}")
     return chroma_client_instance
 
 def get_embedding_function():
@@ -363,12 +356,11 @@ def get_embedding_function():
     
     if embedding_function_instance is None:
         with client_lock:
-            if embedding_function_instance is None:
-                config = get_config()
-                log_verbose(f"Creating embedding function with model: {config.embedding_model}")
-                embedding_function_instance = embedding_functions.SentenceTransformerEmbeddingFunction(
-                    model_name=config.embedding_model
-                )
+            config = get_config()
+            log_verbose(f"Creating embedding function with model: {config.embedding_model}")
+            embedding_function_instance = embedding_functions.SentenceTransformerEmbeddingFunction(
+                model_name=config.embedding_model
+            )
     return embedding_function_instance
 
 # =============================================================================
@@ -628,7 +620,7 @@ def search(
     Returns:
         List of results with doc_id, title, content, score
     """
-    if not query or not query.strip():
+    if not query.strip():
         log_verbose("Empty query, returning empty results")
         return []
     
@@ -860,7 +852,7 @@ def handle_query(
     Raises:
         RAGError: If search or generation fails
     """
-    if not query or not query.strip():
+    if not query.strip():
         log_verbose("Empty query received")
         return {
             'response': "I didn't catch that. Could you please repeat?",
