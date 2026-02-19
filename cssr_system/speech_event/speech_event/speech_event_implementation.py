@@ -1,6 +1,6 @@
 """
 speech_event_implementation.py
-Implementation of speech recognition with Whisper ASR
+Implementation of speech recognition with Whisper ASR.
 
 Author: Yohannes Tadesse Haile
 Date: November 8, 2025
@@ -13,22 +13,20 @@ import math
 import time
 import numpy as np
 import torch
-import rclpy
 import os
 import onnxruntime
 import threading
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
-from rclpy.action import ActionServer
+from rclpy.action import ActionServer, CancelResponse
 from cssr_interfaces.action import SpeechRecognition
 
 from ament_index_python.packages import get_package_share_directory
 from rclpy.node import Node
-from std_msgs.msg import Bool, Float32, String
+from std_msgs.msg import Float32, String
 from naoqi_bridge_msgs.msg import AudioBuffer
 from faster_whisper import WhisperModel
 from scipy.signal import resample_poly
-
 
 class OnnxWrapper():
     def __init__(self, path, force_onnx_cpu=False, logger=None):
@@ -37,7 +35,7 @@ class OnnxWrapper():
         opts.intra_op_num_threads = 4
 
         available_providers = onnxruntime.get_available_providers()
-        
+
         if force_onnx_cpu:
             # Explicitly force CPU
             self.session = onnxruntime.InferenceSession(path, providers=['CPUExecutionProvider'], sess_options=opts)
@@ -50,9 +48,9 @@ class OnnxWrapper():
                 providers = ['TensorrtExecutionProvider', 'CPUExecutionProvider']
             else:
                 providers = ['CPUExecutionProvider']
-            
+
             self.session = onnxruntime.InferenceSession(path, providers=providers, sess_options=opts)
-            
+
             # Determine which provider was actually used
             provider = self.session.get_providers()[0]
             if 'CUDA' in provider:
@@ -129,7 +127,6 @@ class OnnxWrapper():
             # Return speech probability as scalar
             return float(out.squeeze())
 
-
 class SpeechRecognitionNode(Node):
     def __init__(self):
         super().__init__("speech_recognition")
@@ -141,7 +138,7 @@ class SpeechRecognitionNode(Node):
         self.declare_parameter("compute_type", "float16")
         self.declare_parameter("language", "en")
         self.declare_parameter("whisper_model_id", "deepdml/faster-whisper-large-v3-turbo-ct2")
-        
+
         self.declare_parameter("speech_threshold", 0.7)
         self.declare_parameter("neg_threshold", 0.35)
         self.declare_parameter("min_silence_duration_ms", 300)
@@ -149,8 +146,9 @@ class SpeechRecognitionNode(Node):
         self.declare_parameter("min_speech_duration", 0.3)
         self.declare_parameter("pre_speech_buffer_ms", 200)
         self.declare_parameter("intensity_threshold", 0.001)
-        
+
         self.declare_parameter("microphone_topic", "/audio")
+        self.declare_parameter("action_server", True)
 
         self.sample_rate = int(self.get_parameter("sample_rate").value)
         self.input_sample_rate = int(self.get_parameter("input_sample_rate").value)
@@ -158,7 +156,7 @@ class SpeechRecognitionNode(Node):
         self.compute_type = self.get_parameter("compute_type").value
         self.language = self.get_parameter("language").value
         self.whisper_model_id = self.get_parameter("whisper_model_id").value
-        
+
         self.speech_threshold = float(self.get_parameter("speech_threshold").value)
         self.neg_threshold = float(self.get_parameter("neg_threshold").value)
         self.min_silence_duration_ms = int(self.get_parameter("min_silence_duration_ms").value)
@@ -166,8 +164,9 @@ class SpeechRecognitionNode(Node):
         self.min_speech_duration = float(self.get_parameter("min_speech_duration").value)
         self.pre_speech_buffer_ms = int(self.get_parameter("pre_speech_buffer_ms").value)
         self.intensity_threshold = float(self.get_parameter("intensity_threshold").value)
-        
+
         self.microphone_topic = self.get_parameter("microphone_topic").value
+        self.action_server_enabled = bool(self.get_parameter("action_server").value)
 
         # =====================================================
         # Validate parameters
@@ -220,13 +219,13 @@ class SpeechRecognitionNode(Node):
         # Load Whisper with optimizations
         self.get_logger().info(f"Loading Whisper model on device: {self.device}...")
         self.whisper = WhisperModel(
-            self.whisper_model_id, 
-            device=self.device, 
+            self.whisper_model_id,
+            device=self.device,
             compute_type=self.compute_type,
             num_workers=1,  # Reduce overhead for short segments
             cpu_threads=4   # For CPU fallback
         )
-        
+
         # Check if Whisper is actually using GPU
         if self.device == "cuda":
             if torch.cuda.is_available():
@@ -236,9 +235,9 @@ class SpeechRecognitionNode(Node):
                 self.get_logger().warning("CUDA requested but not available! Whisper will use CPU")
         else:
             self.get_logger().info(f"Whisper using CPU (device parameter: {self.device})")
-        
+
         self.get_logger().info("Whisper model loaded.")
-        
+
         # Warmup Whisper to avoid first-inference latency
         self.warmup_whisper()
 
@@ -248,60 +247,59 @@ class SpeechRecognitionNode(Node):
         # Input: 4096 samples @ 48kHz -> 1365 samples @ 16kHz (after resampling)
         # VAD needs: 512 samples per chunk
         # We'll accumulate resampled audio and process in 512-sample chunks
-        
+
         self.vad_chunk_size = 512  # Silero VAD requirement
         self.vad_pending_buffer = np.zeros(0, dtype=np.float32)  # Accumulates until we have 512 samples
-        
+
         # =====================================================
         # Pre-speech lookback buffer (ring buffer)
         # =====================================================
         # Keep last N ms of audio to prepend when speech starts
         self.pre_speech_samples = int((self.pre_speech_buffer_ms / 1000.0) * self.sample_rate)
         self.pre_speech_ring = deque(maxlen=self.pre_speech_samples)
-        
+
         # =====================================================
         # Speech collection buffers
         # =====================================================
         self.speech_buffer = []
         self.speech_active = False
         self.speech_start_time = None
-        
+
         # Silence tracking (chunk-based)
         self.silence_chunks = 0
         self.min_silence_chunks = int((self.min_silence_duration_ms / 1000.0) * self.sample_rate / self.vad_chunk_size)
-        
-        # Max speech duration in chunks
+
+        # Max speech duration in chunks (set from max_speech_duration_s parameter)
         self.max_speech_chunks = int(self.max_speech_duration_s * self.sample_rate / self.vad_chunk_size)
         self.speech_chunk_count = 0
 
         # =====================================================
-        # Action server flags
-        # =====================================================
-        self.action_server = True
-        self.action_started = False
-        self.asr_action_server = None
-        self.processing_action_goal = False
-
-        # =====================================================
-        # Async transcription with thread pool
+        # Transcription thread pool
         # =====================================================
         self.transcription_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="whisper")
         self.transcription_lock = threading.Lock()
         self.is_transcribing = False
-
-        # Action server synchronization
-        self.action_server_lock = threading.Lock()
-        self.action_goal_complete = threading.Event()
         self.transcribed_text = ""
 
-        # Initialize action server
-        if self.action_server:
-            self.init_action_server()
+        # =====================================================
+        # Action server state (all guarded by action_server_lock)
+        # =====================================================
+        self.action_server_lock = threading.Lock()
+        # action_started: True while a goal is active; gates audio_callback and
+        # concurrent goal rejection.  Always read/written under action_server_lock.
+        self.action_started = False
+        self.action_goal_complete = threading.Event()
+        self.speech_detected_event = threading.Event()
+        self._current_goal_handle = None
+        self.asr_action_server = None
+
+        if self.action_server_enabled:
+            self.initialize_action_server()
 
         # Publishers
         self.vad_prob_pub = self.create_publisher(Float32, "/speech_event/vad_speech_prob", 10)
         self.asr_pub = self.create_publisher(String, "/speech_event/text", 10)
-        
+
         # Subscriber
         self.audio_sub = self.create_subscription(AudioBuffer, self.microphone_topic, self.audio_callback, 10)
 
@@ -310,6 +308,7 @@ class SpeechRecognitionNode(Node):
                               f"min_silence={self.min_silence_duration_ms}ms ({self.min_silence_chunks} chunks), "
                               f"min_speech={self.min_speech_duration}s, max_speech={self.max_speech_duration_s}s")
         self.get_logger().info(f"Pre-speech buffer: {self.pre_speech_buffer_ms}ms ({self.pre_speech_samples} samples)")
+        self.get_logger().info(f"Action server: {'enabled' if self.action_server_enabled else 'disabled'}")
 
     def warmup_whisper(self):
         """Run a dummy transcription to warm up CUDA kernels."""
@@ -329,39 +328,121 @@ class SpeechRecognitionNode(Node):
         except Exception as e:
             self.get_logger().warning(f"Whisper warmup failed (non-critical): {e}")
 
-    def init_action_server(self):
-        """Initialize ROS2 Action Server for speech recognition"""
+    # =========================================================================
+    # Action Server
+    # =========================================================================
+    def initialize_action_server(self):
+        """Initialize ROS2 Action Server for speech recognition."""
         self.asr_action_server = ActionServer(
             self,
             SpeechRecognition,
             '/speech_recognition_action',
-            self.execute_asr_action_callback
+            self.execute_asr_action_callback,
+            cancel_callback=self.cancel_callback,
         )
 
+    def cancel_callback(self, goal_handle):
+        """Accept cancellation requests immediately."""
+        self.get_logger().info(f"Cancel request received for goal {goal_handle.goal_id}.")
+        return CancelResponse.ACCEPT
+
     def execute_asr_action_callback(self, goal_handle):
-        """Handle ASR action goal."""
-        self.get_logger().info("ASR Action Goal received.")
-        self.action_started = True
+        """Handle ASR action goal.
 
+        goal.wait defines how long (seconds) to wait for speech to BEGIN.
+        Once speech is detected, recording continues until the speaker stops
+        (VAD silence) or max_speech_duration_s from the config is reached.
+        """
+        # --- Reject concurrent goals ---
         with self.action_server_lock:
-            self.processing_action_goal = True
-            self.max_speech_duration_s = goal_handle.request.wait
-            self.max_speech_chunks = int(self.max_speech_duration_s * self.sample_rate / self.vad_chunk_size)
+            if self.action_started:
+                self.get_logger().warning("Rejecting goal: a goal is already being processed.")
+                goal_handle.abort()
+                return SpeechRecognition.Result()
 
-        # Wait for transcription to complete (timeout = wait duration + 5s buffer)
-        timeout = goal_handle.request.wait + 5.0
-        if not self.action_goal_complete.wait(timeout=timeout):
-            self.get_logger().warning(f"Action goal timed out waiting for transcription after {timeout}s")
+            self.action_started = True
+            self._current_goal_handle = goal_handle
 
-        # Prepare result
+        self.speech_detected_event.clear()
+        self.action_goal_complete.clear()
+
+        self.get_logger().info(
+            f"ASR Action Goal received. Waiting up to {goal_handle.request.wait:.1f}s for speech to start."
+        )
+        self.publish_feedback("waiting")
+
+        def cleanup():
+            with self.action_server_lock:
+                self.action_started = False
+                self._current_goal_handle = None
+            self.speech_detected_event.clear()
+            self.action_goal_complete.clear()
+
+        # ---- Phase 1: wait for speech onset ----
+        onset_deadline = time.monotonic() + goal_handle.request.wait
+        speech_started = False
+
+        while time.monotonic() < onset_deadline:
+            if goal_handle.is_cancel_requested:
+                self.get_logger().info("Goal cancelled while waiting for speech.")
+                cleanup()
+                goal_handle.canceled()
+                return SpeechRecognition.Result()
+
+            if self.speech_detected_event.wait(timeout=0.1):
+                speech_started = True
+                break
+
+        if not speech_started:
+            self.get_logger().warning(
+                f"No speech detected within {goal_handle.request.wait:.1f}s. Aborting.")
+            cleanup()
+            goal_handle.abort()
+            return SpeechRecognition.Result()
+
+        self.get_logger().info("Speech detected. Waiting for speaker to finish...")
+
+        # ---- Phase 2: wait for transcription to complete ----
+        transcription_timeout = self.max_speech_duration_s
+        transcription_deadline = time.monotonic() + transcription_timeout
+        completed = False
+
+        while time.monotonic() < transcription_deadline:
+            if goal_handle.is_cancel_requested:
+                self.get_logger().info("Goal cancelled during transcription.")
+                cleanup()
+                goal_handle.canceled()
+                return SpeechRecognition.Result()
+
+            if self.action_goal_complete.wait(timeout=0.1):
+                completed = True
+                break
+
+        # --- Collect result and clean up ---
         result = SpeechRecognition.Result()
         result.transcription = self.transcribed_text
+        cleanup()
 
-        self.get_logger().info("ASR Action Goal completed.")
-        goal_handle.succeed()
-        self.action_started = False
-        self.action_goal_complete.clear()  # Reset for next goal
+        if completed:
+            self.get_logger().info(f"ASR Action Goal completed. Transcript: '{result.transcription}'")
+            goal_handle.succeed()
+        else:
+            self.get_logger().warning(
+                f"Timed out waiting for transcription after {transcription_timeout:.1f}s."
+            )
+            goal_handle.abort()
+
         return result
+
+    def publish_feedback(self, status: str):
+        """Publish action feedback. status: 'waiting', 'speech', 'transcribing'."""
+        with self.action_server_lock:
+            gh = self._current_goal_handle
+        if gh is None:
+            return
+        feedback = SpeechRecognition.Feedback()
+        feedback.status = status
+        gh.publish_feedback(feedback)
 
     # =========================================================================
     # Audio Parsing
@@ -369,7 +450,7 @@ class SpeechRecognitionNode(Node):
     def parse_audio_buffer(self, msg):
         """
         Convert naoqi_bridge_msgs/AudioBuffer to single-channel audio at 48kHz.
-        
+
         Returns:
             tuple: (audio_48k, freq_in) or (None, None) on failure
         """
@@ -386,7 +467,7 @@ class SpeechRecognitionNode(Node):
             num_frames = data.size // channels
             if num_frames <= 0:
                 return None, None
-            
+
             frames = data[:num_frames * channels].reshape(num_frames, channels).astype(np.float32) / 32767.0
 
             # Extract front-left channel (primary microphone)
@@ -397,7 +478,7 @@ class SpeechRecognitionNode(Node):
                 return np.copy(fallback) if fallback is not None else np.zeros(num_frames, dtype=np.float32)
 
             FL = get_chan(AudioBuffer.CHANNEL_FRONT_LEFT)
-            
+
             return FL, freq_in
 
         except Exception as e:
@@ -408,7 +489,7 @@ class SpeechRecognitionNode(Node):
         """Resample audio to 16kHz for VAD/Whisper."""
         if freq_in == self.sample_rate:
             return audio_48k
-        
+
         try:
             gcd = math.gcd(freq_in, self.sample_rate)
             up = self.sample_rate // gcd
@@ -433,301 +514,164 @@ class SpeechRecognitionNode(Node):
         """
         Process incoming audio:
         1. Parse single-channel audio at 48kHz
-        2. Intensity gate
-        3. Resample to 16kHz
-        4. VAD + speech collection
+        2. Resample to 16kHz
+        3. Update pre-speech ring buffer (always)
+        4. Intensity gate (bypassed during active speech collection)
+        5. VAD + speech collection
         """
-        # Action server guard
-        if self.action_server and not self.action_started:
-            return
-        
+        # Action server guard: skip processing when no goal is active
+        if self.action_server_enabled:
+            with self.action_server_lock:
+                active = self.action_started
+            if not active:
+                return
+
         # Parse single-channel audio (keep at 48kHz)
         audio_48k, freq_in = self.parse_audio_buffer(msg)
         if audio_48k is None:
             return
 
-        # Intensity gate
-        if not self.is_intense_enough(audio_48k):
-            return
-
-        # =====================================================
-        # Resample to 16kHz for VAD/Whisper
-        # =====================================================
+        # Resample to 16kHz
         resampled_audio = self.resample_to_16k(audio_48k, freq_in)
 
         # =====================================================
-        # Update pre-speech ring buffer (always, before VAD)
+        # Always update pre-speech ring buffer.
+        # This must happen before the intensity gate so that the
+        # lookback window contains uninterrupted audio history.
         # =====================================================
         for sample in resampled_audio:
             self.pre_speech_ring.append(sample)
-        
+
+        # =====================================================
+        # Intensity gate — only applied when NOT actively
+        # collecting speech, to avoid dropping mid-speech frames.
+        # =====================================================
+        if not self.speech_active and not self.is_intense_enough(audio_48k):
+            return
+
         # =====================================================
         # Accumulate for chunk-aligned VAD processing
         # =====================================================
         self.vad_pending_buffer = np.concatenate([self.vad_pending_buffer, resampled_audio])
-        
+
         # Process all complete 512-sample chunks
         while len(self.vad_pending_buffer) >= self.vad_chunk_size:
-            # Extract exactly 512 samples
             vad_chunk = self.vad_pending_buffer[:self.vad_chunk_size]
             self.vad_pending_buffer = self.vad_pending_buffer[self.vad_chunk_size:]
-            
-            # Run VAD on this chunk
-            if self.action_server and self.action_started:
-                self.process_vad_chunk_sync(vad_chunk)
-            else:
-                self.process_vad_chunk(vad_chunk)
+            self.process_vad_chunk(vad_chunk)
 
-    def process_vad_chunk_sync(self, vad_chunk: np.ndarray):
-        """
-        Process a single 512-sample VAD chunk through the state machine (sync mode for action server).
-        """
-        # Run VAD
-        speech_prob = self.run_silero_vad(vad_chunk)
-        
-        # Publish probability
-        prob_msg = Float32()
-        prob_msg.data = float(speech_prob)
-        self.vad_prob_pub.publish(prob_msg)
-        
-        # Two-threshold system
-        vad_is_speech = speech_prob >= self.speech_threshold
-        vad_is_silence = speech_prob < self.neg_threshold
-        
-        # =====================================================
-        # State machine with chunk-based tracking
-        # =====================================================
-        
-        if not self.speech_active and vad_is_speech:
-            # =====================================================
-            # START: Speech detected - include pre-speech buffer
-            # =====================================================
-            self.speech_active = True
-            self.speech_start_time = time.time()
-            self.silence_chunks = 0
-            self.speech_chunk_count = 1
-            
-            # Prepend pre-speech buffer (captures the onset)
-            pre_speech_audio = np.array(list(self.pre_speech_ring), dtype=np.float32)
-            self.speech_buffer = [pre_speech_audio, vad_chunk.copy()]
-            
-            self.get_logger().info(f"VAD: speech START (prob={speech_prob:.3f}, "
-                                  f"pre-buffer={len(pre_speech_audio)} samples)")
-        
-        elif self.speech_active and vad_is_speech:
-            # CONTINUE: Still speaking - reset silence counter
-            self.speech_buffer.append(vad_chunk.copy())
-            self.silence_chunks = 0
-            self.speech_chunk_count += 1
-            
-            # =====================================================
-            # CHECK: Max duration cutoff
-            # =====================================================
-            with self.action_server_lock:
-                max_chunks = self.max_speech_chunks
-            if self.speech_chunk_count >= max_chunks:
-                self.finalize_speech_sync(speech_prob, reason="max_duration")
-        
-        elif self.speech_active and vad_is_silence:
-            # POSSIBLE END: Below negative threshold
-            self.speech_buffer.append(vad_chunk.copy())
-            self.silence_chunks += 1
-            self.speech_chunk_count += 1
-            
-            # Check if silence duration exceeded threshold
-            if self.silence_chunks >= self.min_silence_chunks:
-                self.finalize_speech_sync(speech_prob, reason="silence")
-
-            # Also check max duration during silence
-            else:
-                with self.action_server_lock:
-                    max_chunks = self.max_speech_chunks
-                if self.speech_chunk_count >= max_chunks:
-                    self.finalize_speech_sync(speech_prob, reason="max_duration")
-        
-        elif self.speech_active:
-            # In between thresholds - continue collecting, don't increment silence counter
-            self.speech_buffer.append(vad_chunk.copy())
-            self.speech_chunk_count += 1
-
-            # Check max duration
-            with self.action_server_lock:
-                max_chunks = self.max_speech_chunks
-            if self.speech_chunk_count >= max_chunks:
-                self.finalize_speech_sync(speech_prob, reason="max_duration")
-
+    # =========================================================================
+    # VAD State Machine (unified)
+    # =========================================================================
     def process_vad_chunk(self, vad_chunk: np.ndarray):
         """
         Process a single 512-sample VAD chunk through the state machine.
+        Works for both action server mode and standalone topic mode.
         """
-        # Run VAD
         speech_prob = self.run_silero_vad(vad_chunk)
-        
-        # Publish probability
+
         prob_msg = Float32()
         prob_msg.data = float(speech_prob)
         self.vad_prob_pub.publish(prob_msg)
-        
-        # Two-threshold system
+
+        # Two-threshold hysteresis
         vad_is_speech = speech_prob >= self.speech_threshold
         vad_is_silence = speech_prob < self.neg_threshold
-        
-        # =====================================================
-        # State machine with chunk-based tracking
-        # =====================================================
-        
+
+        with self.action_server_lock:
+            max_chunks = self.max_speech_chunks
+
         if not self.speech_active and vad_is_speech:
-            # =====================================================
-            # START: Speech detected - include pre-speech buffer
-            # =====================================================
+            # ---- START ----
             self.speech_active = True
             self.speech_start_time = time.time()
             self.silence_chunks = 0
             self.speech_chunk_count = 1
-            
-            # Prepend pre-speech buffer (captures the onset)
+
             pre_speech_audio = np.array(list(self.pre_speech_ring), dtype=np.float32)
             self.speech_buffer = [pre_speech_audio, vad_chunk.copy()]
-            
+
             self.get_logger().info(f"VAD: speech START (prob={speech_prob:.3f}, "
                                   f"pre-buffer={len(pre_speech_audio)} samples)")
-        
+            self.speech_detected_event.set()
+            self.publish_feedback("speech")
+
         elif self.speech_active and vad_is_speech:
-            # CONTINUE: Still speaking - reset silence counter
+            # ---- CONTINUE ----
             self.speech_buffer.append(vad_chunk.copy())
             self.silence_chunks = 0
             self.speech_chunk_count += 1
-
-            # =====================================================
-            # CHECK: Max duration cutoff
-            # =====================================================
-            with self.action_server_lock:
-                max_chunks = self.max_speech_chunks
             if self.speech_chunk_count >= max_chunks:
                 self.finalize_speech(speech_prob, reason="max_duration")
-        
+
         elif self.speech_active and vad_is_silence:
-            # POSSIBLE END: Below negative threshold
+            # ---- POSSIBLE END ----
             self.speech_buffer.append(vad_chunk.copy())
             self.silence_chunks += 1
             self.speech_chunk_count += 1
-
-            # Check if silence duration exceeded threshold
             if self.silence_chunks >= self.min_silence_chunks:
                 self.finalize_speech(speech_prob, reason="silence")
+            elif self.speech_chunk_count >= max_chunks:
+                self.finalize_speech(speech_prob, reason="max_duration")
 
-            # Also check max duration during silence
-            else:
-                with self.action_server_lock:
-                    max_chunks = self.max_speech_chunks
-                if self.speech_chunk_count >= max_chunks:
-                    self.finalize_speech(speech_prob, reason="max_duration")
-        
         elif self.speech_active:
-            # In between thresholds - continue collecting, don't increment silence counter
+            # ---- IN BETWEEN THRESHOLDS ----
             self.speech_buffer.append(vad_chunk.copy())
             self.speech_chunk_count += 1
-
-            # Check max duration
-            with self.action_server_lock:
-                max_chunks = self.max_speech_chunks
             if self.speech_chunk_count >= max_chunks:
                 self.finalize_speech(speech_prob, reason="max_duration")
 
-    def finalize_speech_sync(self, speech_prob: float, reason: str):
-        """
-        Finalize speech segment and trigger sync transcription (for action server).
-
-        Args:
-            speech_prob: Current VAD probability
-            reason: "silence" or "max_duration"
-        """
-        self.speech_active = False
-        
-        if reason == "silence":
-            silence_duration_s = self.silence_chunks * self.vad_chunk_size / self.sample_rate
-            self.get_logger().info(f"VAD: speech END (prob={speech_prob:.3f}, "
-                                  f"silence={silence_duration_s:.2f}s)")
-        else:
-            self.get_logger().info(f"VAD: speech END (max duration {self.max_speech_duration_s}s reached)")
-        
-        # Reset VAD state
-        self.reset_vad_state()
-        
-        # Concatenate speech
-        if not self.speech_buffer:
-            self.get_logger().warning("Empty speech buffer at finalization")
-            self.reset_speech_state()
-            return
-        
-        speech_audio = np.concatenate(self.speech_buffer).astype(np.float32)
-        duration_s = len(speech_audio) / self.sample_rate
-        
-        # Filter short segments
-        if duration_s < self.min_speech_duration:
-            self.get_logger().info(f"Ignoring short segment ({duration_s:.2f}s)")
-            self.reset_speech_state()
-            return
-        
-        # Synchronous transcription for action server
-        self.transcribed_text = self.transcribe_sync(speech_audio, duration_s)
-
-        with self.action_server_lock:
-            self.processing_action_goal = False
-
-        # Signal action goal completion
-        self.action_goal_complete.set()
-
-        self.reset_speech_state()
-
     def finalize_speech(self, speech_prob: float, reason: str):
         """
-        Finalize speech segment and trigger async transcription.
-
-        Args:
-            speech_prob: Current VAD probability
-            reason: "silence" or "max_duration"
+        Finalize a speech segment and submit transcription to the thread pool.
+        Non-blocking: the audio callback returns immediately after this call.
+        Result delivery differs by mode:
+          - Action server mode: transcribe_worker sets action_goal_complete.
+          - Standalone mode:    transcribe_worker publishes to /speech_event/text.
         """
         self.speech_active = False
-        
+
         if reason == "silence":
             silence_duration_s = self.silence_chunks * self.vad_chunk_size / self.sample_rate
             self.get_logger().info(f"VAD: speech END (prob={speech_prob:.3f}, "
                                   f"silence={silence_duration_s:.2f}s)")
         else:
             self.get_logger().info(f"VAD: speech END (max duration {self.max_speech_duration_s}s reached)")
-        
-        # Reset VAD state
+
         self.reset_vad_state()
-        
-        # Concatenate speech
+
         if not self.speech_buffer:
             self.get_logger().warning("Empty speech buffer at finalization")
             self.reset_speech_state()
             return
-        
+
         speech_audio = np.concatenate(self.speech_buffer).astype(np.float32)
         duration_s = len(speech_audio) / self.sample_rate
-        
-        # Filter short segments
+
         if duration_s < self.min_speech_duration:
             self.get_logger().info(f"Ignoring short segment ({duration_s:.2f}s)")
             self.reset_speech_state()
             return
-        
-        # =====================================================
-        # ASYNC: Submit transcription to thread pool
-        # =====================================================
+
+        # Capture action mode flag before resetting state
+        with self.action_server_lock:
+            in_action_mode = self.action_started
+
         with self.transcription_lock:
             if self.is_transcribing:
                 self.get_logger().warning("Previous transcription still running, skipping...")
                 self.reset_speech_state()
                 return
             self.is_transcribing = True
-            try:
-                self.transcription_executor.submit(self.transcribe_async, speech_audio, duration_s)
-            except Exception as e:
-                self.get_logger().error(f"Failed to submit transcription task: {e}")
+
+        try:
+            self.publish_feedback("transcribing")
+            self.transcription_executor.submit(
+                self.transcribe_worker, speech_audio, duration_s, in_action_mode
+            )
+        except Exception as e:
+            self.get_logger().error(f"Failed to submit transcription task: {e}")
+            with self.transcription_lock:
                 self.is_transcribing = False
 
         self.reset_speech_state()
@@ -739,96 +683,77 @@ class SpeechRecognitionNode(Node):
         self.speech_chunk_count = 0
         self.speech_start_time = None
 
-    def transcribe_sync(self, audio: np.ndarray, duration_s: float) -> str:
+    # =========================================================================
+    # Transcription (runs in thread pool, never blocks audio callback)
+    # =========================================================================
+    def transcribe_worker(self, audio: np.ndarray, duration_s: float, in_action_mode: bool):
         """
-        Transcribe speech segment with Whisper (synchronous for action server).
-
-        This blocks the audio callback.
-        """
-        try:
-            self.get_logger().info(f"[Sync] Running Whisper on {duration_s:.2f}s segment...")
-            start_time = time.time()
-
-            segments, info = self.whisper.transcribe(
-                audio, 
-                language=self.language, 
-                task="transcribe", 
-                beam_size=1,
-                best_of=1,
-                temperature=0.0,
-                vad_filter=False,
-                condition_on_previous_text=False,
-                compression_ratio_threshold=2.4,
-                log_prob_threshold=-1.0,
-                no_speech_threshold=0.6
-            )
-
-            text = " ".join([seg.text.strip() for seg in segments]).strip()
-            elapsed = time.time() - start_time
-            rtf = elapsed / info.duration if info.duration > 0 else 0.0
-
-            self.get_logger().info(f"[Sync] ASR done. elapsed={elapsed:.3f}s, RTF={rtf:.3f}")
-            self.get_logger().info(f"[Sync] Transcript: '{text}'")
-
-            return text
-                
-        except Exception as e:
-            self.get_logger().error(f"[Sync] Transcription error: {e}")
-            return ""
-
-    def transcribe_async(self, audio: np.ndarray, duration_s: float):
-        """
-        Transcribe speech segment with Whisper (runs in thread pool).
-
-        This doesn't block the audio callback, allowing continuous VAD processing.
+        Thread-pool worker: transcribes audio then either signals the waiting
+        action callback or publishes the result to the ASR topic.
         """
         try:
-            self.get_logger().info(f"[Async] Running Whisper on {duration_s:.2f}s segment...")
-            start_time = time.time()
+            text = self.do_transcribe(audio, duration_s)
 
-            segments, info = self.whisper.transcribe(
-                audio, 
-                language=self.language, 
-                task="transcribe", 
-                beam_size=1,           # Already optimal (greedy decoding)
-                best_of=1,             # Don't sample multiple candidates
-                temperature=0.0,       # Deterministic (no sampling)
-                vad_filter=False,      # We do VAD externally
-                condition_on_previous_text=False,  # Don't condition on history (faster)
-                compression_ratio_threshold=2.4,   # Default
-                log_prob_threshold=-1.0,           # Default
-                no_speech_threshold=0.6            # Default
-            )
+            if in_action_mode:
+                self.transcribed_text = text
+                self.action_goal_complete.set()
+            else:
+                if text:
+                    out = String()
+                    out.data = text
+                    self.asr_pub.publish(out)
 
-            text = " ".join([seg.text.strip() for seg in segments]).strip()
-            elapsed = time.time() - start_time
-            rtf = elapsed / info.duration if info.duration > 0 else 0.0
-
-            self.get_logger().info(f"[Async] ASR done. elapsed={elapsed:.3f}s, RTF={rtf:.3f}")
-            self.get_logger().info(f"[Async] Transcript: '{text}'")
-
-            # Only publish non-empty transcripts
-            if text:
-                out = String()
-                out.data = text
-                self.asr_pub.publish(out)
-                
         except Exception as e:
-            self.get_logger().error(f"[Async] Transcription error: {e}")
+            self.get_logger().error(f"Transcription error: {e}")
+            if in_action_mode:
+                # Unblock the action callback even on failure so it does not
+                # hang until timeout; result will be whatever was last stored.
+                self.action_goal_complete.set()
         finally:
             with self.transcription_lock:
                 self.is_transcribing = False
 
+    def do_transcribe(self, audio: np.ndarray, duration_s: float) -> str:
+        """Run Whisper on a speech segment and return the transcript."""
+        self.get_logger().info(f"Running Whisper on {duration_s:.2f}s segment...")
+        start_time = time.time()
+
+        segments, info = self.whisper.transcribe(
+            audio,
+            language=self.language,
+            task="transcribe",
+            beam_size=1,
+            best_of=1,
+            temperature=0.0,
+            vad_filter=False,
+            condition_on_previous_text=False,
+            compression_ratio_threshold=2.4,
+            log_prob_threshold=-1.0,
+            no_speech_threshold=0.6
+        )
+
+        text = " ".join([seg.text.strip() for seg in segments]).strip()
+        elapsed = time.time() - start_time
+        rtf = elapsed / info.duration if info.duration > 0 else 0.0
+
+        self.get_logger().info(f"ASR done. elapsed={elapsed:.3f}s, RTF={rtf:.3f}")
+        self.get_logger().info(f"Transcript: '{text}'")
+
+        return text
+
+    # =========================================================================
+    # VAD helpers
+    # =========================================================================
     def run_silero_vad(self, audio_chunk: np.ndarray) -> float:
         """Run Silero VAD on 512-sample chunk."""
         try:
             if len(audio_chunk) != 512:
                 self.get_logger().warning(f"VAD frame size mismatch: {len(audio_chunk)}")
                 return 0.0
-            
+
             speech_prob = self.silero_model(audio_chunk)
             return speech_prob
-        
+
         except Exception as e:
             self.get_logger().error(f"Silero VAD error: {e}")
             return 0.0

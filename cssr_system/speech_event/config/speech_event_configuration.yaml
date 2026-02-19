@@ -23,7 +23,7 @@ speech_recognition:
     # VAD (Voice Activity Detection) Parameters
     speech_threshold: 0.7        # Probability above which speech starts (0.0-1.0)
     neg_threshold: 0.35          # Probability below which silence is counted (0.0-1.0)
-    min_silence_duration_ms: 300 # Minimum silence duration to end segment (ms)
+    min_silence_duration_ms: 500 # Minimum silence duration to end segment (ms)
     min_speech_duration: 0.3     # Minimum speech duration to keep (seconds)
     max_speech_duration_s: 10.0  # Maximum allowed speech duration (seconds)
     pre_speech_buffer_ms: 200    # Audio to prepend before speech onset (ms)
