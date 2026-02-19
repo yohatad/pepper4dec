@@ -200,6 +200,77 @@ public:
 };
 
 //=============================================================================
+// BehaviorTree Action Nodes
+//=============================================================================
+
+// Wraps cssr_interfaces::action::AnimateBehavior
+class AnimateBehaviorNode
+    : public BT::RosActionNode<cssr_interfaces::action::AnimateBehavior>
+{
+public:
+    AnimateBehaviorNode(const std::string& name,
+                        const BT::NodeConfig& config,
+                        const BT::RosNodeParams& params)
+        : BT::RosActionNode<cssr_interfaces::action::AnimateBehavior>(name, config, params) {}
+
+    static BT::PortsList providedPorts();
+    bool setGoal(Goal& goal) override;
+    BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
+    BT::NodeStatus onResultReceived(const WrappedResult& result) override;
+    BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
+};
+
+// Wraps cssr_interfaces::action::Gesture
+class GestureNode
+    : public BT::RosActionNode<cssr_interfaces::action::Gesture>
+{
+public:
+    GestureNode(const std::string& name,
+                const BT::NodeConfig& config,
+                const BT::RosNodeParams& params)
+        : BT::RosActionNode<cssr_interfaces::action::Gesture>(name, config, params) {}
+
+    static BT::PortsList providedPorts();
+    bool setGoal(Goal& goal) override;
+    BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
+    BT::NodeStatus onResultReceived(const WrappedResult& result) override;
+    BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
+};
+
+// Wraps cssr_interfaces::action::Navigation
+class NavigateNode
+    : public BT::RosActionNode<cssr_interfaces::action::Navigation>
+{
+public:
+    NavigateNode(const std::string& name,
+                 const BT::NodeConfig& config,
+                 const BT::RosNodeParams& params)
+        : BT::RosActionNode<cssr_interfaces::action::Navigation>(name, config, params) {}
+
+    static BT::PortsList providedPorts();
+    bool setGoal(Goal& goal) override;
+    BT::NodeStatus onResultReceived(const WrappedResult& result) override;
+    BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
+};
+
+// Wraps cssr_interfaces::action::SpeechRecognition
+class SpeechRecognitionNode
+    : public BT::RosActionNode<cssr_interfaces::action::SpeechRecognition>
+{
+public:
+    SpeechRecognitionNode(const std::string& name,
+                          const BT::NodeConfig& config,
+                          const BT::RosNodeParams& params)
+        : BT::RosActionNode<cssr_interfaces::action::SpeechRecognition>(name, config, params) {}
+
+    static BT::PortsList providedPorts();
+    bool setGoal(Goal& goal) override;
+    BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
+    BT::NodeStatus onResultReceived(const WrappedResult& result) override;
+    BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
+};
+
+//=============================================================================
 // Function Declarations
 //=============================================================================
 namespace behavior_controller {
