@@ -15,7 +15,7 @@ This program comes with ABSOLUTELY NO WARRANTY.
 
 import sys
 import rclpy
-from rclpy.node import Node
+from rclpy.executors import MultiThreadedExecutor
 from .speech_event_implementation import SpeechRecognitionNode
 
 def main(args=None):
@@ -35,7 +35,9 @@ def main(args=None):
         )
         node.get_logger().info(f"{node_name}: startup.")
 
-        rclpy.spin(node)
+        executor = MultiThreadedExecutor()
+        executor.add_node(node)
+        executor.spin()
 
     except KeyboardInterrupt:
         # Graceful exit on Ctrl-C
