@@ -12,7 +12,7 @@ Version: v2.0 - Updated to use BehaviorTree.ROS2 with valid cssr_interfaces
 #include <behaviortree_cpp/loggers/groot2_publisher.h>
 
 void displayStartupInfo(const rclcpp::Logger& logger) {
-    std::string softwareVersion = "2.0";
+    std::string softwareVersion = "1.0";
     
     RCLCPP_INFO(logger, "\n"
          "**************************************************************************************************\n"
@@ -52,7 +52,7 @@ bool initializeSystem(const rclcpp::Logger& logger) {
 
 int main(int argc, char* argv[]) {
     rclcpp::init(argc, argv);
-    auto node = rclcpp::Node::make_shared("behavior_controller_node");
+    auto node = rclcpp::Node::make_shared("behavior_controller");
     auto logger = node->get_logger();
 
     displayStartupInfo(logger);
