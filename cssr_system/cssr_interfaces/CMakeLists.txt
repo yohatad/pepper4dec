@@ -22,9 +22,6 @@ include_directories(${NUMPY_INCLUDE_DIR})
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/FaceDetection.msg"
   "msg/ObjectDetection.msg"
-  "msg/OvertAttentionStatus.msg"
-  "srv/OvertAttentionSetMode.srv"
-  "srv/AnimateBehaviorSetActivation.srv"
   "srv/ConversationManagerPrompt.srv"
   "action/Navigation.action"
   "action/TTS.action"

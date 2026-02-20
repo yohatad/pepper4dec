@@ -4,14 +4,10 @@ Simplified RAG ROS 2 Node for Pepper Robot Lab Assistant
 
 Environment Variables:
     LLM_API_KEY: API key for LLM service (MUST be exported)
-    LLM_BASE_URL: LLM API endpoint
-    LLM_MODEL: Model name
-    CHROMA_PATH: Path for ChromaDB storage
-    EMBEDDING_MODEL: Sentence transformer model
-    RAG_VERBOSE: Set to "true" for debug logging
 
 Configuration:
-    All non-API key settings loaded from config/rag_system_configuration.yaml
+    All settings loaded from config/rag_system_configuration.yaml
+    Including knowledge base path and collection name
 """
 
 import rclpy
@@ -19,7 +15,7 @@ from pathlib import Path
 from typing import List, Dict
 from rclpy.node import Node
 from ament_index_python.packages import get_package_share_directory
-from cssr_interfaces.srv import LanguageModelCreateCollection, LanguageModelPrompt
+from cssr_interfaces.srv import ConversationManagerPrompt
 from .conversation_manager_implementation import (
     get_config,
     get_collection,
@@ -50,12 +46,15 @@ class SimpleRAGNode(Node):
     
     Services:
         - rag_prompt: Answer questions using RAG
-        - create_collection: Initialize knowledge base
     
-    Configuration via environment variables:
+    Configuration via YAML file (config/rag_system_configuration.yaml):
+        - Knowledge base automatically loaded at startup
+        - LLM settings
+        - Search parameters
+        - Conversation settings
+    
+    Environment variable required:
         export LLM_API_KEY="your-api-key"
-        export LLM_BASE_URL="https://api.groq.com/openai/v1"
-        export LLM_MODEL="llama-3.1-8b-instant"
     """
     
     def __init__(self):
@@ -71,8 +70,10 @@ class SimpleRAGNode(Node):
                     self.get_logger().info(f"Config note: {msg}")
             else:
                 self.get_logger().error(f"Failed to load configuration: {messages}")
+                raise RuntimeError(f"Configuration error: {messages}")
         else:
-            self.get_logger().warn(f"Configuration file not found: {config_file}")
+            self.get_logger().error(f"Configuration file not found: {config_file}")
+            raise FileNotFoundError(f"Required config file not found: {config_file}")
         
         # Log verbose status
         config = get_config()
@@ -81,7 +82,7 @@ class SimpleRAGNode(Node):
         else:
             self.get_logger().info("Verbose mode is DISABLED - only essential logs will be shown")
         
-        # Parameters (can override env vars)
+        # Parameters
         self.declare_parameter('collection_name', 'upanzi_knowledge')
         self.declare_parameter('verbose', False)
         
@@ -96,32 +97,70 @@ class SimpleRAGNode(Node):
         self.collection = None
         self.conversation_history: List[Dict] = []
         
-        # Try to load existing collection
+        # Load collection from configuration
         collection_name = self.get_parameter('collection_name').get_parameter_value().string_value
-        self.load_collection(collection_name)
+        self.initialize_collection(collection_name)
         
-        # Services - use the correct imported service types
-        self.create_service(LanguageModelPrompt, PROMPT_SERVICE, self.prompt_callback)
-        self.create_service(LanguageModelPrompt, GET_INTENT_SERVICE, self.get_intent_callback)
-        self.create_service(LanguageModelCreateCollection, CREATE_COLLECTION, self.create_collection_callback)
+        # Service - only rag_prompt
+        self.create_service(ConversationManagerPrompt, 'rag_prompt', self.prompt_callback)
         
-        status = f"Collection: {collection_name}" if self.collection else "Collection: Not loaded"
+        status = f"Collection: {collection_name} ({self.collection.count()} docs)" if self.collection else "Collection: Failed to load"
         self.get_logger().info(f"RAG Node ready. {status}")
     
-    def load_collection(self, name: str):
-        """Load existing collection"""
+    def initialize_collection(self, name: str):
+        """Initialize collection from configuration"""
+        config = get_config()
+        
+        self.log_verbose(f"Initializing collection: {name}")
+        
+        # First, try to load existing collection
         try:
-            self.log_verbose(f"Attempting to load collection: {name}")
             self.collection = get_collection(name)
             if self.collection:
                 count = self.collection.count()
-                self.get_logger().info(f"Loaded collection '{name}' with {count} documents")
+                self.get_logger().info(f"Loaded existing collection '{name}' with {count} documents")
+                self.log_verbose(f"Collection metadata: {self.collection.metadata}")
+                return
+        except Exception as e:
+            self.log_verbose(f"Could not load existing collection: {e}")
+        
+        # If collection doesn't exist, create it from data file
+        self.get_logger().info(f"Collection '{name}' not found, creating from data file...")
+        
+        data_path = config.data_default_path
+        self.log_verbose(f"Using data path from config: {data_path}")
+        
+        # Convert to absolute path if relative
+        data_path_obj = Path(data_path)
+        if not data_path_obj.is_absolute():
+            data_path_obj = PACKAGE_PATH / data_path_obj
+            self.log_verbose(f"Converted relative path to absolute: {data_path_obj}")
+        
+        if not data_path_obj.exists():
+            self.get_logger().error(f"Data file not found: {data_path_obj}")
+            raise FileNotFoundError(f"Required data file not found: {data_path_obj}")
+        
+        self.log_verbose(f"Data file exists: {data_path_obj}")
+        
+        try:
+            # Create and populate collection
+            self.collection = setup_collection(
+                name=name,
+                json_path=str(data_path_obj),
+                description="Upanzi Network Knowledge Base"
+            )
+            
+            if self.collection:
+                count = self.collection.count()
+                self.get_logger().info(f"Created collection '{name}' with {count} documents")
                 self.log_verbose(f"Collection metadata: {self.collection.metadata}")
             else:
-                self.log_verbose(f"Collection '{name}' not found")
+                raise RuntimeError("setup_collection returned None")
+                
         except Exception as e:
-            self.get_logger().warn(f"Could not load collection: {e}")
-            self.log_verbose(f"Collection load error details: {str(e)}")
+            self.get_logger().error(f"Failed to create collection: {e}")
+            self.log_verbose(f"Detailed error: {str(e)}")
+            raise
     
     @property
     def verbose(self) -> bool:
@@ -144,7 +183,7 @@ class SimpleRAGNode(Node):
         # Check collection
         if self.collection is None:
             self.log_verbose("Collection is None - knowledge base not initialized")
-            response.response = "Knowledge base not initialized. Please set up the collection first."
+            response.response = "Knowledge base not initialized. Please restart the node."
             return response
         
         query = request.prompt.strip()
@@ -171,8 +210,9 @@ class SimpleRAGNode(Node):
             
             config = get_config()
             # Keep history manageable
+            config = get_config()
             if len(self.conversation_history) > config.max_history_turns:
-                self.log_verbose(f"Truncating conversation history from {len(self.conversation_history)} to {config.max_history_turns} turns")
+                self.log_verbose(f"Truncating conversation history from {len(self.conversation_history)} to {config.max_history_turns}")
                 self.conversation_history = self.conversation_history[-config.max_history_turns:]
             
             self.log_verbose(f"Response generated: {result['response'][:200]}...")
@@ -189,114 +229,10 @@ class SimpleRAGNode(Node):
         self.log_verbose("Prompt callback completed")
         return response
     
-    def get_intent_callback(self, request, response):
-        """Handle intent extraction"""
-        
-        self.log_verbose(f"Get intent callback invoked with request: {request}")
-        
-        # Check collection
-        if self.collection is None:
-            self.log_verbose("Collection is None - knowledge base not initialized")
-            response.response = "Knowledge base not initialized. Please set up the collection first."
-            return response
-        
-        query = request.prompt.strip()
-        if not query:
-            self.log_verbose("Empty query received for intent extraction")
-            response.response = "I didn't catch that. Could you please repeat it?"
-            return response
-        
-        self.log_verbose(f"Processing intent extraction for query: '{query}'")
-        
-        try:
-            # Handle query for intent
-            self.log_verbose("Calling handle_query for intent extraction...")
-            result = handle_query(
-                collection=self.collection,
-                query=query,
-                get_intent=True
-            )
-            
-            self.log_verbose(f"Intent extracted: {result['response']}")
-            response.response = result['response']
-            
-        except Exception as e:
-            self.get_logger().error(f"Intent extraction error: {e}")
-            self.log_verbose(f"Detailed error in get_intent_callback: {str(e)}")
-            response.response = "Something went wrong during intent extraction. Please try again."
-        
-        self.log_verbose("Get intent callback completed")
-        return response
-
-    def create_collection_callback(self, request, response):
-        """Create and populate collection"""
-        
-        self.log_verbose(f"Create collection callback invoked: name='{request.name}', datafile_path='{request.datafile_path}'")
-        
-        name = request.name.strip() if request.name else ""
-        data_path = request.datafile_path.strip() if request.datafile_path else ""
-        description = request.description.strip() if request.description else ""
-        
-        if not name:
-            self.log_verbose("Collection name not provided")
-            response.success = 0
-            response.message = "Collection name required"
-            return response
-        
-        self.log_verbose(f"Processing collection creation: name='{name}', description='{description}'")
-        
-        # Use default data path from configuration if not provided
-        if not data_path:
-            config = get_config()
-            data_path = config.data_default_path
-            self.get_logger().info(f"Using default data path from config: {data_path}")
-            self.log_verbose(f"Default data path from config: {data_path}")
-        
-        # Convert to absolute path if relative
-        data_path_obj = Path(data_path)
-        if not data_path_obj.is_absolute():
-            data_path_obj = PACKAGE_PATH / data_path_obj
-            self.log_verbose(f"Converted relative path to absolute: {data_path_obj}")
-        
-        if not data_path_obj.exists():
-            self.log_verbose(f"Data file not found: {data_path_obj}")
-            response.success = 0
-            response.message = f"File not found: {data_path_obj}"
-            return response
-        
-        self.log_verbose(f"Data file exists: {data_path_obj}")
-        self.log_verbose(f"Starting collection creation: {name} from {data_path_obj}")
-        
-        try:
-            collection = setup_collection(name, str(data_path_obj), description)
-            
-            if collection:
-                self.collection = collection
-                self.conversation_history = []
-                
-                count = collection.count()
-                response.success = 1
-                response.message = f"Collection '{name}' ready with {count} documents"
-                self.get_logger().info(response.message)
-                self.log_verbose(f"Collection created successfully with {count} documents")
-                self.log_verbose(f"Collection metadata: {collection.metadata}")
-            else:
-                self.log_verbose("Collection creation returned None")
-                response.success = 0
-                response.message = "Failed to create collection"
-                
-        except Exception as e:
-            self.get_logger().error(f"Error creating collection: {e}")
-            self.log_verbose(f"Detailed error in create_collection_callback: {str(e)}")
-            response.success = 0
-            response.message = f"Error: {e}"
-        
-        self.log_verbose("Create collection callback completed")
-        return response
-    
     def clear_history(self):
         """Clear conversation history"""
         self.conversation_history = []
+        self.log_verbose("Conversation history cleared")
 
 def main(args=None):
     """Main function"""
@@ -304,7 +240,7 @@ def main(args=None):
         # Initialize ROS 2
         rclpy.init(args=args)
         
-        # Your setup code here
+        # Create node
         node = SimpleRAGNode()
         
         # Spin the node

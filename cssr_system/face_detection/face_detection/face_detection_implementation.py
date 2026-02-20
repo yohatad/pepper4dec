@@ -28,7 +28,7 @@ from geometry_msgs.msg import Point
 from typing import Tuple, List, Dict, Optional
 from cssr_interfaces.msg import FaceDetection, ObjectDetection
 from scipy.optimize import linear_sum_assignment
-from builtin_interfaces.msg import Time
+import supervision as sv
 
 def load_configuration() -> Dict:
     """
@@ -95,9 +95,10 @@ class FaceDetectionNode(Node):
         self.timer_start = self.get_clock().now()
         self.last_image_time = None   # timestamp of the last received image
 
-        # Thread safety for visualization
+        # Thread safety for visualization (protects latest_frame and latest_depth)
         self.frame_lock = threading.Lock()
         self.latest_frame: Optional[np.ndarray] = None
+        self.latest_depth: Optional[np.ndarray] = None
 
         # Object detection related attributes
         self.latest_object_detections = None
@@ -107,17 +108,18 @@ class FaceDetectionNode(Node):
         # Face colors keyed by person tracking ID (from object detection)
         self.face_colors: Dict[str, Tuple[int, int, int]] = {}
         
-        # Simple face ID counter for standalone mode only
-        self.next_standalone_face_id = 1
+        # ByteTrack tracker for standalone mode face tracking
+        self.face_tracker = sv.ByteTrack(
+            track_activation_threshold=0.5,
+            lost_track_buffer=30,
+            minimum_matching_threshold=0.3,
+            frame_rate=15
+        )
         
         # Only subscribe to object detection if required
         if self.require_person_detection:
-            self.object_detection_sub = self.create_subscription(
-                ObjectDetection, 
-                '/objectDetection/data', 
-                self.object_detection_callback, 
-                10
-            )
+            self.object_detection_sub = self.create_subscription(ObjectDetection, '/objectDetection/data', self.object_detection_callback, 10)
+            
             if self.verbose_mode:
                 self.get_logger().info(f"{self.node_name}: Person detection ENABLED - subscribed to /objectDetection/data")
                 self.get_logger().info(f"{self.node_name}: Using object detection tracking IDs for face identification")
@@ -129,9 +131,10 @@ class FaceDetectionNode(Node):
         self.vis_timer = self.create_timer(1.0 / 30.0, self.visualization_callback)
 
     def update_latest_frame(self, frame: np.ndarray):
-        """Update the latest frame safely for visualization."""
+        """Update the latest frame and depth safely for visualization."""
         with self.frame_lock:
             self.latest_frame = frame.copy()
+            self.latest_depth = self.depth_image.copy() if self.depth_image is not None else None
 
     def visualization_callback(self):
         """Timer callback for showing or publishing debug images."""
@@ -139,8 +142,8 @@ class FaceDetectionNode(Node):
         with self.frame_lock:
             if self.latest_frame is not None:
                 color_frame = self.latest_frame.copy()
-            if self.depth_image is not None:
-                depth_vis = self.make_depth_vis(self.depth_image)
+            if self.latest_depth is not None:
+                depth_vis = self.make_depth_vis(self.latest_depth)
 
         if color_frame is None and depth_vis is None:
             return
@@ -291,12 +294,6 @@ class FaceDetectionNode(Node):
         self.last_image_time = self.get_clock().now().nanoseconds / 1e9
         
         try:
-            # check if the depth camera and color camera have the same resolution.
-            if self.depth_image is not None:
-                if not self.check_camera_resolution(self.color_image, self.depth_image) and self.camera_type != "pepper":
-                    self.get_logger().error(f"{self.node_name}: Color camera and depth camera have different resolutions.")
-                    rclpy.shutdown()
-                    
             # Process color image
             if isinstance(color_data, CompressedImage):
                 np_arr = np.frombuffer(color_data.data, np.uint8)
@@ -309,6 +306,12 @@ class FaceDetectionNode(Node):
 
             if self.color_image is None or self.depth_image is None:
                 self.get_logger().warn("Failed to decode images")
+                return
+
+            # Check resolution match on the current frame
+            if self.camera_type != "pepper" and not self.check_camera_resolution(self.color_image, self.depth_image):
+                self.get_logger().error(f"{self.node_name}: Color camera and depth camera have different resolutions.")
+                rclpy.shutdown()
                 return
 
             # Process the images
@@ -362,8 +365,7 @@ class FaceDetectionNode(Node):
             elapsed = self.get_clock().now().nanoseconds / 1e9 - self.last_image_time
             if elapsed > self.image_timeout:
                 self.get_logger().warn(
-                    f"No images received for {elapsed:.1f}s (timeout={self.image_timeout}s)"
-                )
+                    f"No images received for {elapsed:.1f}s (timeout={self.image_timeout}s)")
 
     def check_camera_resolution(self, color_image: np.ndarray, depth_image: np.ndarray) -> bool:
         """Check if color and depth images have matching resolutions."""
@@ -779,7 +781,7 @@ class SixDrepNet(FaceDetectionNode):
             self.update_latest_frame(frame)
     
     def process_frame_standalone(self, cv_image):
-        """Process frame with standalone face detection (no person detection required)."""
+        """Process frame with standalone face detection using ByteTrack for persistent IDs."""
         debug_image = cv_image.copy()
         img_h, img_w = debug_image.shape[:2]
         tracking_data = []
@@ -790,25 +792,42 @@ class SixDrepNet(FaceDetectionNode):
         if self.verbose_mode:
             self.get_logger().info(f"Standalone mode: {len(face_boxes)} faces detected")
 
-        # Process all detected faces (simple sequential IDs without tracking)
-        for idx, (box, score) in enumerate(zip(face_boxes, face_scores)):
+        # Filter valid faces
+        valid_boxes = []
+        valid_scores = []
+        for box, score in zip(face_boxes, face_scores):
             fx1, fy1, fx2, fy2 = box
+            if (fx2 - fx1) < 20 or (fy2 - fy1) < 20:
+                continue
+            if not (0 <= fx1 < fx2 <= img_w and 0 <= fy1 < fy2 <= img_h):
+                continue
+            valid_boxes.append([fx1, fy1, fx2, fy2])
+            valid_scores.append(score)
+
+        # Run ByteTrack on face detections
+        if valid_boxes:
+            detections = sv.Detections(
+                xyxy=np.array(valid_boxes, dtype=np.float32),
+                confidence=np.array(valid_scores, dtype=np.float32)
+            )
+            tracked = self.face_tracker.update_with_detections(detections)
+        else:
+            tracked = sv.Detections.empty()
+
+        active_face_ids = set()
+        for i in range(len(tracked)):
+            track_id = tracked.tracker_id[i]
+            if track_id is None:
+                continue
+
+            fx1, fy1, fx2, fy2 = tracked.xyxy[i].astype(int)
             face_cx = (fx1 + fx2) // 2
             face_cy = (fy1 + fy2) // 2
             face_width = fx2 - fx1
             face_height = fy2 - fy1
-            
-            # Filter small faces
-            if face_width < 20 or face_height < 20:
-                continue
-            
-            # Validate coordinates
-            if not (0 <= fx1 < fx2 <= img_w and 0 <= fy1 < fy2 <= img_h):
-                continue
+            face_id = f"face_{track_id}"
+            active_face_ids.add(face_id)
 
-            # Simple sequential ID for standalone mode
-            face_id = f"face_{idx}"
-            
             if face_id not in self.face_colors:
                 self.face_colors[face_id] = self.generate_dark_color()
             face_color = self.face_colors[face_id]
@@ -859,6 +878,11 @@ class SixDrepNet(FaceDetectionNode):
             if cz > 0:
                 cv2.putText(debug_image, f"Depth: {cz:.2f}m", (fx1 + 10, fy2 + 20),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, face_color, 2)
+
+        # Clean up colors for tracks that no longer exist
+        stale_colors = set(self.face_colors.keys()) - active_face_ids
+        for stale_id in stale_colors:
+            del self.face_colors[stale_id]
 
         self.publish_face_detection(tracking_data)
         return debug_image

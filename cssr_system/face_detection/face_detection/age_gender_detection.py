@@ -14,22 +14,26 @@ Publishes age/gender estimates when new person track IDs are detected.
 """
 
 import rclpy
+import json
+import os
+import time
+import threading
+import traceback
+import torch
+import numpy as np
+import cv2
+
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from sensor_msgs.msg import Image
 from std_msgs.msg import String
 from geometry_msgs.msg import Point
 from cv_bridge import CvBridge
-
-import torch
-import numpy as np
-import cv2
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple, Set
-import json
-import time
-import threading
+from queue import Queue
+from ament_index_python.packages import get_package_share_directory
 
 # Import custom messages
 from cssr_interfaces.msg import ObjectDetection, FaceDetection
@@ -85,10 +89,8 @@ def prepare_classification_images(
 
     for img in img_list:
         if img is None:
-            img_tensor = torch.zeros((3, target_size, target_size), dtype=torch.float32)
-            for c in range(3):
-                img_tensor[c] = (img_tensor[c] - mean[c]) / std[c]
-            img_tensor = img_tensor.unsqueeze(0)
+            # Use actual zeros as a neutral placeholder (no fake normalized values)
+            img_tensor = torch.zeros((1, 3, target_size, target_size), dtype=torch.float32)
             prepared_images.append(img_tensor)
             continue
         
@@ -112,7 +114,6 @@ def prepare_classification_images(
         prepared_input = prepared_input.to(device)
 
     return prepared_input
-
 
 # ============================================================================
 # Data structures
@@ -205,9 +206,9 @@ class PersonProfile:
     def to_dict(self) -> dict:
         return {
             'label_id': self.label_id,
-            'age': round(self.age, 1) if self.age else None,
+            'age': round(self.age, 1) if self.age is not None else None,
             'gender': self.gender,
-            'gender_confidence': round(self.gender_confidence, 3) if self.gender_confidence else None,
+            'gender_confidence': round(self.gender_confidence, 3) if self.gender_confidence is not None else None,
             'estimation_count': self.estimation_count,
             'person_bbox': {
                 'x1': self.last_person_bbox.x1,
@@ -221,7 +222,6 @@ class PersonProfile:
 # ============================================================================
 # MiVOLO Inference
 # ============================================================================
-
 class MiVOLOInference:
     """MiVOLO model wrapper supporting both face-only and face+body models."""
     
@@ -230,8 +230,8 @@ class MiVOLOInference:
         self.logger = logger
         self.face_only = face_only
         
-        self._log(f"Loading MiVOLO model from {model_path}")
-        self._log(f"Face-only mode: {face_only}")
+        self.log(f"Loading MiVOLO model from {model_path}")
+        self.log(f"Face-only mode: {face_only}")
         
         self.model = torch.jit.load(model_path)
         self.model.eval()
@@ -246,17 +246,17 @@ class MiVOLOInference:
         self.max_age = 95
         self.avg_age = 48
         
-        self._warmup()
+        self.warmup()
     
-    def _log(self, msg: str, level: str = "info"):
+    def log(self, msg: str, level: str = "info"):
         if self.logger:
             getattr(self.logger, level)(msg)
         else:
             print(f"[MiVOLO] {msg}")
     
-    def _warmup(self, num_runs: int = 3):
+    def warmup(self, num_runs: int = 3):
         """Run dummy inference to load model into GPU memory."""
-        self._log("Warming up model on GPU...")
+        self.log("Warming up model on GPU...")
         
         # Face-only model: [B, 3, 224, 224]
         # Face+body model: [B, 6, 224, 224] (face channels first, then body)
@@ -269,7 +269,7 @@ class MiVOLOInference:
             if self.device == "cuda":
                 torch.cuda.synchronize()
         
-        self._log("Model warmup complete")
+        self.log("Model warmup complete")
     
     def predict(self, face_crop: np.ndarray, body_crop: np.ndarray = None) -> Tuple[Optional[float], Optional[str], Optional[float]]:
         """
@@ -286,13 +286,13 @@ class MiVOLOInference:
             Tuple of (age, gender, gender_confidence) or (None, None, None) on failure
         """
         if face_crop is None or face_crop.size == 0:
-            self._log("Face crop is None or empty", "warn")
+            self.log("Face crop is None or empty", "warning")
             return None, None, None
-        
+
         if not self.face_only:
             # Face+body model
             if body_crop is None or body_crop.size == 0:
-                self._log("Body crop is None or empty (required for face+body model)", "warn")
+                self.log("Body crop is None or empty (required for face+body model)", "warning")
                 return None, None, None
             
             face_input = prepare_classification_images(
@@ -347,7 +347,14 @@ class MiVOLONode(Node):
         super().__init__('mivolo_node')
         
         # Declare parameters
-        self.declare_parameter('mivolo_model_path', '/home/yoha/ros2_ws/src/cssr4africa/cssr_system/face_detection/models/mivolo_agegender_faceonly_422.torchscript')
+        try:
+            default_model_path = os.path.join(
+                get_package_share_directory('face_detection'),
+                'models', 'mivolo_agegender_faceonly_422.torchscript'
+            )
+        except Exception:
+            default_model_path = ''
+        self.declare_parameter('mivolo_model_path', default_model_path)
         self.declare_parameter('device', 'cuda')
         # NOTE: Despite the filename saying "faceonly", this model actually requires face+body (6 channels)
         self.declare_parameter('face_only', False)
@@ -380,21 +387,27 @@ class MiVOLONode(Node):
         # Initialize MiVOLO model
         self.mivolo = MiVOLOInference(model_path, device, face_only, self.get_logger())
         
-        # State tracking
+        # State tracking (protected by data_lock)
         self.known_label_ids: Set[str] = set()
         self.person_profiles: Dict[str, PersonProfile] = {}
-        
-        # Recent detections cache
+
+        # Recent detections cache (protected by data_lock)
         self.recent_persons: Dict[str, BoundingBox] = {}
         self.recent_faces: Dict[str, BoundingBox] = {}
-        
+
+        # Lock for all shared detection/profile state
+        self.data_lock = threading.Lock()
+
         # Image buffer
         self.latest_image: Optional[np.ndarray] = None
         self.image_timestamp: float = 0.0
         self.image_lock = threading.Lock()
-        
-        # Processing lock
-        self.processing_lock = threading.Lock()
+
+        # Single worker thread with queue for estimation (prevents unbounded threads)
+        self.estimation_queue: Queue = Queue()
+        self.pending_estimates: Set[str] = set()  # deduplicates queued label_ids
+        self.worker_thread = threading.Thread(target=self.estimation_worker, daemon=True)
+        self.worker_thread.start()
         
         # CV Bridge
         self.bridge = CvBridge()
@@ -407,20 +420,9 @@ class MiVOLONode(Node):
         )
         
         # Subscribers
-        self.person_sub = self.create_subscription(
-            ObjectDetection, self.person_topic,
-            self.person_callback, sensor_qos
-        )
-        
-        self.face_sub = self.create_subscription(
-            FaceDetection, self.face_topic,
-            self.face_callback, sensor_qos
-        )
-        
-        self.image_sub = self.create_subscription(
-            Image, self.image_topic,
-            self.image_callback, sensor_qos
-        )
+        self.person_sub = self.create_subscription(ObjectDetection, self.person_topic, self.person_callback, sensor_qos)
+        self.face_sub = self.create_subscription(FaceDetection, self.face_topic,self.face_callback, sensor_qos)
+        self.image_sub = self.create_subscription(Image, self.image_topic,self.image_callback, sensor_qos)
         
         # Publisher
         self.result_pub = self.create_publisher(String, self.output_topic, 10)
@@ -447,24 +449,29 @@ class MiVOLONode(Node):
         with self.image_lock:
             has_image = self.latest_image is not None
             image_age = time.time() - self.image_timestamp if has_image else -1
-        
-        # Count faces with mutual gaze and valid depth
-        gaze_count = sum(1 for f in self.recent_faces.values() if f.mutual_gaze)
-        gaze_depth_ok = sum(1 for f in self.recent_faces.values() 
-                           if f.mutual_gaze and 0 < f.depth < self.max_depth_m)
-        
+
+        with self.data_lock:
+            # Count faces with mutual gaze and valid depth
+            gaze_count = sum(1 for f in self.recent_faces.values() if f.mutual_gaze)
+            gaze_depth_ok = sum(1 for f in self.recent_faces.values()
+                               if f.mutual_gaze and 0 < f.depth < self.max_depth_m)
+            num_persons = len(self.recent_persons)
+            num_faces = len(self.recent_faces)
+            num_known = len(self.known_label_ids)
+            person_ids = list(self.recent_persons.keys()) if self.recent_persons else []
+            face_info = [(lid, f"{f.depth:.2f}m", "GAZE" if f.mutual_gaze else "")
+                         for lid, f in self.recent_faces.items()] if self.recent_faces else []
+
         self.get_logger().info(
             f"[DEBUG] Image: {'YES' if has_image else 'NO'} (age={image_age:.1f}s), "
-            f"Persons: {len(self.recent_persons)}, "
-            f"Faces: {len(self.recent_faces)} ({gaze_count} gaze, {gaze_depth_ok} <{self.max_depth_m}m), "
-            f"Known IDs: {len(self.known_label_ids)}"
+            f"Persons: {num_persons}, "
+            f"Faces: {num_faces} ({gaze_count} gaze, {gaze_depth_ok} <{self.max_depth_m}m), "
+            f"Known IDs: {num_known}"
         )
-        
-        if self.recent_persons:
-            self.get_logger().info(f"[DEBUG] Person IDs: {list(self.recent_persons.keys())}")
-        if self.recent_faces:
-            face_info = [(lid, f"{f.depth:.2f}m", "GAZE" if f.mutual_gaze else "") 
-                         for lid, f in self.recent_faces.items()]
+
+        if person_ids:
+            self.get_logger().info(f"[DEBUG] Person IDs: {person_ids}")
+        if face_info:
             self.get_logger().info(f"[DEBUG] Faces: {face_info}")
     
     def image_callback(self, msg: Image):
@@ -475,157 +482,204 @@ class MiVOLONode(Node):
     
     def person_callback(self, msg: ObjectDetection):
         """Process person detections."""
-        current_time = time.time()
-        new_person_ids = []
-        
-        for i in range(len(msg.object_label_id)):
-            if msg.class_names[i] != self.person_class_name:
-                continue
-            
-            label_id = msg.object_label_id[i]
-            
-            person_bbox = BoundingBox.from_centroid(
-                centroid=msg.centroids[i],
-                width=msg.width[i],
-                height=msg.height[i],
-                label_id=label_id,
-                confidence=msg.confidences[i]
-            )
-            
-            self.recent_persons[label_id] = person_bbox
-            
-            if label_id not in self.known_label_ids:
-                self.known_label_ids.add(label_id)
-                self.person_profiles[label_id] = PersonProfile(label_id=label_id)
-                new_person_ids.append(label_id)
-                self.get_logger().info(f"New person detected: {label_id}")
-            
-            self.person_profiles[label_id].last_person_bbox = person_bbox
-        
-        # For new persons, check if we already have a face with mutual_gaze and valid depth
-        for label_id in new_person_ids:
-            face_bbox = self.recent_faces.get(label_id)
-            if face_bbox and face_bbox.mutual_gaze:
-                depth_ok = (face_bbox.depth > 0.0 and face_bbox.depth < self.max_depth_m)
-                if depth_ok:
-                    self.get_logger().info(
-                        f"New person {label_id} has mutual gaze at {face_bbox.depth:.2f}m, triggering estimation"
-                    )
-                    self._schedule_estimation(label_id)
+        ids_to_estimate = []
+        n = len(msg.object_label_id)
+        if not (len(msg.class_names) == len(msg.centroids) == len(msg.width) ==
+                len(msg.height) == len(msg.confidences) == n):
+            self.get_logger().warning("person_callback: inconsistent array lengths, skipping message")
+            return
+
+        with self.data_lock:
+            for i in range(n):
+                if msg.class_names[i] != self.person_class_name:
+                    continue
+
+                label_id = msg.object_label_id[i]
+
+                person_bbox = BoundingBox.from_centroid(
+                    centroid=msg.centroids[i],
+                    width=msg.width[i],
+                    height=msg.height[i],
+                    label_id=label_id,
+                    confidence=msg.confidences[i]
+                )
+
+                self.recent_persons[label_id] = person_bbox
+
+                is_new = label_id not in self.known_label_ids
+                if is_new:
+                    self.known_label_ids.add(label_id)
+                    self.person_profiles[label_id] = PersonProfile(label_id=label_id)
+                    self.get_logger().info(f"New person detected: {label_id}")
+
+                self.person_profiles[label_id].last_person_bbox = person_bbox
+
+                # For new persons, check if we already have a face with mutual_gaze and valid depth
+                if is_new:
+                    face_bbox = self.recent_faces.get(label_id)
+                    if face_bbox and face_bbox.mutual_gaze:
+                        depth_ok = (face_bbox.depth > 0.0 and face_bbox.depth < self.max_depth_m)
+                        if depth_ok:
+                            self.get_logger().info(
+                                f"New person {label_id} has mutual gaze at {face_bbox.depth:.2f}m, triggering estimation"
+                            )
+                            ids_to_estimate.append(label_id)
+
+        for label_id in ids_to_estimate:
+            self.schedule_estimation(label_id)
     
     def face_callback(self, msg: FaceDetection):
         """Process face detections. Only triggers estimation when mutual_gaze is True and depth < max_depth_m."""
-        for i in range(len(msg.face_label_id)):
-            label_id = msg.face_label_id[i]
-            mutual_gaze = msg.mutual_gaze[i] if i < len(msg.mutual_gaze) else False
-            depth = msg.centroids[i].z if i < len(msg.centroids) else 0.0
-            
-            face_bbox = BoundingBox.from_centroid(
-                centroid=msg.centroids[i],
-                width=msg.width[i],
-                height=msg.height[i],
-                label_id=label_id,
-                confidence=1.0,
-                mutual_gaze=mutual_gaze
-            )
-            
-            self.recent_faces[label_id] = face_bbox
-            
-            if label_id in self.person_profiles:
-                self.person_profiles[label_id].last_face_bbox = face_bbox
-            
-            # Only trigger estimation when:
-            # 1. mutual_gaze is True
-            # 2. depth is valid (> 0) and less than max_depth_m
-            # 3. Person is already known and doesn't have valid estimate
-            depth_ok = (depth > 0.0 and depth < self.max_depth_m)
-            
-            if mutual_gaze and depth_ok and label_id in self.known_label_ids:
-                profile = self.person_profiles.get(label_id)
-                if profile and not profile.has_valid_estimate:
-                    self.get_logger().info(
-                        f"Mutual gaze detected for {label_id} at {depth:.2f}m (< {self.max_depth_m}m), triggering estimation"
-                    )
-                    self._schedule_estimation(label_id)
+        ids_to_estimate = []
+        current_time = time.time()
+        n = len(msg.face_label_id)
+        if not (len(msg.centroids) == len(msg.width) == len(msg.height) == len(msg.mutual_gaze) == n):
+            self.get_logger().warning("face_callback: inconsistent array lengths, skipping message")
+            return
+
+        with self.data_lock:
+            for i in range(n):
+                label_id = msg.face_label_id[i]
+                mutual_gaze = msg.mutual_gaze[i]
+                depth = msg.centroids[i].z
+
+                face_bbox = BoundingBox.from_centroid(
+                    centroid=msg.centroids[i],
+                    width=msg.width[i],
+                    height=msg.height[i],
+                    label_id=label_id,
+                    confidence=1.0,
+                    mutual_gaze=mutual_gaze
+                )
+
+                self.recent_faces[label_id] = face_bbox
+
+                if label_id in self.person_profiles:
+                    self.person_profiles[label_id].last_face_bbox = face_bbox
+
+                # Trigger estimation when:
+                # 1. mutual_gaze is True
+                # 2. depth is valid (> 0) and less than max_depth_m
+                # 3. Person is known and needs (re-)estimation
+                depth_ok = (depth > 0.0 and depth < self.max_depth_m)
+
+                if mutual_gaze and depth_ok and label_id in self.known_label_ids:
+                    profile = self.person_profiles.get(label_id)
+                    if profile and self.should_re_estimate(profile, current_time):
+                        self.get_logger().info(
+                            f"Mutual gaze detected for {label_id} at {depth:.2f}m (< {self.max_depth_m}m), triggering estimation"
+                        )
+                        ids_to_estimate.append(label_id)
+
+        for label_id in ids_to_estimate:
+            self.schedule_estimation(label_id)
     
-    def _should_re_estimate(self, profile: PersonProfile, current_time: float) -> bool:
+    def should_re_estimate(self, profile: PersonProfile, current_time: float) -> bool:
         if not profile.has_valid_estimate:
             return True
         return (current_time - profile.last_updated) > self.re_estimate_interval
     
-    def _schedule_estimation(self, label_id: str):
-        thread = threading.Thread(target=self._run_estimation, args=(label_id,), daemon=True)
-        thread.start()
-    
-    def _run_estimation(self, label_id: str):
-        with self.processing_lock:
-            self._estimate_for_person(label_id)
-    
-    def _estimate_for_person(self, label_id: str):
-        """Perform age/gender estimation for a person."""
-        profile = self.person_profiles.get(label_id)
-        if profile is None:
-            return
-        
-        if profile.estimation_count > 0:
-            if (time.time() - profile.last_updated) < self.min_estimate_interval:
+    def schedule_estimation(self, label_id: str):
+        """Queue a label_id for estimation, skipping if already pending."""
+        with self.data_lock:
+            if label_id in self.pending_estimates:
                 return
-        
-        # Get face bbox (required)
-        face_bbox = self.recent_faces.get(label_id)
-        if face_bbox is None:
-            self.get_logger().debug(f"No face bbox for {label_id}")
-            return
-        
-        # Get person bbox (required for face+body model)
-        person_bbox = self.recent_persons.get(label_id)
-        if person_bbox is None and not self.mivolo.face_only:
-            self.get_logger().debug(f"No person bbox for {label_id}")
-            return
-        
-        # Get image
+            self.pending_estimates.add(label_id)
+        self.estimation_queue.put(label_id)
+
+    def estimation_worker(self):
+        """Single worker thread that processes estimation requests sequentially."""
+        while True:
+            try:
+                label_id = self.estimation_queue.get()
+                with self.data_lock:
+                    self.pending_estimates.discard(label_id)
+                self.estimate_for_person(label_id)
+            except Exception as e:
+                self.get_logger().error(f"Estimation worker error: {e}")
+                self.get_logger().error(traceback.format_exc())
+    
+    def estimate_for_person(self, label_id: str):
+        """Perform age/gender estimation for a person."""
+        # Snapshot bboxes and image together to ensure they are temporally aligned
+        with self.data_lock:
+            profile = self.person_profiles.get(label_id)
+            if profile is None:
+                return
+
+            if profile.estimation_count > 0:
+                if (time.time() - profile.last_updated) < self.min_estimate_interval:
+                    return
+
+            face_bbox = self.recent_faces.get(label_id)
+            if face_bbox is None:
+                self.get_logger().debug(f"No face bbox for {label_id}")
+                return
+
+            person_bbox = self.recent_persons.get(label_id)
+            if person_bbox is None and not self.mivolo.face_only:
+                self.get_logger().debug(f"No person bbox for {label_id}")
+                return
+
+            # Snapshot bbox timestamps for alignment check
+            bbox_timestamp = face_bbox.timestamp
+
+        # Get image and verify temporal alignment with bboxes
         with self.image_lock:
             if self.latest_image is None:
-                self.get_logger().warn("No image available")
+                self.get_logger().warning("No image available")
                 return
             image = self.latest_image.copy()
-        
-        # Extract crops
-        face_crop = self._extract_crop(image, face_bbox)
-        if face_crop is None:
-            self.get_logger().warn(f"Invalid face crop for {label_id}")
+            image_ts = self.image_timestamp
+
+        # Skip if bboxes and image are too far apart in time
+        if abs(image_ts - bbox_timestamp) > self.max_cache_age:
+            self.get_logger().warning(
+                f"Skipping {label_id}: image/bbox time gap {abs(image_ts - bbox_timestamp):.2f}s "
+                f"exceeds {self.max_cache_age}s"
+            )
             return
-        
+
+        # Extract crops (no lock needed, working on local copies)
+        face_crop = self.extract_crop(image, face_bbox)
+        if face_crop is None:
+            self.get_logger().warning(f"Invalid face crop for {label_id}")
+            return
+
         person_crop = None
         if not self.mivolo.face_only and person_bbox is not None:
-            person_crop = self._extract_crop(image, person_bbox)
+            person_crop = self.extract_crop(image, person_bbox)
             if person_crop is None:
-                self.get_logger().warn(f"Invalid person crop for {label_id}")
+                self.get_logger().warning(f"Invalid person crop for {label_id}")
                 return
-        
-        # Run inference
+
+        # Run inference (no lock needed, only touches model)
         try:
             self.get_logger().info(f"Running inference for {label_id} (face: {face_crop.shape}, body: {person_crop.shape if person_crop is not None else 'N/A'})")
             age, gender, gender_conf = self.mivolo.predict(face_crop, person_crop)
-            
+
             if age is not None:
-                profile.add_estimate(age, gender, gender_conf)
-                
+                with self.data_lock:
+                    profile.add_estimate(age, gender, gender_conf)
+                    result_dict = profile.to_dict()
+                    log_age = profile.age
+                    log_gender = profile.gender
+                    log_conf = profile.gender_confidence
+
                 self.get_logger().info(
-                    f"[{label_id}] age={profile.age:.1f} (raw={age:.1f}), "
-                    f"gender={profile.gender} ({profile.gender_confidence*100:.1f}%)"
+                    f"[{label_id}] age={log_age:.1f} (raw={age:.1f}), "
+                    f"gender={log_gender} ({log_conf*100:.1f}%)"
                 )
-                
-                self._publish_result(profile)
+
+                self.publish_result(result_dict)
             else:
-                self.get_logger().warn(f"Inference returned None for {label_id}")
-                
+                self.get_logger().warning(f"Inference returned None for {label_id}")
+
         except Exception as e:
             self.get_logger().error(f"Estimation failed for {label_id}: {e}")
-            import traceback
             self.get_logger().error(traceback.format_exc())
     
-    def _extract_crop(self, image: np.ndarray, bbox: BoundingBox) -> Optional[np.ndarray]:
+    def extract_crop(self, image: np.ndarray, bbox: BoundingBox) -> Optional[np.ndarray]:
         h, w = image.shape[:2]
         
         x1 = max(0, int(bbox.x1))
@@ -638,22 +692,38 @@ class MiVOLONode(Node):
         
         return image[y1:y2, x1:x2].copy()
     
-    def _publish_result(self, profile: PersonProfile):
+    def publish_result(self, result_dict: dict):
         msg = String()
-        msg.data = json.dumps(profile.to_dict())
+        msg.data = json.dumps(result_dict)
         self.result_pub.publish(msg)
-        self.get_logger().info(f"Published result for {profile.label_id}")
+        self.get_logger().info(f"Published result for {result_dict.get('label_id')}")
     
     def cleanup_stale_data(self):
         current_time = time.time()
-        
-        stale_persons = [lid for lid, bbox in self.recent_persons.items() if current_time - bbox.timestamp > self.max_cache_age]
-        for lid in stale_persons:
-            del self.recent_persons[lid]
-        
-        stale_faces = [lid for lid, bbox in self.recent_faces.items() if current_time - bbox.timestamp > self.max_cache_age]
-        for lid in stale_faces:
-            del self.recent_faces[lid]
+        profile_timeout = self.re_estimate_interval * 3  # Remove profiles not seen for a long time
+
+        with self.data_lock:
+            stale_persons = [lid for lid, bbox in self.recent_persons.items()
+                             if current_time - bbox.timestamp > self.max_cache_age]
+            for lid in stale_persons:
+                del self.recent_persons[lid]
+
+            stale_faces = [lid for lid, bbox in self.recent_faces.items()
+                           if current_time - bbox.timestamp > self.max_cache_age]
+            for lid in stale_faces:
+                del self.recent_faces[lid]
+
+            # Clean up profiles for persons no longer seen in any recent detection
+            stale_profiles = [
+                lid for lid, profile in self.person_profiles.items()
+                if (lid not in self.recent_persons
+                    and lid not in self.recent_faces
+                    and current_time - profile.last_updated > profile_timeout)
+            ]
+            for lid in stale_profiles:
+                del self.person_profiles[lid]
+                self.known_label_ids.discard(lid)
+                self.get_logger().info(f"Cleaned up stale profile: {lid}")
 
 
 def main(args=None):

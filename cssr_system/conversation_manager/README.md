@@ -51,37 +51,48 @@ pip install sentence-transformers chromadb openai pyyaml
 ```
 
 # 🔧 Configuration Parameters
-The configuration is managed via `config/rag_system_configuration.yaml` or environment variables:
+The configuration is managed via `config/rag_system_configuration.yaml`. The configuration file must be present for the node to start.
 
 | Parameter                   | Description                                                      | Range/Values            | Default Value |
 |-----------------------------|------------------------------------------------------------------|-------------------------|---------------|
 | `llm.base_url`              | LLM API endpoint URL                                             | String (URL)            | `https://api.deepseek.com/v1` |
-| `llm.api_key`               | API key for LLM service                                          | String                  | (from env var)|
+| `llm.api_key`               | API key for LLM service                                          | String                  | (from LLM_API_KEY env var)|
 | `llm.model`                 | LLM model name                                                   | String                  | `deepseek-chat`|
-| `chroma.path`               | Path for ChromaDB local storage                                  | String (path)           | `./chroma_data`|
 | `embedding.model`           | Sentence transformer model for embeddings                        | String                  | `all-MiniLM-L6-v2`|
 | `search.similarity_threshold` | Similarity threshold for document retrieval                    | `[0.0 - 1.0]`           | `0.15`        |
 | `search.top_k`              | Number of documents to retrieve for context                      | Positive integer        | `5`           |
-
-## Environment Variables (Alternative Configuration)
-```bash
-# LLM Settings
-export LLM_BASE_URL="https://api.deepseek.com/v1"
-export LLM_API_KEY="your-api-key-here"
-export LLM_MODEL="deepseek-chat"
-
-# ChromaDB Settings
-export CHROMA_PATH="./chroma_data"
-
-# Embedding Settings
-export EMBEDDING_MODEL="all-MiniLM-L6-v2"
-
-# Debug Settings
-export RAG_VERBOSE="true"  # Optional: for debug logging
-```
+| `data.default_path`         | Path to JSON data file for knowledge base (relative to package) | String (path)           | `./data/upanzi_data.json` |
+| `debug.verbose`             | Enable verbose logging                                           | Boolean                 | `true`        |
 
 > **Note:**  
-> The YAML configuration file takes precedence over environment variables.
+> - `llm.api_key` must be provided via the `LLM_API_KEY` environment variable
+> - ChromaDB storage is automatically configured in the package data folder
+> - The configuration file is required for node startup
+
+## Example Configuration File (`config/rag_system_configuration.yaml`)
+```yaml
+# LLM Settings
+llm:
+  base_url: https://api.deepseek.com/v1
+  model: deepseek-chat
+
+# Embedding Model
+embedding:
+  model: all-MiniLM-L6-v2
+
+# Search Settings
+search:
+  similarity_threshold: 0.15
+  top_k: 5
+
+# Data Settings
+data:
+  default_path: ./data/upanzi_data.json
+  
+# Debug Settings
+debug:
+  verbose: true
+```
 
 # 🚀 Running the Node
 
@@ -109,19 +120,9 @@ The node provides ROS2 services for knowledge base management and querying.
 
 ## Service Structure
 
-### 1. `/create_collection` Service (`cssr_interfaces/srv/LanguageModelCreateCollection`)
-Creates and populates a new knowledge base collection from a JSON file.
+The conversation manager provides a single service for querying the knowledge base:
 
-**Request Fields:**
-- `name` (string): Collection name (e.g., "upanzi_knowledge")
-- `datafile_path` (string): Path to JSON data file
-- `description` (string): Optional description
-
-**Response Fields:**
-- `success` (int32): 1 for success, 0 for failure
-- `message` (string): Status message
-
-### 2. `/rag_prompt` Service (`cssr_interfaces/srv/LanguageModelPrompt`)
+### `/rag_prompt` Service (`cssr_interfaces/srv/LanguageModelPrompt`)
 Query the knowledge base with a question.
 
 **Request Fields:**
@@ -130,21 +131,20 @@ Query the knowledge base with a question.
 **Response Fields:**
 - `response` (string): The generated answer
 
+## Knowledge Base Initialization
+The knowledge base is automatically initialized at node startup using the configuration file (`config/rag_system_configuration.yaml`). The `data.default_path` parameter in the configuration specifies the JSON data file to load. The collection name is configured via the `collection_name` ROS parameter (default: `'upanzi_knowledge'`).
+
+If the collection doesn't exist, it will be created and populated automatically from the specified data file. If it already exists, the existing collection will be reused.
+
 ## Example Usage
 
-1. **Create a Knowledge Base Collection**
-```bash
-ros2 service call /create_collection cssr_interfaces/srv/LanguageModelCreateCollection \
-  "{name: 'upanzi_knowledge', datafile_path: '$(pwd)/ros2_ws/src/cssr4africa/cssr_system/conversation_manager/data/upanzi_data.json', description: 'Upanzi Network knowledge base'}"
-```
-
-2. **Query the Knowledge Base**
+1. **Query the Knowledge Base**
 ```bash
 ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
   "{prompt: 'What is the Upanzi Network?'}"
 ```
 
-3. **More Example Queries**
+2. **More Example Queries**
 ```bash
 # Ask about specific projects
 ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
@@ -210,4 +210,4 @@ For issues or questions:
 # 📜 License
 Copyright (C) 2023 Upanzi Network
 
-2026-01-11
+2026-02-09 - Updated to reflect simplified architecture with automatic knowledge base initialization via configuration file

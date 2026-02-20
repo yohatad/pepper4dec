@@ -49,32 +49,16 @@
 // Custom message/service/action includes from cssr_interfaces package
 // Messages
 #include "cssr_interfaces/msg/face_detection.hpp"
-#include "cssr_interfaces/msg/object_detection.hpp"
-#include "cssr_interfaces/msg/overt_attention_status.hpp"
+
 // Actions
 #include "cssr_interfaces/action/tts.hpp"
 #include "cssr_interfaces/action/gesture.hpp"
 #include "cssr_interfaces/action/navigation.hpp"
 #include "cssr_interfaces/action/animate_behavior.hpp"
 #include "cssr_interfaces/action/speech_recognition.hpp"
-// Services
-#include "cssr_interfaces/srv/overt_attention_set_mode.hpp"
-#include "cssr_interfaces/srv/animate_behavior_set_activation.hpp"
-#include "cssr_interfaces/srv/conversation_manager_prompt.hpp"
 
-//=============================================================================
-// Constants
-//=============================================================================
-namespace Constants {
-    constexpr int GESTURE_DURATION_MS = 3000;
-    constexpr int SERVICE_TIMEOUT_SEC = 5;
-    constexpr int RESPONSE_TIMEOUT_SEC = 10;
-    constexpr int VISITOR_RESPONSE_TIMEOUT_SEC = 5;
-    constexpr double LOOP_RATE_HZ = 10.0;
-    constexpr int WELCOME_GESTURE_ID = 1;
-    constexpr int GOODBYE_GESTURE_ID = 3;
-    constexpr int DEICTIC_GESTURE_ID = 1;
-}
+// Services
+#include "cssr_interfaces/srv/conversation_manager_prompt.hpp"
 
 //=============================================================================
 // Data Structures
@@ -103,7 +87,7 @@ struct LocationInfo {
 
 struct TourSpec {
     std::vector<std::string> locationIds;
-    int getCurrentLocationCount() const { return locationIds.size(); }
+    size_t getLocationCount() const { return locationIds.size(); }
 };
 
 //=============================================================================
@@ -115,29 +99,22 @@ class ConfigManager {
 public:
     static ConfigManager& instance();
     
-    bool loadFromFile(const std::string& configPath);
+    [[nodiscard]] bool loadFromFile(const std::string& configPath);
     
     // Getters
     bool isVerbose() const;
-    bool isAsrEnabled() const;
-    bool isTestMode() const;
     std::string getLanguage() const;
-    std::string getNodeName() const;
     std::string getScenarioSpecification() const;
     std::string getCultureKnowledgeBasePath() const;
     std::string getEnvironmentKnowledgeBasePath() const;
 
 private:
     ConfigManager() = default;
-    mutable std::mutex mutex_; 
-    bool verbose_ = false;
-    bool asrEnabled_ = false;
-    bool testMode_ = false;
-    std::string language_ = "English";
-    std::string nodeName_ = "behaviorController";
-    std::string scenarioSpecification_ = "lab_tour";
-    std::string cultureKnowledgeBasePath_ = "cultureKnowledgeBase.yaml";
-    std::string environmentKnowledgeBasePath_ = "labEnvironmentKnowledgeBase.yaml";
+    bool verbose = false;
+    std::string language = "English";
+    std::string scenarioSpecification = "lab_tour";
+    std::string cultureKnowledgeBasePath = "cultureKnowledgeBase.yaml";
+    std::string environmentKnowledgeBasePath = "labEnvironmentKnowledgeBase.yaml";
     
     // Non-copyable
     ConfigManager(const ConfigManager&) = delete;
@@ -149,7 +126,7 @@ class KnowledgeManager {
 public:
     static KnowledgeManager& instance();
     
-    bool loadFromPackage(const std::string& packagePath);
+    [[nodiscard]] bool loadFromPackage(const std::string& packagePath);
     
     std::string getUtilityPhrase(const std::string& phraseId, const std::string& language = "");
     LocationInfo getLocationInfo(const std::string& locationId);
@@ -157,11 +134,10 @@ public:
 
 private:
     KnowledgeManager() = default;
-    mutable std::mutex mutex_;
-    std::unordered_map<std::string, std::string> utilityPhrases_;
-    std::unordered_map<std::string, LocationInfo> locations_;
-    std::optional<TourSpec> tourSpec_;
-    bool loaded_ = false;
+    std::unordered_map<std::string, std::string> utilityPhrases;
+    std::unordered_map<std::string, LocationInfo> locations;
+    std::optional<TourSpec> tourSpec;
+    bool loaded = false;
     
     // Non-copyable
     KnowledgeManager(const KnowledgeManager&) = delete;
@@ -183,7 +159,7 @@ public:
     void debug(const std::string& msg);
 
 private:
-    std::shared_ptr<rclcpp::Node> node_;
+    std::shared_ptr<rclcpp::Node> node;
     std::string formatMessage(const std::string& msg);
 };
 
@@ -191,23 +167,13 @@ private:
 class ServiceManager {
 public:
     explicit ServiceManager(std::shared_ptr<rclcpp::Node> node);
-    
-    template<typename ServiceType>
-    bool callService(const std::string& serviceName, 
-                    typename ServiceType::Request::SharedPtr request,
-                    typename ServiceType::Response::SharedPtr& response);
-    
-    bool checkServicesAvailable(const std::vector<std::string>& services);
-    bool waitForService(const std::string& serviceName, 
-                       std::chrono::seconds timeout = std::chrono::seconds(5));
+
+    [[nodiscard]] bool checkServicesAvailable(const std::vector<std::string>& services);
+    [[nodiscard]] bool waitForService(const std::string& serviceName,
+                                     std::chrono::seconds timeout = std::chrono::seconds(5));
 
 private:
-    std::shared_ptr<rclcpp::Node> node_;
-    std::unordered_map<std::string, rclcpp::ClientBase::SharedPtr> clients_;
-    std::mutex clientsMutex_;
-    
-    template<typename ServiceType>
-    std::shared_ptr<rclcpp::Client<ServiceType>> getClient(const std::string& serviceName);
+    std::shared_ptr<rclcpp::Node> node;
 };
 
 // Topic Monitor
@@ -215,13 +181,13 @@ class TopicMonitor {
 public:
     explicit TopicMonitor(std::shared_ptr<rclcpp::Node> node);
     
-    bool isTopicAvailable(const std::string& topicName);
-    bool checkTopicsAvailable(const std::vector<std::string>& topics);
-    bool waitForTopic(const std::string& topicName,
-                     std::chrono::seconds timeout = std::chrono::seconds(5));
+    [[nodiscard]] bool isTopicAvailable(const std::string& topicName);
+    [[nodiscard]] bool checkTopicsAvailable(const std::vector<std::string>& topics);
+    [[nodiscard]] bool waitForTopic(const std::string& topicName,
+                                   std::chrono::seconds timeout = std::chrono::seconds(5));
 
 private:
-    std::shared_ptr<rclcpp::Node> node_;
+    std::shared_ptr<rclcpp::Node> node;
 };
 
 // Text Utilities
@@ -231,6 +197,77 @@ public:
     static std::string toLowerCase(const std::string& text);
     static std::vector<std::string> split(const std::string& text, char delimiter);
     static std::string trim(const std::string& text);
+};
+
+//=============================================================================
+// BehaviorTree Action Nodes
+//=============================================================================
+
+// Wraps cssr_interfaces::action::AnimateBehavior
+class AnimateBehaviorNode
+    : public BT::RosActionNode<cssr_interfaces::action::AnimateBehavior>
+{
+public:
+    AnimateBehaviorNode(const std::string& name,
+                        const BT::NodeConfig& config,
+                        const BT::RosNodeParams& params)
+        : BT::RosActionNode<cssr_interfaces::action::AnimateBehavior>(name, config, params) {}
+
+    static BT::PortsList providedPorts();
+    bool setGoal(Goal& goal) override;
+    BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
+    BT::NodeStatus onResultReceived(const WrappedResult& result) override;
+    BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
+};
+
+// Wraps cssr_interfaces::action::Gesture
+class GestureNode
+    : public BT::RosActionNode<cssr_interfaces::action::Gesture>
+{
+public:
+    GestureNode(const std::string& name,
+                const BT::NodeConfig& config,
+                const BT::RosNodeParams& params)
+        : BT::RosActionNode<cssr_interfaces::action::Gesture>(name, config, params) {}
+
+    static BT::PortsList providedPorts();
+    bool setGoal(Goal& goal) override;
+    BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
+    BT::NodeStatus onResultReceived(const WrappedResult& result) override;
+    BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
+};
+
+// Wraps cssr_interfaces::action::Navigation
+class NavigateNode
+    : public BT::RosActionNode<cssr_interfaces::action::Navigation>
+{
+public:
+    NavigateNode(const std::string& name,
+                 const BT::NodeConfig& config,
+                 const BT::RosNodeParams& params)
+        : BT::RosActionNode<cssr_interfaces::action::Navigation>(name, config, params) {}
+
+    static BT::PortsList providedPorts();
+    bool setGoal(Goal& goal) override;
+    BT::NodeStatus onResultReceived(const WrappedResult& result) override;
+    BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
+};
+
+// Wraps cssr_interfaces::action::SpeechRecognition
+class SpeechRecognitionNode
+    : public BT::RosActionNode<cssr_interfaces::action::SpeechRecognition>
+{
+public:
+    SpeechRecognitionNode(const std::string& name,
+                          const BT::NodeConfig& config,
+                          const BT::RosNodeParams& params)
+        : BT::RosActionNode<cssr_interfaces::action::SpeechRecognition>(name, config, params) {}
+
+    static BT::PortsList providedPorts();
+    bool setGoal(Goal& goal) override;
+    BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
+    BT::NodeStatus onResultReceived(const WrappedResult& result) override;
+    BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
 };
 
 //=============================================================================
@@ -254,133 +291,77 @@ namespace behavior_controller {
 BT::Tree initializeTree(const std::string& scenario,
                         std::shared_ptr<rclcpp::Node> node_handle);
 
-} // namespace behavior_controller
+/**
+ * @brief Validate the format of an environment knowledge base YAML file.
+ *
+ * Checks that all required top-level keys exist, that every location referenced
+ * in tour_specification has a corresponding entry in locations, and that each
+ * location entry contains all mandatory fields with legal values:
+ *   - robot_location_description  (non-empty string)
+ *   - robot_location_pose         (map: x, y numeric; theta in [0, 360])
+ *   - gesture_target              (map: x, y, z numeric; z >= 0)
+ *   - pre_gesture_message_english / pre_gesture_message_kinyarwanda  (non-empty strings)
+ *   - post_gesture_message_english / post_gesture_message_kinyarwanda (non-empty strings)
+ *   - cultural_knowledge          (non-empty sequence of non-empty strings)
+ *
+ * Errors are logged via RCLCPP_ERROR and the function returns false on the
+ * first structural violation, or after collecting all field-level errors.
+ *
+ * @param filePath  Absolute path to the YAML file to validate
+ * @return true if the file is fully valid, false otherwise
+ */
+[[nodiscard]] bool validateEnvironmentKnowledgeBase(const std::string& filePath);
 
 //=============================================================================
 // Utility Functions
 //=============================================================================
 
 /**
- * @brief Get a configuration value from the YAML config file
- * @param key The configuration key to retrieve
- * @return The value as a string
- * @throws std::runtime_error if key not found or file cannot be read
- */
-std::string getConfigValue(const std::string& key);
-
-/**
- * @brief Validate the configuration file has all required fields
- * @param configPath Path to the configuration YAML file
- * @return true if valid, false otherwise
- */
-bool validateConfigurationFile(const std::string& configPath);
-
-/**
- * @brief Log system information (ROS distribution, available services/topics)
+ * @brief Log system information (available services/topics and active config)
  * @param node The ROS2 node to query
  */
 void logSystemInfo(std::shared_ptr<rclcpp::Node> node);
 
 /**
  * @brief Check if a language is supported
- * @param language The language code to check
+ * @param language The language name to check (e.g. "English", "Kinyarwanda")
  * @return true if supported, false otherwise
  */
-bool isValidLanguage(const std::string& language);
+[[nodiscard]] bool isValidLanguage(const std::string& language);
 
 /**
  * @brief Get list of supported languages
- * @return Vector of supported language codes
+ * @return Vector of supported language names
  */
 std::vector<std::string> getSupportedLanguages();
 
 /**
- * @brief Check if a file exists
+ * @brief Check if a file exists at the given path
  * @param filepath Path to the file
- * @return true if file exists, false otherwise
+ * @return true if file exists and is readable, false otherwise
  */
-bool fileExists(const std::string& filepath);
+[[nodiscard]] bool fileExists(const std::string& filepath);
 
 /**
- * @brief Get absolute path to a file relative to package share directory
- * @param relativePath Path relative to package share directory
+ * @brief Get absolute path to a file relative to the package share directory
+ * @param relativePath Path relative to the package data/ directory
  * @return Absolute path to the file
  */
 std::string getPackageDataPath(const std::string& relativePath);
 
 /**
- * @brief Print node information to logs
+ * @brief Print node name, namespace, and fully-qualified name to logs
  * @param node The ROS2 node
  */
 void printNodeInfo(std::shared_ptr<rclcpp::Node> node);
 
 /**
- * @brief Convert BehaviorTree NodeStatus to string
+ * @brief Convert BehaviorTree NodeStatus to a human-readable string
  * @param status The NodeStatus to convert
- * @return String representation of the status
+ * @return String representation ("SUCCESS", "FAILURE", "RUNNING", "IDLE", "UNKNOWN")
  */
 std::string nodeStatusToString(BT::NodeStatus status);
 
-//=============================================================================
-// Template Implementations
-//=============================================================================
-
-template<typename ServiceT>
-bool ServiceManager::callService(
-    const std::string& service_name,
-    typename ServiceT::Request::SharedPtr request,
-    typename ServiceT::Response::SharedPtr& response)
-{
-    // 1) Bail out early on shutdown
-    if (!rclcpp::ok()) {
-        RCLCPP_WARN(node_->get_logger(),
-                    "Skipping service call (ROS is shutting down): %s",
-                    service_name.c_str());
-        return false;
-    }
-
-    // 2) Get or create the client
-    auto client = getClient<ServiceT>(service_name);
-
-    // 3) Wait for availability
-    auto timeout = std::chrono::seconds(Constants::SERVICE_TIMEOUT_SEC);
-    if (!client->wait_for_service(timeout)) {
-        RCLCPP_ERROR(node_->get_logger(),
-                     "Service not available: %s",
-                     service_name.c_str());
-        return false;
-    }
-
-    // 4) Send request & block until we get a response or timeout
-    auto future = client->async_send_request(request);
-    if (rclcpp::spin_until_future_complete(node_, future, timeout)
-        != rclcpp::FutureReturnCode::SUCCESS)
-    {
-        RCLCPP_ERROR(node_->get_logger(),
-                     "Service call to %s failed or timed out",
-                     service_name.c_str());
-        return false;
-    }
-
-    // 5) Grab the result
-    response = future.get();
-    return true;
-}
-
-template<typename ServiceType>
-std::shared_ptr<rclcpp::Client<ServiceType>> 
-ServiceManager::getClient(const std::string& serviceName) 
-{
-    std::lock_guard<std::mutex> lock(clientsMutex_);
-    
-    auto it = clients_.find(serviceName);
-    if (it != clients_.end()) {
-        return std::static_pointer_cast<rclcpp::Client<ServiceType>>(it->second);
-    }
-    
-    auto client = node_->create_client<ServiceType>(serviceName);
-    clients_[serviceName] = client;
-    return client;
-}
+} // namespace behavior_controller
 
 #endif // BEHAVIOR_CONTROLLER_INTERFACE_H

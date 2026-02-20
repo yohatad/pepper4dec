@@ -13,17 +13,14 @@ Date: April 18, 2025
 Version: v1.0
 """
 
-import sys
 import rclpy
 from .face_detection_implementation import SixDrepNet, load_configuration
 
 SOFTWARE_VERSION = "v1.0"
-
 def main():
     """
     Main function to run the face detection system.
     """
-    
     rclpy.init()
     node_name = "face_detection"
 
@@ -33,30 +30,18 @@ def main():
     )
 
     print(copyright_message)
-
-    # Load configuration
     config = load_configuration()
+    node = None
 
     try:
         node = SixDrepNet(config)
-
-        # Spin until shutdown
         rclpy.spin(node)
-
     except KeyboardInterrupt:
-        print("\nShutdown requested by user")
-
-    except Exception as e:
-        print(f"Error during execution: {e}")
-        sys.exit(1)
-        
+        pass
     finally:
         if node is not None:
-            try:
-                node.cleanup()
-                node.destroy_node()
-            except Exception as e:
-                print(f"Error during cleanup: {e}")
+            node.cleanup()
+            node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
 

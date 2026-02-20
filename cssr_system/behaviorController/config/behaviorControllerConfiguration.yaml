@@ -2,4 +2,5 @@
 scenario_specification: "lab_tour"
 culture_knowledge_base: "cultureKnowledgeBase.yaml"
 environment_knowledge_base: "labEnvironmentKnowledgeBase.yaml"
-verbose_mode: true
+language: "English"
+verbose_mode: false
