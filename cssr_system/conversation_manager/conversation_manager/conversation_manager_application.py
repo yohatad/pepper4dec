@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import List, Dict
 from rclpy.node import Node
 from ament_index_python.packages import get_package_share_directory
-from cssr_interfaces.srv import LanguageModelPrompt
+from cssr_interfaces.srv import ConversationManagerPrompt
 from .conversation_manager_implementation import (
     get_config,
     get_collection,
@@ -90,7 +90,7 @@ class SimpleRAGNode(Node):
         self.initialize_collection(collection_name)
         
         # Service - only rag_prompt
-        self.create_service(LanguageModelPrompt, 'rag_prompt', self.prompt_callback)
+        self.create_service(ConversationManagerPrompt, 'rag_prompt', self.prompt_callback)
         
         status = f"Collection: {collection_name} ({self.collection.count()} docs)" if self.collection else "Collection: Failed to load"
         self.get_logger().info(f"RAG Node ready. {status}")
