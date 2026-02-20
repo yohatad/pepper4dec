@@ -20,6 +20,7 @@ from collections import deque
 from rclpy.action import ActionServer
 from concurrent.futures import ThreadPoolExecutor
 from rclpy.action import ActionServer, CancelResponse
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from cssr_interfaces.action import SpeechRecognition
 
 from ament_index_python.packages import get_package_share_directory
@@ -294,6 +295,11 @@ class SpeechRecognitionNode(Node):
         self._current_goal_handle = None
         self.asr_action_server = None
 
+        # Separate callback groups so the blocking action callback and the
+        # audio subscription can run concurrently under MultiThreadedExecutor.
+        self._action_cb_group = MutuallyExclusiveCallbackGroup()
+        self._audio_cb_group = MutuallyExclusiveCallbackGroup()
+
         if self.action_server_enabled:
             self.initialize_action_server()
 
@@ -302,7 +308,10 @@ class SpeechRecognitionNode(Node):
         self.asr_pub = self.create_publisher(String, "/speech_event/text", 10)
 
         # Subscriber
-        self.audio_sub = self.create_subscription(AudioBuffer, self.microphone_topic, self.audio_callback, 10)
+        self.audio_sub = self.create_subscription(
+            AudioBuffer, self.microphone_topic, self.audio_callback, 10,
+            callback_group=self._audio_cb_group,
+        )
 
         self.get_logger().info("speech_recognition ready.")
         self.get_logger().info(f"VAD config: speech_thresh={self.speech_threshold}, neg_thresh={self.neg_threshold}, "
@@ -340,6 +349,7 @@ class SpeechRecognitionNode(Node):
             '/speech_recognition_action',
             self.execute_asr_action_callback,
             cancel_callback=self.cancel_callback,
+            callback_group=self._action_cb_group,
         )
 
     def cancel_callback(self, goal_handle):
