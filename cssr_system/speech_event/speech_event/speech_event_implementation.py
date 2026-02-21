@@ -148,6 +148,7 @@ class SpeechRecognitionNode(Node):
         self.declare_parameter("pre_speech_buffer_ms", 200)
         self.declare_parameter("intensity_threshold", 0.001)
 
+        self.declare_parameter("transcription_timeout_s", 5.0)
         self.declare_parameter("microphone_topic", "/audio")
         self.declare_parameter("action_server", True)
 
@@ -166,6 +167,7 @@ class SpeechRecognitionNode(Node):
         self.pre_speech_buffer_ms = int(self.get_parameter("pre_speech_buffer_ms").value)
         self.intensity_threshold = float(self.get_parameter("intensity_threshold").value)
 
+        self.transcription_timeout_s = float(self.get_parameter("transcription_timeout_s").value)
         self.microphone_topic = self.get_parameter("microphone_topic").value
         self.action_server_enabled = bool(self.get_parameter("action_server").value)
 
@@ -207,6 +209,10 @@ class SpeechRecognitionNode(Node):
         if self.intensity_threshold < 0:
             self.get_logger().error(f"Invalid intensity_threshold: {self.intensity_threshold}")
             raise ValueError("intensity_threshold must be non-negative")
+
+        if self.transcription_timeout_s <= 0:
+            self.get_logger().error(f"Invalid transcription_timeout_s: {self.transcription_timeout_s}")
+            raise ValueError("transcription_timeout_s must be positive")
 
         self.get_logger().info("All parameters validated successfully")
 
@@ -413,7 +419,7 @@ class SpeechRecognitionNode(Node):
         self.get_logger().info("Speech detected. Waiting for speaker to finish...")
 
         # ---- Phase 2: wait for transcription to complete ----
-        transcription_timeout = self.max_speech_duration_s
+        transcription_timeout = self.transcription_timeout_s
         transcription_deadline = time.monotonic() + transcription_timeout
         completed = False
 
