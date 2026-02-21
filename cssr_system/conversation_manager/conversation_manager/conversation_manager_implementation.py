@@ -1,11 +1,16 @@
 """
-Simplified RAG Implementation for Pepper Robot Lab Assistant
+Conversation manager implementation for the Pepper robot, utilizing Retrieval-Augmented Generation (RAG) techniques.
 
 Environment Variables:
     LLM_API_KEY: API key for LLM service (MUST be exported as environment variable)
-    
-Configuration File (config/rag_system_configuration.yaml):
-    All other settings (LLM base URL, model, ChromaDB path, embedding model, etc.)
+
+Configuration File (config/converation_manager_configuration.yaml):
+    llm:          base_url, model
+    embedding:    model
+    search:       similarity_threshold, top_k
+    conversation: max_history_turns, context_turns
+    data:         default_path (knowledge base JSON file)
+    debug:        verbose
 """
 
 import os
@@ -39,7 +44,6 @@ DEFAULT_SIMILARITY_THRESHOLD = 0.15
 DEFAULT_TOP_K = 5
 DEFAULT_MAX_HISTORY_TURNS = 5
 DEFAULT_CONTEXT_TURNS = 3
-DEFAULT_MAX_RESPONSE_SENTENCES = 3
 DEFAULT_DATA_PATH = "./data/upanzi_data.json"
 DEFAULT_VERBOSE = False
 
@@ -199,7 +203,7 @@ def print_llm_request(messages: List[Dict], model: str):
     print_separator('=', 80, Colors.BRIGHT_BLUE)
 
 @dataclass
-class RAGConfig:
+class ConversationManagerConfig:
     """
     Configuration for RAG system.
     
@@ -227,10 +231,7 @@ class RAGConfig:
     # Conversation settings
     max_history_turns: int = DEFAULT_MAX_HISTORY_TURNS
     context_turns: int = DEFAULT_CONTEXT_TURNS
-    
-    # Response settings
-    max_response_sentences: int = DEFAULT_MAX_RESPONSE_SENTENCES
-    
+
     # Data settings
     data_default_path: str = DEFAULT_DATA_PATH
     
@@ -284,7 +285,7 @@ class ConfigError(RAGError):
 # Global Clients (Thread-Safe)
 # =============================================================================
 
-global_config: Optional[RAGConfig] = None
+global_config: Optional[ConversationManagerConfig] = None
 openai_client_instance: Optional[openai.OpenAI] = None
 chroma_client_instance: Optional[chromadb.PersistentClient] = None
 embedding_function_instance = None
@@ -292,21 +293,21 @@ config_lock = threading.Lock()
 client_lock = threading.Lock()
 
 
-def get_config() -> RAGConfig:
+def get_config() -> ConversationManagerConfig:
     """Get or create default configuration"""
     global global_config
     with config_lock:
         if global_config is None:
-            global_config = RAGConfig()
+            global_config = ConversationManagerConfig()
         return global_config
 
 
-def set_config(config: RAGConfig) -> None:
+def set_config(config: ConversationManagerConfig) -> None:
     """
     Set custom configuration.
     
     Args:
-        config: RAGConfig instance to use
+        config: ConversationManagerConfig instance to use
         
     Raises:
         ConfigError: If configuration validation fails
@@ -927,14 +928,17 @@ def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
         
     Example YAML format:
         llm:
-          base_url: "https://api.groq.com/openai/v1"
-          # api_key should be set as environment variable LLM_API_KEY
-          model: "llama-3.1-8b-instant"
+          base_url: "https://api.deepseek.com/v1"
+          # api_key must be set as environment variable LLM_API_KEY
+          model: "deepseek-chat"
         embedding:
           model: "all-MiniLM-L6-v2"
         search:
           similarity_threshold: 0.15
           top_k: 5
+        conversation:
+          max_history_turns: 5
+          context_turns: 3
         data:
           default_path: "./data/upanzi_data.json"
         debug:
@@ -1008,7 +1012,7 @@ def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
         chroma_path = str(PACKAGE_PATH / 'data')
         log_verbose(f"Using package data folder for ChromaDB: {chroma_path}")
         
-        config = RAGConfig(
+        config = ConversationManagerConfig(
             llm_base_url=llm.get('base_url', DEFAULT_LLM_BASE_URL),
             # LLM_API_KEY must be exported as environment variable, not from config file
             llm_model=llm.get('model', DEFAULT_LLM_MODEL),

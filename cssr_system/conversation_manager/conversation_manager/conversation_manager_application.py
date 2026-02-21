@@ -1,15 +1,27 @@
 #!/usr/bin/env python3
 """
-Simplified RAG ROS 2 Node for Pepper Robot Lab Assistant
+ROS2 node developed for conversation management for Pepper robot, utilizing Retrieval-Augmented Generation 
+(RAG) techniques.
 
 The application controls when to call the RAG service.
 
 Environment Variables:
-    LLM_API_KEY: API key for LLM service (MUST be exported)
+    LLM_API_KEY: API key for LLM service (MUST be exported as environment variable)
 
-Configuration:
-    All settings loaded from config/rag_system_configuration.yaml
-    Including knowledge base path and collection name
+Configuration (config/converation_manager_configuration.yaml):
+    llm:         base_url, model
+    embedding:   model
+    search:      similarity_threshold, top_k
+    conversation: max_history_turns, context_turns
+    data:        default_path (knowledge base JSON file)
+    debug:       verbose
+
+ROS Parameters:
+    collection_name (str, default: 'upanzi_knowledge'): ChromaDB collection name
+    verbose        (bool, default: False): Enable verbose logging
+
+Services:
+    prompt (cssr_interfaces/srv/ConversationManagerPrompt): Answer questions using RAG
 """
 
 import rclpy
@@ -28,28 +40,13 @@ from .conversation_manager_implementation import (
 
 PACKAGE_PATH = Path(get_package_share_directory('conversation_manager'))
 
-class SimpleRAGNode(Node):
-    """
-    Simple RAG Node for Pepper robot.
-    
-    Services:
-        - rag_prompt: Answer questions using RAG
-    
-    Configuration via YAML file (config/rag_system_configuration.yaml):
-        - Knowledge base automatically loaded at startup
-        - LLM settings
-        - Search parameters
-        - Conversation settings
-    
-    Environment variable required:
-        export LLM_API_KEY="your-api-key"
-    """
+class conversationManager(Node):
     
     def __init__(self):
         super().__init__('conversation_manager')
         
         # Load configuration from YAML file
-        config_file = PACKAGE_PATH / 'config' / 'rag_system_configuration.yaml'
+        config_file = PACKAGE_PATH / 'config' / 'converation_manager_configuration.yaml'
         if config_file.exists():
             success, messages = apply_config_file(str(config_file))
             if success:
@@ -89,8 +86,8 @@ class SimpleRAGNode(Node):
         collection_name = self.get_parameter('collection_name').get_parameter_value().string_value
         self.initialize_collection(collection_name)
         
-        # Service - only rag_prompt
-        self.create_service(ConversationManagerPrompt, 'rag_prompt', self.prompt_callback)
+        # Service
+        self.create_service(ConversationManagerPrompt, 'prompt', self.prompt_callback)
         
         status = f"Collection: {collection_name} ({self.collection.count()} docs)" if self.collection else "Collection: Failed to load"
         self.get_logger().info(f"RAG Node ready. {status}")
@@ -152,11 +149,7 @@ class SimpleRAGNode(Node):
     
     @property
     def verbose(self) -> bool:
-        config = get_config()
-        config_verbose = config.verbose
-        param_verbose = self.get_parameter('verbose').get_parameter_value().bool_value
-        verbose_mode = config_verbose or param_verbose
-        return verbose_mode
+        return get_config().verbose or self.get_parameter('verbose').get_parameter_value().bool_value
     
     def log_verbose(self, message: str) -> None:
         """Log message only if verbose mode is enabled"""
@@ -224,40 +217,20 @@ class SimpleRAGNode(Node):
         self.log_verbose("Conversation history cleared")
 
 def main(args=None):
-    """Main function"""
+    node = None
     try:
-        # Initialize ROS 2
         rclpy.init(args=args)
-        
-        # Create node
-        node = SimpleRAGNode()
-        
-        # Spin the node
+        node = conversationManager()
         rclpy.spin(node)
-        
     except KeyboardInterrupt:
-        # Handle Ctrl+C gracefully
         print("\nShutdown requested (Ctrl+C)...")
-        
     except Exception as e:
-        # Handle other exceptions
         print(f"Error: {e}")
-        
     finally:
-        # Clean shutdown sequence
-        try:
-            # Destroy the node explicitly if it exists
-            if 'node' in locals():
-                node.destroy_node()
-        except Exception as e:
-            print(f"Error destroying node: {e}")
-        
-        try:
-            # Only shutdown if rclpy context is valid
-            if rclpy.ok():
-                rclpy.shutdown()
-        except Exception as e:
-            print(f"Error during shutdown: {e}")
+        if node:
+            node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':

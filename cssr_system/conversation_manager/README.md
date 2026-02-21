@@ -1,5 +1,5 @@
 <div align="center">
-<h1> Conversation Manager Package for Pepper Robot Assistant (ROS2) </h1>
+<h1> Conversation Manager (ROS2) </h1>
 </div>
 
 <div align="center">
@@ -122,7 +122,7 @@ The node provides ROS2 services for knowledge base management and querying.
 
 The conversation manager provides a single service for querying the knowledge base:
 
-### `/rag_prompt` Service (`cssr_interfaces/srv/LanguageModelPrompt`)
+### `/prompt` Service (`cssr_interfaces/srv/ConversationManagerPrompt`)
 Query the knowledge base with a question.
 
 **Request Fields:**
@@ -140,22 +140,22 @@ If the collection doesn't exist, it will be created and populated automatically 
 
 1. **Query the Knowledge Base**
 ```bash
-ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
+ros2 service call /prompt cssr_interfaces/srv/ConversationManagerPrompt \
   "{prompt: 'What is the Upanzi Network?'}"
 ```
 
 2. **More Example Queries**
 ```bash
 # Ask about specific projects
-ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
+ros2 service call /prompt cssr_interfaces/srv/ConversationManagerPrompt \
   "{prompt: 'What projects are focused on cybersecurity?'}"
 
 # Ask about facilities
-ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
+ros2 service call /prompt cssr_interfaces/srv/ConversationManagerPrompt \
   "{prompt: 'Tell me about the Digital Experience Center.'}"
 
 # Ask about research areas
-ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt \
+ros2 service call /prompt cssr_interfaces/srv/ConversationManagerPrompt \
   "{prompt: 'What are the main thrust areas of research?'}"
 ```
 
@@ -170,7 +170,7 @@ ros2 node list
 ros2 service list
 
 # Test the service with a simple query
-ros2 service call /rag_prompt cssr_interfaces/srv/LanguageModelPrompt "{prompt: 'Hello, are you working?'}"
+ros2 service call /prompt cssr_interfaces/srv/ConversationManagerPrompt "{prompt: 'Hello, are you working?'}"
 ```
 
 # 🏗️ Architecture
@@ -186,7 +186,7 @@ The RAG system consists of three main components:
    - Maintains conversation history for context-aware responses
 
 ## Data Flow
-1. User query → `/rag_prompt` service
+1. User query → `/prompt` service
 2. Query embedding → ChromaDB similarity search
 3. Retrieved documents + query → LLM prompt
 4. LLM response → Service response
@@ -210,4 +210,4 @@ For issues or questions:
 # 📜 License
 Copyright (C) 2023 Upanzi Network
 
-2026-02-09 - Updated to reflect simplified architecture with automatic knowledge base initialization via configuration file
+2026-02-

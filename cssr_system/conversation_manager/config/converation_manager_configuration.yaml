@@ -1,4 +1,5 @@
 # LLM Settings
+# Note: LLM_API_KEY must be exported as an environment variable (not set here)
 llm:
   base_url: https://api.deepseek.com/v1
   model: deepseek-chat
@@ -12,8 +13,15 @@ search:
   similarity_threshold: 0.15
   top_k: 5
 
+# Conversation Settings
+conversation:
+  max_history_turns: 5   # Maximum number of turns to store in history
+  context_turns: 3       # Number of recent turns included in each LLM request
+
 # Data Settings
 data:
   default_path: ./data/upanzi_data.json
+
+# Debug Settings
 debug:
   verbose: true
