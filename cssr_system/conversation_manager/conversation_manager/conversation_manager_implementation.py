@@ -15,16 +15,17 @@ Configuration File (config/converation_manager_configuration.yaml):
 
 import os
 import json
-import threading
 import openai
 import chromadb
 import yaml
+import rclpy.logging
 from chromadb.utils import embedding_functions
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from ament_index_python.packages import get_package_share_directory
 from pathlib import Path
-from datetime import datetime
+
+logger = rclpy.logging.get_logger('conversation_manager')
 
 
 # =============================================================================
@@ -32,7 +33,11 @@ from datetime import datetime
 # =============================================================================
 
 # Package path for ChromaDB storage (always in package data folder)
-PACKAGE_PATH = Path(get_package_share_directory('conversation_manager'))
+try:
+    PACKAGE_PATH = Path(get_package_share_directory('conversation_manager'))
+except Exception:
+    # Fallback for environments where ROS2 is not fully sourced (e.g., testing)
+    PACKAGE_PATH = Path(__file__).parent.parent
 
 # Default values as module constants
 DEFAULT_LLM_BASE_URL = "http://localhost:8080/v1"
@@ -44,7 +49,8 @@ DEFAULT_SIMILARITY_THRESHOLD = 0.15
 DEFAULT_TOP_K = 5
 DEFAULT_MAX_HISTORY_TURNS = 5
 DEFAULT_CONTEXT_TURNS = 3
-DEFAULT_DATA_PATH = "./data/upanzi_data.json"
+DEFAULT_MAX_RESPONSE_SENTENCES = 3
+DEFAULT_DATA_PATH = str(PACKAGE_PATH / 'data' / 'upanzi_data.json')
 DEFAULT_VERBOSE = False
 
 class Colors:
@@ -78,22 +84,18 @@ class Colors:
     BG_CYAN = '\033[46m'
     BG_BLUE = '\033[44m'
 
-def log_verbose(message: str) -> None:
-    """Log message only if verbose mode is enabled"""
-    config = get_config()
-    if config.verbose:
-        print(f"[VERBOSE] {message}")
+def is_verbose() -> bool:
+    """Check verbose state without auto-creating a default config."""
+    return global_config is not None and global_config.verbose
 
 def print_separator(char='=', length=80, color=Colors.BRIGHT_BLACK):
-    """Print a colored separator line"""
-    config = get_config()
-    if config.verbose:
-        print(f"{color}{char * length}{Colors.RESET}")
+    """Log a colored separator line at INFO level when verbose."""
+    if is_verbose():
+        logger.info(f"{color}{char * length}{Colors.RESET}")
 
 def print_message_header(role: str, index: int = None):
     """Print a formatted message header"""
-    config = get_config()
-    if not config.verbose:
+    if not is_verbose():
         return
     
     role_colors = {
@@ -109,101 +111,75 @@ def print_message_header(role: str, index: int = None):
         header = f"{color}{Colors.BOLD}[{role_upper} #{index}]{Colors.RESET}"
     else:
         header = f"{color}{Colors.BOLD}[{role_upper}]{Colors.RESET}"
-    
-    print(f"\n{header}")
+
+    logger.info(header)
 
 def print_message_content(content: str, indent: int = 2):
     """Print message content with indentation and wrapping"""
-    config = get_config()
-    if not config.verbose:
+    if not is_verbose():
         return
     
     indent_str = " " * indent
-    # Split content into lines and print with indentation
     lines = content.split('\n')
-    for line in lines:
-        print(f"{Colors.BRIGHT_WHITE}{indent_str}{line}{Colors.RESET}")
+    logger.info('\n'.join(f"{Colors.BRIGHT_WHITE}{indent_str}{line}{Colors.RESET}" for line in lines))
 
 
 def print_search_results(search_results: List[Dict]):
     """Print search results in a readable format"""
-    config = get_config()
-    if not config.verbose:
+    if not is_verbose():
         return
     
-    print(f"\n{Colors.BRIGHT_YELLOW}{Colors.BOLD}SEARCH RESULTS ({len(search_results)} documents){Colors.RESET}")
-    print_separator('─', 80, Colors.YELLOW)
-    
+    lines = [f"{Colors.BRIGHT_YELLOW}{Colors.BOLD}SEARCH RESULTS ({len(search_results)} documents){Colors.RESET}"]
     for i, result in enumerate(search_results, 1):
         score = result.get('score', 0)
         score_color = Colors.BRIGHT_GREEN if score > 0.5 else Colors.YELLOW if score > 0.3 else Colors.RED
-        
-        print(f"\n{Colors.BRIGHT_CYAN}Result #{i}{Colors.RESET}")
-        print(f"  {Colors.DIM}Doc ID:{Colors.RESET} {result.get('doc_id', 'N/A')}")
-        print(f"  {Colors.DIM}Title:{Colors.RESET} {Colors.BOLD}{result.get('title', 'N/A')}{Colors.RESET}")
-        print(f"  {Colors.DIM}Score:{Colors.RESET} {score_color}{score:.4f}{Colors.RESET}")
-        
         content = result.get('content', '')
         if len(content) > 200:
             content = content[:200] + "..."
-        print(f"  {Colors.DIM}Content:{Colors.RESET}")
-        for line in content.split('\n')[:3]:  # Show first 3 lines
-            print(f"    {Colors.BRIGHT_BLACK}{line}{Colors.RESET}")
+        lines.append(f"{Colors.BRIGHT_CYAN}Result #{i}{Colors.RESET}  "
+                     f"{Colors.DIM}Doc:{Colors.RESET} {result.get('doc_id', 'N/A')}  "
+                     f"{Colors.DIM}Title:{Colors.RESET} {result.get('title', 'N/A')}  "
+                     f"{Colors.DIM}Score:{Colors.RESET} {score_color}{score:.4f}{Colors.RESET}")
+        for line in content.split('\n')[:3]:
+            lines.append(f"    {Colors.BRIGHT_BLACK}{line}{Colors.RESET}")
+    logger.info('\n'.join(lines))
 
 def print_conversation_history(conversation_history: List[Dict], context_turns: int):
     """Print conversation history in a readable format"""
-    config = get_config()
-    if not config.verbose or not conversation_history:
+    if not is_verbose() or not conversation_history:
         return
     
     history_to_use = conversation_history[-context_turns:]
-    
-    print(f"\n{Colors.BRIGHT_BLUE}{Colors.BOLD}CONVERSATION HISTORY ({len(history_to_use)}/{len(conversation_history)} turns used){Colors.RESET}")
-    print_separator('─', 80, Colors.BLUE)
-    
+    lines = [f"{Colors.BRIGHT_BLUE}{Colors.BOLD}CONVERSATION HISTORY "
+             f"({len(history_to_use)}/{len(conversation_history)} turns used){Colors.RESET}"]
     for i, turn in enumerate(history_to_use, 1):
-        print(f"\n{Colors.CYAN}Turn #{i}{Colors.RESET}")
-        
         query = turn.get('query', '')
         response = turn.get('response', '')
-        
-        print(f"  {Colors.DIM}User Query:{Colors.RESET}")
-        print(f"    {Colors.BRIGHT_CYAN}{query}{Colors.RESET}")
-        
-        print(f"  {Colors.DIM}Assistant Response:{Colors.RESET}")
-        # Truncate long responses
         if len(response) > 150:
             response = response[:150] + "..."
-        print(f"    {Colors.BRIGHT_GREEN}{response}{Colors.RESET}")
+        lines.append(f"{Colors.CYAN}Turn #{i}{Colors.RESET}  "
+                     f"{Colors.DIM}Q:{Colors.RESET} {Colors.BRIGHT_CYAN}{query}{Colors.RESET}  "
+                     f"{Colors.DIM}A:{Colors.RESET} {Colors.BRIGHT_GREEN}{response}{Colors.RESET}")
+    logger.info('\n'.join(lines))
 
 
 def print_llm_request(messages: List[Dict], model: str):
     """Print the complete LLM request in a readable format"""
-    config = get_config()
-    if not config.verbose:
+    if not is_verbose():
         return
     
-    timestamp = datetime.now().strftime("%H:%M:%S")
-    
-    print(f"\n{Colors.BG_BLUE}{Colors.BRIGHT_WHITE}{Colors.BOLD} LLM REQUEST @ {timestamp} {Colors.RESET}")
-    print_separator('=', 80, Colors.BRIGHT_BLUE)
-    
-    print(f"{Colors.DIM}Model:{Colors.RESET} {Colors.BRIGHT_WHITE}{model}{Colors.RESET}")
-    print(f"{Colors.DIM}Messages:{Colors.RESET} {Colors.BRIGHT_WHITE}{len(messages)}{Colors.RESET}")
-    
-    print_separator('─', 80, Colors.BRIGHT_BLACK)
-    
+    lines = [f"{Colors.BG_BLUE}{Colors.BRIGHT_WHITE}{Colors.BOLD} LLM REQUEST {Colors.RESET}  "
+             f"{Colors.DIM}Model:{Colors.RESET} {Colors.BRIGHT_WHITE}{model}{Colors.RESET}  "
+             f"{Colors.DIM}Messages:{Colors.RESET} {Colors.BRIGHT_WHITE}{len(messages)}{Colors.RESET}"]
     for i, message in enumerate(messages, 1):
-        role = message.get('role', 'unknown')
+        role = message.get('role', 'unknown').upper()
         content = message.get('content', '')
-        
-        print_message_header(role, i)
-        print_message_content(content)
-    
-    print_separator('=', 80, Colors.BRIGHT_BLUE)
+        lines.append(f"{Colors.BOLD}[{role} #{i}]{Colors.RESET} {content[:200]}"
+                     + ("..." if len(content) > 200 else ""))
+    logger.info('\n'.join(lines))
 
 @dataclass
-class ConversationManagerConfig:
+class RAGConfig:
     """
     Configuration for RAG system.
     
@@ -231,7 +207,10 @@ class ConversationManagerConfig:
     # Conversation settings
     max_history_turns: int = DEFAULT_MAX_HISTORY_TURNS
     context_turns: int = DEFAULT_CONTEXT_TURNS
-
+    
+    # Response settings
+    max_response_sentences: int = DEFAULT_MAX_RESPONSE_SENTENCES
+    
     # Data settings
     data_default_path: str = DEFAULT_DATA_PATH
     
@@ -282,95 +261,82 @@ class ConfigError(RAGError):
     pass
 
 # =============================================================================
-# Global Clients (Thread-Safe)
+# Global Clients
 # =============================================================================
 
-global_config: Optional[ConversationManagerConfig] = None
+global_config: Optional[RAGConfig] = None
 openai_client_instance: Optional[openai.OpenAI] = None
 chroma_client_instance: Optional[chromadb.PersistentClient] = None
 embedding_function_instance = None
-config_lock = threading.Lock()
-client_lock = threading.Lock()
 
 
-def get_config() -> ConversationManagerConfig:
+def get_config() -> RAGConfig:
     """Get or create default configuration"""
     global global_config
-    with config_lock:
-        if global_config is None:
-            global_config = ConversationManagerConfig()
-        return global_config
+    if global_config is None:
+        global_config = RAGConfig()
+    return global_config
 
-
-def set_config(config: ConversationManagerConfig) -> None:
+def set_config(config: RAGConfig) -> None:
     """
     Set custom configuration.
-    
+
     Args:
-        config: ConversationManagerConfig instance to use
-        
+        config: RAGConfig instance to use
+
     Raises:
         ConfigError: If configuration validation fails
     """
     global global_config, openai_client_instance, chroma_client_instance, embedding_function_instance
-    
+
     is_valid, errors = config.validate()
     if not is_valid:
         raise ConfigError(f"Invalid configuration: {'; '.join(errors)}")
-    
-    with config_lock:
-        global_config = config
-    
-    with client_lock:
-        openai_client_instance = None
-        chroma_client_instance = None
-        embedding_function_instance = None
-    
-    log_verbose(f"Configuration updated: llm_base_url={config.llm_base_url}, llm_model={config.llm_model}")
+
+    global_config = config
+    openai_client_instance = None
+    chroma_client_instance = None
+    embedding_function_instance = None
+
+    logger.debug(f"Configuration updated: llm_base_url={config.llm_base_url}, llm_model={config.llm_model}")
 
 def get_openai_client() -> openai.OpenAI:
-    """Get or create OpenAI client (thread-safe)"""
+    """Get or create OpenAI client"""
     global openai_client_instance
-    
+
     if openai_client_instance is None:
-        with client_lock:
-            if openai_client_instance is None:
-                config = get_config()
-                log_verbose(f"Creating OpenAI client with base_url: {config.llm_base_url}")
-                openai_client_instance = openai.OpenAI(
-                    base_url=config.llm_base_url,
-                    api_key=config.llm_api_key,
-                    timeout=30.0
-                )
+        config = get_config()
+        logger.debug(f"Creating OpenAI client with base_url: {config.llm_base_url}")
+        openai_client_instance = openai.OpenAI(
+            base_url=config.llm_base_url,
+            api_key=config.llm_api_key,
+            timeout=30.0
+        )
     return openai_client_instance
 
 def get_chroma_client() -> chromadb.PersistentClient:
-    """Get or create ChromaDB client (embedded mode - no server needed, thread-safe)"""
+    """Get or create ChromaDB client (embedded mode - no server needed)"""
     global chroma_client_instance
-    
+
     if chroma_client_instance is None:
-        with client_lock:
-            if chroma_client_instance is None:
-                config = get_config()
-                try:
-                    log_verbose(f"Creating ChromaDB client with path: {config.chroma_path}")
-                    chroma_client_instance = chromadb.PersistentClient(path=config.chroma_path)
-                except Exception as e:
-                    raise RAGError(f"Failed to initialize ChromaDB: {e}")
+        config = get_config()
+        try:
+            logger.debug(f"Creating ChromaDB client with path: {config.chroma_path}")
+            chroma_client_instance = chromadb.PersistentClient(path=config.chroma_path)
+        except Exception as e:
+            raise RAGError(f"Failed to initialize ChromaDB: {e}")
     return chroma_client_instance
 
 def get_embedding_function():
-    """Get or create embedding function (thread-safe)"""
+    """Get or create embedding function"""
     global embedding_function_instance
-    
+
     if embedding_function_instance is None:
-        with client_lock:
-            if embedding_function_instance is None:
-                config = get_config()
-                log_verbose(f"Creating embedding function with model: {config.embedding_model}")
-                embedding_function_instance = embedding_functions.SentenceTransformerEmbeddingFunction(
-                    model_name=config.embedding_model
-                )
+        config = get_config()
+        logger.debug(f"Creating embedding function with model: {config.embedding_model}")
+        embedding_function_instance = embedding_functions.SentenceTransformerEmbeddingFunction(
+            model_name=config.embedding_model
+        )
     return embedding_function_instance
 
 # =============================================================================
@@ -391,7 +357,7 @@ def load_json_data(file_path: str) -> List[Dict]:
         RAGError: If file not found or invalid JSON
     """
     try:
-        log_verbose(f"Loading JSON data from: {file_path}")
+        logger.debug(f"Loading JSON data from: {file_path}")
         with open(file_path, 'r', encoding='utf-8') as file:
             json_data = json.load(file)
 
@@ -402,7 +368,7 @@ def load_json_data(file_path: str) -> List[Dict]:
         else:
             raise RAGError(f"Unexpected JSON type: {type(json_data).__name__}")
 
-        log_verbose(f"Loaded {len(result)} documents from {file_path}")
+        logger.debug(f"Loaded {len(result)} documents from {file_path}")
         return result
 
     except json.JSONDecodeError as e:
@@ -488,7 +454,7 @@ def parse_upanzi_format(json_data: Dict) -> List[Dict]:
                 'status': project.get('status', '')
             })
     
-    log_verbose(f"Parsed {len(documents)} documents from Upanzi format")
+    logger.debug(f"Parsed {len(documents)} documents from Upanzi format")
     return documents
 
 # =============================================================================
@@ -507,33 +473,39 @@ def create_collection(name: str, description: str = "") -> chromadb.Collection:
     """
     existing = get_collection(name)
     if existing:
-        log_verbose(f"Using existing collection: {name}")
+        logger.debug(f"Using existing collection: {name}")
         return existing
     
     client = get_chroma_client()
     ef = get_embedding_function()
     
-    log_verbose(f"Creating new collection: {name}")
+    logger.debug(f"Creating new collection: {name}")
+    metadata = {'hnsw:space': 'cosine'}
+    if description:
+        metadata['description'] = description
     collection = client.create_collection(
         name=name,
-        metadata={'description': description} if description else None,
+        metadata=metadata,
         embedding_function=ef
     )
-    log_verbose(f"Created collection: {name}")
+    logger.debug(f"Created collection: {name}")
     return collection
 
 
 def get_collection(name: str) -> Optional[chromadb.Collection]:
-    """Get existing collection"""
+    """Get existing collection, or None if it does not exist."""
     try:
         client = get_chroma_client()
         ef = get_embedding_function()
         collection = client.get_collection(name=name, embedding_function=ef)
-        log_verbose(f"Retrieved collection: {name}")
+        logger.debug(f"Retrieved collection: {name}")
         return collection
-    except Exception:
-        log_verbose(f"Collection not found: {name}")
-        return None
+    except Exception as e:
+        err_msg = str(e).lower()
+        if "does not exist" in err_msg or "not found" in err_msg:
+            logger.debug(f"Collection not found: {name}")
+            return None
+        raise RAGError(f"Failed to get collection '{name}': {e}")
 
 def populate_collection(collection: chromadb.Collection, documents: List[Dict]) -> int:
     """
@@ -549,36 +521,43 @@ def populate_collection(collection: chromadb.Collection, documents: List[Dict]) 
     docs = []
     ids = []
     metadatas = []
-    
+    seen_ids = set()
+
     for doc in documents:
         text = doc.get('text', '')
         if not text:
             continue
-        
+
+        doc_id = doc.get('doc_id') or str(len(ids))
+        if doc_id in seen_ids:
+            logger.warn(f"Skipping document with duplicate doc_id: {doc_id}")
+            continue
+        seen_ids.add(doc_id)
+
         # Build searchable content
         title = doc.get('title', '')
         keywords = doc.get('keywords', [])
-        
+
         content = f"Title: {title}\n" if title else ""
         if keywords:
             content += f"Keywords: {', '.join(keywords)}\n"
         content += text
-        
+
         docs.append(content)
-        ids.append(doc.get('doc_id', str(len(ids))))
+        ids.append(doc_id)
         metadatas.append({
             'title': title,
             'category': doc.get('category', ''),
             'keywords': ' '.join(keywords)
         })
-    
+
     if docs:
-        log_verbose(f"Adding {len(docs)} documents to collection")
+        logger.debug(f"Adding {len(docs)} documents to collection")
         collection.add(documents=docs, ids=ids, metadatas=metadatas)
+        logger.debug(f"Added {len(docs)} documents to collection")
     else:
-        log_verbose("No documents to add to collection")
-    
-    log_verbose(f"Added {len(docs)} documents to collection")
+        logger.debug("No documents to add to collection")
+
     return len(docs)
 
 def setup_collection(name: str, json_path: str, description: str = "") -> chromadb.Collection:
@@ -596,16 +575,16 @@ def setup_collection(name: str, json_path: str, description: str = "") -> chroma
     Raises:
         RAGError: If data loading fails
     """
-    log_verbose(f"Setting up collection '{name}' from {json_path}")
+    logger.debug(f"Setting up collection '{name}' from {json_path}")
     documents = load_json_data(json_path)
     collection = create_collection(name, description)
     
     if collection.count() == 0:
         populate_collection(collection, documents)
     else:
-        log_verbose(f"Collection '{name}' already has {collection.count()} documents")
+        logger.debug(f"Collection '{name}' already has {collection.count()} documents")
     
-    log_verbose(f"Collection '{name}' ready with {collection.count()} documents")
+    logger.debug(f"Collection '{name}' ready with {collection.count()} documents")
     return collection
 
 # =============================================================================
@@ -631,13 +610,13 @@ def search(
         List of results with doc_id, title, content, score
     """
     if not query or not query.strip():
-        log_verbose("Empty query, returning empty results")
+        logger.debug("Empty query, returning empty results")
         return []
     
     config = get_config()
     top_k = top_k or config.default_top_k
     
-    log_verbose(f"Searching for query: '{query}' with top_k={top_k}, category_filter={category_filter}")
+    logger.debug(f"Searching for query: '{query}' with top_k={top_k}, category_filter={category_filter}")
     
     where_filter = None
     if category_filter:
@@ -651,7 +630,7 @@ def search(
         )
         
         if not results or not results['ids'] or not results['ids'][0]:
-            log_verbose("No search results found")
+            logger.debug("No search results found")
             return []
         
         formatted = []
@@ -659,7 +638,7 @@ def search(
             score = 1 - results['distances'][0][i]
             
             if score < config.similarity_threshold:
-                log_verbose(f"Result {results['ids'][0][i]} below threshold ({score} < {config.similarity_threshold})")
+                logger.debug(f"Result {results['ids'][0][i]} below threshold ({score} < {config.similarity_threshold})")
                 continue
             
             formatted.append({
@@ -669,11 +648,11 @@ def search(
                 'score': score
             })
         
-        log_verbose(f"Search returned {len(formatted)} results above threshold")
+        logger.debug(f"Search returned {len(formatted)} results above threshold")
         return formatted
         
     except Exception as e:
-        log_verbose(f"Search failed with error: {e}")
+        logger.error(f"Search failed: {e}")
         raise RAGError(f"Search failed: {e}")
 
 # =============================================================================
@@ -714,7 +693,7 @@ def generate_response(
         RAGError: If LLM call fails
     """
     config = get_config()
-    log_verbose(f"Generating response for query: '{query}'")
+    logger.debug(f"Generating response for query: '{query}'")
     
     # Print search results in verbose mode
     if search_results:
@@ -723,9 +702,9 @@ def generate_response(
     # Build context from search results
     context = ""
     if search_results:
-        context_parts = [f"[{r['title']}]\n{r['content']}" for r in search_results[:3]]
+        context_parts = [f"[{r['title']}]\n{r['content']}" for r in search_results]
         context = "\n\n".join(context_parts)
-        log_verbose(f"Using {len(search_results)} search results as context")
+        logger.debug(f"Using {len(search_results)} search results as context")
     
     # Build messages
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -737,7 +716,7 @@ def generate_response(
         # Print conversation history in verbose mode
         print_conversation_history(conversation_history, config.context_turns)
         
-        log_verbose(f"Using {len(history_to_use)} previous conversation turns")
+        logger.debug(f"Using {len(history_to_use)} previous conversation turns")
         for turn in history_to_use:
             messages.append({"role": "user", "content": turn.get("query", "")})
             messages.append({"role": "assistant", "content": turn.get("response", "")})
@@ -754,10 +733,13 @@ def generate_response(
     
     try:
         client = get_openai_client()
-        log_verbose(f"Sending request to LLM (model: {config.llm_model})")
+        logger.debug(f"Sending request to LLM (model: {config.llm_model})")
+        # ~50 tokens per sentence is a conservative upper bound
+        max_tokens = config.max_response_sentences * 50
         response = client.chat.completions.create(
             model=config.llm_model,
-            messages=messages
+            messages=messages,
+            max_tokens=max_tokens
         )
         
         if response.choices:
@@ -767,23 +749,17 @@ def generate_response(
             if "</think>" in answer:
                 answer = answer.split("</think>")[-1].strip()
             
-            # Print LLM response in verbose mode
-            if config.verbose:
-                print(f"\n{Colors.BG_CYAN}{Colors.BLACK}{Colors.BOLD} LLM RESPONSE {Colors.RESET}")
-                print_separator('=', 80, Colors.BRIGHT_CYAN)
-                print_message_content(answer)
-                print_separator('=', 80, Colors.BRIGHT_CYAN)
+            if is_verbose():
+                logger.info(f"{Colors.BG_CYAN}{Colors.BLACK}{Colors.BOLD} LLM RESPONSE {Colors.RESET}\n{answer}")
             
-            log_verbose(f"LLM response received: {answer[:100]}...")
+            logger.debug(f"LLM response received: {answer[:100]}...")
             return answer
         
-        log_verbose("LLM returned no choices")
+        logger.debug("LLM returned no choices")
         return "I'm sorry, I couldn't generate a response. Please try again."
         
     except Exception as e:
-        log_verbose(f"LLM request failed: {e}")
-        if config.verbose:
-            print(f"\n{Colors.BRIGHT_RED}{Colors.BOLD}ERROR: {e}{Colors.RESET}")
+        logger.error(f"LLM request failed: {e}")
         raise RAGError(f"LLM request failed: {e}")
 
 # =============================================================================
@@ -814,7 +790,7 @@ def handle_query(
         RAGError: If search or generation fails
     """
     if not query or not query.strip():
-        log_verbose("Empty query received")
+        logger.debug("Empty query received")
         return {
             'response': "I didn't catch that. Could you please repeat?",
             'sources': [],
@@ -822,22 +798,22 @@ def handle_query(
         }
     
     config = get_config()
-    log_verbose(f"Handling query: '{query}'")
+    logger.debug(f"Handling query: '{query}'")
     
     # Truncate history to configured maximum
     if conversation_history and len(conversation_history) > config.max_history_turns:
-        log_verbose(f"Truncating conversation history from {len(conversation_history)} to {config.max_history_turns} turns")
+        logger.debug(f"Truncating conversation history from {len(conversation_history)} to {config.max_history_turns} turns")
         conversation_history = conversation_history[-config.max_history_turns:]
     
     # Search for relevant documents
-    log_verbose("Searching for relevant documents...")
+    logger.debug("Searching for relevant documents...")
     results = search(collection, query, top_k=top_k, category_filter=category_filter)
     
     # Generate response
-    log_verbose("Generating response...")
+    logger.debug("Generating response...")
     response = generate_response(query, results, conversation_history)
     
-    log_verbose(f"Query handled successfully, response length: {len(response)}")
+    logger.debug(f"Query handled successfully, response length: {len(response)}")
     return {
         'response': response,
         'sources': [r['doc_id'] for r in results],
@@ -858,7 +834,7 @@ def read_yaml_config(file_path: str) -> Tuple[Dict[str, Any], Optional[str]]:
         Tuple of (config dict, error message or None)
     """
     try:
-        log_verbose(f"Reading YAML config from: {file_path}")
+        logger.debug(f"Reading YAML config from: {file_path}")
         with open(file_path, 'r') as f:
             config = yaml.safe_load(f)
             if config is None:
@@ -928,17 +904,14 @@ def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
         
     Example YAML format:
         llm:
-          base_url: "https://api.deepseek.com/v1"
-          # api_key must be set as environment variable LLM_API_KEY
-          model: "deepseek-chat"
+          base_url: "https://api.groq.com/openai/v1"
+          # api_key should be set as environment variable LLM_API_KEY
+          model: "llama-3.1-8b-instant"
         embedding:
           model: "all-MiniLM-L6-v2"
         search:
           similarity_threshold: 0.15
           top_k: 5
-        conversation:
-          max_history_turns: 5
-          context_turns: 3
         data:
           default_path: "./data/upanzi_data.json"
         debug:
@@ -950,26 +923,26 @@ def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
     if error:
         return False, [error]
     
-    log_verbose(f"Successfully read YAML config from {file_path}")
+    logger.debug(f"Successfully read YAML config from {file_path}")
     
     # Extract nested values with defaults
     llm = yaml_config.get('llm', {})
     embedding = yaml_config.get('embedding', {})
-    search = yaml_config.get('search', {})
+    search_cfg = yaml_config.get('search', {})
     conversation = yaml_config.get('conversation', {})
     data = yaml_config.get('data', {})
     debug = yaml_config.get('debug', {})
-    
+
     # Parse numeric values safely
     similarity_threshold, warn = safe_float(
-        search.get('similarity_threshold'), 
-        DEFAULT_SIMILARITY_THRESHOLD, 
+        search_cfg.get('similarity_threshold'),
+        DEFAULT_SIMILARITY_THRESHOLD,
         'similarity_threshold'
     )
     if warn:
         messages.append(warn)
-    
-    top_k, warn = safe_int(search.get('top_k'), DEFAULT_TOP_K, 'top_k')
+
+    top_k, warn = safe_int(search_cfg.get('top_k'), DEFAULT_TOP_K, 'top_k')
     if warn:
         messages.append(warn)
     
@@ -1008,15 +981,13 @@ def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
         messages.append(warn)
     
     try:
-        # ChromaDB is always stored in the package data folder
-        chroma_path = str(PACKAGE_PATH / 'data')
-        log_verbose(f"Using package data folder for ChromaDB: {chroma_path}")
+        logger.debug(f"Using package data folder for ChromaDB: {DEFAULT_CHROMA_PATH}")
         
-        config = ConversationManagerConfig(
+        config = RAGConfig(
             llm_base_url=llm.get('base_url', DEFAULT_LLM_BASE_URL),
             # LLM_API_KEY must be exported as environment variable, not from config file
             llm_model=llm.get('model', DEFAULT_LLM_MODEL),
-            chroma_path=chroma_path,  # Always use package data folder
+            chroma_path=DEFAULT_CHROMA_PATH,
             embedding_model=embedding.get('model', DEFAULT_EMBEDDING_MODEL),
             similarity_threshold=similarity_threshold,
             default_top_k=top_k,
@@ -1028,12 +999,12 @@ def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
         
         # This will validate and raise ConfigError if invalid
         set_config(config)
-        log_verbose(f"Configuration applied successfully: verbose={verbose}")
+        logger.debug(f"Configuration applied successfully: verbose={verbose}")
         return True, messages
         
     except ConfigError as e:
-        log_verbose(f"ConfigError: {e}")
+        logger.error(f"Configuration error: {e}")
         return False, [str(e)] + messages
     except Exception as e:
-        log_verbose(f"Exception applying configuration: {e}")
+        logger.error(f"Failed to apply configuration: {e}")
         return False, [f"Failed to apply configuration: {e}"] + messages
