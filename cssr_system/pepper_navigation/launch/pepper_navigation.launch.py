@@ -8,27 +8,50 @@ from ament_index_python.packages import get_package_share_directory
 def generate_launch_description():
     # Paths
     pkg_dir = get_package_share_directory('pepper_navigation')
-    map_file = os.path.join(pkg_dir, 'map', 'map.yaml')
+    map_file = os.path.join(pkg_dir, 'map', 'rtabmap_feb_15.yaml')
     params_file = os.path.join(pkg_dir, 'config', 'nav2_params.yaml')
+    keepout_mask_file = os.path.join(pkg_dir, 'map', 'keepout_zones.yaml')
     
     return LaunchDescription([
-        # Map Server
-        # Node(
-        #     package='nav2_map_server',
-        #     executable='map_server',
-        #     name='map_server',
-        #     output='screen',
-        #     parameters=[{'yaml_filename': map_file}]
-        # ),
+        # Map Server (lifecycle node)
+        Node(
+            package='nav2_map_server',
+            executable='map_server',
+            name='map_server',
+            output='screen',
+            parameters=[{'yaml_filename': map_file}]
+        ),
         
-        # # AMCL (Localization)
-        # Node(
-        #     package='nav2_amcl',
-        #     executable='amcl',
-        #     name='amcl',
-        #     output='screen',
-        #     parameters=[params_file]
-        # ),
+        # Filter Mask Server (lifecycle node - add to lifecycle manager)
+        Node(
+            package='nav2_map_server',
+            executable='map_server',
+            name='filter_mask_server',
+            output='screen',
+            parameters=[{
+                'yaml_filename': keepout_mask_file,
+                'topic_name': '/keepout_filter_mask',  # Absolute path
+                'frame_id': 'map'
+            }]
+        ),
+
+        # Costmap Filter Info Server (lifecycle node)
+        Node(
+            package='nav2_map_server',
+            executable='costmap_filter_info_server',
+            name='costmap_filter_info_server',
+            output='screen',
+            parameters=[params_file]
+        ),
+        
+        # AMCL (Localization)
+        Node(
+            package='nav2_amcl',
+            executable='amcl',
+            name='amcl',
+            output='screen',
+            parameters=[params_file]
+        ),
         
         # Nav2 Controller
         Node(
@@ -65,8 +88,8 @@ def generate_launch_description():
             output='screen',
             parameters=[params_file]
         ),
-        
-        # Lifecycle Manager
+
+        # Lifecycle Manager (ONLY lifecycle nodes here)
         Node(
             package='nav2_lifecycle_manager',
             executable='lifecycle_manager',
@@ -74,9 +97,12 @@ def generate_launch_description():
             output='screen',
             parameters=[{
                 'autostart': True,
+                'bond_timeout': 4.0,
                 'node_names': [
-                    # 'map_server',
-                    # 'amcl',
+                    'map_server',
+                    'filter_mask_server',
+                    'costmap_filter_info_server',  # Must activate lifecycle node
+                    'amcl',
                     'controller_server',
                     'planner_server',
                     'behavior_server',

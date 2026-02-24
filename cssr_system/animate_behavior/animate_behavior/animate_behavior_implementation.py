@@ -78,7 +78,7 @@ class AnimateBehaviorServer(Node):
                 names=['HipPitch', 'HipRoll', 'KneePitch'],
                 min=[-1.04, -0.51, -0.51],
                 max=[1.04, 0.51, 0.51],
-                home=[-0.15, -0.01, 0.03],
+                home=[-0.10, -0.01, 0.03],
                 factors=[0.2, 0.2, 0.1]
             )
         }

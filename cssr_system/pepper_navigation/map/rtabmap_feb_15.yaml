@@ -1,0 +1,7 @@
+image: rtabmap_feb_15.pgm
+resolution: 0.05
+origin: [-2.90374, -5.47226, 0.0]
+negate: 0
+occupied_thresh: 0.5
+free_thresh: 0.196
+

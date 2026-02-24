@@ -7,6 +7,10 @@
   <maintainer email="yohatad000@gmail.com">yoha</maintainer>
   <license>TODO: License declaration</license>
 
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <depend>rclpy</depend>
   <depend>nav2_bringup</depend>
   <depend>nav2_map_server</depend>
   <depend>nav2_amcl</depend>
@@ -17,7 +21,10 @@
   <depend>nav2_lifecycle_manager</depend>
   <depend>nav2_costmap_2d</depend>
 
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
   <export>
-    <build_type>ament_python</build_type>
+    <build_type>ament_cmake</build_type>
   </export>
 </package>

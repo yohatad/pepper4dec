@@ -3,15 +3,20 @@
 <package format="3">
   <name>custom_launch</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="lab@todo.todo">lab</maintainer>
-  <license>TODO: License declaration</license>
+  <description>Custom launch files for CSSR4Africa system</description>
+  <maintainer email="your_email@example.com">Your Name</maintainer>
+  <license>Apache-2.0</license>
 
-  <depend>launch</depend>
-  <depend>launch_ros</depend>
-  <depend>ament_index_python</depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>slam_toolbox</exec_depend>
+  <exec_depend>nav2_bringup</exec_depend>
+  <exec_depend>robot_localization</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
 
   <export>
-    <build_type>ament_python</build_type>
+    <build_type>ament_cmake</build_type>
   </export>
 </package>

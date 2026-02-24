@@ -535,7 +535,7 @@ def generate_launch_description():
         # Arguments
         DeclareLaunchArgument('stereo', default_value='false', description='Use stereo input instead of RGB-D.'),
 
-        DeclareLaunchArgument('localization', default_value='true', description='Launch in localization mode.'),
+        DeclareLaunchArgument('localization', default_value='false', description='Launch in localization mode.'),
         DeclareLaunchArgument('rtabmap_viz',  default_value='true',  description='Launch RTAB-Map UI (optional).'),
         DeclareLaunchArgument('rviz',         default_value='false', description='Launch RVIZ (optional).'),
 
@@ -554,7 +554,7 @@ def generate_launch_description():
         DeclareLaunchArgument('map_topic',      default_value='map',                description='Map topic name.'),
         DeclareLaunchArgument('publish_tf_map', default_value='true',               description='Publish TF between map and odomerty.'),
         DeclareLaunchArgument('namespace',      default_value='',            description=''),
-        DeclareLaunchArgument('database_path',  default_value='~/.ros/rtabmap.db',  description='Where is the map saved/loaded.'),
+        DeclareLaunchArgument('database_path',  default_value='~/.ros/rtabmap_feb_15.db',  description='Where is the map saved/loaded.'),
         DeclareLaunchArgument('topic_queue_size', default_value='30',               description='Queue size of individual topic subscribers.'),
         DeclareLaunchArgument('queue_size',     default_value='30',                 description='Backward compatibility, use "sync_queue_size" instead.'),
         DeclareLaunchArgument('qos',            default_value='2',                  description='General QoS used for sensor input data: 0=system default, 1=Reliable, 2=Best Effort.'),
