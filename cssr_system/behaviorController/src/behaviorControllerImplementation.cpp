@@ -217,73 +217,107 @@ BT::NodeStatus GestureNode::onFailure(BT::ActionNodeErrorCode error)
 }
 
 //=============================================================================
-// NavigateNode
-// Action: cssr_interfaces::action::Navigation
+// NavigateRosAction
+// Action: nav2_msgs::action::NavigateToPose  →  server: /navigate_to_pose
 //
 // Goal fields:
-//   float64 goal_x
-//   float64 goal_y
-//   float64 goal_theta
+//   geometry_msgs/PoseStamped pose  – constructed from goal_x, goal_y, goal_theta
+//   string                behavior_tree  – leave empty for Nav2 default BT
 //
 // Result fields:
-//   bool navigation_goal_success
+//   (empty – success/failure determined by result.code)
 //
 // Feedback fields:
-//   int8 progress
+//   geometry_msgs/PoseStamped current_pose
+//   float32                   distance_remaining
+//   int16                     number_of_recoveries
 //=============================================================================
 
-BT::PortsList NavigateNode::providedPorts()
+BT::PortsList NavigateRosAction::providedPorts()
 {
     return {
-        BT::InputPort<double>("goal_x",     0.0, "Goal x position (metres)"),
-        BT::InputPort<double>("goal_y",     0.0, "Goal y position (metres)"),
-        BT::InputPort<double>("goal_theta", 0.0, "Goal heading (degrees)"),
+        BT::InputPort<double>      ("goal_x",                  "Goal x position (metres)"),
+        BT::InputPort<double>      ("goal_y",                  "Goal y position (metres)"),
+        BT::InputPort<double>      ("goal_theta",        0.0,  "Goal heading (radians)"),
+        BT::InputPort<std::string> ("frame_id",          "map","Coordinate frame for the goal pose"),
+        BT::OutputPort<float>      ("distance_remaining",      "Feedback: metres remaining to goal"),
+        BT::OutputPort<int>        ("recoveries",              "Feedback: number of recovery attempts"),
     };
 }
 
-bool NavigateNode::setGoal(Goal& goal)
+bool NavigateRosAction::setGoal(Goal& goal)
 {
     auto goal_x     = getInput<double>("goal_x");
     auto goal_y     = getInput<double>("goal_y");
     auto goal_theta = getInput<double>("goal_theta");
+    auto frame_id   = getInput<std::string>("frame_id");
 
-    if (!goal_x || !goal_y || !goal_theta) {
+    if (!goal_x || !goal_y) {
         RCLCPP_ERROR(rclcpp::get_logger("behavior_controller"),
-                     "[NavigateNode] Missing required input port(s)");
+                     "[NavigateRosAction] Missing required input port(s): goal_x, goal_y");
         return false;
     }
 
-    goal.goal_x     = goal_x.value();
-    goal.goal_y     = goal_y.value();
-    goal.goal_theta = goal_theta.value();
+    const double x     = goal_x.value();
+    const double y     = goal_y.value();
+    const double theta = goal_theta ? goal_theta.value() : 0.0;
+
+    goal.pose.header.frame_id = frame_id ? frame_id.value() : "map";
+    goal.pose.header.stamp    = rclcpp::Clock().now();
+    goal.pose.pose.position.x = x;
+    goal.pose.pose.position.y = y;
+    goal.pose.pose.position.z = 0.0;
+
+    // Yaw (radians) → quaternion: roll=0, pitch=0
+    goal.pose.pose.orientation.x = 0.0;
+    goal.pose.pose.orientation.y = 0.0;
+    goal.pose.pose.orientation.z = std::sin(theta / 2.0);
+    goal.pose.pose.orientation.w = std::cos(theta / 2.0);
+
+    // Empty string → Nav2 uses its default navigation BT
+    goal.behavior_tree = "";
 
     if (ConfigManager::instance().isVerbose()) {
         RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
-                    "[NavigateNode] Goal → (%.3f, %.3f) θ=%.1f°",
-                    goal.goal_x, goal.goal_y, goal.goal_theta);
+                    "[NavigateRosAction] Goal → frame=%s x=%.3f y=%.3f theta=%.3f rad",
+                    goal.pose.header.frame_id.c_str(), x, y, theta);
     }
     return true;
 }
 
-BT::NodeStatus NavigateNode::onResultReceived(const WrappedResult& result)
+BT::NodeStatus NavigateRosAction::onFeedback(const std::shared_ptr<const Feedback> feedback)
 {
-    if (!result.result->navigation_goal_success) {
+    setOutput("distance_remaining", feedback->distance_remaining);
+    setOutput("recoveries",         static_cast<int>(feedback->number_of_recoveries));
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[NavigateRosAction] Feedback: %.2fm remaining, %d recoveries",
+                    feedback->distance_remaining, feedback->number_of_recoveries);
+    }
+    return BT::NodeStatus::RUNNING;
+}
+
+BT::NodeStatus NavigateRosAction::onResultReceived(const WrappedResult& result)
+{
+    if (result.code != rclcpp_action::ResultCode::SUCCEEDED) {
         RCLCPP_WARN(rclcpp::get_logger("behavior_controller"),
-                    "[NavigateNode] Navigation failed");
+                    "[NavigateRosAction] Navigation did not succeed (code=%d)",
+                    static_cast<int>(result.code));
         return BT::NodeStatus::FAILURE;
     }
 
     if (ConfigManager::instance().isVerbose()) {
         RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
-                    "[NavigateNode] Navigation succeeded");
+                    "[NavigateRosAction] Navigation succeeded");
     }
     return BT::NodeStatus::SUCCESS;
 }
 
-BT::NodeStatus NavigateNode::onFailure(BT::ActionNodeErrorCode error)
+BT::NodeStatus NavigateRosAction::onFailure(BT::ActionNodeErrorCode error)
 {
     RCLCPP_ERROR(rclcpp::get_logger("behavior_controller"),
-                 "[NavigateNode] Action error: %s", toStr(error));
+                 "[NavigateRosAction] Action error: %s", toStr(error));
     return BT::NodeStatus::FAILURE;
 }
 
@@ -365,6 +399,287 @@ BT::NodeStatus SpeechRecognitionNode::onFailure(BT::ActionNodeErrorCode error)
     return BT::NodeStatus::FAILURE;
 }
 
+//=============================================================================
+// ConversationManagerNode
+// Action: cssr_interfaces::action::ConversationManager
+//
+// Goal fields:
+//   string prompt    – natural-language input to the conversation manager
+//
+// Result fields:
+//   bool   success
+//   string response  – the generated reply
+//
+// Feedback fields:
+//   string status    – "searching" | "generating"
+//=============================================================================
+
+BT::PortsList ConversationManagerNode::providedPorts()
+{
+    return {
+        BT::InputPort<std::string> ("prompt",   "", "Natural-language prompt to send"),
+        BT::OutputPort<std::string>("response",     "Reply from the conversation manager"),
+        BT::OutputPort<std::string>("status",       "Feedback: searching | generating"),
+    };
+}
+
+bool ConversationManagerNode::setGoal(Goal& goal)
+{
+    auto prompt = getInput<std::string>("prompt");
+
+    if (!prompt || prompt.value().empty()) {
+        RCLCPP_ERROR(rclcpp::get_logger("behavior_controller"),
+                     "[ConversationManagerNode] Missing or empty 'prompt' input port");
+        return false;
+    }
+
+    goal.prompt = prompt.value();
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[ConversationManagerNode] Goal → prompt=\"%s\"", goal.prompt.c_str());
+    }
+    return true;
+}
+
+BT::NodeStatus ConversationManagerNode::onFeedback(const std::shared_ptr<const Feedback> feedback)
+{
+    setOutput("status", feedback->status);
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[ConversationManagerNode] Feedback: %s", feedback->status.c_str());
+    }
+    return BT::NodeStatus::RUNNING;
+}
+
+BT::NodeStatus ConversationManagerNode::onResultReceived(const WrappedResult& result)
+{
+    setOutput("response", result.result->response);
+
+    if (!result.result->success) {
+        RCLCPP_WARN(rclcpp::get_logger("behavior_controller"),
+                    "[ConversationManagerNode] Action failed");
+        return BT::NodeStatus::FAILURE;
+    }
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[ConversationManagerNode] Response → \"%s\"", result.result->response.c_str());
+    }
+    return BT::NodeStatus::SUCCESS;
+}
+
+BT::NodeStatus ConversationManagerNode::onFailure(BT::ActionNodeErrorCode error)
+{
+    RCLCPP_ERROR(rclcpp::get_logger("behavior_controller"),
+                 "[ConversationManagerNode] Action error: %s", toStr(error));
+    return BT::NodeStatus::FAILURE;
+}
+
+//=============================================================================
+// SpeechWithFeedbackNode
+// Action: naoqi_bridge_msgs::action::SpeechWithFeedback
+//
+// Goal fields:
+//   string say          – text to speak (supports \mrk=N\ bookmark syntax)
+//
+// Result fields:
+//   bool success
+//
+// Feedback fields:
+//   bool   started       – true once speech begins
+//   int32  bookmark      – current bookmark ID (-1 if none)
+//   string current_word  – word currently being spoken
+//=============================================================================
+
+BT::PortsList SpeechWithFeedbackNode::providedPorts()
+{
+    return {
+        BT::InputPort<std::string> ("say",          "",    "Text to speak (supports \\mrk=N\\ bookmarks)"),
+        BT::OutputPort<bool>       ("started",             "Feedback: true once speech begins"),
+        BT::OutputPort<int>        ("bookmark",            "Feedback: current bookmark ID (-1 if none)"),
+        BT::OutputPort<std::string>("current_word",        "Feedback: word currently being spoken"),
+    };
+}
+
+bool SpeechWithFeedbackNode::setGoal(Goal& goal)
+{
+    auto say = getInput<std::string>("say");
+
+    if (!say || say.value().empty()) {
+        RCLCPP_ERROR(rclcpp::get_logger("behavior_controller"),
+                     "[SpeechWithFeedbackNode] Missing or empty 'say' input port");
+        return false;
+    }
+
+    goal.say = say.value();
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[SpeechWithFeedbackNode] Goal → say=\"%s\"", goal.say.c_str());
+    }
+    return true;
+}
+
+BT::NodeStatus SpeechWithFeedbackNode::onFeedback(const std::shared_ptr<const Feedback> feedback)
+{
+    setOutput("started",      feedback->started);
+    setOutput("bookmark",     static_cast<int>(feedback->bookmark));
+    setOutput("current_word", feedback->current_word);
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[SpeechWithFeedbackNode] Feedback: started=%s bookmark=%d word=\"%s\"",
+                    feedback->started ? "true" : "false",
+                    feedback->bookmark,
+                    feedback->current_word.c_str());
+    }
+    return BT::NodeStatus::RUNNING;
+}
+
+BT::NodeStatus SpeechWithFeedbackNode::onResultReceived(const WrappedResult& result)
+{
+    if (!result.result->success) {
+        RCLCPP_WARN(rclcpp::get_logger("behavior_controller"),
+                    "[SpeechWithFeedbackNode] Speech action reported failure");
+        return BT::NodeStatus::FAILURE;
+    }
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[SpeechWithFeedbackNode] Speech completed successfully");
+    }
+    return BT::NodeStatus::SUCCESS;
+}
+
+BT::NodeStatus SpeechWithFeedbackNode::onFailure(BT::ActionNodeErrorCode error)
+{
+    RCLCPP_ERROR(rclcpp::get_logger("behavior_controller"),
+                 "[SpeechWithFeedbackNode] Action error: %s", toStr(error));
+    return BT::NodeStatus::FAILURE;
+}
+
+//=============================================================================
+// CheckFaceDetected
+// Topic: /faceDetection/data  (cssr_interfaces::msg::FaceDetection)
+//
+// Blocks (returns RUNNING) until the face-detection condition is met, then
+// returns SUCCESS. Runs indefinitely — never times out.
+//
+// Input ports:
+//   bool require_mutual_gaze  – if true, succeed only when mutual gaze detected
+//
+// Output ports:
+//   int    face_count   – number of faces in the latest message
+//   bool   mutual_gaze  – true if any detected face has mutual gaze
+//   string face_id      – label ID of the first detected face
+//   double face_x       – centroid x of first face (pixels)
+//   double face_y       – centroid y of first face (pixels)
+//   double face_depth   – depth of first face (metres)
+//=============================================================================
+
+CheckFaceDetected::CheckFaceDetected(const std::string& name,
+                                     const BT::NodeConfig& config,
+                                     std::shared_ptr<rclcpp::Node> node)
+    : BT::StatefulActionNode(name, config), node_(node)
+{
+    sub_ = node_->create_subscription<cssr_interfaces::msg::FaceDetection>(
+        "/faceDetection/data", 10,
+        [this](const cssr_interfaces::msg::FaceDetection::SharedPtr msg) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            latestMsg_ = msg;
+        });
+}
+
+BT::PortsList CheckFaceDetected::providedPorts()
+{
+    return {
+        BT::InputPort<bool>        ("require_mutual_gaze", true, "Succeed only when mutual gaze is detected"),
+        BT::OutputPort<int>        ("face_count",                 "Number of faces in the latest message"),
+        BT::OutputPort<bool>       ("mutual_gaze",                "True if any face has mutual gaze"),
+        BT::OutputPort<std::string>("face_id",                    "Label ID of the first detected face"),
+        BT::OutputPort<double>     ("face_x",                     "Centroid x of first face (pixels)"),
+        BT::OutputPort<double>     ("face_y",                     "Centroid y of first face (pixels)"),
+        BT::OutputPort<double>     ("face_depth",                 "Depth of first face (metres)"),
+    };
+}
+
+// Shared evaluation logic used by both onStart and onRunning.
+// Returns SUCCESS when conditions are met, RUNNING while still waiting.
+BT::NodeStatus CheckFaceDetected::checkLatestMessage()
+{
+    cssr_interfaces::msg::FaceDetection::SharedPtr msg;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        msg = latestMsg_;
+    }
+
+    if (!msg) {
+        return BT::NodeStatus::RUNNING;
+    }
+
+    const int faceCount = static_cast<int>(msg->face_label_id.size());
+    bool anyMutualGaze = false;
+    for (bool g : msg->mutual_gaze) {
+        anyMutualGaze = anyMutualGaze || g;
+    }
+
+    setOutput("face_count",  faceCount);
+    setOutput("mutual_gaze", anyMutualGaze);
+
+    if (faceCount > 0) {
+        setOutput("face_id",    msg->face_label_id[0]);
+        setOutput("face_x",     static_cast<double>(msg->centroids[0].x));
+        setOutput("face_y",     static_cast<double>(msg->centroids[0].y));
+        setOutput("face_depth", static_cast<double>(msg->centroids[0].z));
+    }
+
+    if (faceCount == 0) {
+        return BT::NodeStatus::RUNNING;
+    }
+
+    const bool requireGaze = getInput<bool>("require_mutual_gaze").value_or(false);
+    if (requireGaze && !anyMutualGaze) {
+        if (ConfigManager::instance().isVerbose()) {
+            RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                        "[CheckFaceDetected] %d face(s) detected, waiting for mutual gaze...", faceCount);
+        }
+        return BT::NodeStatus::RUNNING;
+    }
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[CheckFaceDetected] SUCCESS – %d face(s), mutual_gaze=%s, id=%s depth=%.2fm",
+                    faceCount, anyMutualGaze ? "true" : "false",
+                    msg->face_label_id[0].c_str(),
+                    static_cast<double>(msg->centroids[0].z));
+    }
+    return BT::NodeStatus::SUCCESS;
+}
+
+BT::NodeStatus CheckFaceDetected::onStart()
+{
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[CheckFaceDetected] Started – waiting for face detection data...");
+    }
+    return checkLatestMessage();
+}
+
+BT::NodeStatus CheckFaceDetected::onRunning()
+{
+    return checkLatestMessage();
+}
+
+void CheckFaceDetected::onHalted()
+{
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[CheckFaceDetected] Halted");
+    }
+}
+
 namespace behavior_controller {
 
 BT::Tree initializeTree(const std::string& scenario,
@@ -390,13 +705,22 @@ BT::Tree initializeTree(const std::string& scenario,
     // Create factory and register nodes
     BT::BehaviorTreeFactory factory;
 
-    factory.registerNodeType<AnimateBehaviorNode>   ("AnimateBehavior",   params);
-    factory.registerNodeType<GestureNode>           ("Gesture",           params);
-    factory.registerNodeType<NavigateNode>          ("Navigate",          params);
-    factory.registerNodeType<SpeechRecognitionNode> ("SpeechRecognition", params);
+    factory.registerNodeType<AnimateBehaviorNode>      ("AnimateBehavior",      params);
+    factory.registerNodeType<GestureNode>              ("Gesture",              params);
+    factory.registerNodeType<NavigateRosAction>        ("NavigateRosAction",    params);
+    factory.registerNodeType<SpeechRecognitionNode>    ("SpeechRecognition",    params);
+    factory.registerNodeType<ConversationManagerNode>  ("ConversationManager",  params);
+    factory.registerNodeType<SpeechWithFeedbackNode>   ("SpeechWithFeedback",   params);
+
+    // CheckFaceDetected requires the node handle at construction; use registerBuilder
+    factory.registerBuilder<CheckFaceDetected>(
+        "CheckFaceDetected",
+        [node_handle](const std::string& name, const BT::NodeConfig& config) {
+            return std::make_unique<CheckFaceDetected>(name, config, node_handle);
+        });
 
     if (ConfigManager::instance().isVerbose()) {
-        RCLCPP_INFO(logger, "[initializeTree] Registered nodes: AnimateBehavior, Gesture, Navigate, SpeechRecognition");
+        RCLCPP_INFO(logger, "[initializeTree] Registered nodes: AnimateBehavior, Gesture, NavigateRosAction, SpeechRecognition, ConversationManager, SpeechWithFeedback, CheckFaceDetected");
         RCLCPP_INFO(logger, "[initializeTree] Loading tree: %s", xmlPath.c_str());
     }
 

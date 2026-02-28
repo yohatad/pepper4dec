@@ -15,6 +15,8 @@
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
+#include <nav2_msgs/action/navigate_to_pose.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
 
 // BehaviorTree.CPP includes
 #include <behaviortree_cpp/bt_factory.h>
@@ -50,12 +52,15 @@
 // Messages
 #include "cssr_interfaces/msg/face_detection.hpp"
 
+// naoqi_bridge_msgs actions
+#include "naoqi_bridge_msgs/action/speech_with_feedback.hpp"
+
 // Actions
 #include "cssr_interfaces/action/tts.hpp"
 #include "cssr_interfaces/action/gesture.hpp"
-#include "cssr_interfaces/action/navigation.hpp"
 #include "cssr_interfaces/action/animate_behavior.hpp"
 #include "cssr_interfaces/action/speech_recognition.hpp"
+#include "cssr_interfaces/action/conversation_manager.hpp"
 
 // Services
 #include "cssr_interfaces/srv/conversation_manager_prompt.hpp"
@@ -237,18 +242,19 @@ public:
     BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
 };
 
-// Wraps cssr_interfaces::action::Navigation
-class NavigateNode
-    : public BT::RosActionNode<cssr_interfaces::action::Navigation>
+// Wraps nav2_msgs::action::NavigateToPose  →  Nav2 /navigate_to_pose server
+class NavigateRosAction
+    : public BT::RosActionNode<nav2_msgs::action::NavigateToPose>
 {
 public:
-    NavigateNode(const std::string& name,
-                 const BT::NodeConfig& config,
-                 const BT::RosNodeParams& params)
-        : BT::RosActionNode<cssr_interfaces::action::Navigation>(name, config, params) {}
+    NavigateRosAction(const std::string& name,
+                      const BT::NodeConfig& config,
+                      const BT::RosNodeParams& params)
+        : BT::RosActionNode<nav2_msgs::action::NavigateToPose>(name, config, params) {}
 
     static BT::PortsList providedPorts();
     bool setGoal(Goal& goal) override;
+    BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
     BT::NodeStatus onResultReceived(const WrappedResult& result) override;
     BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
 };
@@ -268,6 +274,63 @@ public:
     BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
     BT::NodeStatus onResultReceived(const WrappedResult& result) override;
     BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
+};
+
+// Wraps cssr_interfaces::action::ConversationManager
+class ConversationManagerNode
+    : public BT::RosActionNode<cssr_interfaces::action::ConversationManager>
+{
+public:
+    ConversationManagerNode(const std::string& name,
+                            const BT::NodeConfig& config,
+                            const BT::RosNodeParams& params)
+        : BT::RosActionNode<cssr_interfaces::action::ConversationManager>(name, config, params) {}
+
+    static BT::PortsList providedPorts();
+    bool setGoal(Goal& goal) override;
+    BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
+    BT::NodeStatus onResultReceived(const WrappedResult& result) override;
+    BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
+};
+
+// Wraps naoqi_bridge_msgs::action::SpeechWithFeedback
+class SpeechWithFeedbackNode
+    : public BT::RosActionNode<naoqi_bridge_msgs::action::SpeechWithFeedback>
+{
+public:
+    SpeechWithFeedbackNode(const std::string& name,
+                           const BT::NodeConfig& config,
+                           const BT::RosNodeParams& params)
+        : BT::RosActionNode<naoqi_bridge_msgs::action::SpeechWithFeedback>(name, config, params) {}
+
+    static BT::PortsList providedPorts();
+    bool setGoal(Goal& goal) override;
+    BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
+    BT::NodeStatus onResultReceived(const WrappedResult& result) override;
+    BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
+};
+
+// Subscribes to /faceDetection/data and blocks (RUNNING) until face(s) are present,
+// then returns SUCCESS. Never times out — runs indefinitely until condition is met.
+class CheckFaceDetected : public BT::StatefulActionNode
+{
+public:
+    CheckFaceDetected(const std::string& name,
+                      const BT::NodeConfig& config,
+                      std::shared_ptr<rclcpp::Node> node);
+
+    static BT::PortsList providedPorts();
+    BT::NodeStatus onStart() override;
+    BT::NodeStatus onRunning() override;
+    void onHalted() override;
+
+private:
+    BT::NodeStatus checkLatestMessage();
+
+    std::shared_ptr<rclcpp::Node> node_;
+    rclcpp::Subscription<cssr_interfaces::msg::FaceDetection>::SharedPtr sub_;
+    cssr_interfaces::msg::FaceDetection::SharedPtr latestMsg_;
+    std::mutex mutex_;
 };
 
 //=============================================================================

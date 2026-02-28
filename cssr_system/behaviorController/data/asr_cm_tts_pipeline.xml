@@ -1,0 +1,74 @@
+<?xml version="1.0"?>
+<!--
+  asr_cm_tts_pipeline.xml
+  ASR → Conversation Manager → TTS pipeline
+
+  Loop:
+    1. CheckFaceDetected  – block until mutual gaze detected (engagement gate)
+    2. SpeechRecognition  – listen for user speech
+    3. ConversationManager – RAG + LLM generates a response
+    4. SpeechWithFeedback  – robot speaks the response
+
+  If SpeechRecognition times out (no speech heard) the Fallback catches the
+  failure, speaks a prompt, and the outer Repeat restarts from step 1.
+-->
+<root BTCPP_format="4">
+
+  <BehaviorTree ID="asr_cm_tts_pipeline">
+
+    <!-- Run the dialogue loop forever -->
+    <Repeat num_cycles="-1">
+      <Sequence>
+
+        <!-- ── Step 1: Wait for engagement ───────────────────────────── -->
+        <!-- Blocks (RUNNING) until a person makes eye contact.           -->
+        <!-- Remove or set require_mutual_gaze="false" to always listen.  -->
+        <CheckFaceDetected
+          require_mutual_gaze="true"
+          face_count="{face_count}"
+          mutual_gaze="{mutual_gaze}"
+          face_id="{face_id}"
+          face_depth="{face_depth}"
+          face_x="{face_x}"
+          face_y="{face_y}"/>
+
+        <!-- ── Step 2: Listen → Think → Speak ───────────────────────── -->
+        <!-- Fallback handles the case where no speech is heard:          -->
+        <!--   • inner Sequence runs the full ASR → CM → TTS chain       -->
+        <!--   • if ASR fails, the robot prompts the user and loops back  -->
+        <Fallback>
+
+          <!-- Happy path: speech detected, response generated and spoken -->
+          <Sequence>
+            <SpeechRecognition
+              wait="7.0"
+              transcription="{user_speech}"
+              status="{asr_status}"/>
+
+            <ConversationManager
+              prompt="{user_speech}"
+              response="{llm_response}"
+              status="{cm_status}"/>
+
+            <SpeechWithFeedback
+              say="{llm_response}"
+              started="{tts_started}"
+              bookmark="{tts_bookmark}"
+              current_word="{tts_word}"/>
+          </Sequence>
+
+          <!-- Fallback: no speech heard → prompt and retry              -->
+          <SpeechWithFeedback
+            say="I didn't catch that. Could you please repeat?"
+            started="{tts_started}"
+            bookmark="{tts_bookmark}"
+            current_word="{tts_word}"/>
+
+        </Fallback>
+
+      </Sequence>
+    </Repeat>
+
+  </BehaviorTree>
+
+</root>
