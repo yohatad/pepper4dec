@@ -432,13 +432,13 @@ def launch_setup(context, *args, **kwargs):
             #     output='screen'
             #     ),
 
-            Node(
-                package='tf2_ros',
-                executable='static_transform_publisher',
-                name='room_to_map_origin',
-                arguments=['4.4', '7.8', '0.0', '-1.5708', '0', '0', 'room_origin', 'map'],
-                output='screen'
-            ),
+            # Node(
+            #     package='tf2_ros',
+            #     executable='static_transform_publisher',
+            #     name='room_to_map_origin',
+            #     arguments=['4.4', '7.8', '0.0', '-1.5708', '0', '0', 'room_origin', 'map'],
+            #     output='screen'
+            # ),
     
             # Node(
             #     package='tf2_ros',
@@ -526,9 +526,10 @@ def launch_setup(context, *args, **kwargs):
 
 def generate_launch_description():
     
-    config_rviz = os.path.join(
-        get_package_share_directory('rtabmap_launch'), 'launch', 'config', 'rgbd.rviz'
-    )
+    # config_rviz = os.path.join(
+    #     get_package_share_directory('rtabmap_launch'), 'launch', 'config', 'rgbd.rviz'
+    # )
+    config_rviz = '/home/yoha/navigation.rviz'
     
     return LaunchDescription([
         
@@ -537,7 +538,7 @@ def generate_launch_description():
 
         DeclareLaunchArgument('localization', default_value='false', description='Launch in localization mode.'),
         DeclareLaunchArgument('rtabmap_viz',  default_value='true',  description='Launch RTAB-Map UI (optional).'),
-        DeclareLaunchArgument('rviz',         default_value='false', description='Launch RVIZ (optional).'),
+        DeclareLaunchArgument('rviz',         default_value='true', description='Launch RVIZ (optional).'),
 
         DeclareLaunchArgument('use_sim_time', default_value='false', description='Use simulation (Gazebo) clock if true'),
 
@@ -554,7 +555,7 @@ def generate_launch_description():
         DeclareLaunchArgument('map_topic',      default_value='map',                description='Map topic name.'),
         DeclareLaunchArgument('publish_tf_map', default_value='true',               description='Publish TF between map and odomerty.'),
         DeclareLaunchArgument('namespace',      default_value='',            description=''),
-        DeclareLaunchArgument('database_path',  default_value='~/.ros/rtabmap_feb_15.db',  description='Where is the map saved/loaded.'),
+        DeclareLaunchArgument('database_path',  default_value='~/.ros/rtabmap_feb_26.db',  description='Where is the map saved/loaded.'),
         DeclareLaunchArgument('topic_queue_size', default_value='30',               description='Queue size of individual topic subscribers.'),
         DeclareLaunchArgument('queue_size',     default_value='30',                 description='Backward compatibility, use "sync_queue_size" instead.'),
         DeclareLaunchArgument('qos',            default_value='2',                  description='General QoS used for sensor input data: 0=system default, 1=Reliable, 2=Best Effort.'),
