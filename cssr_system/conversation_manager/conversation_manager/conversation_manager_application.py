@@ -20,21 +20,26 @@ ROS Parameters:
     collection_name (str, default: 'upanzi_knowledge'): ChromaDB collection name
     verbose        (bool, default: False): Enable verbose logging
 
-Services:
-    prompt (cssr_interfaces/srv/ConversationManagerPrompt): Answer questions using RAG
+Actions:
+    prompt (cssr_interfaces/action/ConversationManager): Answer questions using RAG
+        Feedback: status – "searching" | "generating"
+        Result:   success, response
 """
 
 import rclpy
 from pathlib import Path
 from typing import List, Dict
 from rclpy.node import Node
+from rclpy.action import ActionServer
 from ament_index_python.packages import get_package_share_directory
-from cssr_interfaces.srv import ConversationManagerPrompt
+from cssr_interfaces.action import ConversationManager
 from .conversation_manager_implementation import (
     get_config,
     get_collection,
     setup_collection,
     handle_query,
+    search,
+    generate_response,
     apply_config_file,
 )
 
@@ -86,9 +91,9 @@ class conversationManager(Node):
         collection_name = self.get_parameter('collection_name').get_parameter_value().string_value
         self.initialize_collection(collection_name)
         
-        # Service
-        self.create_service(ConversationManagerPrompt, 'prompt', self.prompt_callback)
-        
+        # Action server
+        self._action_server = ActionServer(self, ConversationManager, 'prompt', self.execute_callback)
+
         status = f"Collection: {collection_name} ({self.collection.count()} docs)" if self.collection else "Collection: Failed to load"
         self.get_logger().info(f"RAG Node ready. {status}")
     
@@ -156,60 +161,70 @@ class conversationManager(Node):
         if self.verbose:
             self.get_logger().info(f"[VERBOSE] {message}")
     
-    def prompt_callback(self, request, response):
-        """Handle RAG query"""
-        
-        self.log_verbose(f"Prompt callback invoked with request: {request}")
-        
+    def execute_callback(self, goal_handle):
+        """Handle RAG query as an action, publishing feedback at each stage."""
+
+        self.log_verbose(f"Action goal received: prompt=\"{goal_handle.request.prompt}\"")
+
+        result = ConversationManager.Result()
+
         # Check collection
         if self.collection is None:
             self.log_verbose("Collection is None - knowledge base not initialized")
-            response.response = "Knowledge base not initialized. Please restart the node."
-            return response
-        
-        query = request.prompt.strip() if request.prompt else ""
+            result.success = False
+            result.response = "Knowledge base not initialized. Please restart the node."
+            goal_handle.abort()
+            return result
+
+        query = goal_handle.request.prompt.strip() if goal_handle.request.prompt else ""
         if not query:
             self.log_verbose("Empty query received")
-            response.response = "I didn't catch that. Could you repeat?"
-            return response
-        
+            result.success = False
+            result.response = "I didn't catch that. Could you repeat?"
+            goal_handle.abort()
+            return result
+
         self.log_verbose(f"Processing query: '{query}'")
         self.log_verbose(f"Current conversation history length: {len(self.conversation_history)}")
-        
+
+        feedback_msg = ConversationManager.Feedback()
+
         try:
-            # Handle query
-            self.log_verbose("Calling handle_query...")
-            result = handle_query(
-                collection=self.collection,
-                query=query,
-                conversation_history=self.conversation_history
-            )
-            
-            # Update history
-            self.conversation_history.append({
-                'query': query,
-                'response': result['response']
-            })
-            
-            # Keep history manageable
             config = get_config()
+
+            # Stage 1: vector search
+            feedback_msg.status = 'searching'
+            goal_handle.publish_feedback(feedback_msg)
+            self.log_verbose("Searching knowledge base...")
+            search_results = search(self.collection, query)
+
+            # Stage 2: LLM generation
+            feedback_msg.status = 'generating'
+            goal_handle.publish_feedback(feedback_msg)
+            self.log_verbose("Generating response...")
+            response_text = generate_response(query, search_results, self.conversation_history)
+
+            # Update conversation history
+            self.conversation_history.append({'query': query, 'response': response_text})
             if len(self.conversation_history) > config.max_history_turns:
-                self.log_verbose(f"Truncating conversation history from {len(self.conversation_history)} to {config.max_history_turns}")
+                self.log_verbose(f"Truncating conversation history to {config.max_history_turns} turns")
                 self.conversation_history = self.conversation_history[-config.max_history_turns:]
-            
-            self.log_verbose(f"Response generated: {result['response'][:200]}...")
-            self.log_verbose(f"Sources used: {result['sources']}")
-            self.log_verbose(f"Updated conversation history length: {len(self.conversation_history)}")
-            
-            response.response = result['response']
-            
+
+            self.log_verbose(f"Response generated: {response_text[:200]}...")
+
+            result.success = True
+            result.response = response_text
+            goal_handle.succeed()
+
         except Exception as e:
             self.get_logger().error(f"Query error: {e}")
-            self.log_verbose(f"Detailed error in prompt_callback: {str(e)}")
-            response.response = "Something went wrong. Please try again."
-        
-        self.log_verbose("Prompt callback completed")
-        return response
+            self.log_verbose(f"Detailed error in execute_callback: {str(e)}")
+            result.success = False
+            result.response = "Something went wrong. Please try again."
+            goal_handle.abort()
+
+        self.log_verbose("Action callback completed")
+        return result
     
     def clear_history(self):
         """Clear conversation history"""

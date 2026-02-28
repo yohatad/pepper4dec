@@ -13,7 +13,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/FaceDetection.msg"
   "msg/ObjectDetection.msg"
   "srv/ConversationManagerPrompt.srv"
-  "action/Navigation.action"
+  "action/ConversationManager.action"
   "action/TTS.action"
   "action/Gesture.action"
   "action/AnimateBehavior.action"
