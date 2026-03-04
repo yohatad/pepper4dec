@@ -64,6 +64,8 @@
 
 // Services
 #include "cssr_interfaces/srv/conversation_manager_prompt.hpp"
+#include <std_srvs/srv/trigger.hpp>
+#include <std_srvs/srv/set_bool.hpp>
 
 //=============================================================================
 // Data Structures
@@ -308,6 +310,41 @@ public:
     BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
     BT::NodeStatus onResultReceived(const WrappedResult& result) override;
     BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
+};
+
+// Calls animate_behavior/stop (std_srvs::srv::Trigger) to immediately stop animation.
+// Returns SUCCESS if the service reports success, FAILURE otherwise.
+class StopAnimateBehavior
+    : public BT::RosServiceNode<std_srvs::srv::Trigger>
+{
+public:
+    StopAnimateBehavior(const std::string& name,
+                        const BT::NodeConfig& config,
+                        const BT::RosNodeParams& params)
+        : BT::RosServiceNode<std_srvs::srv::Trigger>(name, config, params) {}
+
+    static BT::PortsList providedPorts();
+    bool setRequest(Request& request) override;
+    BT::NodeStatus onResponseReceived(const Response& response) override;
+    BT::NodeStatus onFailure(BT::ServiceNodeErrorCode error) override;
+};
+
+// Calls /attn/set_enabled (std_srvs::srv::SetBool) to enable or disable overt attention.
+// Input port 'enabled' (bool): true = enable, false = disable.
+// Returns SUCCESS if the service confirms the change, FAILURE otherwise.
+class SetOvertAttention
+    : public BT::RosServiceNode<std_srvs::srv::SetBool>
+{
+public:
+    SetOvertAttention(const std::string& name,
+                      const BT::NodeConfig& config,
+                      const BT::RosNodeParams& params)
+        : BT::RosServiceNode<std_srvs::srv::SetBool>(name, config, params) {}
+
+    static BT::PortsList providedPorts();
+    bool setRequest(Request& request) override;
+    BT::NodeStatus onResponseReceived(const Response& response) override;
+    BT::NodeStatus onFailure(BT::ServiceNodeErrorCode error) override;
 };
 
 // Subscribes to /faceDetection/data and blocks (RUNNING) until face(s) are present,

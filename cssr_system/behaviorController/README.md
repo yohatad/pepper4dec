@@ -139,6 +139,8 @@ The behavior controller consists of three main components:
    | BT Node | Type | ROS2 Interface |
    |---------|------|----------------|
    | `AnimateBehavior` | Action | `cssr_interfaces::action::AnimateBehavior` |
+   | `StopAnimateBehavior` | Service | `std_srvs::srv::Trigger` (`animate_behavior/stop`) |
+   | `SetOvertAttention` | Service | `std_srvs::srv::SetBool` (`/attn/set_enabled`) |
    | `Gesture` | Action | `cssr_interfaces::action::Gesture` |
    | `SpeechWithFeedback` | Action | `naoqi_bridge_msgs::action::SpeechWithFeedback` |
    | `SpeechRecognition` | Action | `cssr_interfaces::action::SpeechRecognition` |

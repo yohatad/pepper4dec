@@ -113,6 +113,56 @@ BT::NodeStatus AnimateBehaviorNode::onFailure(BT::ActionNodeErrorCode error)
 }
 
 //=============================================================================
+// StopAnimateBehavior
+// Service: animate_behavior/stop  (std_srvs::srv::Trigger)
+//
+// Calls the stop service on the animate_behavior node to immediately halt any
+// ongoing animation. Returns SUCCESS if the service confirms the stop, FAILURE
+// if the service reports an error or is unavailable.
+//=============================================================================
+
+BT::PortsList StopAnimateBehavior::providedPorts()
+{
+    return {
+        BT::OutputPort<std::string>("message", "Response message from the stop service"),
+    };
+}
+
+bool StopAnimateBehavior::setRequest(Request& /*request*/)
+{
+    // std_srvs::srv::Trigger has an empty request — nothing to set
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[StopAnimateBehavior] Sending stop request to animate_behavior/stop");
+    }
+    return true;
+}
+
+BT::NodeStatus StopAnimateBehavior::onResponseReceived(const Response& response)
+{
+    setOutput("message", response.message);
+
+    if (!response.success) {
+        RCLCPP_WARN(rclcpp::get_logger("behavior_controller"),
+                    "[StopAnimateBehavior] Service returned failure: %s", response.message.c_str());
+        return BT::NodeStatus::FAILURE;
+    }
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[StopAnimateBehavior] Animation stopped: %s", response.message.c_str());
+    }
+    return BT::NodeStatus::SUCCESS;
+}
+
+BT::NodeStatus StopAnimateBehavior::onFailure(BT::ServiceNodeErrorCode error)
+{
+    RCLCPP_ERROR(rclcpp::get_logger("behavior_controller"),
+                 "[StopAnimateBehavior] Service error: %s", toStr(error));
+    return BT::NodeStatus::FAILURE;
+}
+
+//=============================================================================
 // GestureNode
 // Action: cssr_interfaces::action::Gesture
 //
@@ -561,6 +611,67 @@ BT::NodeStatus SpeechWithFeedbackNode::onFailure(BT::ActionNodeErrorCode error)
 }
 
 //=============================================================================
+// SetOvertAttention
+// Service: /attn/set_enabled  (std_srvs::srv::SetBool)
+//
+// Enables or disables the overt attention system.
+//   enabled = true  → attention system starts tracking faces / saliency
+//   enabled = false → attention system stops and returns head to default pose
+//=============================================================================
+
+BT::PortsList SetOvertAttention::providedPorts()
+{
+    return {
+        BT::InputPort<bool>        ("enabled", true, "true = enable attention, false = disable"),
+        BT::OutputPort<std::string>("message",       "Response message from the service"),
+    };
+}
+
+bool SetOvertAttention::setRequest(Request& request)
+{
+    auto enabled = getInput<bool>("enabled");
+
+    if (!enabled) {
+        RCLCPP_ERROR(rclcpp::get_logger("behavior_controller"),
+                     "[SetOvertAttention] Missing required input port 'enabled'");
+        return false;
+    }
+
+    request.data = enabled.value();
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[SetOvertAttention] Request → enabled=%s",
+                    request.data ? "true" : "false");
+    }
+    return true;
+}
+
+BT::NodeStatus SetOvertAttention::onResponseReceived(const Response& response)
+{
+    setOutput("message", response.message);
+
+    if (!response.success) {
+        RCLCPP_WARN(rclcpp::get_logger("behavior_controller"),
+                    "[SetOvertAttention] Service returned failure: %s", response.message.c_str());
+        return BT::NodeStatus::FAILURE;
+    }
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[SetOvertAttention] %s", response.message.c_str());
+    }
+    return BT::NodeStatus::SUCCESS;
+}
+
+BT::NodeStatus SetOvertAttention::onFailure(BT::ServiceNodeErrorCode error)
+{
+    RCLCPP_ERROR(rclcpp::get_logger("behavior_controller"),
+                 "[SetOvertAttention] Service error: %s", toStr(error));
+    return BT::NodeStatus::FAILURE;
+}
+
+//=============================================================================
 // CheckFaceDetected
 // Topic: /faceDetection/data  (cssr_interfaces::msg::FaceDetection)
 //
@@ -706,8 +817,10 @@ BT::Tree initializeTree(const std::string& scenario,
     BT::BehaviorTreeFactory factory;
 
     factory.registerNodeType<AnimateBehaviorNode>      ("AnimateBehavior",      params);
+    factory.registerNodeType<StopAnimateBehavior>      ("StopAnimateBehavior",  params);
+    factory.registerNodeType<SetOvertAttention>        ("SetOvertAttention",    params);
     factory.registerNodeType<GestureNode>              ("Gesture",              params);
-    factory.registerNodeType<Navigate>        ("Navigate",    params);
+    factory.registerNodeType<Navigate>                 ("Navigate",             params);
     factory.registerNodeType<SpeechRecognitionNode>    ("SpeechRecognition",    params);
     factory.registerNodeType<ConversationManagerNode>  ("ConversationManager",  params);
     factory.registerNodeType<SpeechWithFeedbackNode>   ("SpeechWithFeedback",   params);
@@ -720,7 +833,7 @@ BT::Tree initializeTree(const std::string& scenario,
         });
 
     if (ConfigManager::instance().isVerbose()) {
-        RCLCPP_INFO(logger, "[initializeTree] Registered nodes: AnimateBehavior, Gesture, Navigate, SpeechRecognition, ConversationManager, SpeechWithFeedback, CheckFaceDetected");
+        RCLCPP_INFO(logger, "[initializeTree] Registered nodes: AnimateBehavior, StopAnimateBehavior, SetOvertAttention, Gesture, Navigate, SpeechRecognition, ConversationManager, SpeechWithFeedback, CheckFaceDetected");
         RCLCPP_INFO(logger, "[initializeTree] Loading tree: %s", xmlPath.c_str());
     }
 
