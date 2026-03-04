@@ -327,7 +327,7 @@ The animation system uses a sophisticated motion generation approach:
 
 For issues or questions:
 - Create an issue on the CSSR4Africa GitHub repository
-- Contact: <a href="mailto:yohanneh@andrew.cmu.edu">yohanneh@andrew.cmu.edu</a><br>
+- Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a><br>
 - Visit: <a href="http://www.cssr4africa.org">www.cssr4africa.org</a>
 
 # 📜 License
@@ -335,6 +335,6 @@ Copyright (C) 2025 CSSR4Africa Consortium
 Funded by African Engineering and Technology Network (Afretec)
 Inclusive Digital Transformation Research Grant Programme
 
-**Author:** Yohannes Tadesse Haile, Carnegie Mellon University Africa
-**Version:** v1.0
+**Author:** Yohannes Tadesse Haile, Carnegie Mellon University Africa   
+**Version:** v1.0   
 **Last Updated:** February 2026

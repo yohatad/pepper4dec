@@ -276,7 +276,7 @@ unified_attention_node:
 
 For issues or questions:
 - Create an issue on GitHub
-- Contact: <a href="mailto:yohanneh@andrew.cmu.edu">yohanneh@andrew.cmu.edu</a><br>
+- Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a><br>
 - Visit: <a href="http://www.cssr4africa.org">www.cssr4africa.org</a>
 
 # 📜 License
