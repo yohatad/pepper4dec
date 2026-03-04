@@ -1,5 +1,5 @@
 <div align="center">
-<h1> Object Detection and Tracking (ROS2) </h1>
+<h1> Object Detection and Tracking </h1>
 </div>
 
 <div align="center">

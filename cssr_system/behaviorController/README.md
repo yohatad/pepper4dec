@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>Behavior Controller (ROS2)</h1>
+  <h1>Behavior Controller</h1>
 </div>
 
 <div align="center">

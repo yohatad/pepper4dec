@@ -1,5 +1,5 @@
 <div align="center">
-<h1> Gesture Execution for Pepper Robot (ROS2) </h1>
+<h1> Gesture Execution for Pepper Robot </h1>
 </div>
 
 <div align="center">

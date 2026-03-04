@@ -1,5 +1,5 @@
 <div align="center">
-<h1> Face and Mutual Gaze Detection and Localization (ROS2) </h1>
+<h1> Face and Mutual Gaze Detection and Localization</h1>
 </div>
 
 <div align="center">

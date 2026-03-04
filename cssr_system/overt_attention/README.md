@@ -1,5 +1,5 @@
 <div align="center">
-<h1> Overt Visual Attention System (ROS2) </h1>
+<h1> Overt Visual Attention System </h1>
 </div>
 
 <div align="center">

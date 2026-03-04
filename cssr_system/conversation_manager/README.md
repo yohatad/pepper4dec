@@ -1,5 +1,5 @@
 <div align="center">
-<h1> Conversation Manager (ROS2) </h1>
+<h1> Conversation Manager</h1>
 </div>
 
 <div align="center">
