@@ -483,6 +483,16 @@ class YOLOONNX:
         self.input_names = [inp.name for inp in self.onnx_session.get_inputs()]
         self.output_names = [out.name for out in self.onnx_session.get_outputs()]
 
+        # Warmup run to load model weights into memory
+        dummy_input = np.zeros(
+            [1 if d is None or isinstance(d, str) else d for d in self.input_shape],
+            dtype=np.float32
+        )
+        self.onnx_session.run(
+            self.output_names,
+            {name: dummy_input for name in self.input_names},
+        )
+
     def __call__(self, image: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         resized_image = self.preprocess(image)
         inference_image = resized_image[np.newaxis, ...].astype(np.float32)
@@ -555,6 +565,10 @@ class SixDrepNet(FaceDetectionNode):
                 sess_options=session_option,
                 providers=['CUDAExecutionProvider', 'CPUExecutionProvider']
             )
+
+            # Warmup run to load SixDrepNet weights into memory
+            dummy_sixdrep = np.zeros((1, 3, 224, 224), dtype=np.float32)
+            self.sixdrepnet_session.run(None, {'input': dummy_sixdrep})
 
             active_providers = self.sixdrepnet_session.get_providers()
             if self.verbose_mode:
