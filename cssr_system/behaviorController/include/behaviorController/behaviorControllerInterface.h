@@ -324,8 +324,8 @@ public:
         : BT::RosServiceNode<std_srvs::srv::Trigger>(name, config, params) {}
 
     static BT::PortsList providedPorts();
-    bool setRequest(Request& request) override;
-    BT::NodeStatus onResponseReceived(const Response& response) override;
+    bool setRequest(Request::SharedPtr& request) override;
+    BT::NodeStatus onResponseReceived(const Response::SharedPtr& response) override;
     BT::NodeStatus onFailure(BT::ServiceNodeErrorCode error) override;
 };
 
@@ -342,8 +342,8 @@ public:
         : BT::RosServiceNode<std_srvs::srv::SetBool>(name, config, params) {}
 
     static BT::PortsList providedPorts();
-    bool setRequest(Request& request) override;
-    BT::NodeStatus onResponseReceived(const Response& response) override;
+    bool setRequest(Request::SharedPtr& request) override;
+    BT::NodeStatus onResponseReceived(const Response::SharedPtr& response) override;
     BT::NodeStatus onFailure(BT::ServiceNodeErrorCode error) override;
 };
 

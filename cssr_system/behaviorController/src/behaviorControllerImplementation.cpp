@@ -128,7 +128,7 @@ BT::PortsList StopAnimateBehavior::providedPorts()
     };
 }
 
-bool StopAnimateBehavior::setRequest(Request& /*request*/)
+bool StopAnimateBehavior::setRequest(Request::SharedPtr& /*request*/)
 {
     // std_srvs::srv::Trigger has an empty request — nothing to set
     if (ConfigManager::instance().isVerbose()) {
@@ -138,19 +138,19 @@ bool StopAnimateBehavior::setRequest(Request& /*request*/)
     return true;
 }
 
-BT::NodeStatus StopAnimateBehavior::onResponseReceived(const Response& response)
+BT::NodeStatus StopAnimateBehavior::onResponseReceived(const Response::SharedPtr& response)
 {
-    setOutput("message", response.message);
+    setOutput("message", response->message);
 
-    if (!response.success) {
+    if (!response->success) {
         RCLCPP_WARN(rclcpp::get_logger("behavior_controller"),
-                    "[StopAnimateBehavior] Service returned failure: %s", response.message.c_str());
+                    "[StopAnimateBehavior] Service returned failure: %s", response->message.c_str());
         return BT::NodeStatus::FAILURE;
     }
 
     if (ConfigManager::instance().isVerbose()) {
         RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
-                    "[StopAnimateBehavior] Animation stopped: %s", response.message.c_str());
+                    "[StopAnimateBehavior] Animation stopped: %s", response->message.c_str());
     }
     return BT::NodeStatus::SUCCESS;
 }
@@ -627,7 +627,7 @@ BT::PortsList SetOvertAttention::providedPorts()
     };
 }
 
-bool SetOvertAttention::setRequest(Request& request)
+bool SetOvertAttention::setRequest(Request::SharedPtr& request)
 {
     auto enabled = getInput<bool>("enabled");
 
@@ -637,29 +637,29 @@ bool SetOvertAttention::setRequest(Request& request)
         return false;
     }
 
-    request.data = enabled.value();
+    request->data = enabled.value();
 
     if (ConfigManager::instance().isVerbose()) {
         RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
                     "[SetOvertAttention] Request → enabled=%s",
-                    request.data ? "true" : "false");
+                    request->data ? "true" : "false");
     }
     return true;
 }
 
-BT::NodeStatus SetOvertAttention::onResponseReceived(const Response& response)
+BT::NodeStatus SetOvertAttention::onResponseReceived(const Response::SharedPtr& response)
 {
-    setOutput("message", response.message);
+    setOutput("message", response->message);
 
-    if (!response.success) {
+    if (!response->success) {
         RCLCPP_WARN(rclcpp::get_logger("behavior_controller"),
-                    "[SetOvertAttention] Service returned failure: %s", response.message.c_str());
+                    "[SetOvertAttention] Service returned failure: %s", response->message.c_str());
         return BT::NodeStatus::FAILURE;
     }
 
     if (ConfigManager::instance().isVerbose()) {
         RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
-                    "[SetOvertAttention] %s", response.message.c_str());
+                    "[SetOvertAttention] %s", response->message.c_str());
     }
     return BT::NodeStatus::SUCCESS;
 }
