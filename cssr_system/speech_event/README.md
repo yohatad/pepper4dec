@@ -57,7 +57,7 @@ pip install torch==2.5.1+cu121 torchaudio==2.5.1+cu121 torchvision==0.20.1+cu121
 # pip install torch==2.5.1 torchaudio==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cpu
 
 # Install remaining Python packages
-pip install -r ~/ros2_ws/src/cssr4africa/cssr_system/speech_event/speech_event_requirements.txt
+pip install -r ~/ros2_ws/src/cssr4africa/cssr_system/speech_event/requirements.txt
 ```
 
 ## Building the ROS2 Package
@@ -388,7 +388,7 @@ speech_event/
 ├── package.xml                            # ROS2 package manifest
 ├── setup.py                               # Python package setup and entry points
 ├── setup.cfg                              # Setup configuration
-├── speech_event_requirements.txt          # Python dependencies
+├── requirements.txt                       # Python dependencies
 └── README.md                              # This file
 ```
 

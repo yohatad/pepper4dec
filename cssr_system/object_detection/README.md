@@ -57,7 +57,7 @@ pip install --upgrade pip
 pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
 # Install package requirements
-pip install -r ~/ros2_ws/src/cssr4africa/cssr_system/object_detection/object_detection_requirements_x86.txt
+pip install -r ~/ros2_ws/src/cssr4africa/cssr_system/object_detection/requirements.txt
 ```
 
 4. **Download Model Files**
