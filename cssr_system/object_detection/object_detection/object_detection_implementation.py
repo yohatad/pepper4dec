@@ -675,9 +675,19 @@ class YOLOv11(ObjectDetectionNode):
             input_shape = self.session.get_inputs()[0].shape  # [N, C, H, W]
             self.input_height, self.input_width = input_shape[2], input_shape[3]
 
+            # Warmup run to load model weights into memory
+            dummy_input = np.zeros(
+                [1 if d is None or isinstance(d, str) else d for d in input_shape],
+                dtype=np.float32
+            )
+            self.session.run(
+                [o.name for o in self.session.get_outputs()],
+                {self.session.get_inputs()[0].name: dummy_input}
+            )
+
             if self.verbose_mode:
                 self.get_logger().info(f"{self.node_name}: ONNX model loaded successfully.")
-            
+
             return True
         except Exception as e:
             self.get_logger().error(f"{self.node_name}: Failed to initialize ONNX model: {e}")
