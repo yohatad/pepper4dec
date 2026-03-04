@@ -45,13 +45,13 @@ def generate_launch_description():
         ),
         
         # AMCL (Localization)
-        Node(
-            package='nav2_amcl',
-            executable='amcl',
-            name='amcl',
-            output='screen',
-            parameters=[params_file]
-        ),
+        # Node(
+        #     package='nav2_amcl',
+        #     executable='amcl',
+        #     name='amcl',
+        #     output='screen',
+        #     parameters=[params_file]
+        # ),
         
         # Nav2 Controller
         Node(
@@ -89,6 +89,13 @@ def generate_launch_description():
             parameters=[params_file]
         ),
 
+        # Node(
+        #     package='tf2_ros',
+        #     executable='static_transform_publisher',
+        #     name='static_map_to_odom',
+        #     arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom']
+        # ),
+
         # Lifecycle Manager (ONLY lifecycle nodes here)
         Node(
             package='nav2_lifecycle_manager',
@@ -102,7 +109,7 @@ def generate_launch_description():
                     'map_server',
                     'filter_mask_server',
                     'costmap_filter_info_server',  # Must activate lifecycle node
-                    'amcl',
+                    # 'amcl',
                     'controller_server',
                     'planner_server',
                     'behavior_server',
