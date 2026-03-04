@@ -113,28 +113,15 @@ class AnimateBehaviorServer(Node):
         self.motion_speed = 0.08  # Speed parameter for ALMotion
         
         # Publishers
-        self.joint_pub = self.create_publisher(
-            JointAnglesWithSpeed, 
-            '/joint_angles', 
-            10
-        )
-        self.vel_pub = self.create_publisher(
-            Twist, 
-            '/cmd_vel', 
-            10
-        )
+        self.joint_pub = self.create_publisher(JointAnglesWithSpeed, '/joint_angles', 10)
+        self.vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         
         # Subscriber
-        self.joint_sub = self.create_subscription(
-            JointState, 
-            '/joint_states', 
-            self.joint_states_callback, 
-            10
-        )
+        self.joint_sub = self.create_subscription(JointState, '/joint_states', 
+            self.joint_states_callback, 10)
         
         # Action server
-        self._action_server = ActionServer(
-            self,
+        self._action_server = ActionServer(self,
             AnimateBehavior,
             'animate_behavior',
             execute_callback=self.execute_callback,
@@ -144,24 +131,19 @@ class AnimateBehaviorServer(Node):
         )
 
         # Service for explicit stop control from BT
-        self.stop_service = self.create_service(
-            Trigger,
+        self.stop_service = self.create_service(Trigger,
             'animate_behavior/stop',
             self.stop_service_callback,
             callback_group=self.callback_group
         )
         
         # Main animation timer - 30Hz for smooth motion
-        self.animation_timer = self.create_timer(
-            1.0 / self.update_rate,  # 30Hz = 0.033s
+        self.animation_timer = self.create_timer(1.0 / self.update_rate,
             self.animation_update,
-            callback_group=self.callback_group
-        )
+            callback_group=self.callback_group)
         
         # Feedback timer - 2Hz
-        self.feedback_timer = self.create_timer(
-            0.5,
-            self.feedback_update,
+        self.feedback_timer = self.create_timer(0.5, self.feedback_update,
             callback_group=self.callback_group
         )
         
@@ -581,22 +563,3 @@ class AnimateBehaviorServer(Node):
             # Signal any waiting goal to complete
             if self.goal_complete_event:
                 self.goal_complete_event.set()
-
-def main(args=None):
-    rclpy.init(args=args)
-    
-    node = AnimateBehaviorServer()
-    
-    executor = MultiThreadedExecutor(num_threads=4)
-    executor.add_node(node)
-    
-    try:
-        executor.spin()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
-
-if __name__ == '__main__':
-    main()

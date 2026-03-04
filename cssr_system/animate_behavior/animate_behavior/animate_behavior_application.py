@@ -20,33 +20,19 @@ from .animate_behavior_implementation import AnimateBehaviorServer
 
 def main(args=None):
     rclpy.init(args=args)
-
-    action_server = AnimateBehaviorServer()
+    
+    node = AnimateBehaviorServer()
+    
     executor = MultiThreadedExecutor(num_threads=4)
-    executor.add_node(action_server)
-
+    executor.add_node(node)
+    
     try:
         executor.spin()
     except KeyboardInterrupt:
-        pass  # Don't log here - context may be shutting down
+        pass
     finally:
-        # Cleanup before destroying node
-        try:
-            action_server.cleanup()
-        except Exception:
-            pass  # Ignore cleanup errors during shutdown
-
-        # Destroy node and shutdown
-        try:
-            action_server.destroy_node()
-        except Exception:
-            pass
-
-        try:
-            if rclpy.ok():
-                rclpy.shutdown()
-        except Exception:
-            pass
+        node.destroy_node()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
