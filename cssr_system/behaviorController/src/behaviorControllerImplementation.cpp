@@ -217,7 +217,7 @@ BT::NodeStatus GestureNode::onFailure(BT::ActionNodeErrorCode error)
 }
 
 //=============================================================================
-// NavigateRosAction
+// Navigate
 // Action: nav2_msgs::action::NavigateToPose  →  server: /navigate_to_pose
 //
 // Goal fields:
@@ -233,7 +233,7 @@ BT::NodeStatus GestureNode::onFailure(BT::ActionNodeErrorCode error)
 //   int16                     number_of_recoveries
 //=============================================================================
 
-BT::PortsList NavigateRosAction::providedPorts()
+BT::PortsList Navigate::providedPorts()
 {
     return {
         BT::InputPort<double>      ("goal_x",                  "Goal x position (metres)"),
@@ -245,7 +245,7 @@ BT::PortsList NavigateRosAction::providedPorts()
     };
 }
 
-bool NavigateRosAction::setGoal(Goal& goal)
+bool Navigate::setGoal(Goal& goal)
 {
     auto goal_x     = getInput<double>("goal_x");
     auto goal_y     = getInput<double>("goal_y");
@@ -254,7 +254,7 @@ bool NavigateRosAction::setGoal(Goal& goal)
 
     if (!goal_x || !goal_y) {
         RCLCPP_ERROR(rclcpp::get_logger("behavior_controller"),
-                     "[NavigateRosAction] Missing required input port(s): goal_x, goal_y");
+                     "[Navigate] Missing required input port(s): goal_x, goal_y");
         return false;
     }
 
@@ -279,45 +279,45 @@ bool NavigateRosAction::setGoal(Goal& goal)
 
     if (ConfigManager::instance().isVerbose()) {
         RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
-                    "[NavigateRosAction] Goal → frame=%s x=%.3f y=%.3f theta=%.3f rad",
+                    "[Navigate] Goal → frame=%s x=%.3f y=%.3f theta=%.3f rad",
                     goal.pose.header.frame_id.c_str(), x, y, theta);
     }
     return true;
 }
 
-BT::NodeStatus NavigateRosAction::onFeedback(const std::shared_ptr<const Feedback> feedback)
+BT::NodeStatus Navigate::onFeedback(const std::shared_ptr<const Feedback> feedback)
 {
     setOutput("distance_remaining", feedback->distance_remaining);
     setOutput("recoveries",         static_cast<int>(feedback->number_of_recoveries));
 
     if (ConfigManager::instance().isVerbose()) {
         RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
-                    "[NavigateRosAction] Feedback: %.2fm remaining, %d recoveries",
+                    "[Navigate] Feedback: %.2fm remaining, %d recoveries",
                     feedback->distance_remaining, feedback->number_of_recoveries);
     }
     return BT::NodeStatus::RUNNING;
 }
 
-BT::NodeStatus NavigateRosAction::onResultReceived(const WrappedResult& result)
+BT::NodeStatus Navigate::onResultReceived(const WrappedResult& result)
 {
     if (result.code != rclcpp_action::ResultCode::SUCCEEDED) {
         RCLCPP_WARN(rclcpp::get_logger("behavior_controller"),
-                    "[NavigateRosAction] Navigation did not succeed (code=%d)",
+                    "[Navigate] Navigation did not succeed (code=%d)",
                     static_cast<int>(result.code));
         return BT::NodeStatus::FAILURE;
     }
 
     if (ConfigManager::instance().isVerbose()) {
         RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
-                    "[NavigateRosAction] Navigation succeeded");
+                    "[Navigate] Navigation succeeded");
     }
     return BT::NodeStatus::SUCCESS;
 }
 
-BT::NodeStatus NavigateRosAction::onFailure(BT::ActionNodeErrorCode error)
+BT::NodeStatus Navigate::onFailure(BT::ActionNodeErrorCode error)
 {
     RCLCPP_ERROR(rclcpp::get_logger("behavior_controller"),
-                 "[NavigateRosAction] Action error: %s", toStr(error));
+                 "[Navigate] Action error: %s", toStr(error));
     return BT::NodeStatus::FAILURE;
 }
 
@@ -707,7 +707,7 @@ BT::Tree initializeTree(const std::string& scenario,
 
     factory.registerNodeType<AnimateBehaviorNode>      ("AnimateBehavior",      params);
     factory.registerNodeType<GestureNode>              ("Gesture",              params);
-    factory.registerNodeType<NavigateRosAction>        ("NavigateRosAction",    params);
+    factory.registerNodeType<Navigate>        ("Navigate",    params);
     factory.registerNodeType<SpeechRecognitionNode>    ("SpeechRecognition",    params);
     factory.registerNodeType<ConversationManagerNode>  ("ConversationManager",  params);
     factory.registerNodeType<SpeechWithFeedbackNode>   ("SpeechWithFeedback",   params);
@@ -720,7 +720,7 @@ BT::Tree initializeTree(const std::string& scenario,
         });
 
     if (ConfigManager::instance().isVerbose()) {
-        RCLCPP_INFO(logger, "[initializeTree] Registered nodes: AnimateBehavior, Gesture, NavigateRosAction, SpeechRecognition, ConversationManager, SpeechWithFeedback, CheckFaceDetected");
+        RCLCPP_INFO(logger, "[initializeTree] Registered nodes: AnimateBehavior, Gesture, Navigate, SpeechRecognition, ConversationManager, SpeechWithFeedback, CheckFaceDetected");
         RCLCPP_INFO(logger, "[initializeTree] Loading tree: %s", xmlPath.c_str());
     }
 

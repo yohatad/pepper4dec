@@ -243,11 +243,11 @@ public:
 };
 
 // Wraps nav2_msgs::action::NavigateToPose  →  Nav2 /navigate_to_pose server
-class NavigateRosAction
+class Navigate
     : public BT::RosActionNode<nav2_msgs::action::NavigateToPose>
 {
 public:
-    NavigateRosAction(const std::string& name,
+    Navigate(const std::string& name,
                       const BT::NodeConfig& config,
                       const BT::RosNodeParams& params)
         : BT::RosActionNode<nav2_msgs::action::NavigateToPose>(name, config, params) {}

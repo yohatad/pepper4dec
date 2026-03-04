@@ -71,20 +71,20 @@ Sends text to the `/tts` action server.
 | `text` | string | — | Direct text to speak (takes priority over phrase_key) |
 | `language` | string | config language | Language code |
 
-#### NavigateRosAction - Navigation
+#### Navigate - Navigation
 
 Sends navigation goals to the `/navigation` action server.
 
 ```xml
 <!-- Navigate using explicit coordinates -->
-<Action ID="NavigateRosAction"
+<Action ID="Navigate"
         name="GoToLobby"
         goal_x="1.5"
         goal_y="2.0"
         goal_theta="0.0"/>
 
 <!-- Navigate using blackboard variable "exhibitLocation" (set by SelectExhibit) -->
-<Action ID="NavigateRosAction"
+<Action ID="Navigate"
         name="Navigate"/>
 ```
 
@@ -297,7 +297,7 @@ The blackboard is shared state accessible by all nodes in the tree.
 | Variable | Type | Set By | Used By |
 |----------|------|--------|---------|
 | `visits` | int | `RetrieveListOfExhibits`, `SelectExhibit` | `SelectExhibit`, `IsListWithExhibit` |
-| `exhibitLocation` | RobotPose | `SelectExhibit` | `NavigateRosAction` |
+| `exhibitLocation` | RobotPose | `SelectExhibit` | `Navigate` |
 | `exhibitGestureTarget` | Position3D | `SelectExhibit` | `GestureRosAction`, `SetOvertAttentionModeRosService` |
 | `exhibitPreGestureMessage` | string | `SelectExhibit` | TTS nodes |
 | `exhibitPostGestureMessage` | string | `SelectExhibit` | TTS nodes |
@@ -397,7 +397,7 @@ For Groot editor compatibility, declare all custom nodes in `<TreeNodesModel>`:
 ```xml
 <TreeNodesModel>
   <Action ID="TTSRosAction" editable="true"/>
-  <Action ID="NavigateRosAction" editable="true"/>
+  <Action ID="Navigate" editable="true"/>
   <Action ID="GestureRosAction" editable="true"/>
   <Action ID="SpeechRecognitionRosAction" editable="true"/>
   <Action ID="AnimateBehaviorRosAction" editable="true"/>

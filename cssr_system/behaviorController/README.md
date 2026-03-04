@@ -143,7 +143,7 @@ The behavior controller consists of three main components:
    | `SpeechWithFeedback` | Action | `naoqi_bridge_msgs::action::SpeechWithFeedback` |
    | `SpeechRecognition` | Action | `cssr_interfaces::action::SpeechRecognition` |
    | `ConversationManager` | Action | `cssr_interfaces::action::ConversationManager` |
-   | `NavigateRosAction` | Action | `nav2_msgs::action::NavigateToPose` (`/navigate_to_pose`) |
+   | `Navigate` | Action | `nav2_msgs::action::NavigateToPose` (`/navigate_to_pose`) |
    | `CheckFaceDetected` | Topic subscriber | `/faceDetection/data` (`cssr_interfaces::msg::FaceDetection`) |
 
 # 💡 Support

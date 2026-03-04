@@ -45,9 +45,8 @@ source install/setup.bash
 
 2. **Install Python Dependencies**
 ```bash
-# Install required Python packages
-pip install numpy==1.24.4
-pip install sentence-transformers chromadb openai pyyaml
+# Install package requirements
+pip install -r ~/ros2_ws/src/cssr4africa/cssr_system/conversation_manager/requirements.txt
 ```
 
 # 🔧 Configuration Parameters
