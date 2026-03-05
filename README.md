@@ -2,7 +2,7 @@
 
 # Pepper Robot Tour – Digital Experience Center (DEC)
 
-<img src="cssr_system/upanzi-logo.svg" alt="Upanzi Logo" width="800px">
+<img src="dec_system/upanzi-logo.svg" alt="Upanzi Logo" width="800px">
 
 </div>
 
