@@ -19,7 +19,8 @@ Beyond automation, the project serves as a real-world testbed for **culturally a
 The system is built on **ROS2 (Humble)** and follows a modular architecture with specialized packages handling different aspects of robot behavior and perception:
 
 ### **Core Control Packages**
-- **`behavior_controller`** - Central mission interpreter that orchestrates tour execution, translating mission specifications into executable robot commands
+- **`behaviorController`** - Central mission interpreter that orchestrates tour execution, translating mission specifications into executable robot commands
+- **`animate_behavior`** - Manages animated behavior sequences for expressive robot performance
 - **`conversation_manager`** - Manages dialogue flow and visitor interaction sequences
 - **`gesture_execution`** - Controls Pepper's arm and body movements for expressive gesturing
 - **`speech_event`** - Handles speech recognition and processing
@@ -29,17 +30,14 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 - **`face_detection`** - Real-time face detection, head pose estimation, and mutual gaze detection using SixDrepNet algorithm
 - **`object_detection`** - YOLO-based person and object detection for scene understanding
 - **`overt_attention`** - Controls robot's attention mechanism based on visitor presence
-- **`pepper_attention`** - Specialized attention system for Pepper robot
 
 ### **Navigation & Localization**
 - **`pepper_navigation`** - Autonomous navigation and path planning for Pepper
-- **`robot_localization`** - Robot pose estimation and localization
 
 ### **Infrastructure & Utilities**
-- **`cssr_bringup`** - System launch files and startup configurations
-- **`cssr_interfaces`** - Custom ROS2 message and service definitions
+- **`dec_bringup`** - System launch files and startup configurations
+- **`dec_interfaces`** - Custom ROS2 message and service definitions
 - **`custom_launch`** - Custom launch configurations
-- **`head_test`** - Testing utilities for robot head movement
 
 ## 🚀 Quick Start
 
