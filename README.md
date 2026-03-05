@@ -70,7 +70,7 @@ python3.10 -m venv ~/cssr_env
 source ~/cssr_env/bin/activate
 
 # Install Python dependencies
-pip install -r ros2_ws/src/cssr4africa/cssr_system/face_detection/face_detection_requirements_x86.txt
+pip install -r ros2_ws/src/cssr4africa/cssr_system/face_detection/requirements.txt
 ```
 
 3. **Download Model Files**
