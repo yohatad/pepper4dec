@@ -39,7 +39,7 @@ git clone <repository-url>
 
 # Build the workspace
 cd ~/ros2_ws
-colcon build --packages-select overt_attention cssr_interfaces
+colcon build --packages-select overt_attention dec_interfaces
 source install/setup.bash
 ```
 
@@ -51,14 +51,14 @@ pip install opencv-python numpy scipy
 
 3. **Ensure Required Packages are Built**
 The attention system depends on:
-- `cssr_interfaces`: Custom message definitions
+- `dec_interfaces`: Custom message definitions
 - `face_detection`: For face detection input (optional but recommended)
 - `naoqi_bridge_msgs`: For Pepper/NAO robot control (if using Pepper)
 
 ```bash
 # Build all required packages
 cd ~/ros2_ws
-colcon build --packages-select cssr_interfaces overt_attention
+colcon build --packages-select dec_interfaces overt_attention
 source install/setup.bash
 ```
 
@@ -161,7 +161,7 @@ ros2 run overt_attention visualization_node \
 
 ## Required Input Topics
 The attention system requires the following input topics:
-- **Face Detection**: `/faceDetection/data` (`cssr_interfaces/msg/FaceDetection`)
+- **Face Detection**: `/faceDetection/data` (`dec_interfaces/msg/FaceDetection`)
 - **Camera Images**: `/camera/color/image_raw` (`sensor_msgs/msg/Image`)
 - **Camera Info**: `/camera/color/camera_info` (`sensor_msgs/msg/CameraInfo`)
 - **Joint States**: `/joint_states` (`sensor_msgs/msg/JointState`) - for current head position

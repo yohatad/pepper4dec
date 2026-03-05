@@ -121,7 +121,7 @@ The node provides ROS2 services for knowledge base management and querying.
 
 The conversation manager provides a single service for querying the knowledge base:
 
-### `/prompt` Service (`cssr_interfaces/srv/ConversationManagerPrompt`)
+### `/prompt` Service (`dec_interfaces/srv/ConversationManagerPrompt`)
 Query the knowledge base with a question.
 
 **Request Fields:**
@@ -139,22 +139,22 @@ If the collection doesn't exist, it will be created and populated automatically 
 
 1. **Query the Knowledge Base**
 ```bash
-ros2 service call /prompt cssr_interfaces/srv/ConversationManagerPrompt \
+ros2 service call /prompt dec_interfaces/srv/ConversationManagerPrompt \
   "{prompt: 'What is the Upanzi Network?'}"
 ```
 
 2. **More Example Queries**
 ```bash
 # Ask about specific projects
-ros2 service call /prompt cssr_interfaces/srv/ConversationManagerPrompt \
+ros2 service call /prompt dec_interfaces/srv/ConversationManagerPrompt \
   "{prompt: 'What projects are focused on cybersecurity?'}"
 
 # Ask about facilities
-ros2 service call /prompt cssr_interfaces/srv/ConversationManagerPrompt \
+ros2 service call /prompt dec_interfaces/srv/ConversationManagerPrompt \
   "{prompt: 'Tell me about the Digital Experience Center.'}"
 
 # Ask about research areas
-ros2 service call /prompt cssr_interfaces/srv/ConversationManagerPrompt \
+ros2 service call /prompt dec_interfaces/srv/ConversationManagerPrompt \
   "{prompt: 'What are the main thrust areas of research?'}"
 ```
 
@@ -169,7 +169,7 @@ ros2 node list
 ros2 service list
 
 # Test the service with a simple query
-ros2 service call /prompt cssr_interfaces/srv/ConversationManagerPrompt "{prompt: 'Hello, are you working?'}"
+ros2 service call /prompt dec_interfaces/srv/ConversationManagerPrompt "{prompt: 'Hello, are you working?'}"
 ```
 
 # 🏗️ Architecture

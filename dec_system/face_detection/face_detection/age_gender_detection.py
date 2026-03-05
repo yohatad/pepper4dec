@@ -36,7 +36,7 @@ from queue import Queue
 from ament_index_python.packages import get_package_share_directory
 
 # Import custom messages
-from cssr_interfaces.msg import ObjectDetection, FaceDetection
+from dec_interfaces.msg import ObjectDetection, FaceDetection
 
 
 # ============================================================================

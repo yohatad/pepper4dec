@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>cssr_interfaces</name>
+  <name>dec_interfaces</name>
   <version>0.0.1</version>
   <description>Messages, services and actions for DEC</description>
 

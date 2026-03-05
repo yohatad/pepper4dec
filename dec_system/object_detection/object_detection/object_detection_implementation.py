@@ -26,7 +26,7 @@ from cv_bridge import CvBridge
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from geometry_msgs.msg import Point
 from typing import Tuple, List, Dict, Optional, Set
-from cssr_interfaces.msg import ObjectDetection
+from dec_interfaces.msg import ObjectDetection
 
 # COCO class names (80 classes)
 COCO_CLASSES = [

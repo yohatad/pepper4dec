@@ -48,22 +48,22 @@
 // YAML includes
 #include <yaml-cpp/yaml.h>
 
-// Custom message/service/action includes from cssr_interfaces package
+// Custom message/service/action includes from dec_interfaces package
 // Messages
-#include "cssr_interfaces/msg/face_detection.hpp"
+#include "dec_interfaces/msg/face_detection.hpp"
 
 // naoqi_bridge_msgs actions
 #include "naoqi_bridge_msgs/action/speech_with_feedback.hpp"
 
 // Actions
-#include "cssr_interfaces/action/tts.hpp"
-#include "cssr_interfaces/action/gesture.hpp"
-#include "cssr_interfaces/action/animate_behavior.hpp"
-#include "cssr_interfaces/action/speech_recognition.hpp"
-#include "cssr_interfaces/action/conversation_manager.hpp"
+#include "dec_interfaces/action/tts.hpp"
+#include "dec_interfaces/action/gesture.hpp"
+#include "dec_interfaces/action/animate_behavior.hpp"
+#include "dec_interfaces/action/speech_recognition.hpp"
+#include "dec_interfaces/action/conversation_manager.hpp"
 
 // Services
-#include "cssr_interfaces/srv/conversation_manager_prompt.hpp"
+#include "dec_interfaces/srv/conversation_manager_prompt.hpp"
 #include <std_srvs/srv/trigger.hpp>
 #include <std_srvs/srv/set_bool.hpp>
 
@@ -210,15 +210,15 @@ public:
 // BehaviorTree Action Nodes
 //=============================================================================
 
-// Wraps cssr_interfaces::action::AnimateBehavior
+// Wraps dec_interfaces::action::AnimateBehavior
 class AnimateBehaviorNode
-    : public BT::RosActionNode<cssr_interfaces::action::AnimateBehavior>
+    : public BT::RosActionNode<dec_interfaces::action::AnimateBehavior>
 {
 public:
     AnimateBehaviorNode(const std::string& name,
                         const BT::NodeConfig& config,
                         const BT::RosNodeParams& params)
-        : BT::RosActionNode<cssr_interfaces::action::AnimateBehavior>(name, config, params) {}
+        : BT::RosActionNode<dec_interfaces::action::AnimateBehavior>(name, config, params) {}
 
     static BT::PortsList providedPorts();
     bool setGoal(Goal& goal) override;
@@ -227,15 +227,15 @@ public:
     BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
 };
 
-// Wraps cssr_interfaces::action::Gesture
+// Wraps dec_interfaces::action::Gesture
 class GestureNode
-    : public BT::RosActionNode<cssr_interfaces::action::Gesture>
+    : public BT::RosActionNode<dec_interfaces::action::Gesture>
 {
 public:
     GestureNode(const std::string& name,
                 const BT::NodeConfig& config,
                 const BT::RosNodeParams& params)
-        : BT::RosActionNode<cssr_interfaces::action::Gesture>(name, config, params) {}
+        : BT::RosActionNode<dec_interfaces::action::Gesture>(name, config, params) {}
 
     static BT::PortsList providedPorts();
     bool setGoal(Goal& goal) override;
@@ -261,15 +261,15 @@ public:
     BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
 };
 
-// Wraps cssr_interfaces::action::SpeechRecognition
+// Wraps dec_interfaces::action::SpeechRecognition
 class SpeechRecognitionNode
-    : public BT::RosActionNode<cssr_interfaces::action::SpeechRecognition>
+    : public BT::RosActionNode<dec_interfaces::action::SpeechRecognition>
 {
 public:
     SpeechRecognitionNode(const std::string& name,
                           const BT::NodeConfig& config,
                           const BT::RosNodeParams& params)
-        : BT::RosActionNode<cssr_interfaces::action::SpeechRecognition>(name, config, params) {}
+        : BT::RosActionNode<dec_interfaces::action::SpeechRecognition>(name, config, params) {}
 
     static BT::PortsList providedPorts();
     bool setGoal(Goal& goal) override;
@@ -278,15 +278,15 @@ public:
     BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
 };
 
-// Wraps cssr_interfaces::action::ConversationManager
+// Wraps dec_interfaces::action::ConversationManager
 class ConversationManagerNode
-    : public BT::RosActionNode<cssr_interfaces::action::ConversationManager>
+    : public BT::RosActionNode<dec_interfaces::action::ConversationManager>
 {
 public:
     ConversationManagerNode(const std::string& name,
                             const BT::NodeConfig& config,
                             const BT::RosNodeParams& params)
-        : BT::RosActionNode<cssr_interfaces::action::ConversationManager>(name, config, params) {}
+        : BT::RosActionNode<dec_interfaces::action::ConversationManager>(name, config, params) {}
 
     static BT::PortsList providedPorts();
     bool setGoal(Goal& goal) override;
@@ -365,8 +365,8 @@ private:
     BT::NodeStatus checkLatestMessage();
 
     std::shared_ptr<rclcpp::Node> node_;
-    rclcpp::Subscription<cssr_interfaces::msg::FaceDetection>::SharedPtr sub_;
-    cssr_interfaces::msg::FaceDetection::SharedPtr latestMsg_;
+    rclcpp::Subscription<dec_interfaces::msg::FaceDetection>::SharedPtr sub_;
+    dec_interfaces::msg::FaceDetection::SharedPtr latestMsg_;
     std::mutex mutex_;
 };
 

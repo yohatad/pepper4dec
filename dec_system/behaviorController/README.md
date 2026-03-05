@@ -25,7 +25,7 @@ The **Behavior Controller** package is a **ROS2** package that orchestrates robo
 - **BehaviorTree.ROS2** (`behaviortree_ros2`)
 - **Nav2** (`nav2_msgs`)
 - **naoqi_bridge_msgs**
-- **cssr_interfaces** (custom messages, services, and actions)
+- **dec_interfaces** (custom messages, services, and actions)
 - **yaml-cpp**
 
 ## Package Installation
@@ -91,16 +91,16 @@ ros2 run behavior_controller behaviorController
 <span style="color: #ff3333; font-weight: bold;">NOTE: </span>
 <span style="color: #cccccc;">The following <strong>ROS2 action servers</strong> must be available before the behavior controller starts executing:
 
-- `AnimateBehavior` — `cssr_interfaces::action::AnimateBehavior`
-- `Gesture` — `cssr_interfaces::action::Gesture`
+- `AnimateBehavior` — `dec_interfaces::action::AnimateBehavior`
+- `Gesture` — `dec_interfaces::action::Gesture`
 - `SpeechWithFeedback` — `naoqi_bridge_msgs::action::SpeechWithFeedback`
-- `SpeechRecognition` — `cssr_interfaces::action::SpeechRecognition`
-- `ConversationManager` — `cssr_interfaces::action::ConversationManager`
+- `SpeechRecognition` — `dec_interfaces::action::SpeechRecognition`
+- `ConversationManager` — `dec_interfaces::action::ConversationManager`
 - `/navigate_to_pose` — `nav2_msgs::action::NavigateToPose`
 
 The following <strong>topic</strong> must also be available:
 
-- `/faceDetection/data` — `cssr_interfaces::msg::FaceDetection`
+- `/faceDetection/data` — `dec_interfaces::msg::FaceDetection`
 </span>
 </div>
 
@@ -138,15 +138,15 @@ The behavior controller consists of three main components:
 
    | BT Node | Type | ROS2 Interface |
    |---------|------|----------------|
-   | `AnimateBehavior` | Action | `cssr_interfaces::action::AnimateBehavior` |
+   | `AnimateBehavior` | Action | `dec_interfaces::action::AnimateBehavior` |
    | `StopAnimateBehavior` | Service | `std_srvs::srv::Trigger` (`animate_behavior/stop`) |
    | `SetOvertAttention` | Service | `std_srvs::srv::SetBool` (`/attn/set_enabled`) |
-   | `Gesture` | Action | `cssr_interfaces::action::Gesture` |
+   | `Gesture` | Action | `dec_interfaces::action::Gesture` |
    | `SpeechWithFeedback` | Action | `naoqi_bridge_msgs::action::SpeechWithFeedback` |
-   | `SpeechRecognition` | Action | `cssr_interfaces::action::SpeechRecognition` |
-   | `ConversationManager` | Action | `cssr_interfaces::action::ConversationManager` |
+   | `SpeechRecognition` | Action | `dec_interfaces::action::SpeechRecognition` |
+   | `ConversationManager` | Action | `dec_interfaces::action::ConversationManager` |
    | `Navigate` | Action | `nav2_msgs::action::NavigateToPose` (`/navigate_to_pose`) |
-   | `CheckFaceDetected` | Topic subscriber | `/faceDetection/data` (`cssr_interfaces::msg::FaceDetection`) |
+   | `CheckFaceDetected` | Topic subscriber | `/faceDetection/data` (`dec_interfaces::msg::FaceDetection`) |
 
 # 💡 Support
 

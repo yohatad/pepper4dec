@@ -14,7 +14,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 from sensor_msgs.msg import CompressedImage, Image, CameraInfo
 from geometry_msgs.msg import Vector3
 from std_msgs.msg import Float32MultiArray
-from cssr_interfaces.msg import FaceDetection
+from dec_interfaces.msg import FaceDetection
 from cv_bridge import CvBridge
 from ament_index_python.packages import get_package_share_directory
 

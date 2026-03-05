@@ -16,7 +16,7 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
-find_package(cssr_interfaces REQUIRED)
+find_package(dec_interfaces REQUIRED)
 find_package(behaviortree_cpp REQUIRED)
 find_package(behaviortree_ros2 REQUIRED)
 find_package(yaml-cpp REQUIRED)
@@ -42,7 +42,7 @@ ament_target_dependencies(${PROJECT_NAME}_lib
   geometry_msgs
   nav2_msgs
   naoqi_bridge_msgs
-  cssr_interfaces
+  dec_interfaces
   behaviortree_cpp
   behaviortree_ros2
   ament_index_cpp
@@ -78,7 +78,7 @@ ament_export_dependencies(
   geometry_msgs
   nav2_msgs
   naoqi_bridge_msgs
-  cssr_interfaces
+  dec_interfaces
   behaviortree_cpp
   behaviortree_ros2
   ament_index_cpp

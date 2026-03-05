@@ -19,7 +19,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from geometry_msgs.msg import Twist
 from naoqi_bridge_msgs.msg import JointAnglesWithSpeed
 from sensor_msgs.msg import JointState
-from cssr_interfaces.action import AnimateBehavior
+from dec_interfaces.action import AnimateBehavior
 from std_srvs.srv import Trigger
 
 @dataclass

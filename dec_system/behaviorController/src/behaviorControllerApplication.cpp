@@ -2,7 +2,7 @@
 Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
 Email: yohanneh@andrew.cmu.edu
 Date: February 09, 2026
-Version: v2.0 - Updated to use BehaviorTree.ROS2 with valid cssr_interfaces
+Version: v2.0 - Updated to use BehaviorTree.ROS2 with valid dec_interfaces
 */
 
 #include "behaviorController/behaviorControllerInterface.h"

@@ -14,7 +14,7 @@ using namespace BT;
 
 //=============================================================================
 // AnimateBehaviorNode
-// Action: cssr_interfaces::action::AnimateBehavior
+// Action: dec_interfaces::action::AnimateBehavior
 //
 // Goal fields:
 //   string  behavior_type     – "All", "body", "hands", "rotation"
@@ -164,7 +164,7 @@ BT::NodeStatus StopAnimateBehavior::onFailure(BT::ServiceNodeErrorCode error)
 
 //=============================================================================
 // GestureNode
-// Action: cssr_interfaces::action::Gesture
+// Action: dec_interfaces::action::Gesture
 //
 // Goal fields:
 //   string  gesture_type
@@ -373,7 +373,7 @@ BT::NodeStatus Navigate::onFailure(BT::ActionNodeErrorCode error)
 
 //=============================================================================
 // SpeechRecognitionNode
-// Action: cssr_interfaces::action::SpeechRecognition
+// Action: dec_interfaces::action::SpeechRecognition
 //
 // Goal fields:
 //   float32 wait          – seconds to wait for speech input
@@ -451,7 +451,7 @@ BT::NodeStatus SpeechRecognitionNode::onFailure(BT::ActionNodeErrorCode error)
 
 //=============================================================================
 // ConversationManagerNode
-// Action: cssr_interfaces::action::ConversationManager
+// Action: dec_interfaces::action::ConversationManager
 //
 // Goal fields:
 //   string prompt    – natural-language input to the conversation manager
@@ -673,7 +673,7 @@ BT::NodeStatus SetOvertAttention::onFailure(BT::ServiceNodeErrorCode error)
 
 //=============================================================================
 // CheckFaceDetected
-// Topic: /faceDetection/data  (cssr_interfaces::msg::FaceDetection)
+// Topic: /faceDetection/data  (dec_interfaces::msg::FaceDetection)
 //
 // Blocks (returns RUNNING) until the face-detection condition is met, then
 // returns SUCCESS. Runs indefinitely — never times out.
@@ -695,9 +695,9 @@ CheckFaceDetected::CheckFaceDetected(const std::string& name,
                                      std::shared_ptr<rclcpp::Node> node)
     : BT::StatefulActionNode(name, config), node_(node)
 {
-    sub_ = node_->create_subscription<cssr_interfaces::msg::FaceDetection>(
+    sub_ = node_->create_subscription<dec_interfaces::msg::FaceDetection>(
         "/faceDetection/data", 10,
-        [this](const cssr_interfaces::msg::FaceDetection::SharedPtr msg) {
+        [this](const dec_interfaces::msg::FaceDetection::SharedPtr msg) {
             std::lock_guard<std::mutex> lock(mutex_);
             latestMsg_ = msg;
         });
@@ -720,7 +720,7 @@ BT::PortsList CheckFaceDetected::providedPorts()
 // Returns SUCCESS when conditions are met, RUNNING while still waiting.
 BT::NodeStatus CheckFaceDetected::checkLatestMessage()
 {
-    cssr_interfaces::msg::FaceDetection::SharedPtr msg;
+    dec_interfaces::msg::FaceDetection::SharedPtr msg;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         msg = latestMsg_;

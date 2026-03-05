@@ -136,7 +136,7 @@ ros2 run object_detection object_detection
 The node publishes detected objects and their corresponding data to the `/objectDetection/data` topic. When running in verbose mode, it displays OpenCV-annotated color and depth images for visualization.
 
 ## Topic Structure
-- **Published Topic**: `/objectDetection/data` (`cssr_interfaces/msg/ObjectDetection`)
+- **Published Topic**: `/objectDetection/data` (`dec_interfaces/msg/ObjectDetection`)
   - `label[]`: Array of object labels (strings)
   - `centroids[]`: Array of centroid coordinates (geometry_msgs/Point)
   - `width[]`: Array of bounding box widths (float)

@@ -20,7 +20,7 @@ from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from rclpy.action import ActionServer, CancelResponse
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
-from cssr_interfaces.action import SpeechRecognition
+from dec_interfaces.action import SpeechRecognition
 
 from ament_index_python.packages import get_package_share_directory
 from rclpy.node import Node

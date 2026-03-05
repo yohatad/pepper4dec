@@ -16,7 +16,7 @@ from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import CameraInfo, JointState
 from naoqi_bridge_msgs.msg import JointAnglesWithSpeed
 from geometry_msgs.msg import Vector3
-from cssr_interfaces.msg import FaceDetection
+from dec_interfaces.msg import FaceDetection
 from std_srvs.srv import SetBool
 from ament_index_python.packages import get_package_share_directory
 

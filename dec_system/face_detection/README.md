@@ -143,7 +143,7 @@ ros2 run face_detection face_detection
 The node publishes detected faces and their corresponding data to the `/faceDetection/data` topic. When running in verbose mode, it displays OpenCV-annotated color and depth images for visualization.
 
 ## Topic Structure
-- **Published Topic**: `/faceDetection/data` (`cssr_interfaces/msg/FaceDetection`)
+- **Published Topic**: `/faceDetection/data` (`dec_interfaces/msg/FaceDetection`)
   - `face_label_id[]`: Array of face IDs (strings)
   - `centroids[]`: Array of centroid coordinates (geometry_msgs/Point)
   - `width[]`: Array of bounding box widths (float)

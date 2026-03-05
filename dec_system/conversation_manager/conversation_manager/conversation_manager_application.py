@@ -21,7 +21,7 @@ ROS Parameters:
     verbose        (bool, default: False): Enable verbose logging
 
 Actions:
-    prompt (cssr_interfaces/action/ConversationManager): Answer questions using RAG
+    prompt (dec_interfaces/action/ConversationManager): Answer questions using RAG
         Feedback: status – "searching" | "generating"
         Result:   success, response
 """
@@ -32,7 +32,7 @@ from typing import List, Dict
 from rclpy.node import Node
 from rclpy.action import ActionServer
 from ament_index_python.packages import get_package_share_directory
-from cssr_interfaces.action import ConversationManager
+from dec_interfaces.action import ConversationManager
 from .conversation_manager_implementation import (
     get_config,
     get_collection,

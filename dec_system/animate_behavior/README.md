@@ -91,7 +91,7 @@ The node provides an action server `/animate_behavior` for controlling animation
 
 ## Action Definition
 
-**Action Type:** `cssr_interfaces/action/AnimateBehavior`
+**Action Type:** `dec_interfaces/action/AnimateBehavior`
 
 ### Goal (Request)
 ```
@@ -121,25 +121,25 @@ bool is_running           # Animation still active flag
 
 **Animate all limbs for 30 seconds with moderate range:**
 ```bash
-ros2 action send_goal /animate_behavior cssr_interfaces/action/AnimateBehavior \
+ros2 action send_goal /animate_behavior dec_interfaces/action/AnimateBehavior \
   "{behavior_type: 'All', selected_range: 0.5, duration_seconds: 30}"
 ```
 
 **Animate arms only indefinitely (until cancelled):**
 ```bash
-ros2 action send_goal /animate_behavior cssr_interfaces/action/AnimateBehavior \
+ros2 action send_goal /animate_behavior dec_interfaces/action/AnimateBehavior \
   "{behavior_type: 'arms', selected_range: 0.7, duration_seconds: 0}"
 ```
 
 **Return to home position (stop animation):**
 ```bash
-ros2 action send_goal /animate_behavior cssr_interfaces/action/AnimateBehavior \
+ros2 action send_goal /animate_behavior dec_interfaces/action/AnimateBehavior \
   "{behavior_type: 'home', selected_range: 0.0, duration_seconds: 0}"
 ```
 
 **Gentle hand gestures for 60 seconds:**
 ```bash
-ros2 action send_goal /animate_behavior cssr_interfaces/action/AnimateBehavior \
+ros2 action send_goal /animate_behavior dec_interfaces/action/AnimateBehavior \
   "{behavior_type: 'hands', selected_range: 0.3, duration_seconds: 60}"
 ```
 
@@ -149,7 +149,7 @@ ros2 action send_goal /animate_behavior cssr_interfaces/action/AnimateBehavior \
 import rclpy
 from rclpy.action import ActionClient
 from rclpy.node import Node
-from cssr_interfaces.action import AnimateBehavior
+from dec_interfaces.action import AnimateBehavior
 
 class AnimationClient(Node):
     def __init__(self):
@@ -237,7 +237,7 @@ if __name__ == '__main__':
 
 | Action Server | Type | Description |
 |---------------|------|-------------|
-| `/animate_behavior` | `cssr_interfaces/action/AnimateBehavior` | Main animation control interface |
+| `/animate_behavior` | `dec_interfaces/action/AnimateBehavior` | Main animation control interface |
 
 ## Services
 
@@ -271,7 +271,7 @@ animate_behavior/
 ## Animation Server
 - Check that the action server is running: `ros2 action list | grep animate_behavior`
 - Monitor action server status: `ros2 action info /animate_behavior`
-- Send a test goal: `ros2 action send_goal /animate_behavior cssr_interfaces/action/AnimateBehavior "{behavior_type: 'hands', selected_range: 0.5, duration_seconds: 10}"`
+- Send a test goal: `ros2 action send_goal /animate_behavior dec_interfaces/action/AnimateBehavior "{behavior_type: 'hands', selected_range: 0.5, duration_seconds: 10}"`
 - Monitor feedback during execution: Add `--feedback` flag to the action send_goal command
 - Check for joint state reception: Look for "✓ Joint states received" in the node logs
 
@@ -294,9 +294,9 @@ animate_behavior/
 - Verify `/joint_states` is being received (check logs for "Joint states received")
 
 ### Animation won't stop
-- Use the `home` behavior type to stop: `ros2 action send_goal /animate_behavior cssr_interfaces/action/AnimateBehavior "{behavior_type: 'home', selected_range: 0.0, duration_seconds: 0}"`
+- Use the `home` behavior type to stop: `ros2 action send_goal /animate_behavior dec_interfaces/action/AnimateBehavior "{behavior_type: 'home', selected_range: 0.0, duration_seconds: 0}"`
 - Alternatively, use the stop service: `ros2 service call /animate_behavior/stop std_srvs/srv/Trigger`
-- Cancel via action: `ros2 action send_goal /animate_behavior cssr_interfaces/action/AnimateBehavior "{behavior_type: 'All', selected_range: 0.5, duration_seconds: 10}" --cancel`
+- Cancel via action: `ros2 action send_goal /animate_behavior dec_interfaces/action/AnimateBehavior "{behavior_type: 'All', selected_range: 0.5, duration_seconds: 10}" --cancel`
 
 ## Logging
 - View detailed logs: `ros2 run animate_behavior animate_behavior --ros-args --log-level debug`

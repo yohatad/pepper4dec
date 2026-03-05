@@ -25,7 +25,7 @@ The **Gesture Execution** package is a **ROS2** package designed to execute vari
 - **ROS2 Humble** or newer
 - **Python 3.10** or compatible version
 - **Pepper Robot** or simulator with NAOqi bridge
-- **cssr_interfaces** package for action definitions
+- **dec_interfaces** package for action definitions
 
 ## Package Installation
 
@@ -37,7 +37,7 @@ git clone <repository-url>
 
 # Build the workspace
 cd ~/ros2_ws
-colcon build --packages-select gesture_execution cssr_interfaces
+colcon build --packages-select gesture_execution dec_interfaces
 source install/setup.bash
 ```
 
@@ -119,7 +119,7 @@ ros2 action list
 # 🖥️ Action Interface
 The node provides a single action server `/gesture_execution/execute` with the following goal structure:
 
-## Action Goal (`cssr_interfaces/action/Gesture`)
+## Action Goal (`dec_interfaces/action/Gesture`)
 
 | Parameter | Type | Description | Constraints |
 |-----------|------|-------------|-------------|
@@ -146,7 +146,7 @@ Points to a specific 3D location in the environment. The robot uses inverse kine
 
 **Example Action Goal:**
 ```bash
-ros2 action send_goal /gesture_execution/execute cssr_interfaces/action/Gesture \
+ros2 action send_goal /gesture_execution/execute dec_interfaces/action/Gesture \
   "{gesture_type: 'deictic', gesture_id: 0, gesture_duration: 2000, bow_nod_angle: 0, \
     location_x: 2.0, location_y: 1.5, location_z: 0.8}"
 ```
@@ -159,7 +159,7 @@ Executes predefined arm motions from the gesture.yaml file. Currently supported 
 
 **Example Action Goal:**
 ```bash
-ros2 action send_goal /gesture_execution/execute cssr_interfaces/action/Gesture \
+ros2 action send_goal /gesture_execution/execute dec_interfaces/action/Gesture \
   "{gesture_type: 'iconic', gesture_id: 2, gesture_duration: 3000, bow_nod_angle: 0, \
     location_x: 0.0, location_y: 0.0, location_z: 0.0}"
 ```
@@ -169,7 +169,7 @@ Bows the robot forward at a specified angle.
 
 **Example Action Goal:**
 ```bash
-ros2 action send_goal /gesture_execution/execute cssr_interfaces/action/Gesture \
+ros2 action send_goal /gesture_execution/execute dec_interfaces/action/Gesture \
   "{gesture_type: 'bow', gesture_id: 0, gesture_duration: 2500, bow_nod_angle: 30, \
     location_x: 0.0, location_y: 0.0, location_z: 0.0}"
 ```
@@ -179,7 +179,7 @@ Nods the robot's head at a specified angle.
 
 **Example Action Goal:**
 ```bash
-ros2 action send_goal /gesture_execution/execute cssr_interfaces/action/Gesture \
+ros2 action send_goal /gesture_execution/execute dec_interfaces/action/Gesture \
   "{gesture_type: 'nod', gesture_id: 0, gesture_duration: 1500, bow_nod_angle: 15, \
     location_x: 0.0, location_y: 0.0, location_z: 0.0}"
 ```

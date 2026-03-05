@@ -2,7 +2,7 @@
  *
  * Author: Yohannes Tadesse Haile
  * Date: Feb 09, 2026
- * Version: v1.0 - Updated for BehaviorTree.ROS2 with valid cssr_interfaces
+ * Version: v1.0 - Updated for BehaviorTree.ROS2 with valid dec_interfaces
  *
  * Copyright (C) 2025 CyLab Carnegie Mellon University Africa
  */

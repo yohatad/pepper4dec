@@ -31,7 +31,7 @@ from geometry_msgs.msg import Pose2D, Point
 from visualization_msgs.msg import Marker
 from naoqi_bridge_msgs.msg import JointAnglesTrajectory
 
-from cssr_interfaces.action import Gesture
+from dec_interfaces.action import Gesture
 
 from .pepper_kinematics_utilities import PepperKinematicsUtilities, RIGHT_ARM, LEFT_ARM
 

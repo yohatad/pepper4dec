@@ -26,7 +26,7 @@ from cv_bridge import CvBridge
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from geometry_msgs.msg import Point
 from typing import Tuple, List, Dict, Optional
-from cssr_interfaces.msg import FaceDetection, ObjectDetection
+from dec_interfaces.msg import FaceDetection, ObjectDetection
 from scipy.optimize import linear_sum_assignment
 import supervision as sv
 

@@ -28,7 +28,7 @@ The following ROS2 packages are required (listed in `package.xml`):
 - `rclpy`, `rclcpp`, `rclcpp_action`
 - `std_msgs`, `geometry_msgs`, `sensor_msgs`
 - `naoqi_bridge_msgs` — for `AudioBuffer` microphone messages
-- `cssr_interfaces` — for the `SpeechRecognition` action definition
+- `dec_interfaces` — for the `SpeechRecognition` action definition
 - `ament_index_python`
 
 ## Python Environment Setup
@@ -220,7 +220,7 @@ ros2 run speech_event speech_event_localization
 |---------------------------------|-----------------------------------------------|---------------------------------------------------------------------------------------------|
 | `/speech_event/vad_speech_prob` | `std_msgs/Float32`                            | Real-time VAD probability (0–1) for each 512-sample chunk.                                 |
 | `/speech_event/text`            | `std_msgs/String`                             | Recognized speech text (published after each segment ends, in standalone mode only).       |
-| `/speech_recognition_action`    | `cssr_interfaces/action/SpeechRecognition`    | ROS2 action server for synchronous transcription requests (action server mode).            |
+| `/speech_recognition_action`    | `dec_interfaces/action/SpeechRecognition`    | ROS2 action server for synchronous transcription requests (action server mode).            |
 
 You can monitor the output with:
 ```bash
@@ -265,7 +265,7 @@ The node provides an action server at `/speech_recognition_action` for synchrono
 ```python
 import rclpy
 from rclpy.action import ActionClient
-from cssr_interfaces.action import SpeechRecognition
+from dec_interfaces.action import SpeechRecognition
 
 # Create client
 client = ActionClient(node, SpeechRecognition, '/speech_recognition_action')
