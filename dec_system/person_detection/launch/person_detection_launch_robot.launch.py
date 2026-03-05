@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 """
-object_detection_launch_robot.launch.py
-ROS2 Launch file for Object Detection Robot
+person_detection_launch_robot.launch.py
+ROS2 Launch file for Person Detection Robot
 """
 
 from launch import LaunchDescription
@@ -20,7 +20,7 @@ def launch_setup(context, *args, **kwargs):
     # Load the camera type from the YAML file
     config_file = os.path.join(
         os.getenv("COLCON_PREFIX_PATH").split(":")[0],  # first install dir
-        "object_detection", "share", "object_detection", "config", "object_detection_configuration.yaml"
+        "person_detection", "share", "person_detection", "config", "person_detection_configuration.yaml"
     )
     with open(config_file, "r") as f:
         params = yaml.safe_load(f)
@@ -75,12 +75,12 @@ def launch_setup(context, *args, **kwargs):
         print("Camera launch is disabled (launch_camera=false). Assuming topics are available from ROS2 bag or other source.")
 
 
-    # Add object detection node
+    # Add person detection node
     actions.append(
         Node(
-            package="object_detection",
-            executable="object_detection",
-            name="object_detection",
+            package="person_detection",
+            executable="person_detection",
+            name="person_detection",
             output="screen",
         )
     )

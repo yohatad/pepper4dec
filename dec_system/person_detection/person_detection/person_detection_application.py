@@ -1,11 +1,11 @@
 #!/home/yoha/face_detection_env/bin/python3
 
 """
-object_detection_application.py
-ROS2 Node for Object Detection and Localization.
+person_detection_application.py
+ROS2 Node for Person Detection and Localization.
 
-Implements object detection using YOLOv11 with ByteTrack tracking (bytetracker package).
-Configuration is loaded from object_detection_configuration.yaml.
+Implements person detection using YOLOv11 with ByteTrack tracking (bytetracker package).
+Configuration is loaded from person_detection_configuration.yaml.
 
 Supports configurable object classes to track (e.g., person, car, bottle, etc.)
 
@@ -17,14 +17,14 @@ Version: v2.0
 
 import sys
 import rclpy
-from .object_detection_implementation import YOLOv11, load_configuration
+from .person_detection_implementation import YOLOv11, load_configuration
 
 BANNER = """
 ================================================================================
-                        Object Detection v1.0
+                        Person Detection v1.0
 ================================================================================
-  - YOLOv11 object detection with ByteTrack multi-object tracking
-  - Configurable target classes via object_detection_configuration.yaml
+  - YOLOv11 person detection with ByteTrack multi-object tracking
+  - Configurable target classes via person_detection_configuration.yaml
   - Supported classes: person, car, bottle, chair, and 76 more COCO classes
   
   This program comes with ABSOLUTELY NO WARRANTY.
@@ -42,7 +42,7 @@ def main():
 
     node = None
     try:
-        # Create YOLOv11 object detection node with ByteTrack
+        # Create YOLOv11 person detection node with ByteTrack
         node = YOLOv11(config)
 
         # Spin until shutdown

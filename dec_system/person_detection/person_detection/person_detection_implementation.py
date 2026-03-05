@@ -1,7 +1,7 @@
 """
-object_detection_implementation.py - Implementation code for running the Object Detection and Localization ROS2 node.
+person_detection_implementation.py - Implementation code for running the Person Detection and Localization ROS2 node.
 
-Supports configurable object detection with ByteTrack tracking using the bytetracker package.
+Supports configurable person detection with ByteTrack tracking using the bytetracker package.
 
 Author: Yohannes Tadesse Haile
 Date: December 07, 2025
@@ -71,8 +71,8 @@ def load_configuration() -> Dict:
     }
     
     try:
-        package_path = get_package_share_directory('object_detection')
-        config_file = os.path.join(package_path, 'config', 'object_detection_configuration.yaml')
+        package_path = get_package_share_directory('person_detection')
+        config_file = os.path.join(package_path, 'config', 'person_detection_configuration.yaml')
         
         if os.path.exists(config_file):
             with open(config_file, 'r') as file:
@@ -118,14 +118,14 @@ def get_class_indices(target_classes: List, class_names: List[str] = COCO_CLASSE
                 print(f"Warning: Class name '{cls}' not found in COCO classes")
     
     return indices
-class ObjectDetectionNode(Node):
-    def __init__(self, config: Dict, node_name: str = 'objectDetection'):
+class PersonDetectionNode(Node):
+    def __init__(self, config: Dict, node_name: str = 'personDetection'):
         super().__init__(node_name)
         
         self.config = config
-        self.pub_objects = self.create_publisher(ObjectDetection, "/objectDetection/data", 10)
-        self.debug_pub = self.create_publisher(Image, "/objectDetection/debug", 1)
-        self.depth_debug_pub = self.create_publisher(Image, "/objectDetection/depth_debug", 1)
+        self.pub_objects = self.create_publisher(ObjectDetection, "/personDetection/data", 10)
+        self.debug_pub = self.create_publisher(Image, "/personDetection/debug", 1)
+        self.depth_debug_pub = self.create_publisher(Image, "/personDetection/depth_debug", 1)
 
         self.bridge = CvBridge()
         self.depth_image: Optional[np.ndarray] = None
@@ -188,9 +188,9 @@ class ObjectDetectionNode(Node):
         if self.config.get("verboseMode", False) and os.environ.get("DISPLAY", "") != "":
             try:
                 if color_frame is not None:
-                    cv2.imshow("Object Detection Debug (RGB)", color_frame)
+                    cv2.imshow("Person Detection Debug (RGB)", color_frame)
                 if depth_vis is not None:
-                    cv2.imshow("Object Detection Debug (Depth)", depth_vis)
+                    cv2.imshow("Person Detection Debug (Depth)", depth_vis)
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord('q'):
                     self.get_logger().info(f"{self.node_name}: User requested shutdown")
@@ -232,7 +232,7 @@ class ObjectDetectionNode(Node):
     def extract_topic(self, image_topic: str) -> Optional[str]:
         """Extract topic name from configuration file."""
         try:
-            package = get_package_share_directory('object_detection')
+            package = get_package_share_directory('person_detection')
             config_path = os.path.join(package, 'data', 'pepper_topics.yaml')
 
             with open(config_path, 'r') as file:
@@ -587,7 +587,7 @@ class ObjectDetectionNode(Node):
         except Exception as e:
             self.get_logger().error(f"Error during cleanup: {e}")
 
-class YOLOv11(ObjectDetectionNode):
+class YOLOv11(PersonDetectionNode):
     def __init__(self, config: Dict):
         """
         Initializes the ROS2 node, loads configuration, and subscribes to necessary topics.
@@ -616,7 +616,7 @@ class YOLOv11(ObjectDetectionNode):
             return
 
         if self.verbose_mode:
-            self.get_logger().info(f"{self.node_name}: Object Detection YOLOv11 node initialized with ByteTrack")
+            self.get_logger().info(f"{self.node_name}: Person Detection YOLOv11 node initialized with ByteTrack")
         
         # Subscribe to topics
         if not self.subscribe_topics():
@@ -647,8 +647,8 @@ class YOLOv11(ObjectDetectionNode):
             so.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
 
             try:
-                package_path = get_package_share_directory('object_detection')
-                model_path = os.path.join(package_path, 'models', 'object_detection_yolov11m.onnx')
+                package_path = get_package_share_directory('person_detection')
+                model_path = os.path.join(package_path, 'models', 'person_detection_yolov11m.onnx')
             except Exception as e:
                 self.get_logger().error(f"Failed to get package path: {e}")
                 return False

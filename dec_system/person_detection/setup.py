@@ -1,21 +1,21 @@
 from setuptools import setup
 from glob import glob
 
-pkg = "object_detection"
+pkg = "person_detection"
 
 setup(
     name=pkg,
     version="0.1.0",
-    packages=["object_detection"],  
+    packages=["person_detection"],
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="Yohannes",
     maintainer_email="yohanneh@alumni.cmu.edu",
-    description="Object detection node",
+    description="Person detection node",
     license="",
     entry_points={
         "console_scripts": [
-            "object_detection = object_detection.object_detection_application:main",
+            "person_detection = person_detection.person_detection_application:main",
         ],
     },
     data_files=[
