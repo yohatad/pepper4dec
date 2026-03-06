@@ -12,6 +12,7 @@ find_package(geometry_msgs REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/FaceDetection.msg"
   "msg/ObjectDetection.msg"
+  "msg/PersonDetection.msg"
   "srv/ConversationManagerPrompt.srv"
   "action/ConversationManager.action"
   "action/TTS.action"
