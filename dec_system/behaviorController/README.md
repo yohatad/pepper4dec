@@ -34,7 +34,7 @@ The **Behavior Controller** package is a **ROS2** package that orchestrates robo
 ```bash
 # Clone the repository (if not already done)
 cd ~/ros2_ws/src
-git clone https://github.com/cssr4africa/cssr4africa.git
+# git clone https://github.com/dec_ros2/dec4africa.git
 
 # Build the package
 cd ~/ros2_ws
@@ -68,7 +68,7 @@ cd ~/ros2_ws && source install/setup.bash
 
 2. **Launch the robot**:
 ```bash
-ros2 launch cssr_system cssrSystemLaunchRobot.launch.py \
+ros2 launch dec_system decSystemLaunchRobot.launch.py \
   robot_ip:=<robot_ip> \
   roscore_ip:=<roscore_ip> \
   network_interface:=<network_interface>
@@ -153,9 +153,8 @@ The behavior controller consists of three main components:
 For issues or questions:
 - Create an issue on GitHub
 - Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a><br>
-- Visit: <a href="http://www.cssr4africa.org">www.cssr4africa.org</a>
+<!-- - Visit: <a href="http://www.dec4africa.org">www.dec4africa.org</a> -->
 
 # 📜 License
-Copyright (C) 2023 Upanzi Network
-
-2026-02-09
+Copyright (C) 2026 Upanzi Network
+Licensed under the BSD-3-Clause License. See individual package licenses for details.

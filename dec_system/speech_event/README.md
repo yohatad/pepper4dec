@@ -8,12 +8,12 @@
 
 The **Speech Event Recognition and Localization** package is a ROS2 package that provides real-time speech recognition using Whisper ASR, voice activity detection (VAD) with Silero VAD (ONNX), and optional sound-source localization. It processes the robot's microphone audio (48 kHz, `naoqi_bridge_msgs/AudioBuffer`), detects speech segments, transcribes them with a low-latency Whisper model, and publishes the recognized text. The module can also estimate the direction-of-arrival of a sound using SRP-PHAT beamforming on Pepper's 4-microphone array.
 
-# 📄 Documentation
-The main documentation for this deliverable is found in the CSSR4Africa project deliverables. For technical details about the audio processing pipeline, refer to the source code and inline comments.
+<!-- # 📄 Documentation
+The main documentation for this deliverable is found in the DEC4Africa project deliverables. For technical details about the audio processing pipeline, refer to the source code and inline comments. -->
 
 # 🛠️ Installation
-
-Install the required software components to instantiate and set up the development environment for controlling the Pepper robot. Use the [CSSR4Africa Software Installation Manual](https://cssr4africa.github.io/deliverables/CSSR4Africa_Deliverable_D3.3.pdf).
+<!-- 
+Install the required software components to instantiate and set up the development environment for controlling the Pepper robot. Use the [DEC4Africa Software Installation Manual](https://dec4africa.github.io/deliverables/DEC4Africa_Deliverable_D3.3.pdf). -->
 
 ## Prerequisites
 - Ubuntu 22.04
@@ -57,7 +57,7 @@ pip install torch==2.5.1+cu121 torchaudio==2.5.1+cu121 torchvision==0.20.1+cu121
 # pip install torch==2.5.1 torchaudio==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cpu
 
 # Install remaining Python packages
-pip install -r ~/ros2_ws/src/cssr4africa/cssr_system/speech_event/requirements.txt
+pip install -r ~/ros2_ws/src/dec4africa/dec_system/speech_event/requirements.txt
 ```
 
 ## Building the ROS2 Package
@@ -149,7 +149,7 @@ speech_recognition:
 ```
 Then load with:
 ```bash
-ros2 run speech_event speech_event --ros-args --params-file ~/ros2_ws/src/cssr4africa/cssr_system/speech_event/config/speech_event_configuration.yaml
+ros2 run speech_event speech_event --ros-args --params-file ~/ros2_ws/src/dec4africa/dec_system/speech_event/config/speech_event_configuration.yaml
 ```
 
 # 🔄 Operating Modes
@@ -180,7 +180,7 @@ cd ~/ros2_ws && source install/setup.bash
 
 ## 1️⃣ Launch the robot (if not already running):
 ```bash
-ros2 launch cssr_system pepper_bringup.launch.py robot_ip:=<robot_ip>
+ros2 launch dec_system pepper_bringup.launch.py robot_ip:=<robot_ip>
 ```
 
 ## 2️⃣ Run the Speech Event Recognition node:
@@ -427,13 +427,10 @@ speech_event/
 # 💡 Support
 
 For issues or questions:
-- Create an issue on the CSSR4Africa GitHub repository
+- Create an issue on the DEC4Africa GitHub repository
 - Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a><br>
-- Visit: <a href="http://www.cssr4africa.org">www.cssr4africa.org</a>
+<!-- - Visit: <a href="http://www.dec4africa.org">www.dec4africa.org</a> -->
 
 # 📜 License
-Copyright (C) 2023 CSSR4Africa Consortium
-Funded by African Engineering and Technology Network (Afretec)
-Inclusive Digital Transformation Research Grant Programme
-
-Last Updated: February 2026
+Copyright (C) 2026 Upanzi Network
+Licensed under the BSD-3-Clause License. See individual package licenses for details.

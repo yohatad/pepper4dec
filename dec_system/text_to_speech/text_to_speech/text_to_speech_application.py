@@ -8,7 +8,7 @@ Implements text-to-speech synthesis using a pre-trained model.
 Configuration is loaded from text_to_speech_configuration.yaml.
 
 Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
-Email: yohanneh@andrew.cmu.edu
+Email: yohatad123@gmail.com
 Date: April 18, 2025
 Version: v1.0
 """

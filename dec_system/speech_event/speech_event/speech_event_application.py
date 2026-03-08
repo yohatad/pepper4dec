@@ -8,7 +8,6 @@ Author: Yohannes Tadesse Haile
 Date: November 8, 2025
 Version: v2.0
 
-Copyright (C) 2023 CSSR4Africa Consortium
 
 This program comes with ABSOLUTELY NO WARRANTY.
 """

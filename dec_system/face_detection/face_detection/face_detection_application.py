@@ -8,7 +8,7 @@ Implements face detection using SixDrepNet (YOLO + SixDrepNet).
 Configuration is loaded from face_detection_configuration.yaml.
 
 Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
-Email: yohanneh@andrew.cmu.edu
+Email: yohatad123@gmail.com
 Date: April 18, 2025
 Version: v1.0
 """

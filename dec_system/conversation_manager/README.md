@@ -19,7 +19,7 @@ The **Conversation Manager Package** implements a **Retrieval-Augmented Generati
 - **ROS2 Service Interface**: Clean service-based architecture for integration with other ROS2 nodes
 
 # 📄 Documentation
-The main documentation for this deliverable is found in the relevant CSSR4Africa deliverables that provide more details.
+The main documentation for this deliverable is found in the relevant DEC4Africa deliverables that provide more details.
 
 # 🛠️ Installation 
 
@@ -46,7 +46,7 @@ source install/setup.bash
 2. **Install Python Dependencies**
 ```bash
 # Install package requirements
-pip install -r ~/ros2_ws/src/cssr4africa/cssr_system/conversation_manager/requirements.txt
+pip install -r ~/ros2_ws/src/dec_system/conversation_manager/requirements.txt
 ```
 
 # 🔧 Configuration Parameters
@@ -204,9 +204,8 @@ The system uses a structured JSON format with the following sections:
 For issues or questions:
 - Create an issue on GitHub
 - Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a>, <a href="mailto:mahadanso79@gmail.com">mahadanso79@gmail.com</a><br>
-- Visit: <a href="http://www.cssr4africa.org">www.cssr4africa.org</a>
+<!-- - Visit: <a href="http://www.dec4africa.org">www.dec4africa.org</a> -->
 
 # 📜 License
-Copyright (C) 2023 Upanzi Network
-
-2026-03-04
+Copyright (C) 2026 Upanzi Network
+Licensed under the BSD-3-Clause License. See individual package licenses for details.

@@ -3,7 +3,7 @@
 <package format="3">
   <name>custom_launch</name>
   <version>0.0.0</version>
-  <description>Custom launch files for CSSR4Africa system</description>
+  <description>Custom launch files for Pepper4DEC system</description>
   <maintainer email="your_email@example.com">Your Name</maintainer>
   <license>Apache-2.0</license>
 

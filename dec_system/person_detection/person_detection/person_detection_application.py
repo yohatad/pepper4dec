@@ -10,7 +10,7 @@ Configuration is loaded from person_detection_configuration.yaml.
 Supports configurable object classes to track (e.g., person, car, bottle, etc.)
 
 Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
-Email: yohanneh@andrew.cmu.edu
+Email: yohatad123@gmail.com
 Date: December 07, 2025
 Version: v2.0
 """

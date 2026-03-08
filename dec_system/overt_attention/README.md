@@ -277,9 +277,8 @@ unified_attention_node:
 For issues or questions:
 - Create an issue on GitHub
 - Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a><br>
-- Visit: <a href="http://www.cssr4africa.org">www.cssr4africa.org</a>
+<!-- - Visit: <a href="http://www.dec4africa.org">www.dec4africa.org</a> -->
 
 # 📜 License
-Copyright (C) 2023 Upanzi Network   
-
-2026-02-08
+Copyright (C) 2026 Upanzi Network
+Licensed under the BSD-3-Clause License. See individual package licenses for details.

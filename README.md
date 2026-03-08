@@ -28,16 +28,22 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 
 ### **Perception & Attention Packages**
 - **`face_detection`** - Real-time face detection, head pose estimation, and mutual gaze detection using SixDrepNet algorithm
-- **`object_detection`** - YOLO-based person and object detection for scene understanding
+- **`person_detection`** - YOLO-based person detection for scene understanding
 - **`overt_attention`** - Controls robot's attention mechanism based on visitor presence
 
 ### **Navigation & Localization**
-- **`pepper_navigation`** - Autonomous navigation and path planning for Pepper
+- **`pepper_navigation`** - For navigation, RTAB-Map for SLAM and Nav2 for Navigation.
 
 ### **Infrastructure & Utilities**
 - **`dec_bringup`** - System launch files and startup configurations
 - **`dec_interfaces`** - Custom ROS2 message and service definitions
 - **`custom_launch`** - Custom launch configurations
+
+## 🖥️ Hardware Diagram
+
+<div align="center">
+<img src="dec_system/Hardware Diagram_white_lower.png" alt="Hardware Diagram" width="900px">
+</div>
 
 ## 🚀 Quick Start
 
@@ -53,7 +59,7 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 ```bash
 # Clone the repository
 cd ~/ros2_ws/src
-git clone https://github.com/yohatad/cssr4africa.git
+git clone https://github.com/yohatad/pepper4dec.git
 
 # Build all packages
 cd ~/ros2_ws
@@ -64,16 +70,16 @@ source install/setup.bash
 2. **Set Up Python Environment**
 ```bash
 # Create virtual environment (recommended)
-python3.10 -m venv ~/cssr_env
-source ~/cssr_env/bin/activate
+python3.10 -m venv ~/dec_virtual_envs
+source ~/dec_virtual_envs/bin/activate
 
 # Install Python dependencies
-pip install -r ros2_ws/src/cssr4africa/cssr_system/face_detection/requirements.txt
+pip install -r ros2_ws/src/pepper4dec/dec_system/face_detection/requirements.txt
 ```
 
 3. **Download Model Files**
    - Place required ONNX model files in their respective `models/` directories
-   - Ensure face detection models are in `cssr_system/face_detection/models/`
+   - Ensure face detection models are in `dec_system/face_detection/models/`
 
 ## 🎯 Running the Tour System
 
@@ -83,7 +89,7 @@ pip install -r ros2_ws/src/cssr4africa/cssr_system/face_detection/requirements.t
 source ~/ros2_ws/install/setup.bash
 
 # Launch the complete system
-ros2 launch cssr_bringup complete_system.launch.py
+ros2 launch dec_bringup complete_system.launch.py
 ```
 
 ### Component-Based Launch
@@ -126,18 +132,18 @@ Each package contains configuration files in their `config/` directories:
 - **Adaptation**: Culturally-aware behavior selection based on context
 
 ### **Navigation System**
-- **Localization**: Adaptive Monte Carlo Localization (AMCL)
-- **Mapping**: Uses pre-built maps (`cssr_system/map.pgm`)
+- **Localization**: Adaptive Monte Carlo Localization (AMCL) or RTAB-MAP
+- **Mapping**: Uses pre-built maps (`dec_system/map.pgm`)
 - **Path Planning**: Dynamic Window Approach (DWA) for safe navigation
 - **Integration**: Full coordination with behavior controller
 
 ## 🔧 Development
 
 ### Adding New Features
-1. Create new package in `cssr_system/` directory
+1. Create new package in `dec_system/` directory
 2. Follow ROS2 package structure conventions
-3. Define interfaces in `cssr_interfaces` if needed
-4. Update `cssr_bringup` launch files
+3. Define interfaces in `dec_interfaces` if needed
+4. Update `dec_bringup` launch files
 
 ### Code Style
 - Follow ROS2 C++ and Python style guides
@@ -149,19 +155,17 @@ Each package contains configuration files in their `config/` directories:
 Detailed documentation is available:
 - **Package-specific READMEs** in each package directory
 - **Configuration guides** in config directories
-- **API documentation**: `ros2 interface show cssr_interfaces/`
-<!-- - **Deliverable reports**: [CSSR4Africa Deliverables](https://cssr4africa.github.io/deliverables/) -->
+- **API documentation**: `ros2 interface show dec_interfaces/`
+<!-- - **Deliverable reports**: [DEC4Africa Deliverables](https://dec4africa.github.io/deliverables/) -->
 
 
 ## 🆘 Support
 
 For issues or questions:
 - **Contact**: 
-  - [yohanneh@andrew.cmu.edu](mailto:yohanneh@andrew.cmu.edu)
+  - [yohatad123@gmail.com](mailto:yohatad123@gmail.com)
   - [muhammed]
 
-## 📄 License
-
-Copyright (C) 2023-2025 Upanzi Network & CSSR4Africa Consortium
-
+# 📜 License
+Copyright (C) 2026 Upanzi Network
 Licensed under the BSD-3-Clause License. See individual package licenses for details.

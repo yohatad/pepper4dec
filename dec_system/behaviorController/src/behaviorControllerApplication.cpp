@@ -1,6 +1,6 @@
 /*
 Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
-Email: yohanneh@andrew.cmu.edu
+Email: yohatad123@gmail.com
 Date: February 09, 2026
 Version: v2.0 - Updated to use BehaviorTree.ROS2 with valid dec_interfaces
 */

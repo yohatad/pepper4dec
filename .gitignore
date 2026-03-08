@@ -7,6 +7,6 @@
 **/*cpython*
 __pycache__/
 **/*.png
-**/cssr4africa_virtual_envs/**
+**/dec_virtual_envs/**
 **/BehaviorTree.CPP/**
 **/chroma.sqlite3

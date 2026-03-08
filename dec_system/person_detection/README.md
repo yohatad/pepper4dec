@@ -57,7 +57,7 @@ pip install --upgrade pip
 pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
 # Install package requirements
-pip install -r ~/ros2_ws/src/cssr4africa/cssr_system/object_detection/requirements.txt
+pip install -r ~/ros2_ws/src/dec4africa/dec_system/object_detection/requirements.txt
 ```
 
 4. **Download Model Files**
@@ -174,9 +174,8 @@ The object detection system consists of two main components:
 For issues or questions:
 - Create an issue on GitHub
 - Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a><br>
-- Visit: <a href="http://www.cssr4africa.org">www.cssr4africa.org</a>
+<!-- - Visit: <a href="http://www.dec4africa.org">www.dec4africa.org</a> -->
 
 # 📜 License
-Copyright (C) 2023 Upanzi Network   
-
-2026-01-17 (Updated for ROS2)
+Copyright (C) 2026 Upanzi Network
+Licensed under the BSD-3-Clause License. See individual package licenses for details.

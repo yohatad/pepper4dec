@@ -7,4 +7,4 @@ using YOLOv11 and ByteTrack algorithms.
 
 __version__ = "1.0.0"
 __author__ = "Yohannes Tadesse Haile"
-__email__ = "yohanneh@andrew.cmu.edu"
+__email__ = "yohatad123@gmail.com"

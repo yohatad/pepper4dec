@@ -8,12 +8,12 @@
 
 The **Animate Behavior** package is a ROS2 action server that provides natural, lifelike animation for the Pepper humanoid robot during idle periods or social interactions. It generates smooth, randomized gestural movements across various body parts (arms, hands, legs, and base rotation) to enhance the robot's expressiveness and engagement during human-robot interaction. The module uses high-frequency motion updates (30Hz) with exponential smoothing to achieve natural, fluid movements that avoid mechanical or jerky appearance.
 
-# 📄 Documentation
-The main documentation for this deliverable is found in the CSSR4Africa project deliverables. For technical details about the animation pipeline and motion control, refer to the source code and inline comments.
+<!-- # 📄 Documentation
+The main documentation for this deliverable is found in the pepper4dec project deliverables. For technical details about the animation pipeline and motion control, refer to the source code and inline comments.
 
 # 🛠️ Installation
 
-Install the required software components to instantiate and set up the development environment for controlling the Pepper robot. Use the [CSSR4Africa Software Installation Manual](https://cssr4africa.github.io/deliverables/CSSR4Africa_Deliverable_D3.3.pdf).
+Install the required software components to instantiate and set up the development environment for controlling the Pepper robot. Use the [DEC4Africa Software Installation Manual](https://pepper4dec.github.io/deliverables/DEC4Africa_Deliverable_D3.3.pdf). -->
 
 ## Prerequisites
 - Ubuntu 22.04
@@ -326,15 +326,10 @@ The animation system uses a sophisticated motion generation approach:
 # 💡 Support
 
 For issues or questions:
-- Create an issue on the CSSR4Africa GitHub repository
+- Create an issue on the dec_ros2 GitHub repository
 - Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a><br>
-- Visit: <a href="http://www.cssr4africa.org">www.cssr4africa.org</a>
+<!-- - Visit: <a href="http://www.dec4africa.org">www.dec4africa.org</a> -->
 
 # 📜 License
-Copyright (C) 2025 CSSR4Africa Consortium
-Funded by African Engineering and Technology Network (Afretec)
-Inclusive Digital Transformation Research Grant Programme
-
-**Author:** Yohannes Tadesse Haile, Carnegie Mellon University Africa   
-**Version:** v1.0   
-**Last Updated:** February 2026
+Copyright (C) 2026 Upanzi Network
+Licensed under the BSD-3-Clause License. See individual package licenses for details.
