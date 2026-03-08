@@ -6,7 +6,7 @@
 **/*.pyc
 **/*cpython*
 __pycache__/
-**/*.png
+# **/*.png
 **/dec_virtual_envs/**
 **/BehaviorTree.CPP/**
 **/chroma.sqlite3
