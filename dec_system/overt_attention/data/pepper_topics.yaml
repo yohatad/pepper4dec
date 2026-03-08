@@ -1,9 +1,9 @@
 topics:
   image:
-    base: "/camera/color/image_raw"
+    base: "/camera/color/image_raw_custom"
     use_compressed: false
   depth:
-    base: "/camera/aligned_depth_to_color/image_raw"
+    base: "/camera/aligned_depth_to_color/image_raw_custom"
     use_compressed: false
   saliency:
     peak: "/attn/saliency_peak"

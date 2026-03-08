@@ -7,8 +7,8 @@ Shows faces with tracking IDs, engagement status, depth, saliency peaks, and cur
 import cv2
 import numpy as np
 import yaml
-from pathlib import Path
 import rclpy
+from pathlib import Path
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from sensor_msgs.msg import CompressedImage, Image, CameraInfo
@@ -73,25 +73,25 @@ class VisualizationNode(Node):
             raise
         
         # Parameters
-        self.declare_parameter('use_compressed', True)
-        self.declare_parameter('image_topic_base', '/camera/color/image_raw_custom')
         self.declare_parameter('show_face_ids', True)
         self.declare_parameter('show_depth', True)
         self.declare_parameter('show_engagement', True)
-        
+
         # Load parameters
-        self.use_compressed = self.get_parameter('use_compressed').value
-        image_base = self.get_parameter('image_topic_base').value
         self.show_face_ids = self.get_parameter('show_face_ids').value
         self.show_depth = self.get_parameter('show_depth').value
         self.show_engagement = self.get_parameter('show_engagement').value
-        
+
         # Load topics from YAML config
         self.face_topic = self.topics_config['topics']['face']
         self.saliency_topic = self.topics_config['topics']['saliency']['peak']
         self.target_topic = self.topics_config['topics']['target_angles']
         self.camera_info_topic = self.topics_config['topics']['camera_info']
-        
+
+        # Load image topic from YAML config
+        image_base = self.topics_config['topics']['image']['base']
+        self.use_compressed = self.topics_config['topics']['image']['use_compressed']
+
         # Construct image topic
         if self.use_compressed:
             self.image_topic = image_base + "/compressed"
