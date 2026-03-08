@@ -6,7 +6,7 @@ Supports both face-only (3 channel) and face+body (6 channel) models.
 Fully self-contained - no external MiVOLO dependencies required.
 
 Subscribes to:
-- objectdetection/data (ObjectDetection.msg) - person detections with track IDs
+- persondetection/data (PersonDetection.msg) - person detections with track IDs
 - facedetection/data (FaceDetection.msg) - face detections with matching label IDs
 - camera image topic
 
@@ -36,7 +36,7 @@ from queue import Queue
 from ament_index_python.packages import get_package_share_directory
 
 # Import custom messages
-from dec_interfaces.msg import ObjectDetection, FaceDetection
+from dec_interfaces.msg import PersonDetection, FaceDetection
 
 
 # ============================================================================
@@ -359,7 +359,7 @@ class MiVOLONode(Node):
         # NOTE: Despite the filename saying "faceonly", this model actually requires face+body (6 channels)
         self.declare_parameter('face_only', False)
         self.declare_parameter('face_topic', '/faceDetection/data')
-        self.declare_parameter('person_topic', '/objectDetection/data')
+        self.declare_parameter('person_topic', '/personDetection/data')
         self.declare_parameter('image_topic', '/camera/color/image_raw')
         self.declare_parameter('output_topic', 'mivolo/results')
         self.declare_parameter('max_cache_age_sec', 2.0)
@@ -420,7 +420,7 @@ class MiVOLONode(Node):
         )
         
         # Subscribers
-        self.person_sub = self.create_subscription(ObjectDetection, self.person_topic, self.person_callback, sensor_qos)
+        self.person_sub = self.create_subscription(PersonDetection, self.person_topic, self.person_callback, sensor_qos)
         self.face_sub = self.create_subscription(FaceDetection, self.face_topic,self.face_callback, sensor_qos)
         self.image_sub = self.create_subscription(Image, self.image_topic,self.image_callback, sensor_qos)
         
@@ -480,10 +480,10 @@ class MiVOLONode(Node):
             self.latest_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
             self.image_timestamp = time.time()
     
-    def person_callback(self, msg: ObjectDetection):
+    def person_callback(self, msg: PersonDetection):
         """Process person detections."""
         ids_to_estimate = []
-        n = len(msg.object_label_id)
+        n = len(msg.person_label_id)
         if not (len(msg.class_names) == len(msg.centroids) == len(msg.width) ==
                 len(msg.height) == len(msg.confidences) == n):
             self.get_logger().warning("person_callback: inconsistent array lengths, skipping message")
@@ -494,7 +494,7 @@ class MiVOLONode(Node):
                 if msg.class_names[i] != self.person_class_name:
                     continue
 
-                label_id = msg.object_label_id[i]
+                label_id = msg.person_label_id[i]
 
                 person_bbox = BoundingBox.from_centroid(
                     centroid=msg.centroids[i],

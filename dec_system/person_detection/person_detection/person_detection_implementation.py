@@ -26,7 +26,7 @@ from cv_bridge import CvBridge
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from geometry_msgs.msg import Point
 from typing import Tuple, List, Dict, Optional, Set
-from dec_interfaces.msg import ObjectDetection
+from dec_interfaces.msg import PersonDetection
 
 # COCO class names (80 classes)
 COCO_CLASSES = [
@@ -123,7 +123,7 @@ class PersonDetectionNode(Node):
         super().__init__(node_name)
         
         self.config = config
-        self.pub_objects = self.create_publisher(ObjectDetection, "/personDetection/data", 10)
+        self.pub_objects = self.create_publisher(PersonDetection, "/personDetection/data", 10)
         self.debug_pub = self.create_publisher(Image, "/personDetection/debug", 1)
         self.depth_debug_pub = self.create_publisher(Image, "/personDetection/depth_debug", 1)
 
@@ -521,20 +521,20 @@ class PersonDetectionNode(Node):
         return tracking_data
 
     def publish_object_detection(self, tracking_data: List[Dict]):
-        """Publish the detected objects to the topic."""
+        """Publish the detected persons to the topic."""
         if not tracking_data:
             return
-            
-        object_msg = ObjectDetection()
-        object_msg.object_label_id = [data['track_id'] for data in tracking_data]
-        object_msg.class_names = [data['class_name'] for data in tracking_data]
-        object_msg.class_ids = [data['class_id'] for data in tracking_data]
-        object_msg.confidences = [data['confidence'] for data in tracking_data]
-        object_msg.centroids = [data['centroid'] for data in tracking_data]
-        object_msg.width = [data['width'] for data in tracking_data]
-        object_msg.height = [data['height'] for data in tracking_data]
-        
-        self.pub_objects.publish(object_msg)
+
+        person_msg = PersonDetection()
+        person_msg.person_label_id = [data['track_id'] for data in tracking_data]
+        person_msg.class_names = [data['class_name'] for data in tracking_data]
+        person_msg.class_ids = [data['class_id'] for data in tracking_data]
+        person_msg.confidences = [data['confidence'] for data in tracking_data]
+        person_msg.centroids = [data['centroid'] for data in tracking_data]
+        person_msg.width = [data['width'] for data in tracking_data]
+        person_msg.height = [data['height'] for data in tracking_data]
+
+        self.pub_objects.publish(person_msg)
 
     def draw_tracked_objects(self, frame: np.ndarray, tracked_objects: List[Dict], 
                             tracking_data: List[Dict]) -> np.ndarray:

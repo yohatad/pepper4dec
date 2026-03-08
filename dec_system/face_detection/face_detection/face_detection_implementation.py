@@ -26,7 +26,7 @@ from cv_bridge import CvBridge
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from geometry_msgs.msg import Point
 from typing import Tuple, List, Dict, Optional
-from dec_interfaces.msg import FaceDetection, ObjectDetection
+from dec_interfaces.msg import FaceDetection, PersonDetection
 from scipy.optimize import linear_sum_assignment
 import supervision as sv
 
@@ -47,7 +47,7 @@ def load_configuration() -> Dict:
         'sixdrepnetConfidence': 0.65,
         'sixdrepnetHeadposeAngle': 10,
         'requirePersonDetection': True,
-        'objectDetectionTimeout': 0.5,  # Max age for object detection data
+        'personDetectionTimeout': 0.5,  # Max age for person detection data
         'prioritizeFaceDepth': True  # Prioritize face depth over person depth
     }
     
@@ -88,7 +88,7 @@ class FaceDetectionNode(Node):
         self.verbose_mode = config['verboseMode']
         self.image_timeout = config['imageTimeout']
         self.require_person_detection = config.get('requirePersonDetection', True)
-        self.object_detection_timeout = config.get('objectDetectionTimeout', 0.5)
+        self.person_detection_timeout = config.get('personDetectionTimeout', 0.5)
         self.prioritize_face_depth = config.get('prioritizeFaceDepth', True)
         
         self.node_name = self.get_name()
@@ -100,12 +100,12 @@ class FaceDetectionNode(Node):
         self.latest_frame: Optional[np.ndarray] = None
         self.latest_depth: Optional[np.ndarray] = None
 
-        # Object detection related attributes
-        self.latest_object_detections = None
-        self.latest_object_detections_timestamp = None
-        self.object_detections_lock = threading.Lock()
-        
-        # Face colors keyed by person tracking ID (from object detection)
+        # Person detection related attributes
+        self.latest_person_detections = None
+        self.latest_person_detections_timestamp = None
+        self.person_detections_lock = threading.Lock()
+
+        # Face colors keyed by person tracking ID (from person detection)
         self.face_colors: Dict[str, Tuple[int, int, int]] = {}
         
         # ByteTrack tracker for standalone mode face tracking
@@ -116,13 +116,13 @@ class FaceDetectionNode(Node):
             frame_rate=15
         )
         
-        # Only subscribe to object detection if required
+        # Only subscribe to person detection if required
         if self.require_person_detection:
-            self.object_detection_sub = self.create_subscription(ObjectDetection, '/objectDetection/data', self.object_detection_callback, 10)
-            
+            self.person_detection_sub = self.create_subscription(PersonDetection, '/personDetection/data', self.person_detection_callback, 10)
+
             if self.verbose_mode:
-                self.get_logger().info(f"{self.node_name}: Person detection ENABLED - subscribed to /objectDetection/data")
-                self.get_logger().info(f"{self.node_name}: Using object detection tracking IDs for face identification")
+                self.get_logger().info(f"{self.node_name}: Person detection ENABLED - subscribed to /personDetection/data")
+                self.get_logger().info(f"{self.node_name}: Using person detection tracking IDs for face identification")
         else:
             if self.verbose_mode:
                 self.get_logger().info(f"{self.node_name}: Person detection DISABLED - running standalone face detection")
@@ -201,11 +201,11 @@ class FaceDetectionNode(Node):
 
         return None
 
-    def wait_for_topics(self, color_topic: str, depth_topic: str, object_detection_topic: Optional[str] = None, timeout: float = 30.0) -> bool:
+    def wait_for_topics(self, color_topic: str, depth_topic: str, person_detection_topic: Optional[str] = None, timeout: float = 30.0) -> bool:
         """Wait for topics to have active publishers."""
         topics_to_wait = [color_topic, depth_topic]
-        if object_detection_topic and self.require_person_detection:
-            topics_to_wait.append(object_detection_topic)
+        if person_detection_topic and self.require_person_detection:
+            topics_to_wait.append(person_detection_topic)
             
         self.get_logger().info(f"Waiting for topics: {topics_to_wait}")
         
@@ -264,19 +264,19 @@ class FaceDetectionNode(Node):
                 color_msg_type = Image
                 depth_msg_type = Image
 
-            # Wait for topics (conditionally wait for object detection)
-            object_detection_topic = "/objectDetection/data" if self.require_person_detection else None
-            if not self.wait_for_topics(color_topic, depth_topic, object_detection_topic):
+            # Wait for topics (conditionally wait for person detection)
+            person_detection_topic = "/personDetection/data" if self.require_person_detection else None
+            if not self.wait_for_topics(color_topic, depth_topic, person_detection_topic):
                 return False
 
             # Create subscribers
             self.color_sub = Subscriber(self, color_msg_type, color_topic, qos_profile=qos_profile_sensor_data)
             self.depth_sub = Subscriber(self, depth_msg_type, depth_topic, qos_profile=qos_profile_sensor_data)
-            
+
             self.get_logger().info(f"Subscribed to {color_topic}")
             self.get_logger().info(f"Subscribed to {depth_topic}")
             if self.require_person_detection:
-                self.get_logger().info(f"Subscribed to {object_detection_topic}")
+                self.get_logger().info(f"Subscribed to {person_detection_topic}")
 
             # Set up synchronizer
             slop = 5.0 if self.camera_type == "pepper" else 0.1
@@ -446,17 +446,17 @@ class FaceDetectionNode(Node):
 
         self.pub_gaze.publish(face_msg)
 
-    def object_detection_callback(self, msg: ObjectDetection):
-        """Callback for object detection messages. Thread-safe storage with timestamp."""
-        with self.object_detections_lock:
-            self.latest_object_detections = {
-                'object_label_id': list(msg.object_label_id),
+    def person_detection_callback(self, msg: PersonDetection):
+        """Callback for person detection messages. Thread-safe storage with timestamp."""
+        with self.person_detections_lock:
+            self.latest_person_detections = {
+                'person_label_id': list(msg.person_label_id),
                 'class_names': list(msg.class_names),
                 'centroids': [Point(x=c.x, y=c.y, z=c.z) for c in msg.centroids],
                 'width': list(msg.width),
                 'height': list(msg.height)
             }
-            self.latest_object_detections_timestamp = self.get_clock().now()
+            self.latest_person_detections_timestamp = self.get_clock().now()
 
     def cleanup(self):
         """Clean up resources."""
@@ -902,67 +902,66 @@ class SixDrepNet(FaceDetectionNode):
         return debug_image
 
     def process_frame_with_person_detection(self, cv_image):
-        """Process frame with person-constrained face detection using object detection tracking IDs."""
+        """Process frame with person-constrained face detection using person detection tracking IDs."""
         debug_image = cv_image.copy()
         img_h, img_w = debug_image.shape[:2]
         tracking_data = []
 
-        # Thread-safe retrieval of object detections with timestamp validation
-        with self.object_detections_lock:
-            if self.latest_object_detections is None or self.latest_object_detections_timestamp is None:
+        # Thread-safe retrieval of person detections with timestamp validation
+        with self.person_detections_lock:
+            if self.latest_person_detections is None or self.latest_person_detections_timestamp is None:
                 if self.verbose_mode:
-                    self.get_logger().warn("No object detection data available")
+                    self.get_logger().warn("No person detection data available")
                 self.publish_face_detection([])
                 return debug_image
-            
-            # Check if object detection data is too old
+
+            # Check if person detection data is too old
             current_time = self.get_clock().now()
-            detection_age = (current_time - self.latest_object_detections_timestamp).nanoseconds / 1e9
-            
-            if detection_age > self.object_detection_timeout:
+            detection_age = (current_time - self.latest_person_detections_timestamp).nanoseconds / 1e9
+
+            if detection_age > self.person_detection_timeout:
                 if self.verbose_mode:
                     self.get_logger().warn(
-                        f"Object detection data is stale ({detection_age:.2f}s old, "
-                        f"timeout={self.object_detection_timeout}s)"
+                        f"Person detection data is stale ({detection_age:.2f}s old, "
+                        f"timeout={self.person_detection_timeout}s)"
                     )
                 self.publish_face_detection([])
                 return debug_image
-            
+
             # Make efficient copy of only needed data
-            object_detections = {
-                'object_label_id': list(self.latest_object_detections['object_label_id']),
-                'class_names': list(self.latest_object_detections['class_names']),
-                'centroids': [Point(x=c.x, y=c.y, z=c.z) for c in self.latest_object_detections['centroids']],
-                'width': list(self.latest_object_detections['width']),
-                'height': list(self.latest_object_detections['height'])
+            person_detections = {
+                'person_label_id': list(self.latest_person_detections['person_label_id']),
+                'class_names': list(self.latest_person_detections['class_names']),
+                'centroids': [Point(x=c.x, y=c.y, z=c.z) for c in self.latest_person_detections['centroids']],
+                'width': list(self.latest_person_detections['width']),
+                'height': list(self.latest_person_detections['height'])
             }
 
-        # Validate array consistency including object_label_id
-        n_detections = len(object_detections['object_label_id'])
-        
+        # Validate array consistency including person_label_id
+        n_detections = len(person_detections['person_label_id'])
+
         if self.verbose_mode and n_detections > 0:
-            person_count = sum(1 for cn in object_detections['class_names'] if cn == 'person')
             self.get_logger().info(
-                f"Object detection: {n_detections} total objects, {person_count} persons "
+                f"Person detection: {n_detections} persons "
                 f"(age: {detection_age:.2f}s)"
             )
-        
+
         if n_detections == 0:
             if self.verbose_mode:
-                self.get_logger().debug("No objects in object detection message")
+                self.get_logger().debug("No persons in person detection message")
             self.publish_face_detection([])
             # Clear face colors when no persons detected
             self.face_colors.clear()
             return debug_image
-            
+
         # Validate all arrays have same length
         if not all(len(arr) == n_detections for arr in [
-            object_detections['class_names'],
-            object_detections['centroids'],
-            object_detections['width'],
-            object_detections['height']
+            person_detections['class_names'],
+            person_detections['centroids'],
+            person_detections['width'],
+            person_detections['height']
         ]):
-            self.get_logger().error("Inconsistent object detection array lengths")
+            self.get_logger().error("Inconsistent person detection array lengths")
             self.publish_face_detection([])
             return debug_image
 
@@ -970,10 +969,10 @@ class SixDrepNet(FaceDetectionNode):
         persons = []
         active_person_ids = set()
         for i in range(n_detections):
-            if object_detections['class_names'][i] == 'person':
-                centroid = object_detections['centroids'][i]
-                width = object_detections['width'][i]
-                height = object_detections['height'][i]
+            if person_detections['class_names'][i] == 'person':
+                centroid = person_detections['centroids'][i]
+                width = person_detections['width'][i]
+                height = person_detections['height'][i]
                 
                 x1 = max(0, int(centroid.x - width / 2))
                 y1 = max(0, int(centroid.y - height / 2))
@@ -995,8 +994,8 @@ class SixDrepNet(FaceDetectionNode):
                         self.get_logger().warn(f"Skipping out-of-frame person box")
                     continue
                 
-                # Use object detection tracking ID directly
-                person_tracking_id = object_detections['object_label_id'][i]
+                # Use person detection tracking ID directly
+                person_tracking_id = person_detections['person_label_id'][i]
                 active_person_ids.add(str(person_tracking_id))
                 
                 if self.verbose_mode:
@@ -1006,7 +1005,7 @@ class SixDrepNet(FaceDetectionNode):
                     )
                 
                 persons.append({
-                    'tracking_id': person_tracking_id,  # This is the key from object detection
+                    'tracking_id': person_tracking_id,  # This is the key from person detection
                     'box': (x1, y1, x2, y2),
                     'depth': centroid.z,
                     'assigned_faces': []  # List to support multiple faces per person
@@ -1090,7 +1089,7 @@ class SixDrepNet(FaceDetectionNode):
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
             return debug_image
 
-        # Process matched pairs - using object detection tracking IDs
+        # Process matched pairs - using person detection tracking IDs
         for face_idx, person_idx in matches:
             face = faces[face_idx]
             person = persons[person_idx]
@@ -1102,7 +1101,7 @@ class SixDrepNet(FaceDetectionNode):
             # Track assigned faces (for multiple faces per person)
             person['assigned_faces'].append(face_idx)
             
-            # Use person's tracking ID from object detection directly
+            # Use person's tracking ID from person detection directly
             # For multiple faces per person, add suffix
             if len(person['assigned_faces']) == 1:
                 face_id = str(person['tracking_id'])
@@ -1142,7 +1141,7 @@ class SixDrepNet(FaceDetectionNode):
             mutual_gaze = abs(yaw_deg) < self.sixdrep_angle and abs(pitch_deg) < self.sixdrep_angle
 
             tracking_data.append({
-                'face_id': face_id,  # This is now based on object detection tracking ID
+                'face_id': face_id,  # This is now based on person detection tracking ID
                 'centroid': Point(x=float(face_cx), y=float(face_cy), z=float(cz)),
                 'width': float(face_width),
                 'height': float(face_height),
