@@ -32,7 +32,7 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 - **`overt_attention`** - Controls robot's attention mechanism based on visitor presence
 
 ### **Navigation & Localization**
-- **`pepper_navigation`** - For navigation, RTAB-Map for SLAM and Nav2 for Navigation.
+- **`pepper_navmap`** - For navigation, RTAB-Map for SLAM and Nav2 for Navigation.
 
 ### **Infrastructure & Utilities**
 - **`dec_bringup`** - System launch files and startup configurations
