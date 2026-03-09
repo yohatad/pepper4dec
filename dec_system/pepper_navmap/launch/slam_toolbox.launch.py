@@ -13,7 +13,7 @@ def generate_launch_description():
     declare_slam_params_file_cmd = DeclareLaunchArgument(
         'slam_params_file',
         default_value=os.path.join(
-            get_package_share_directory('custom_launch'),
+            get_package_share_directory('dec_launch'),
             'config',
             'mapper_params_online_async.yaml'
         ),

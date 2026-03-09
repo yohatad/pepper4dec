@@ -26,75 +26,59 @@ saliency_node:
     
     # Multi-peak parameters
     num_peaks: 5
-    peak_min_distance_px: 100
+    peak_min_distance_px: 50
     
     # Processing rate
     process_hz: 1.0
 
 # ===========================================
-# Laptop unified attention node params
+# Unified attention node params
 # ===========================================
 unified_attention_node:
   ros__parameters:
-    # Depth image configuration
-    depth_scale: 0.001  # Scale to convert depth values to meters (0.001 for mm, 1.0 for meters)
-    
-    # Face scoring
-    bias_face: 2.0
-    mutual_gaze_bonus: 0.6
+    # System
+    start_enabled: true
+    move_to_default_on_disable: true
+    default_yaw: 0.0
+    default_pitch: -0.2
+    default_move_speed: 0.1
+
+    # Joint limits for face tracking
+    face_yaw_lim: 1.8
+    face_pitch_up: 0.4
+    face_pitch_dn: -0.7
+
+    # Joint limits for saliency
+    saliency_yaw_lim: 1.2
+    saliency_pitch_up: 0.3
+    saliency_pitch_dn: -0.3
+
+    # Face parameters
+    face_timeout: 2.0
+    engaged_priority_bonus: 2.0
+    face_switch_cooldown: 1.0
+    same_face_threshold_deg: 8.0
+    prefer_closer_faces: true
+    max_face_distance: 5.0
+
+    # Stability parameters (anti-jitter)
+    min_angular_change_deg: 2.0   # Dead-zone: skip cmd if head already close
+    target_smoothing_alpha: 0.4   # EMA weight for new target (0=frozen, 1=raw)
+
+    # Saliency parameters
     saliency_min_score: 0.30
-    
-    # Depth filtering
-    depth_lo: 0.6             # Preferred depth range lower (meters)
-    depth_hi: 1.8             # Preferred depth range upper (meters)
-    depth_min: 0.35           # Minimum valid depth (meters)
-    depth_max: 4.0            # Maximum valid depth (meters)
-    depth_roi_px: 5           # ROI size for median filtering
-    track_timeout_s: 5.0      # Remove tracks not seen for this long
-    
-    # Target selection hysteresis
-    hysteresis_delta: 1.2
-    hysteresis_hold_ms: 1200
-    dwell_cap_s: 8.0
-    
+    saliency_min_cooldown: 1.5
+    saliency_max_dwell: 3.0
+    switch_score_ratio: 1.4
+    same_target_threshold_deg: 5.0
+
     # Inhibition of Return (IOR)
-    ior_px_radius: 60.0
-    ior_penalty: 2.0
-    
-    # Scene change detection
-    head_move_reset_threshold: 0.5  # radians (~30 degrees)
-    
-    # Audio
-    audio_hold_s: 2.0
-    
-    # Motion gating
-    head_velocity_threshold: 0.08
-    head_settle_time: 5.0
-    deadband_yaw: 0.06
-    deadband_pitch: 0.06
-    
-    # Saliency dwell
-    saliency_dwell_time: 2.5
-    
-    # Output configuration
-    command_mode: "joint_state"  # or "trajectory"
-    joint_names: ["HeadYaw", "HeadPitch"]
-    
-    # Idle behavior
-    home_yaw: 0.0
-    home_pitch: -0.05
-    idle_scan_period_min: 3.0
-    idle_scan_period_max: 6.0
-    idle_scan_yaw_deg: 20.0
-    idle_scan_pitch_deg: 8.0
-    micro_saccade_deg: 0.4
-    micro_saccade_period_min: 3.0
-    micro_saccade_period_max: 5.0
-    
-    # Joint limits
-    yaw_lim: 1.8
-    pitch_up: 0.4
-    pitch_dn: -0.7
+    enable_ior: true
+    ior_max_suppression: 0.9
+    ior_half_life: 3.0
+    ior_radius_deg: 15.0
+    ior_cleanup_threshold: 0.05
+    ior_max_locations: 20
 
 # ===========================================
 # Visualization node params

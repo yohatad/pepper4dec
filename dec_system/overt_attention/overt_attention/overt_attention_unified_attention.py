@@ -7,8 +7,8 @@ Priority 1: Engaged Faces | Priority 2: Detected Faces | Priority 3: Saliency (w
 import math
 import time
 import yaml
-from pathlib import Path
 import rclpy
+from pathlib import Path
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
@@ -64,10 +64,15 @@ class OvertAttention(Node):
         self.declare_parameter("default_pitch", -0.2)  # Default head pitch position (radians)
         self.declare_parameter("default_move_speed", 0.1)  # Speed for moving to default position
         
-        # Joint limits
-        self.declare_parameter("yaw_lim", 1.8)
-        self.declare_parameter("pitch_up", 0.4)
-        self.declare_parameter("pitch_dn", -0.7)
+        # Joint limits for face tracking
+        self.declare_parameter("face_yaw_lim", 1.8)
+        self.declare_parameter("face_pitch_up", 0.4)
+        self.declare_parameter("face_pitch_dn", -0.7)
+
+        # Joint limits for saliency
+        self.declare_parameter("saliency_yaw_lim", 1.8)
+        self.declare_parameter("saliency_pitch_up", 0.4)
+        self.declare_parameter("saliency_pitch_dn", -0.7)
         
         # Face parameters
         self.declare_parameter("face_timeout", 2.0)
@@ -77,6 +82,10 @@ class OvertAttention(Node):
         self.declare_parameter("prefer_closer_faces", True)
         self.declare_parameter("max_face_distance", 5.0)
         
+        # Stability parameters (anti-jitter)
+        self.declare_parameter("min_angular_change_deg", 2.0)   # Dead-zone: skip cmd if head already close
+        self.declare_parameter("target_smoothing_alpha", 0.4)   # EMA weight for new target (0=frozen, 1=raw)
+
         # Saliency parameters
         self.declare_parameter("saliency_min_score", 0.30)
         self.declare_parameter("saliency_min_cooldown", 1.5)
@@ -105,9 +114,13 @@ class OvertAttention(Node):
         self.default_pitch = self.get_parameter("default_pitch").value
         self.default_move_speed = self.get_parameter("default_move_speed").value
         
-        self.yaw_lim = self.get_parameter("yaw_lim").value
-        self.pitch_up = self.get_parameter("pitch_up").value
-        self.pitch_dn = self.get_parameter("pitch_dn").value
+        self.face_yaw_lim = self.get_parameter("face_yaw_lim").value
+        self.face_pitch_up = self.get_parameter("face_pitch_up").value
+        self.face_pitch_dn = self.get_parameter("face_pitch_dn").value
+
+        self.saliency_yaw_lim = self.get_parameter("saliency_yaw_lim").value
+        self.saliency_pitch_up = self.get_parameter("saliency_pitch_up").value
+        self.saliency_pitch_dn = self.get_parameter("saliency_pitch_dn").value
         
         self.face_timeout = self.get_parameter("face_timeout").value
         self.engaged_bonus = self.get_parameter("engaged_priority_bonus").value
@@ -116,6 +129,9 @@ class OvertAttention(Node):
         self.prefer_closer = self.get_parameter("prefer_closer_faces").value
         self.max_face_distance = self.get_parameter("max_face_distance").value
         
+        self.min_angular_change = math.radians(self.get_parameter("min_angular_change_deg").value)
+        self.target_smoothing_alpha = self.get_parameter("target_smoothing_alpha").value
+
         self.saliency_min = self.get_parameter("saliency_min_score").value
         self.min_cooldown = self.get_parameter("saliency_min_cooldown").value
         self.max_dwell = self.get_parameter("saliency_max_dwell").value
@@ -138,6 +154,10 @@ class OvertAttention(Node):
         # Head state
         self._head_yaw = self._head_pitch = None
         
+        # Smoothed target state
+        self._target_yaw = None
+        self._target_pitch = None
+
         # Face state
         self.last_face_time = 0.0
         self.last_face_switch_time = 0.0
@@ -367,9 +387,12 @@ class OvertAttention(Node):
         
         # Update state
         is_new_face = (best_face['face_id'] != self.current_face_id)
-        
+
         if is_new_face:
             self.last_face_switch_time = current_time
+            # Reset smoothed target so we jump immediately to the new face
+            self._target_yaw = None
+            self._target_pitch = None
             self.get_logger().info(
                 f"Switching to face: {best_face['face_id']} "
                 f"(engaged={best_face['mutual_gaze']}, "
@@ -383,8 +406,8 @@ class OvertAttention(Node):
         self.last_face_time = current_time
         
         # Clamp and publish
-        yaw = clamp(best_face['world_yaw'], -self.yaw_lim, self.yaw_lim)
-        pitch = clamp(best_face['world_pitch'], self.pitch_dn, self.pitch_up)
+        yaw = clamp(best_face['world_yaw'], -self.face_yaw_lim, self.face_yaw_lim)
+        pitch = clamp(best_face['world_pitch'], self.face_pitch_dn, self.face_pitch_up)
         
         source = f"face[{best_face['face_id']}]"
         if best_face['mutual_gaze']:
@@ -446,6 +469,24 @@ class OvertAttention(Node):
             self.get_logger().info(f"No recent faces, switching to saliency (was tracking: {self.current_face_id})")
             self.current_face_id = None
             self.current_face_location = None
+
+            # Reset smoothed target so the face position doesn't bias saliency EMA
+            self._target_yaw = None
+            self._target_pitch = None
+
+            # If head is outside saliency limits (e.g. from face tracking), pull it back in
+            head_yaw = self._head_yaw
+            head_pitch = self._head_pitch if self._head_pitch is not None else 0.0
+            clamped_yaw = clamp(head_yaw, -self.saliency_yaw_lim, self.saliency_yaw_lim)
+            clamped_pitch = clamp(head_pitch, self.saliency_pitch_dn, self.saliency_pitch_up)
+            if clamped_yaw != head_yaw or clamped_pitch != head_pitch:
+                self.get_logger().info(
+                    f"Head outside saliency limits "
+                    f"(yaw={math.degrees(head_yaw):.1f}°, pitch={math.degrees(head_pitch):.1f}°) "
+                    f"→ returning to "
+                    f"(yaw={math.degrees(clamped_yaw):.1f}°, pitch={math.degrees(clamped_pitch):.1f}°)"
+                )
+                self.publish_head(clamped_yaw, clamped_pitch, source='saliency_reenter', force=True)
         
         if len(msg.data) < 3:
             return
@@ -459,13 +500,19 @@ class OvertAttention(Node):
             
             if score < self.saliency_min:
                 continue
-            
+
             cam_yaw, cam_pitch = pixel_to_angles(u, v, self.fx, self.fy, self.cx, self.cy)
             world_yaw = cam_yaw + self._head_yaw
             world_pitch = cam_pitch + self._head_pitch
-            
+
+            # Skip candidates outside saliency joint limits so the head never
+            # gets commanded to (and stuck at) a boundary
+            if (world_yaw < -self.saliency_yaw_lim or world_yaw > self.saliency_yaw_lim or
+                    world_pitch < self.saliency_pitch_dn or world_pitch > self.saliency_pitch_up):
+                continue
+
             score = self.apply_ior_filter(world_yaw, world_pitch, score)
-            
+
             if score >= self.saliency_min:
                 candidates.append((world_yaw, world_pitch, score))
         
@@ -512,12 +559,38 @@ class OvertAttention(Node):
             self.visited_locations.append((best_yaw, best_pitch, time.time()))
         
         # Clamp and publish
-        yaw = clamp(best_yaw, -self.yaw_lim, self.yaw_lim)
-        pitch = clamp(best_pitch, self.pitch_dn, self.pitch_up)
+        yaw = clamp(best_yaw, -self.saliency_yaw_lim, self.saliency_yaw_lim)
+        pitch = clamp(best_pitch, self.saliency_pitch_dn, self.saliency_pitch_up)
         self.publish_head(yaw, pitch, score=best_score, source=f'saliency({reason})')
 
-    def publish_head(self, yaw, pitch, score=0.0, source='unknown'):
-        """Send absolute head command and publish camera-relative target for visualization."""
+    def publish_head(self, yaw, pitch, score=0.0, source='unknown', force=False):
+        """Send absolute head command and publish camera-relative target for visualization.
+
+        force=True bypasses EMA smoothing and dead-zone (used for immediate corrective moves).
+        """
+        if force:
+            # Immediate move: reset smoothed target to destination and skip dead-zone
+            self._target_yaw = yaw
+            self._target_pitch = pitch
+        else:
+            # Apply exponential moving average smoothing to reduce noise
+            if self._target_yaw is None:
+                self._target_yaw = yaw
+                self._target_pitch = pitch
+            else:
+                alpha = self.target_smoothing_alpha
+                self._target_yaw = alpha * yaw + (1.0 - alpha) * self._target_yaw
+                self._target_pitch = alpha * pitch + (1.0 - alpha) * self._target_pitch
+
+            yaw = self._target_yaw
+            pitch = self._target_pitch
+
+            # Dead-zone: skip command if head is already close enough to the smoothed target
+            if self._head_yaw is not None and self._head_pitch is not None:
+                if (abs(yaw - self._head_yaw) < self.min_angular_change and
+                        abs(pitch - self._head_pitch) < self.min_angular_change):
+                    return
+
         msg = JointAnglesWithSpeed()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.joint_names = ['HeadYaw', 'HeadPitch']

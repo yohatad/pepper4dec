@@ -37,7 +37,7 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 ### **Infrastructure & Utilities**
 - **`dec_bringup`** - System launch files and startup configurations
 - **`dec_interfaces`** - Custom ROS2 message and service definitions
-- **`custom_launch`** - Custom launch configurations
+- **`dec_launch`** - Custom launch configurations
 
 ## 🖥️ Hardware Diagram
 
