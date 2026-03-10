@@ -25,6 +25,7 @@ from dec_interfaces.action import SpeechRecognition
 from ament_index_python.packages import get_package_share_directory
 from rclpy.node import Node
 from std_msgs.msg import Float32, String
+from std_srvs.srv import SetBool
 from naoqi_bridge_msgs.msg import AudioBuffer
 from faster_whisper import WhisperModel
 from scipy.signal import resample_poly
@@ -308,6 +309,11 @@ class SpeechRecognitionNode(Node):
         if self.action_server_enabled:
             self.initialize_action_server()
 
+        # Pause/resume gate — mute mic during TTS (works in both modes).
+        # Plain bool is safe without a lock: CPython GIL makes bool reads atomic.
+        self.listening_enabled = True
+        self.create_service(SetBool, '/speech_event/set_enabled', self._set_enabled_callback)
+
         # Publishers
         self.vad_prob_pub = self.create_publisher(Float32, "/speech_event/vad_speech_prob", 10)
         self.asr_pub = self.create_publisher(String, "/speech_event/text", 10)
@@ -324,6 +330,28 @@ class SpeechRecognitionNode(Node):
                               f"min_speech={self.min_speech_duration}s, max_speech={self.max_speech_duration_s}s")
         self.get_logger().info(f"Pre-speech buffer: {self.pre_speech_buffer_ms}ms ({self.pre_speech_samples} samples)")
         self.get_logger().info(f"Action server: {'enabled' if self.action_server_enabled else 'disabled'}")
+
+    def _set_enabled_callback(self, request, response):
+        """Enable or disable audio processing (e.g. mute mic during TTS)."""
+        if self.listening_enabled == request.data:
+            state = "enabled" if request.data else "disabled"
+            response.success = True
+            response.message = f"Listening already {state}"
+            return response
+
+        self.listening_enabled = request.data
+
+        if not request.data and self.speech_active:
+            # Disabling mid-speech: abandon the partial buffer to avoid stale state.
+            self.speech_active = False
+            self.reset_speech_state()
+            self.get_logger().info("Speech buffer cleared due to listening disable")
+
+        state = "enabled" if request.data else "disabled"
+        self.get_logger().info(f"Speech listening {state}")
+        response.success = True
+        response.message = f"Listening {state}"
+        return response
 
     def warmup_whisper(self):
         """Run a dummy transcription to warm up CUDA kernels."""
@@ -526,6 +554,15 @@ class SpeechRecognitionNode(Node):
     # =========================================================================
     # Audio Callback
     # =========================================================================
+    def _should_process_audio(self) -> bool:
+        """Return True if audio should be processed right now."""
+        if not self.listening_enabled:
+            return False
+        if self.action_server_enabled:
+            with self.action_server_lock:
+                return self.action_started
+        return True
+
     def audio_callback(self, msg: AudioBuffer):
         """
         Process incoming audio:
@@ -535,12 +572,8 @@ class SpeechRecognitionNode(Node):
         4. Intensity gate (bypassed during active speech collection)
         5. VAD + speech collection
         """
-        # Action server guard: skip processing when no goal is active
-        if self.action_server_enabled:
-            with self.action_server_lock:
-                active = self.action_started
-            if not active:
-                return
+        if not self._should_process_audio():
+            return
 
         # Parse single-channel audio (keep at 48kHz)
         audio_48k, freq_in = self.parse_audio_buffer(msg)

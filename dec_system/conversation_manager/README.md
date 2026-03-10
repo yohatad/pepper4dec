@@ -16,7 +16,7 @@ The **Conversation Manager Package** implements a **Retrieval-Augmented Generati
 - **Real-time Query Processing**: Processes natural language questions and returns knowledgeable responses
 - **Conversation Memory**: Maintains context from previous interactions (last 5 turns)
 - **Multi-format Data Support**: Handles structured JSON knowledge bases and flat document lists
-- **ROS2 Service Interface**: Clean service-based architecture for integration with other ROS2 nodes
+- **ROS2 Action Interface**: Action-based architecture for integration with other ROS2 nodes, with feedback during processing
 
 # 📄 Documentation
 The main documentation for this deliverable is found in the relevant DEC4Africa deliverables that provide more details.
@@ -50,7 +50,7 @@ pip install -r ~/ros2_ws/src/dec_system/conversation_manager/requirements.txt
 ```
 
 # 🔧 Configuration Parameters
-The configuration is managed via `config/rag_system_configuration.yaml`. The configuration file must be present for the node to start.
+The configuration is managed via `config/converation_manager_configuration.yaml`. The configuration file must be present for the node to start.
 
 | Parameter                   | Description                                                      | Range/Values            | Default Value |
 |-----------------------------|------------------------------------------------------------------|-------------------------|---------------|
@@ -68,7 +68,7 @@ The configuration is managed via `config/rag_system_configuration.yaml`. The con
 > - ChromaDB storage is automatically configured in the package data folder
 > - The configuration file is required for node startup
 
-## Example Configuration File (`config/rag_system_configuration.yaml`)
+## Example Configuration File (`config/converation_manager_configuration.yaml`)
 ```yaml
 # LLM Settings
 llm:
@@ -115,23 +115,25 @@ ros2 run conversation_manager conversation_manager --ros-args -p collection_name
 ```
 
 # 🖥️ Output
-The node provides ROS2 services for knowledge base management and querying.
+The node provides a ROS2 action for querying the knowledge base.
 
-## Service Structure
+## Action Interface
 
-The conversation manager provides a single service for querying the knowledge base:
+### `/prompt` Action (`dec_interfaces/action/ConversationManager`)
+Query the knowledge base with a question. Publishes feedback during processing and returns the final answer.
 
-### `/prompt` Service (`dec_interfaces/srv/ConversationManagerPrompt`)
-Query the knowledge base with a question.
-
-**Request Fields:**
+**Goal Fields:**
 - `prompt` (string): The question to ask
 
-**Response Fields:**
-- `response` (string): The generated answer
+**Feedback Fields:**
+- `status` (string): Current processing stage — `searching` or `generating`
+
+**Result Fields:**
+- `response` (string): The generated answer (plain text, extracted from LLM JSON output)
+- `success` (bool): Whether the query was processed successfully
 
 ## Knowledge Base Initialization
-The knowledge base is automatically initialized at node startup using the configuration file (`config/rag_system_configuration.yaml`). The `data.default_path` parameter in the configuration specifies the JSON data file to load. The collection name is configured via the `collection_name` ROS parameter (default: `'upanzi_knowledge'`).
+The knowledge base is automatically initialized at node startup using the configuration file (`config/converation_manager_configuration.yaml`). The `data.default_path` parameter in the configuration specifies the JSON data file to load. The collection name is configured via the `collection_name` ROS parameter (default: `'upanzi_knowledge'`).
 
 If the collection doesn't exist, it will be created and populated automatically from the specified data file. If it already exists, the existing collection will be reused.
 
@@ -139,22 +141,22 @@ If the collection doesn't exist, it will be created and populated automatically 
 
 1. **Query the Knowledge Base**
 ```bash
-ros2 service call /prompt dec_interfaces/srv/ConversationManagerPrompt \
+ros2 action send_goal /prompt dec_interfaces/action/ConversationManager \
   "{prompt: 'What is the Upanzi Network?'}"
 ```
 
 2. **More Example Queries**
 ```bash
 # Ask about specific projects
-ros2 service call /prompt dec_interfaces/srv/ConversationManagerPrompt \
+ros2 action send_goal /prompt dec_interfaces/action/ConversationManager \
   "{prompt: 'What projects are focused on cybersecurity?'}"
 
 # Ask about facilities
-ros2 service call /prompt dec_interfaces/srv/ConversationManagerPrompt \
+ros2 action send_goal /prompt dec_interfaces/action/ConversationManager \
   "{prompt: 'Tell me about the Digital Experience Center.'}"
 
 # Ask about research areas
-ros2 service call /prompt dec_interfaces/srv/ConversationManagerPrompt \
+ros2 action send_goal /prompt dec_interfaces/action/ConversationManager \
   "{prompt: 'What are the main thrust areas of research?'}"
 ```
 
@@ -165,11 +167,11 @@ To verify the node is working correctly:
 # Check node status
 ros2 node list
 
-# Check available services
-ros2 service list
+# Check available actions
+ros2 action list
 
-# Test the service with a simple query
-ros2 service call /prompt dec_interfaces/srv/ConversationManagerPrompt "{prompt: 'Hello, are you working?'}"
+# Test with a simple query
+ros2 action send_goal /prompt dec_interfaces/action/ConversationManager "{prompt: 'Hello, are you working?'}"
 ```
 
 # 🏗️ Architecture
@@ -178,17 +180,17 @@ The RAG system consists of three main components:
 1. **Knowledge Base**: Structured JSON data about Upanzi Network stored in `data/upanzi_data.json`
 2. **Vector Database**: ChromaDB with persistent local storage for document embeddings
 3. **RAG Node**:
-   - Receives queries via ROS2 services
+   - Receives queries via ROS2 actions
    - Performs semantic search on the vector database
    - Retrieves relevant context documents
    - Generates responses using LLM with retrieved context
    - Maintains conversation history for context-aware responses
 
 ## Data Flow
-1. User query → `/prompt` service
-2. Query embedding → ChromaDB similarity search
-3. Retrieved documents + query → LLM prompt
-4. LLM response → Service response
+1. User query → `/prompt` action goal
+2. Feedback: `searching` → ChromaDB similarity search
+3. Feedback: `generating` → Retrieved documents + query → LLM prompt
+4. LLM JSON response parsed → `answer` field returned as action result
 
 ## Knowledge Base Format
 The system uses a structured JSON format with the following sections:
