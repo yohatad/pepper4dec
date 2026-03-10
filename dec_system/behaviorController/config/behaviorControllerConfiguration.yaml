@@ -1,6 +1,6 @@
 # Behavior Controller Configuration
-scenario_specification: "lab_tour"
+scenario_specification: "asr_cm_tts_pipeline"
 culture_knowledge_base: "cultureKnowledgeBase.yaml"
 environment_knowledge_base: "labEnvironmentKnowledgeBase.yaml"
 language: "English"
-verbose_mode: false
+verbose_mode: true

@@ -50,20 +50,43 @@ bool initializeSystem(const rclcpp::Logger& logger) {
     return true;
 }
 
+namespace behavior_controller {
+    BT::Tree initializeTree(const std::string& scenario,
+                            std::shared_ptr<rclcpp::Node> node_handle);
+}
+
 int main(int argc, char* argv[]) {
     rclcpp::init(argc, argv);
     auto node = rclcpp::Node::make_shared("behavior_controller");
     auto logger = node->get_logger();
 
     displayStartupInfo(logger);
-    
+
     if (!initializeSystem(logger)) {
         RCLCPP_ERROR(logger, "System initialization failed. Shutting down.");
         rclcpp::shutdown();
         return 1;
     }
 
-    rclcpp::spin(node);
+    // Initialize and start the behavior tree
+    BT::Tree tree;
+    try {
+        std::string scenario = ConfigManager::instance().getScenarioSpecification();
+        tree = behavior_controller::initializeTree(scenario, node);
+    } catch (const std::exception& e) {
+        RCLCPP_ERROR(logger, "Failed to initialize behavior tree: %s", e.what());
+        rclcpp::shutdown();
+        return 1;
+    }
+
+    // Tick the tree at 50Hz using a wall timer
+    rclcpp::WallRate rate(50);
+    while (rclcpp::ok()) {
+        rclcpp::spin_some(node);
+        tree.tickOnce();
+        rate.sleep();
+    }
+
     rclcpp::shutdown();
     return 0;
 }

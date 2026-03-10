@@ -396,10 +396,10 @@ def get_collection(name: str) -> Optional[chromadb.Collection]:
         collection = client.get_collection(name=name, embedding_function=ef)
         logger.debug(f"Retrieved collection: {name}")
         return collection
-    except chromadb.errors.InvalidCollectionException:
-        logger.debug(f"Collection not found: {name}")
-        return None
     except Exception as e:
+        if "does not exist" in str(e).lower() or "not found" in str(e).lower():
+            logger.debug(f"Collection not found: {name}")
+            return None
         raise RAGError(f"Failed to get collection '{name}': {e}")
 
 def populate_collection(collection: chromadb.Collection, documents: List[Dict]) -> int:
@@ -652,15 +652,22 @@ def generate_response(
         )
         
         if response.choices:
-            answer = response.choices[0].message.content.strip()
-            
+            raw = response.choices[0].message.content.strip()
+
             # Clean thinking tags if present
-            if "</think>" in answer:
-                answer = answer.split("</think>")[-1].strip()
-            
+            if "</think>" in raw:
+                raw = raw.split("</think>")[-1].strip()
+
             if is_verbose():
-                logger.info(f"{Colors.BG_CYAN}{Colors.BLACK}{Colors.BOLD} LLM RESPONSE {Colors.RESET}\n{answer}")
-            
+                logger.info(f"{Colors.BG_CYAN}{Colors.BLACK}{Colors.BOLD} LLM RESPONSE {Colors.RESET}\n{raw}")
+
+            # Extract the spoken answer from the structured JSON response
+            try:
+                parsed = json.loads(raw)
+                answer = parsed.get("answer", raw)
+            except (json.JSONDecodeError, AttributeError):
+                answer = raw
+
             logger.debug(f"LLM response received: {answer[:100]}...")
             return answer
         
