@@ -388,6 +388,7 @@ BT::NodeStatus Navigate::onFailure(BT::ActionNodeErrorCode error)
 BT::PortsList SpeechRecognitionNode::providedPorts()
 {
     return {
+        BT::InputPort<std::string> ("action_name", "/speech_recognition_action", "Action server name"),
         BT::InputPort<float>       ("wait",          2.0f, "Seconds to wait for speech input"),
         BT::OutputPort<std::string>("transcription",       "Recognised speech text"),
         BT::OutputPort<std::string>("status",              "Feedback update from action server (waiting/speech/transcribing)"),
@@ -467,6 +468,7 @@ BT::NodeStatus SpeechRecognitionNode::onFailure(BT::ActionNodeErrorCode error)
 BT::PortsList ConversationManagerNode::providedPorts()
 {
     return {
+        BT::InputPort<std::string> ("action_name", "/prompt", "Action server name"),
         BT::InputPort<std::string> ("prompt",   "", "Natural-language prompt to send"),
         BT::OutputPort<std::string>("response",     "Reply from the conversation manager"),
         BT::OutputPort<std::string>("status",       "Feedback: searching | generating"),
@@ -546,6 +548,7 @@ BT::NodeStatus ConversationManagerNode::onFailure(BT::ActionNodeErrorCode error)
 BT::PortsList SpeechWithFeedbackNode::providedPorts()
 {
     return {
+        BT::InputPort<std::string> ("action_name", "/speech_with_feedback", "Action server name"),
         BT::InputPort<std::string> ("say",          "",    "Text to speak (supports \\mrk=N\\ bookmarks)"),
         BT::OutputPort<bool>       ("started",             "Feedback: true once speech begins"),
         BT::OutputPort<int>        ("bookmark",            "Feedback: current bookmark ID (-1 if none)"),
@@ -791,6 +794,141 @@ void CheckFaceDetected::onHalted()
     }
 }
 
+//=============================================================================
+// ListenForSpeech
+// Topic: /speech_event/text  (std_msgs::msg::String)
+//
+// Blocks (RUNNING) until a new transcription arrives AFTER this node started.
+// Stale messages published before onStart() are ignored via the newTextAvailable_
+// flag, which is cleared on each start.
+//
+// Output ports:
+//   string transcription  – the recognised speech text
+//=============================================================================
+
+ListenForSpeech::ListenForSpeech(const std::string& name,
+                                 const BT::NodeConfig& config,
+                                 std::shared_ptr<rclcpp::Node> node)
+    : BT::StatefulActionNode(name, config), node_(node)
+{
+    sub_ = node_->create_subscription<std_msgs::msg::String>(
+        "/speech_event/text", 10,
+        [this](const std_msgs::msg::String::SharedPtr msg) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            latestText_ = msg->data;
+            newTextAvailable_ = true;
+        });
+}
+
+BT::PortsList ListenForSpeech::providedPorts()
+{
+    return {
+        BT::OutputPort<std::string>("transcription", "Recognised speech text from /speech_event/text"),
+    };
+}
+
+BT::NodeStatus ListenForSpeech::onStart()
+{
+    // Clear the flag so we only accept messages that arrive after this tick.
+    std::lock_guard<std::mutex> lock(mutex_);
+    newTextAvailable_ = false;
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[ListenForSpeech] Started – waiting for speech on /speech_event/text");
+    }
+    return BT::NodeStatus::RUNNING;
+}
+
+BT::NodeStatus ListenForSpeech::onRunning()
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!newTextAvailable_) {
+        return BT::NodeStatus::RUNNING;
+    }
+
+    setOutput("transcription", latestText_);
+    newTextAvailable_ = false;
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[ListenForSpeech] Transcription received: \"%s\"", latestText_.c_str());
+    }
+    return BT::NodeStatus::SUCCESS;
+}
+
+void ListenForSpeech::onHalted()
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    newTextAvailable_ = false;
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[ListenForSpeech] Halted");
+    }
+}
+
+//=============================================================================
+// SetSpeechListening
+// Service: /speech_event/set_enabled  (std_srvs::srv::SetBool)
+//
+// Enables or disables the speech recognition mic.
+//   enabled = true  → mic active, transcription resumes
+//   enabled = false → mic muted, no transcription during TTS
+//=============================================================================
+
+BT::PortsList SetSpeechListening::providedPorts()
+{
+    return {
+        BT::InputPort<bool>        ("enabled", true, "true = listen, false = mute"),
+        BT::OutputPort<std::string>("message",       "Response message from the service"),
+    };
+}
+
+bool SetSpeechListening::setRequest(Request::SharedPtr& request)
+{
+    auto enabled = getInput<bool>("enabled");
+
+    if (!enabled) {
+        RCLCPP_ERROR(rclcpp::get_logger("behavior_controller"),
+                     "[SetSpeechListening] Missing required input port 'enabled'");
+        return false;
+    }
+
+    request->data = enabled.value();
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[SetSpeechListening] Request → enabled=%s",
+                    request->data ? "true" : "false");
+    }
+    return true;
+}
+
+BT::NodeStatus SetSpeechListening::onResponseReceived(const Response::SharedPtr& response)
+{
+    setOutput("message", response->message);
+
+    if (!response->success) {
+        RCLCPP_WARN(rclcpp::get_logger("behavior_controller"),
+                    "[SetSpeechListening] Service returned failure: %s", response->message.c_str());
+        return BT::NodeStatus::FAILURE;
+    }
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[SetSpeechListening] %s", response->message.c_str());
+    }
+    return BT::NodeStatus::SUCCESS;
+}
+
+BT::NodeStatus SetSpeechListening::onFailure(BT::ServiceNodeErrorCode error)
+{
+    RCLCPP_ERROR(rclcpp::get_logger("behavior_controller"),
+                 "[SetSpeechListening] Service error: %s", toStr(error));
+    return BT::NodeStatus::FAILURE;
+}
+
 namespace behavior_controller {
 
 BT::Tree initializeTree(const std::string& scenario,
@@ -819,21 +957,28 @@ BT::Tree initializeTree(const std::string& scenario,
     factory.registerNodeType<AnimateBehaviorNode>      ("AnimateBehavior",      params);
     factory.registerNodeType<StopAnimateBehavior>      ("StopAnimateBehavior",  params);
     factory.registerNodeType<SetOvertAttention>        ("SetOvertAttention",    params);
+    factory.registerNodeType<SetSpeechListening>       ("SetSpeechListening",   params);
     factory.registerNodeType<GestureNode>              ("Gesture",              params);
     factory.registerNodeType<Navigate>                 ("Navigate",             params);
     factory.registerNodeType<SpeechRecognitionNode>    ("SpeechRecognition",    params);
     factory.registerNodeType<ConversationManagerNode>  ("ConversationManager",  params);
     factory.registerNodeType<SpeechWithFeedbackNode>   ("SpeechWithFeedback",   params);
 
-    // CheckFaceDetected requires the node handle at construction; use registerBuilder
+    // CheckFaceDetected and ListenForSpeech require the node handle at construction
     factory.registerBuilder<CheckFaceDetected>(
         "CheckFaceDetected",
         [node_handle](const std::string& name, const BT::NodeConfig& config) {
             return std::make_unique<CheckFaceDetected>(name, config, node_handle);
         });
 
+    factory.registerBuilder<ListenForSpeech>(
+        "ListenForSpeech",
+        [node_handle](const std::string& name, const BT::NodeConfig& config) {
+            return std::make_unique<ListenForSpeech>(name, config, node_handle);
+        });
+
     if (ConfigManager::instance().isVerbose()) {
-        RCLCPP_INFO(logger, "[initializeTree] Registered nodes: AnimateBehavior, StopAnimateBehavior, SetOvertAttention, Gesture, Navigate, SpeechRecognition, ConversationManager, SpeechWithFeedback, CheckFaceDetected");
+        RCLCPP_INFO(logger, "[initializeTree] Registered nodes: AnimateBehavior, StopAnimateBehavior, SetOvertAttention, SetSpeechListening, Gesture, Navigate, SpeechRecognition, ConversationManager, SpeechWithFeedback, CheckFaceDetected, ListenForSpeech");
         RCLCPP_INFO(logger, "[initializeTree] Loading tree: %s", xmlPath.c_str());
     }
 

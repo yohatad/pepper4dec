@@ -1,0 +1,56 @@
+<?xml version="1.0"?>
+<!--
+  listen_cm_tts_pipeline.xml
+  Standalone ASR → Conversation Manager → TTS pipeline
+
+  Requires speech_event running with action_server: false
+  (ros2 run speech_event speech_event --ros-args -p action_server:=false)
+
+  Loop:
+    1. ListenForSpeech    – block until a transcription arrives on /speech_event/text
+    2. SetSpeechListening – mute mic so robot voice is not transcribed
+    3. ConversationManager – RAG + LLM generates a response
+    4. SpeechWithFeedback  – robot speaks the response
+    5. SetSpeechListening – re-enable mic and loop back
+-->
+<root BTCPP_format="4">
+
+  <BehaviorTree ID="listen_cm_tts_pipeline">
+
+    <!-- Run the dialogue loop forever -->
+    <Repeat num_cycles="-1">
+      <Sequence>
+
+        <!-- Step 1: Wait for user to say something -->
+        <ListenForSpeech
+          transcription="{user_speech}"/>
+
+        <!-- Step 2: Mute mic before robot speaks -->
+        <SetSpeechListening
+          enabled="false"
+          message="{set_listening_msg}"/>
+
+        <!-- Step 3: Generate a response -->
+        <ConversationManager
+          prompt="{user_speech}"
+          response="{llm_response}"
+          status="{cm_status}"/>
+
+        <!-- Step 4: Robot speaks the response -->
+        <SpeechWithFeedback
+          say="{llm_response}"
+          started="{tts_started}"
+          bookmark="{tts_bookmark}"
+          current_word="{tts_word}"/>
+
+        <!-- Step 5: Re-enable mic after robot finishes speaking -->
+        <SetSpeechListening
+          enabled="true"
+          message="{set_listening_msg}"/>
+
+      </Sequence>
+    </Repeat>
+
+  </BehaviorTree>
+
+</root>

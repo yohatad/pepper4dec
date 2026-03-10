@@ -347,6 +347,47 @@ public:
     BT::NodeStatus onFailure(BT::ServiceNodeErrorCode error) override;
 };
 
+// Subscribes to /speech_event/text (standalone mode) and blocks (RUNNING) until
+// a new transcription arrives after this node started, then returns SUCCESS.
+// Requires speech_event running with action_server: false.
+class ListenForSpeech : public BT::StatefulActionNode
+{
+public:
+    ListenForSpeech(const std::string& name,
+                    const BT::NodeConfig& config,
+                    std::shared_ptr<rclcpp::Node> node);
+
+    static BT::PortsList providedPorts();
+    BT::NodeStatus onStart() override;
+    BT::NodeStatus onRunning() override;
+    void onHalted() override;
+
+private:
+    std::shared_ptr<rclcpp::Node> node_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_;
+    std::string latestText_;
+    bool newTextAvailable_ = false;
+    std::mutex mutex_;
+};
+
+// Calls /speech_event/set_enabled (std_srvs::srv::SetBool) to mute or unmute
+// the speech recognition mic (e.g. disable during TTS, re-enable after).
+// Input port 'enabled' (bool): true = listen, false = mute.
+class SetSpeechListening
+    : public BT::RosServiceNode<std_srvs::srv::SetBool>
+{
+public:
+    SetSpeechListening(const std::string& name,
+                       const BT::NodeConfig& config,
+                       const BT::RosNodeParams& params)
+        : BT::RosServiceNode<std_srvs::srv::SetBool>(name, config, params) {}
+
+    static BT::PortsList providedPorts();
+    bool setRequest(Request::SharedPtr& request) override;
+    BT::NodeStatus onResponseReceived(const Response::SharedPtr& response) override;
+    BT::NodeStatus onFailure(BT::ServiceNodeErrorCode error) override;
+};
+
 // Subscribes to /faceDetection/data and blocks (RUNNING) until face(s) are present,
 // then returns SUCCESS. Never times out — runs indefinitely until condition is met.
 class CheckFaceDetected : public BT::StatefulActionNode

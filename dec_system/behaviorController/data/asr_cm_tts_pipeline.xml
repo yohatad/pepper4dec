@@ -23,14 +23,14 @@
         <!-- ── Step 1: Wait for engagement ───────────────────────────── -->
         <!-- Blocks (RUNNING) until a person makes eye contact.           -->
         <!-- Remove or set require_mutual_gaze="false" to always listen.  -->
-        <CheckFaceDetected
+        <!-- <CheckFaceDetected
           require_mutual_gaze="true"
           face_count="{face_count}"
           mutual_gaze="{mutual_gaze}"
           face_id="{face_id}"
           face_depth="{face_depth}"
           face_x="{face_x}"
-          face_y="{face_y}"/>
+          face_y="{face_y}"/> -->
 
         <!-- ── Step 2: Listen → Think → Speak ───────────────────────── -->
         <!-- Fallback handles the case where no speech is heard:          -->
