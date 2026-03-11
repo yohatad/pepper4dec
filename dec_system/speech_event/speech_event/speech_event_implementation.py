@@ -554,7 +554,7 @@ class SpeechRecognitionNode(Node):
     # =========================================================================
     # Audio Callback
     # =========================================================================
-    def _should_process_audio(self) -> bool:
+    def should_process_audio(self) -> bool:
         """Return True if audio should be processed right now."""
         if not self.listening_enabled:
             return False
@@ -572,7 +572,7 @@ class SpeechRecognitionNode(Node):
         4. Intensity gate (bypassed during active speech collection)
         5. VAD + speech collection
         """
-        if not self._should_process_audio():
+        if not self.should_process_audio():
             return
 
         # Parse single-channel audio (keep at 48kHz)
