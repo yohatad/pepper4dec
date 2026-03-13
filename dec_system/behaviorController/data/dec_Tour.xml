@@ -86,7 +86,7 @@
     <Sequence name="VisitExhibitSequence">
       <Action ID="RetrieveListOfExhibits" exhibit_list="{exhibit_queue}"/>
       <!-- Return to starting position before beginning the tour loop -->
-      <Action ID="Navigate" goal_x="4.0" goal_y="6.8" goal_theta="1.5708" frame_id="map"/>
+      <Action ID="Navigate" goal_x="4.0" goal_y="6.8" goal_theta="1.5708"/>
       
       <!-- Loop through exhibits using WhileDoElse for cleaner exit -->
       <WhileDoElse name="ExhibitLoop">
@@ -153,7 +153,7 @@
               gesture_type="goodbye"
               gesture_duration="2000"/>
       <!-- Return to standby position -->
-      <Action ID="Navigate" goal_x="4.0" goal_y="6.8" goal_theta="1.5708" frame_id="map"/>
+      <Action ID="Navigate" goal_x="4.0" goal_y="6.8" goal_theta="1.5708" />
     </Sequence>
   </BehaviorTree>
 
@@ -169,7 +169,7 @@
                 goal_x="{exhibit_goal_x}"
                 goal_y="{exhibit_goal_y}"
                 goal_theta="{exhibit_goal_theta}"
-                frame_id="map"/>
+                />
       </RetryUntilSuccessful>
 
       <!-- Re-enable attention and animations -->
@@ -274,7 +274,8 @@
     </Action>
 
     <Action ID="IsMutualGazeDiscovered">
-      <input_port name="timeout" default="10.0">Mutual gaze timeout in seconds</input_port>
+      <input_port name="timeout"      default="10.0">Overall timeout in seconds</input_port>
+      <input_port name="min_duration" default="0.5">Seconds of continuous gaze required to succeed</input_port>
     </Action>
 
     <Action ID="IsVisitorResponseYes">
