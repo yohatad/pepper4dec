@@ -119,11 +119,8 @@ bool KnowledgeManager::loadFromPackage(const std::string& packagePath) {
             info.gestureTarget.y = location["gesture_target"]["y"].as<double>();
             info.gestureTarget.z = location["gesture_target"]["z"].as<double>();
 
-            // Messages by language (all four required, guaranteed by validator)
-            info.preMessages["English"]      = location["pre_gesture_message_english"].as<std::string>();
-            info.preMessages["Kinyarwanda"]  = location["pre_gesture_message_kinyarwanda"].as<std::string>();
-            info.postMessages["English"]     = location["post_gesture_message_english"].as<std::string>();
-            info.postMessages["Kinyarwanda"] = location["post_gesture_message_kinyarwanda"].as<std::string>();
+            // Gesture message (English)
+            info.gestureMessage = location["gesture_message_english"].as<std::string>();
 
             locations[locationId] = info;
         }
@@ -662,33 +659,20 @@ bool validateEnvironmentKnowledgeBase(const std::string& filePath) {
             }
         }
 
-        // Message fields: all four must be non-empty strings
-        static const char* msgFields[] = {
-            "pre_gesture_message_english",
-            "pre_gesture_message_kinyarwanda",
-            "post_gesture_message_english",
-            "post_gesture_message_kinyarwanda"
-        };
-        for (const char* field : msgFields) {
-            if (!loc[field] || !loc[field].IsScalar()) {
+        // gesture_message_english: must be present (empty string is allowed)
+        if (!loc["gesture_message_english"] || !loc["gesture_message_english"].IsScalar()) {
+            RCLCPP_ERROR(logger,
+                         "[KB Validation] Location '%s': missing field 'gesture_message_english'",
+                         locId.c_str());
+            valid = false;
+        } else {
+            try {
+                loc["gesture_message_english"].as<std::string>();
+            } catch (const YAML::Exception&) {
                 RCLCPP_ERROR(logger,
-                             "[KB Validation] Location '%s': missing field '%s'",
-                             locId.c_str(), field);
+                             "[KB Validation] Location '%s': 'gesture_message_english' cannot be read as a string",
+                             locId.c_str());
                 valid = false;
-            } else {
-                try {
-                    if (loc[field].as<std::string>().empty()) {
-                        RCLCPP_ERROR(logger,
-                                     "[KB Validation] Location '%s': '%s' must not be empty",
-                                     locId.c_str(), field);
-                        valid = false;
-                    }
-                } catch (const YAML::Exception&) {
-                    RCLCPP_ERROR(logger,
-                                 "[KB Validation] Location '%s': '%s' cannot be read as a string",
-                                 locId.c_str(), field);
-                    valid = false;
-                }
             }
         }
 

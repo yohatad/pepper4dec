@@ -869,6 +869,239 @@ void ListenForSpeech::onHalted()
 }
 
 //=============================================================================
+// IsVisitorDiscovered
+// Topic: /faceDetection/data  (dec_interfaces::msg::FaceDetection)
+//
+// Blocks (RUNNING) until at least one face appears. Returns FAILURE if the
+// "timeout" port (seconds) expires before any face is detected.
+//=============================================================================
+
+IsVisitorDiscovered::IsVisitorDiscovered(const std::string& name,
+                                         const BT::NodeConfig& config,
+                                         std::shared_ptr<rclcpp::Node> node)
+    : BT::StatefulActionNode(name, config), node_(node)
+{
+    sub_ = node_->create_subscription<dec_interfaces::msg::FaceDetection>(
+        "/faceDetection/data", 10,
+        [this](const dec_interfaces::msg::FaceDetection::SharedPtr msg) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            latestMsg_ = msg;
+        });
+}
+
+BT::PortsList IsVisitorDiscovered::providedPorts()
+{
+    return {
+        BT::InputPort<double>("timeout", 30.0, "Discovery timeout in seconds"),
+    };
+}
+
+BT::NodeStatus IsVisitorDiscovered::onStart()
+{
+    const double timeout = getInput<double>("timeout").value_or(30.0);
+    deadline_ = node_->now() + rclcpp::Duration::from_seconds(timeout);
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[IsVisitorDiscovered] Started – timeout=%.1fs", timeout);
+    }
+    return onRunning();
+}
+
+BT::NodeStatus IsVisitorDiscovered::onRunning()
+{
+    if (node_->now() > deadline_) {
+        RCLCPP_WARN(rclcpp::get_logger("behavior_controller"),
+                    "[IsVisitorDiscovered] Timeout – no visitor detected");
+        return BT::NodeStatus::FAILURE;
+    }
+
+    dec_interfaces::msg::FaceDetection::SharedPtr msg;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        msg = latestMsg_;
+    }
+
+    if (!msg || msg->face_label_id.empty()) {
+        return BT::NodeStatus::RUNNING;
+    }
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[IsVisitorDiscovered] SUCCESS – %zu face(s) detected",
+                    msg->face_label_id.size());
+    }
+    return BT::NodeStatus::SUCCESS;
+}
+
+void IsVisitorDiscovered::onHalted()
+{
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[IsVisitorDiscovered] Halted");
+    }
+}
+
+//=============================================================================
+// IsMutualGazeDiscovered
+// Topic: /faceDetection/data  (dec_interfaces::msg::FaceDetection)
+//
+// Blocks (RUNNING) until mutual gaze is detected. Returns FAILURE on timeout.
+//=============================================================================
+
+IsMutualGazeDiscovered::IsMutualGazeDiscovered(const std::string& name,
+                                               const BT::NodeConfig& config,
+                                               std::shared_ptr<rclcpp::Node> node)
+    : BT::StatefulActionNode(name, config), node_(node)
+{
+    sub_ = node_->create_subscription<dec_interfaces::msg::FaceDetection>(
+        "/faceDetection/data", 10,
+        [this](const dec_interfaces::msg::FaceDetection::SharedPtr msg) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            latestMsg_ = msg;
+        });
+}
+
+BT::PortsList IsMutualGazeDiscovered::providedPorts()
+{
+    return {
+        BT::InputPort<double>("timeout", 10.0, "Mutual gaze timeout in seconds"),
+    };
+}
+
+BT::NodeStatus IsMutualGazeDiscovered::onStart()
+{
+    const double timeout = getInput<double>("timeout").value_or(10.0);
+    deadline_ = node_->now() + rclcpp::Duration::from_seconds(timeout);
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[IsMutualGazeDiscovered] Started – timeout=%.1fs", timeout);
+    }
+    return onRunning();
+}
+
+BT::NodeStatus IsMutualGazeDiscovered::onRunning()
+{
+    if (node_->now() > deadline_) {
+        RCLCPP_WARN(rclcpp::get_logger("behavior_controller"),
+                    "[IsMutualGazeDiscovered] Timeout – mutual gaze not established");
+        return BT::NodeStatus::FAILURE;
+    }
+
+    dec_interfaces::msg::FaceDetection::SharedPtr msg;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        msg = latestMsg_;
+    }
+
+    if (!msg) {
+        return BT::NodeStatus::RUNNING;
+    }
+
+    for (bool gaze : msg->mutual_gaze) {
+        if (gaze) {
+            if (ConfigManager::instance().isVerbose()) {
+                RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                            "[IsMutualGazeDiscovered] SUCCESS – mutual gaze established");
+            }
+            return BT::NodeStatus::SUCCESS;
+        }
+    }
+    return BT::NodeStatus::RUNNING;
+}
+
+void IsMutualGazeDiscovered::onHalted()
+{
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[IsMutualGazeDiscovered] Halted");
+    }
+}
+
+//=============================================================================
+// GetVisitorResponse
+// Topic: /speech_event/text  (std_msgs::msg::String)
+//
+// Blocks (RUNNING) until a new transcription arrives after this node started.
+// Returns FAILURE when the "timeout" port (seconds) expires without speech.
+// Writes the recognised text to the "visitor_response" output port.
+//=============================================================================
+
+GetVisitorResponse::GetVisitorResponse(const std::string& name,
+                                       const BT::NodeConfig& config,
+                                       std::shared_ptr<rclcpp::Node> node)
+    : BT::StatefulActionNode(name, config), node_(node)
+{
+    sub_ = node_->create_subscription<std_msgs::msg::String>(
+        "/speech_event/text", 10,
+        [this](const std_msgs::msg::String::SharedPtr msg) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            latestText_ = msg->data;
+            newTextAvailable_ = true;
+        });
+}
+
+BT::PortsList GetVisitorResponse::providedPorts()
+{
+    return {
+        BT::InputPort<double>      ("timeout",          10.0, "Response timeout in seconds"),
+        BT::OutputPort<std::string>("visitor_response",       "Recognised visitor utterance"),
+    };
+}
+
+BT::NodeStatus GetVisitorResponse::onStart()
+{
+    const double timeout = getInput<double>("timeout").value_or(10.0);
+    deadline_ = node_->now() + rclcpp::Duration::from_seconds(timeout);
+
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        newTextAvailable_ = false;
+    }
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[GetVisitorResponse] Started – timeout=%.1fs", timeout);
+    }
+    return BT::NodeStatus::RUNNING;
+}
+
+BT::NodeStatus GetVisitorResponse::onRunning()
+{
+    if (node_->now() > deadline_) {
+        RCLCPP_WARN(rclcpp::get_logger("behavior_controller"),
+                    "[GetVisitorResponse] Timeout – no speech received");
+        return BT::NodeStatus::FAILURE;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!newTextAvailable_) {
+        return BT::NodeStatus::RUNNING;
+    }
+
+    setOutput("visitor_response", latestText_);
+    newTextAvailable_ = false;
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[GetVisitorResponse] Received: \"%s\"", latestText_.c_str());
+    }
+    return BT::NodeStatus::SUCCESS;
+}
+
+void GetVisitorResponse::onHalted()
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    newTextAvailable_ = false;
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[GetVisitorResponse] Halted");
+    }
+}
+
+//=============================================================================
 // SetSpeechListening
 // Service: /speech_event/set_enabled  (std_srvs::srv::SetBool)
 //
@@ -929,6 +1162,316 @@ BT::NodeStatus SetSpeechListening::onFailure(BT::ServiceNodeErrorCode error)
     return BT::NodeStatus::FAILURE;
 }
 
+//=============================================================================
+// RetrieveListOfExhibits
+// SyncActionNode — reads KnowledgeManager tour spec, writes location ID queue
+// to the blackboard via the "exhibit_list" output port.
+//=============================================================================
+
+BT::PortsList RetrieveListOfExhibits::providedPorts()
+{
+    return {
+        BT::OutputPort<std::vector<std::string>>("exhibit_list", "Ordered list of location IDs from KnowledgeManager"),
+    };
+}
+
+BT::NodeStatus RetrieveListOfExhibits::tick()
+{
+    TourSpec spec = KnowledgeManager::instance().getTourSpecification();
+
+    if (spec.locationIds.empty()) {
+        RCLCPP_ERROR(rclcpp::get_logger("behavior_controller"),
+                     "[RetrieveListOfExhibits] Tour specification has no locations");
+        return BT::NodeStatus::FAILURE;
+    }
+
+    setOutput("exhibit_list", spec.locationIds);
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[RetrieveListOfExhibits] Loaded %zu exhibit(s): %s",
+                    spec.locationIds.size(), spec.locationIds.front().c_str());
+    }
+    return BT::NodeStatus::SUCCESS;
+}
+
+//=============================================================================
+// IsListWithExhibit
+// Condition — returns SUCCESS if exhibit_queue is non-empty, FAILURE if empty.
+//=============================================================================
+
+BT::PortsList IsListWithExhibit::providedPorts()
+{
+    return {
+        BT::InputPort<std::vector<std::string>>("exhibit_list", "{exhibit_queue}",
+                                                "Queue of remaining location IDs"),
+    };
+}
+
+BT::NodeStatus IsListWithExhibit::tick()
+{
+    auto queue = getInput<std::vector<std::string>>("exhibit_list");
+    if (!queue || queue->empty()) {
+        return BT::NodeStatus::FAILURE;
+    }
+    return BT::NodeStatus::SUCCESS;
+}
+
+//=============================================================================
+// SelectExhibit
+// SyncActionNode — reads the front location ID from exhibit_queue, looks up
+// its LocationInfo, and writes 7 blackboard keys for navigation and presentation.
+//=============================================================================
+
+BT::PortsList SelectExhibit::providedPorts()
+{
+    return {
+        BT::InputPort<std::vector<std::string>>("exhibit_list", "{exhibit_queue}",
+                                                "Queue of remaining location IDs"),
+        BT::OutputPort<std::string>("exhibit_speech",       "Gesture message (gesture_message_english)"),
+        BT::OutputPort<double>     ("exhibit_goal_x",       "Navigation goal x (metres)"),
+        BT::OutputPort<double>     ("exhibit_goal_y",       "Navigation goal y (metres)"),
+        BT::OutputPort<double>     ("exhibit_goal_theta",   "Navigation goal heading (radians)"),
+        BT::OutputPort<double>     ("exhibit_location_x",   "Gesture target x (metres)"),
+        BT::OutputPort<double>     ("exhibit_location_y",   "Gesture target y (metres)"),
+        BT::OutputPort<double>     ("exhibit_location_z",   "Gesture target z (metres)"),
+    };
+}
+
+BT::NodeStatus SelectExhibit::tick()
+{
+    auto queue = getInput<std::vector<std::string>>("exhibit_list");
+    if (!queue || queue->empty()) {
+        RCLCPP_ERROR(rclcpp::get_logger("behavior_controller"),
+                     "[SelectExhibit] exhibit_queue is empty");
+        return BT::NodeStatus::FAILURE;
+    }
+
+    const std::string locationId = queue->front();
+    LocationInfo info = KnowledgeManager::instance().getLocationInfo(locationId);
+
+    setOutput("exhibit_speech",     info.gestureMessage);
+    setOutput("exhibit_goal_x",     info.robotPose.x);
+    setOutput("exhibit_goal_y",     info.robotPose.y);
+    setOutput("exhibit_goal_theta", info.robotPose.theta);
+    setOutput("exhibit_location_x", info.gestureTarget.x);
+    setOutput("exhibit_location_y", info.gestureTarget.y);
+    setOutput("exhibit_location_z", info.gestureTarget.z);
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[SelectExhibit] Selected '%s' → goal=(%.2f, %.2f, %.2f) "
+                    "target=(%.2f, %.2f, %.2f)",
+                    locationId.c_str(),
+                    info.robotPose.x, info.robotPose.y, info.robotPose.theta,
+                    info.gestureTarget.x, info.gestureTarget.y, info.gestureTarget.z);
+    }
+    return BT::NodeStatus::SUCCESS;
+}
+
+//=============================================================================
+// PopExhibitFromList
+// SyncActionNode — removes the front entry from exhibit_queue. Always SUCCESS.
+//=============================================================================
+
+BT::PortsList PopExhibitFromList::providedPorts()
+{
+    return {
+        BT::InputPort<std::vector<std::string>>("exhibit_list", "{exhibit_queue}",
+                                                "Queue to pop from"),
+        BT::OutputPort<int>("remaining_count", "Number of exhibits remaining after pop"),
+    };
+}
+
+BT::NodeStatus PopExhibitFromList::tick()
+{
+    auto queue = getInput<std::vector<std::string>>("exhibit_list");
+    if (!queue || queue->empty()) {
+        setOutput("remaining_count", 0);
+        return BT::NodeStatus::SUCCESS;
+    }
+
+    // Resolve the actual blackboard key from the port mapping so we write
+    // back to the same key regardless of what the XML binds exhibit_list to.
+    std::string bb_key = config().input_ports.at("exhibit_list");
+    if (bb_key.size() >= 2 && bb_key.front() == '{' && bb_key.back() == '}') {
+        bb_key = bb_key.substr(1, bb_key.size() - 2);
+    }
+
+    const std::string popped = queue->front();
+    queue->erase(queue->begin());
+    config().blackboard->set(bb_key, *queue);
+    setOutput("remaining_count", static_cast<int>(queue->size()));
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[PopExhibitFromList] Popped '%s', %zu exhibit(s) remaining",
+                    popped.c_str(), queue->size());
+    }
+    return BT::NodeStatus::SUCCESS;
+}
+
+//=============================================================================
+// LogEvent
+// SyncActionNode — logs a message at the requested level. Always SUCCESS.
+//=============================================================================
+
+BT::PortsList LogEvent::providedPorts()
+{
+    return {
+        BT::InputPort<std::string>("level",   "info", "Log level: debug | info | warn | error"),
+        BT::InputPort<std::string>("message",         "Message to log"),
+    };
+}
+
+BT::NodeStatus LogEvent::tick()
+{
+    auto level   = getInput<std::string>("level");
+    auto message = getInput<std::string>("message");
+
+    const std::string msg = message ? message.value() : "(no message)";
+    const std::string lvl = level   ? level.value()   : "info";
+
+    auto logger = rclcpp::get_logger("behavior_controller");
+    if      (lvl == "debug") { RCLCPP_DEBUG(logger, "[LogEvent] %s", msg.c_str()); }
+    else if (lvl == "warn")  { RCLCPP_WARN (logger, "[LogEvent] %s", msg.c_str()); }
+    else if (lvl == "error") { RCLCPP_ERROR(logger, "[LogEvent] %s", msg.c_str()); }
+    else                     { RCLCPP_INFO (logger, "[LogEvent] %s", msg.c_str()); }
+
+    return BT::NodeStatus::SUCCESS;
+}
+
+//=============================================================================
+// SetBlackboardValue
+// SyncActionNode — writes a string value to an arbitrary blackboard key.
+//=============================================================================
+
+BT::PortsList SetBlackboardValue::providedPorts()
+{
+    return {
+        BT::InputPort<std::string>("key",   "Blackboard key to write"),
+        BT::InputPort<std::string>("value", "Value to store"),
+    };
+}
+
+BT::NodeStatus SetBlackboardValue::tick()
+{
+    auto key   = getInput<std::string>("key");
+    auto value = getInput<std::string>("value");
+
+    if (!key) {
+        RCLCPP_ERROR(rclcpp::get_logger("behavior_controller"),
+                     "[SetBlackboardValue] Missing required port 'key'");
+        return BT::NodeStatus::FAILURE;
+    }
+
+    config().blackboard->set(key.value(), value ? value.value() : std::string{});
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[SetBlackboardValue] %s = \"%s\"",
+                    key.value().c_str(), value ? value.value().c_str() : "");
+    }
+    return BT::NodeStatus::SUCCESS;
+}
+
+//=============================================================================
+// CheckBlackboard
+// Condition — compares a blackboard string value to an expected string.
+//=============================================================================
+
+BT::PortsList CheckBlackboard::providedPorts()
+{
+    return {
+        BT::InputPort<std::string>("key",      "Blackboard key to read"),
+        BT::InputPort<std::string>("expected", "Expected value"),
+    };
+}
+
+BT::NodeStatus CheckBlackboard::tick()
+{
+    auto key      = getInput<std::string>("key");
+    auto expected = getInput<std::string>("expected");
+
+    if (!key || !expected) {
+        RCLCPP_ERROR(rclcpp::get_logger("behavior_controller"),
+                     "[CheckBlackboard] Missing required port(s)");
+        return BT::NodeStatus::FAILURE;
+    }
+
+    std::string actual;
+    if (!config().blackboard->get(key.value(), actual)) {
+        return BT::NodeStatus::FAILURE;
+    }
+    return (actual == expected.value()) ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
+}
+
+//=============================================================================
+// IsVisitorResponseYes
+// Action: dec_interfaces::action::ConversationManager
+//
+// Sends the raw ASR utterance as the prompt. The system prompt classifies
+// AFFIRMATIVE utterances with answer="yes" and NEGATIVE with answer="no".
+// generate_response() returns parsed["answer"], so we check response == "yes".
+//=============================================================================
+
+BT::PortsList IsVisitorResponseYes::providedPorts()
+{
+    return {
+        BT::InputPort<std::string>("visitor_response", "{visitor_response}",
+                                   "Raw ASR utterance written by GetVisitorResponse"),
+    };
+}
+
+bool IsVisitorResponseYes::setGoal(Goal& goal)
+{
+    auto response = getInput<std::string>("visitor_response");
+    if (!response || response.value().empty()) {
+        RCLCPP_ERROR(rclcpp::get_logger("behavior_controller"),
+                     "[IsVisitorResponseYes] 'visitor_response' port is empty");
+        return false;
+    }
+
+    goal.prompt = response.value();
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[IsVisitorResponseYes] Classifying utterance: \"%s\"",
+                    goal.prompt.c_str());
+    }
+    return true;
+}
+
+BT::NodeStatus IsVisitorResponseYes::onFeedback(const std::shared_ptr<const Feedback> /*feedback*/)
+{
+    return BT::NodeStatus::RUNNING;
+}
+
+BT::NodeStatus IsVisitorResponseYes::onResultReceived(const WrappedResult& result)
+{
+    if (!result.result->success) {
+        RCLCPP_WARN(rclcpp::get_logger("behavior_controller"),
+                    "[IsVisitorResponseYes] ConversationManager action failed");
+        return BT::NodeStatus::FAILURE;
+    }
+
+    const std::string answer = TextUtils::toLowerCase(result.result->response);
+    const bool yes = (answer == "yes");
+
+    RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                "[IsVisitorResponseYes] classified answer=\"%s\" → %s",
+                result.result->response.c_str(), yes ? "SUCCESS" : "FAILURE");
+
+    return yes ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
+}
+
+BT::NodeStatus IsVisitorResponseYes::onFailure(BT::ActionNodeErrorCode error)
+{
+    RCLCPP_ERROR(rclcpp::get_logger("behavior_controller"),
+                 "[IsVisitorResponseYes] Action error: %s", toStr(error));
+    return BT::NodeStatus::FAILURE;
+}
+
 namespace behavior_controller {
 
 BT::Tree initializeTree(const std::string& scenario,
@@ -954,6 +1497,15 @@ BT::Tree initializeTree(const std::string& scenario,
     // Create factory and register nodes
     BT::BehaviorTreeFactory factory;
 
+    factory.registerNodeType<RetrieveListOfExhibits>   ("RetrieveListOfExhibits");
+    factory.registerNodeType<IsListWithExhibit>        ("IsListWithExhibit");
+    factory.registerNodeType<SelectExhibit>            ("SelectExhibit");
+    factory.registerNodeType<PopExhibitFromList>       ("PopExhibitFromList");
+    factory.registerNodeType<LogEvent>                 ("LogEvent");
+    factory.registerNodeType<SetBlackboardValue>       ("SetBlackboardValue");
+    factory.registerNodeType<CheckBlackboard>          ("CheckBlackboard");
+    factory.registerNodeType<IsVisitorResponseYes>     ("IsVisitorResponseYes", params);
+
     factory.registerNodeType<AnimateBehaviorNode>      ("AnimateBehavior",      params);
     factory.registerNodeType<StopAnimateBehavior>      ("StopAnimateBehavior",  params);
     factory.registerNodeType<SetOvertAttention>        ("SetOvertAttention",    params);
@@ -964,7 +1516,7 @@ BT::Tree initializeTree(const std::string& scenario,
     factory.registerNodeType<ConversationManagerNode>  ("ConversationManager",  params);
     factory.registerNodeType<SpeechWithFeedbackNode>   ("SpeechWithFeedback",   params);
 
-    // CheckFaceDetected and ListenForSpeech require the node handle at construction
+    // Nodes that require the node handle at construction time
     factory.registerBuilder<CheckFaceDetected>(
         "CheckFaceDetected",
         [node_handle](const std::string& name, const BT::NodeConfig& config) {
@@ -975,6 +1527,24 @@ BT::Tree initializeTree(const std::string& scenario,
         "ListenForSpeech",
         [node_handle](const std::string& name, const BT::NodeConfig& config) {
             return std::make_unique<ListenForSpeech>(name, config, node_handle);
+        });
+
+    factory.registerBuilder<IsVisitorDiscovered>(
+        "IsVisitorDiscovered",
+        [node_handle](const std::string& name, const BT::NodeConfig& config) {
+            return std::make_unique<IsVisitorDiscovered>(name, config, node_handle);
+        });
+
+    factory.registerBuilder<IsMutualGazeDiscovered>(
+        "IsMutualGazeDiscovered",
+        [node_handle](const std::string& name, const BT::NodeConfig& config) {
+            return std::make_unique<IsMutualGazeDiscovered>(name, config, node_handle);
+        });
+
+    factory.registerBuilder<GetVisitorResponse>(
+        "GetVisitorResponse",
+        [node_handle](const std::string& name, const BT::NodeConfig& config) {
+            return std::make_unique<GetVisitorResponse>(name, config, node_handle);
         });
 
     if (ConfigManager::instance().isVerbose()) {
