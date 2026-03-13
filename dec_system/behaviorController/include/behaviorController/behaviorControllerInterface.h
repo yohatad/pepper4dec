@@ -451,6 +451,7 @@ private:
     rclcpp::Subscription<dec_interfaces::msg::FaceDetection>::SharedPtr sub_;
     dec_interfaces::msg::FaceDetection::SharedPtr latestMsg_;
     rclcpp::Time deadline_;
+    rclcpp::Time gazeStart_;   // when continuous mutual gaze began; zero if not currently gazing
     std::mutex mutex_;
 };
 

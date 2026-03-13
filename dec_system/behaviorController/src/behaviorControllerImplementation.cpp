@@ -965,18 +965,22 @@ IsMutualGazeDiscovered::IsMutualGazeDiscovered(const std::string& name,
 BT::PortsList IsMutualGazeDiscovered::providedPorts()
 {
     return {
-        BT::InputPort<double>("timeout", 10.0, "Mutual gaze timeout in seconds"),
+        BT::InputPort<double>("timeout",      10.0, "Overall timeout in seconds"),
+        BT::InputPort<double>("min_duration",  0.5, "Seconds of continuous gaze required to succeed"),
     };
 }
 
 BT::NodeStatus IsMutualGazeDiscovered::onStart()
 {
     const double timeout = getInput<double>("timeout").value_or(10.0);
-    deadline_ = node_->now() + rclcpp::Duration::from_seconds(timeout);
+    deadline_  = node_->now() + rclcpp::Duration::from_seconds(timeout);
+    gazeStart_ = rclcpp::Time(0, 0, RCL_ROS_TIME);  // zero = not currently gazing
 
     if (ConfigManager::instance().isVerbose()) {
+        const double minDur = getInput<double>("min_duration").value_or(0.5);
         RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
-                    "[IsMutualGazeDiscovered] Started – timeout=%.1fs", timeout);
+                    "[IsMutualGazeDiscovered] Started – timeout=%.1fs, min_duration=%.2fs",
+                    timeout, minDur);
     }
     return onRunning();
 }
@@ -985,7 +989,7 @@ BT::NodeStatus IsMutualGazeDiscovered::onRunning()
 {
     if (node_->now() > deadline_) {
         RCLCPP_WARN(rclcpp::get_logger("behavior_controller"),
-                    "[IsMutualGazeDiscovered] Timeout – mutual gaze not established");
+                    "[IsMutualGazeDiscovered] Timeout – sustained mutual gaze not established");
         return BT::NodeStatus::FAILURE;
     }
 
@@ -996,18 +1000,39 @@ BT::NodeStatus IsMutualGazeDiscovered::onRunning()
     }
 
     if (!msg) {
+        gazeStart_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
         return BT::NodeStatus::RUNNING;
     }
 
+    bool anyMutualGaze = false;
     for (bool gaze : msg->mutual_gaze) {
-        if (gaze) {
-            if (ConfigManager::instance().isVerbose()) {
-                RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
-                            "[IsMutualGazeDiscovered] SUCCESS – mutual gaze established");
-            }
-            return BT::NodeStatus::SUCCESS;
-        }
+        if (gaze) { anyMutualGaze = true; break; }
     }
+
+    if (!anyMutualGaze) {
+        // Gaze broke — reset the sustain timer
+        gazeStart_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
+        return BT::NodeStatus::RUNNING;
+    }
+
+    // Gaze is present — start timer if not already running
+    const rclcpp::Time zero(0, 0, RCL_ROS_TIME);
+    if (gazeStart_ == zero) {
+        gazeStart_ = node_->now();
+    }
+
+    const double minDur   = getInput<double>("min_duration").value_or(0.5);
+    const double sustained = (node_->now() - gazeStart_).seconds();
+
+    if (sustained >= minDur) {
+        if (ConfigManager::instance().isVerbose()) {
+            RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                        "[IsMutualGazeDiscovered] SUCCESS – mutual gaze sustained for %.2fs",
+                        sustained);
+        }
+        return BT::NodeStatus::SUCCESS;
+    }
+
     return BT::NodeStatus::RUNNING;
 }
 
