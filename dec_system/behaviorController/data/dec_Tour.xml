@@ -55,7 +55,7 @@
       <Action ID="SetOvertAttention" enabled="true"/>
 
       <!-- Query for tour -->
-      <Action ID="SpeechWithFeedback" say="{query_tour_speech}"/>
+      <Action ID="SpeechWithFeedback" say="Would you like me to guide you through the Ubanzi lab?"/>
     </Sequence>
   </BehaviorTree>
 
