@@ -6,7 +6,6 @@ package_name = 'conversation_manager'
 setup(
     name=package_name,
     version='1.0.0',
-    packages=find_packages(exclude=['test']),  # <-- ADD THIS LINE
     install_requires=['setuptools', 'openai', 'chromadb', 'sentence-transformers'],
     zip_safe=True,
     maintainer='Muhammed Danso and Yohannes Haile',
