@@ -8,7 +8,7 @@ from ament_index_python.packages import get_package_share_directory
 def generate_launch_description():
     # Paths
     pkg_dir = get_package_share_directory('pepper_navigation')
-    map_file = os.path.join(pkg_dir, 'map', 'rtabmap_feb_15.yaml')
+    map_file = os.path.join(pkg_dir, 'map', 'rtabmap_feb_26.yaml')
     params_file = os.path.join(pkg_dir, 'config', 'nav2_params.yaml')
     keepout_mask_file = os.path.join(pkg_dir, 'map', 'keepout_zones.yaml')
     
@@ -89,12 +89,12 @@ def generate_launch_description():
             parameters=[params_file]
         ),
 
-        # Node(
-        #     package='tf2_ros',
-        #     executable='static_transform_publisher',
-        #     name='static_map_to_odom',
-        #     arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom']
-        # ),
+        Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='static_map_to_odom',
+            arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom']
+        ),
 
         # Lifecycle Manager (ONLY lifecycle nodes here)
         Node(
