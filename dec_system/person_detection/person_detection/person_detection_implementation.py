@@ -3,6 +3,10 @@ person_detection_implementation.py - Implementation code for running the Person 
 
 Supports configurable person detection with ByteTrack tracking using the bytetracker package.
 
+It uses a YOLOv11 ONNX model for detection and can handle both compressed and uncompressed image topics from various 
+camera types (RealSense, Pepper, video). The node publishes detected person data including class, confidence, 
+bounding box, and depth information.
+
 Author: Yohannes Tadesse Haile
 Date: December 07, 2025
 Version: v1.0

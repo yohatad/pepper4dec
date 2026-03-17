@@ -17,18 +17,19 @@ import multiprocessing
 import yaml
 import random
 import threading
+import supervision as sv
+
 from ament_index_python.packages import get_package_share_directory
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.node import Node
-from math import cos, sin, pi
 from sensor_msgs.msg import Image, CompressedImage
 from cv_bridge import CvBridge
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from geometry_msgs.msg import Point
 from typing import Tuple, List, Dict, Optional
-from dec_interfaces.msg import FaceDetection, PersonDetection
+from math import cos, sin, pi
 from scipy.optimize import linear_sum_assignment
-import supervision as sv
+from dec_interfaces.msg import FaceDetection, PersonDetection
 
 def load_configuration() -> Dict:
     """
