@@ -1,0 +1,94 @@
+# Environment Knowledge Base
+tour_specification: [1, 2, 3, 4, 5, 6, 7]
+
+locations:
+  1:
+    robot_location_description: "Pepper's starting location"
+    robot_location_pose:
+      x: 4.0
+      y: 0.0
+      theta: 90.0
+    gesture_target:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+    gesture_message_english: "Thank you for visiting Upanzi's Digital Experience Center. My name is Pepper, and I will be your tour guide. The Digital Experience Center is a physical space designed to showcase cutting-edge digital technologies, such as digital public infrastructure and digital public goods, allowing visitors like you to interact with solutions like digital identity, payments, and cybersecurity. Feel free to ask questions as we go along"
+    cultural_knowledge: ["SymbolicShapeRespect", "BowExtentRespect"]
+
+  2:
+    robot_location_description: "DPG/DPI Booth 1"
+    robot_location_pose:
+      x: 4.8
+      y: 8.0
+      theta: 45.0
+    gesture_target:
+      x: 6.0
+      y: 8.0
+      z: 0.0
+    gesture_message_english: "Our first stop is the Digital Public Goods and Infrastructure section. Here, we showcase the interoperable building blocks that make up the Upanzi Network. These include our flagship digital public goods: the Upanzi Digital Identity (UDI) system, which provides a secure and user-friendly way for citizens to prove their identity online; the Upanzi Payments System (UPS), which enables seamless digital transactions; and the Upanzi Programs Management System (UPMS), which helps governments efficiently manage social benefit programs. These solutions are designed to be open-source and scalable, allowing them to be adopted and adapted by other countries across Africa and beyond."
+    cultural_knowledge: ["DeicticShape"]
+
+  3:
+    robot_location_description: "DPG/DPI Booth 2"
+    robot_location_pose:
+      x: 4.8
+      y: 5.6
+      theta: 45.0
+    gesture_target:
+      x: 6.0
+      y: 5.6
+      z: 0.0
+    gesture_message_english: "Now that you've seen the building blocks of Upanzi's digital infrastructure, let's put it to use! Think of this like setting up your very first bank account - but done digitally, in minutes, using just your digital ID. No long queues, no paperwork, no hassle. Behind the scenes, we've connected Mifos - a banking platform - into Mojaloop, which is the payment network that links banks, mobile money wallets, and financial services into one system. What that means for you as a citizen is simple: once your account is open, you can send and receive money instantly, whether it's to a friend across town, a business across the country, or even someone in another country entirely. We've also built MojaShop - a digital marketplace where merchants and customers can transact using all these connected tools. And to make sure everything works safely and reliably, the entire system has been put through rigorous security and quality testing. This is what digital financial inclusion looks like in practice."
+    cultural_knowledge: ["DeicticShape"]
+
+  4:
+    robot_location_description: "Data Exchange Booth 1"
+    robot_location_pose:
+      x: 3.2
+      y: 1.6
+      theta: 100.0
+    gesture_target:
+      x: 3.2
+      y: 0.4
+      z: 270.0
+    gesture_message_english: "Now let's see what this same digital infrastructure can do when powered by good data. The Upanzi Open Data Portal brings together datasets from across Africa into one unified platform — making it easy for governments, researchers, and entrepreneurs to find, share, and reuse data that was previously scattered and hard to access. It uses machine learning to automatically describe datasets and score their quality, so the right data is always easy to find and trust. This matters enormously in practice. In healthcare, Upanzi's HumekaFL project analyses a newborn's cry instantly to alert a doctor if the baby needs help — even in a remote clinic, far from any specialist. And through the Upanzi Malaria Diagnosis project, instead of lengthy manual work under a microscope, malaria can now be diagnosed digitally and quickly, with live dashboards helping hospitals stay ahead of outbreaks. None of this is possible without reliable, structured data flowing through a shared digital infrastructure. That is what the Open Data Portal provides — the foundation for faster care, smarter decisions, and evidence-based development across Africa."
+    cultural_knowledge: ["DeicticShape"]
+
+  5:
+    robot_location_description: "Connectivity Booth"
+    robot_location_pose:
+      x: 2.4
+      y: 3.2
+      theta: 50.0
+    gesture_target:
+      x: 1.2
+      y: 3.2
+      z: 180.0
+    gesture_message_english: "All the digital services you've seen today rely on one thing - a reliable internet connection. This is where our connectivity work comes in. Through the Measurement of Internet Resilience Africa Project or MIRA for short working in partnership with the Internet Society, we've built devices that measure internet strength and stability across Africa, starting right here in Kigali and expanding to more countries. Think of it as a health check for the internet - so we know exactly where it's weak and how to fix it. But what about places with no internet at all? Our second initiative tackles just that - a low-cost mesh network using wireless signals that can connect communities without traditional internet. We're already planning to deploy it in a refugee camp with World Vision, to help share health, sanitation, and education content across the camp. Because connectivity isn't a luxury - it's the foundation everything else is built on."
+    cultural_knowledge: ["DeicticShape"]
+
+  6:
+    robot_location_description: "Cybersecurity Booth"
+    robot_location_pose:
+      x: 2.4
+      y: 5.2
+      theta: 50.0
+    gesture_target:
+      x: 1.2
+      y: 5.2
+      z: 180.0
+    gesture_message_english: "As more of Africa's services move online, cybersecurity becomes the foundation that protects everything we've seen today. Upanzi is tackling this on two fronts. The first is building the next generation of digital defenders. picoCTF-Africa is a gamified cybersecurity program, backed by Carnegie Mellon University and the Upanzi Network, that teaches high school and college students real-world skills through hands-on challenges in web security, programming, forensics, and more. In 2025, the program reached 13 countries with over 1,700 participants — and it's fully free and online, making cybersecurity education accessible to anyone, anywhere on the continent. The second front is protecting the continent in real time. Together with AfricaCERT, Upanzi is building a continent-wide threat intelligence network — strategically placing sensors across African networks to detect malicious activity, uncover attackers' techniques, and share insights instantly with security teams across the region. Because a digital Africa is only as strong as its ability to defend itself."
+    cultural_knowledge: ["DeicticShape"]
+
+  7:
+    robot_location_description: "Pepper's ending location"
+    robot_location_pose:
+      x: 4.0
+      y: 6.8
+      theta: 100.0
+    gesture_target:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+    gesture_message_english: "And that brings us to the end of our tour. Today you stepped into the shoes of a citizen — and saw how a single digital identity can open doors to financial services, healthcare, open data, and beyond. Every stop we visited is one piece of a larger puzzle: digital infrastructure that is open, interoperable, and built to serve real people across Africa. None of it works in isolation — identity enables payments, data powers healthcare, connectivity reaches the last mile, and cybersecurity keeps it all safe. Together, they form the foundation of a digital Africa that leaves no one behind. Thank you for joining us today — we hope it was as inspiring for you as it is for us every day. Goodbye, and enjoy your rest of your Tour in CMU Africa!"
+    cultural_knowledge: ["IconicShape"]
