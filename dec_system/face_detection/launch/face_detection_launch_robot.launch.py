@@ -106,7 +106,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             'launch_camera',
-            default_value='true',
+            default_value='false',
             description='Whether to launch the camera driver (set to false when using ROS2 bags)'
         ),
         OpaqueFunction(function=launch_setup)
