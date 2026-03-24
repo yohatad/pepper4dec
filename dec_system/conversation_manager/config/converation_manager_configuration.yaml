@@ -15,8 +15,8 @@ search:
 
 # Conversation Settings
 conversation:
-  max_history_turns: 5   # Maximum number of turns to store in history
-  context_turns: 3       # Number of recent turns included in each LLM request
+  max_history_turns: 15   # Maximum number of turns to store in history
+  context_turns: 10       # Number of recent turns included in each LLM request
 
 # Data Settings
 data:
