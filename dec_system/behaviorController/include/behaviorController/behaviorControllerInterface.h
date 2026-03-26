@@ -88,8 +88,7 @@ struct LocationInfo {
     std::string description;
     RobotPose robotPose;
     Position3D gestureTarget;
-    std::unordered_map<std::string, std::string> preMessages;  
-    std::unordered_map<std::string, std::string> postMessages;
+    std::string gestureMessage;
 };
 
 struct TourSpec {
@@ -411,6 +410,195 @@ private:
     std::mutex mutex_;
 };
 
+// Blocks (RUNNING) until at least one face appears on /faceDetection/data.
+// Returns FAILURE when the "timeout" port (seconds) expires without a face.
+class IsVisitorDiscovered : public BT::StatefulActionNode
+{
+public:
+    IsVisitorDiscovered(const std::string& name,
+                        const BT::NodeConfig& config,
+                        std::shared_ptr<rclcpp::Node> node);
+
+    static BT::PortsList providedPorts();
+    BT::NodeStatus onStart() override;
+    BT::NodeStatus onRunning() override;
+    void onHalted() override;
+
+private:
+    std::shared_ptr<rclcpp::Node> node_;
+    rclcpp::Subscription<dec_interfaces::msg::FaceDetection>::SharedPtr sub_;
+    dec_interfaces::msg::FaceDetection::SharedPtr latestMsg_;
+    rclcpp::Time deadline_;
+    std::mutex mutex_;
+};
+
+// Blocks (RUNNING) until mutual gaze is detected on /faceDetection/data.
+// Returns FAILURE when the "timeout" port (seconds) expires.
+class IsMutualGazeDiscovered : public BT::StatefulActionNode
+{
+public:
+    IsMutualGazeDiscovered(const std::string& name,
+                           const BT::NodeConfig& config,
+                           std::shared_ptr<rclcpp::Node> node);
+
+    static BT::PortsList providedPorts();
+    BT::NodeStatus onStart() override;
+    BT::NodeStatus onRunning() override;
+    void onHalted() override;
+
+private:
+    std::shared_ptr<rclcpp::Node> node_;
+    rclcpp::Subscription<dec_interfaces::msg::FaceDetection>::SharedPtr sub_;
+    dec_interfaces::msg::FaceDetection::SharedPtr latestMsg_;
+    rclcpp::Time deadline_;
+    rclcpp::Time gazeStart_;   // when continuous mutual gaze began; zero if not currently gazing
+    std::mutex mutex_;
+};
+
+// Blocks (RUNNING) until a new transcription arrives on /speech_event/text.
+// Returns FAILURE when the "timeout" port (seconds) expires without speech.
+// Writes the recognised text to the "visitor_response" output port.
+class GetVisitorResponse : public BT::StatefulActionNode
+{
+public:
+    GetVisitorResponse(const std::string& name,
+                       const BT::NodeConfig& config,
+                       std::shared_ptr<rclcpp::Node> node);
+
+    static BT::PortsList providedPorts();
+    BT::NodeStatus onStart() override;
+    BT::NodeStatus onRunning() override;
+    void onHalted() override;
+
+private:
+    std::shared_ptr<rclcpp::Node> node_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_;
+    std::string latestText_;
+    bool newTextAvailable_ = false;
+    rclcpp::Time deadline_;
+    std::mutex mutex_;
+};
+
+//=============================================================================
+// Tour Loop Nodes  (SyncActionNode — no ROS, pure blackboard + KnowledgeManager)
+//
+// All four nodes share the blackboard key "exhibit_queue"
+// (a std::vector<std::string> of location IDs in visit order).
+//=============================================================================
+
+// Reads KnowledgeManager::getTourSpecification().locationIds and writes the
+// ordered vector to the "exhibit_list" output port (default key: exhibit_queue).
+// Returns FAILURE if the tour specification is empty.
+class RetrieveListOfExhibits : public BT::SyncActionNode
+{
+public:
+    RetrieveListOfExhibits(const std::string& name, const BT::NodeConfig& config)
+        : BT::SyncActionNode(name, config) {}
+
+    static BT::PortsList providedPorts();
+    BT::NodeStatus tick() override;
+};
+
+// Condition: returns SUCCESS if exhibit_queue is non-empty, FAILURE otherwise.
+// Reads the queue via the "exhibit_list" input port (default key: exhibit_queue).
+class IsListWithExhibit : public BT::SyncActionNode
+{
+public:
+    IsListWithExhibit(const std::string& name, const BT::NodeConfig& config)
+        : BT::SyncActionNode(name, config) {}
+
+    static BT::PortsList providedPorts();
+    BT::NodeStatus tick() override;
+};
+
+// Reads the front of exhibit_queue, looks up the corresponding LocationInfo in
+// KnowledgeManager, and writes 7 blackboard keys consumed by NavigateToLocation
+// and PresentExhibit:
+//   {exhibit_speech}         ← LocationInfo.gestureMessage
+//   {exhibit_goal_x/y/theta} ← LocationInfo.robotPose
+//   {exhibit_location_x/y/z} ← LocationInfo.gestureTarget
+// Does NOT pop the queue — that is deferred to PopExhibitFromList.
+class SelectExhibit : public BT::SyncActionNode
+{
+public:
+    SelectExhibit(const std::string& name, const BT::NodeConfig& config)
+        : BT::SyncActionNode(name, config) {}
+
+    static BT::PortsList providedPorts();
+    BT::NodeStatus tick() override;
+};
+
+// Removes the front entry from exhibit_queue and writes the remaining count to
+// the "remaining_count" output port. Always returns SUCCESS.
+class PopExhibitFromList : public BT::SyncActionNode
+{
+public:
+    PopExhibitFromList(const std::string& name, const BT::NodeConfig& config)
+        : BT::SyncActionNode(name, config) {}
+
+    static BT::PortsList providedPorts();
+    BT::NodeStatus tick() override;
+};
+
+//=============================================================================
+// Utility Nodes  (SyncActionNode — no ROS, pure blackboard/logging)
+//=============================================================================
+
+// Logs a message at the requested level (debug | info | warn | error).
+// Always returns SUCCESS.
+class LogEvent : public BT::SyncActionNode
+{
+public:
+    LogEvent(const std::string& name, const BT::NodeConfig& config)
+        : BT::SyncActionNode(name, config) {}
+
+    static BT::PortsList providedPorts();
+    BT::NodeStatus tick() override;
+};
+
+// Writes a string value to an arbitrary blackboard key.
+// Always returns SUCCESS.
+class SetBlackboardValue : public BT::SyncActionNode
+{
+public:
+    SetBlackboardValue(const std::string& name, const BT::NodeConfig& config)
+        : BT::SyncActionNode(name, config) {}
+
+    static BT::PortsList providedPorts();
+    BT::NodeStatus tick() override;
+};
+
+// Reads blackboard key "key" and compares its string value to "expected".
+// Returns SUCCESS on match, FAILURE otherwise.
+class CheckBlackboard : public BT::SyncActionNode
+{
+public:
+    CheckBlackboard(const std::string& name, const BT::NodeConfig& config)
+        : BT::SyncActionNode(name, config) {}
+
+    static BT::PortsList providedPorts();
+    BT::NodeStatus tick() override;
+};
+
+// Sends the raw visitor utterance to ConversationManager. The system prompt
+// classifies AFFIRMATIVE utterances with answer="yes" and NEGATIVE with answer="no".
+// Returns SUCCESS if response == "yes", FAILURE otherwise.
+class IsVisitorResponseYes
+    : public BT::RosActionNode<dec_interfaces::action::ConversationManager>
+{
+public:
+    IsVisitorResponseYes(const std::string& name,
+                         const BT::NodeConfig& config,
+                         const BT::RosNodeParams& params)
+        : BT::RosActionNode<dec_interfaces::action::ConversationManager>(name, config, params) {}
+
+    static BT::PortsList providedPorts();
+    bool setGoal(Goal& goal) override;
+    BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
+    BT::NodeStatus onResultReceived(const WrappedResult& result) override;
+    BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
+};
+
 //=============================================================================
 // Function Declarations
 //=============================================================================
@@ -441,8 +629,7 @@ BT::Tree initializeTree(const std::string& scenario,
  *   - robot_location_description  (non-empty string)
  *   - robot_location_pose         (map: x, y numeric; theta in [0, 360])
  *   - gesture_target              (map: x, y, z numeric; z >= 0)
- *   - pre_gesture_message_english / pre_gesture_message_kinyarwanda  (non-empty strings)
- *   - post_gesture_message_english / post_gesture_message_kinyarwanda (non-empty strings)
+ *   - gesture_message_english     (string, may be empty)
  *   - cultural_knowledge          (non-empty sequence of non-empty strings)
  *
  * Errors are logged via RCLCPP_ERROR and the function returns false on the

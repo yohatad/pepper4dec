@@ -18,8 +18,8 @@ The **Conversation Manager Package** implements a **Retrieval-Augmented Generati
 - **Multi-format Data Support**: Handles structured JSON knowledge bases and flat document lists
 - **ROS2 Action Interface**: Action-based architecture for integration with other ROS2 nodes, with feedback during processing
 
-# 📄 Documentation
-The main documentation for this deliverable is found in the relevant DEC4Africa deliverables that provide more details.
+<!-- # 📄 Documentation
+The main documentation for this deliverable is found in the relevant DEC4Africa deliverables that provide more details. -->
 
 # 🛠️ Installation 
 
@@ -35,7 +35,7 @@ The main documentation for this deliverable is found in the relevant DEC4Africa 
 ```bash
 # Clone the repository (if not already done)
 cd ~/ros2_ws/src
-git clone <repository-url>
+git clone https://github.com/yohatad/pepper4dec
 
 # Build the workspace
 cd ~/ros2_ws
@@ -52,16 +52,16 @@ pip install -r ~/ros2_ws/src/dec_system/conversation_manager/requirements.txt
 # 🔧 Configuration Parameters
 The configuration is managed via `config/converation_manager_configuration.yaml`. The configuration file must be present for the node to start.
 
-| Parameter                   | Description                                                      | Range/Values            | Default Value |
-|-----------------------------|------------------------------------------------------------------|-------------------------|---------------|
-| `llm.base_url`              | LLM API endpoint URL                                             | String (URL)            | `https://api.deepseek.com/v1` |
-| `llm.api_key`               | API key for LLM service                                          | String                  | (from LLM_API_KEY env var)|
-| `llm.model`                 | LLM model name                                                   | String                  | `deepseek-chat`|
-| `embedding.model`           | Sentence transformer model for embeddings                        | String                  | `all-MiniLM-L6-v2`|
-| `search.similarity_threshold` | Similarity threshold for document retrieval                    | `[0.0 - 1.0]`           | `0.15`        |
-| `search.top_k`              | Number of documents to retrieve for context                      | Positive integer        | `5`           |
-| `data.default_path`         | Path to JSON data file for knowledge base (relative to package) | String (path)           | `./data/upanzi_data.json` |
-| `debug.verbose`             | Enable verbose logging                                           | Boolean                 | `true`        |
+| Parameter                     | Description                                                      | Range/Values            | Default Value |
+|-------------------------------|------------------------------------------------------------------|-------------------------|---------------|
+| `llm.base_url`                | LLM API endpoint URL                                             | String (URL)            | `https://api.deepseek.com/v1` |
+| `llm.api_key`                 | API key for LLM service                                          | String                  | (from LLM_API_KEY env var)|
+| `llm.model`                   | LLM model name                                                   | String                  | `deepseek-chat`|
+| `embedding.model`             | Sentence transformer model for embeddings                        | String                  | `all-MiniLM-L6-v2`|
+| `search.similarity_threshold` | Similarity threshold for document retrieval                      | `[0.0 - 1.0]`           | `0.15`        |
+| `search.top_k`                | Number of documents to retrieve for context                      | Positive integer        | `5`           |
+| `data.default_path`           | Path to JSON data file for knowledge base (relative to package)  | String (path)           | `./data/upanzi_data.json` |
+| `debug.verbose`               | Enable verbose logging                                           | Boolean                 | `true`        |
 
 > **Note:**  
 > - `llm.api_key` must be provided via the `LLM_API_KEY` environment variable
@@ -96,7 +96,7 @@ debug:
 # 🚀 Running the Node
 
 ## Launch All Components
-The RAG node can be started directly:
+The conversation_manager node can be started directly:
 
 ```bash
 # Source the workspace

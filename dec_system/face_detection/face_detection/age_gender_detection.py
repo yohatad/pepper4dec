@@ -76,7 +76,6 @@ def class_letterbox(im: np.ndarray, new_shape: Tuple[int, int] = (640, 640),
     
     return im
 
-
 def prepare_classification_images(
     img_list: List[Optional[np.ndarray]],
     target_size: int = 224,

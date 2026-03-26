@@ -1,0 +1,296 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="4" main_tree_to_execute="TourGuide">
+  
+  <!-- Main Tour Guide Behavior Tree -->
+  <BehaviorTree ID="TourGuide">
+    <Sequence name="MainTourSequence">
+      <SubTree ID="DetectVisitor"/>
+      <SubTree ID="EngageVisitor"/>
+      
+      <!-- Handle visitor response - if they decline, skip to EndTour gracefully -->
+      <Fallback name="TourDecision">
+        <Sequence name="AcceptedTour">
+          <SubTree ID="QueryVisitorResponse"/>
+          <SubTree ID="VisitExhibit"/>
+        </Sequence>
+        <!-- If QueryVisitorResponse fails (visitor declined), we still end gracefully -->
+        <Action ID="SetBlackboardValue" key="tour_declined" value="true"/>
+      </Fallback>
+      
+      <SubTree ID="EndTour"/>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- I. Detect Visitor -->
+  <BehaviorTree ID="DetectVisitor">
+    <Sequence name="DetectVisitorSequence">
+      <Parallel success_count="2" failure_count="1" name="SetupDetection">
+        <Action ID="AnimateBehavior" behavior_type="All" selected_range="0.5" duration_seconds="0"/>
+        <Action ID="SetOvertAttention" enabled="true"/>
+      </Parallel>
+      <Action ID="IsVisitorDiscovered" timeout="30.0"/>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- II. Engage Visitor -->
+  <BehaviorTree ID="EngageVisitor">
+    <Sequence name="EngageVisitorSequence">
+      <!-- Welcome gesture -->
+      <ReactiveSequence name="PerformWelcomeGesture">
+        <Action ID="StopAnimateBehavior"/>
+        <Action ID="Gesture" gesture_type="welcome" gesture_duration="2000"/>
+        <Action ID="AnimateBehavior" behavior_type="All" selected_range="0.5" duration_seconds="0"/>
+      </ReactiveSequence>
+
+      <!-- Welcome speech -->
+      <Action ID="SpeechWithFeedback" say="{welcome_speech}"/>
+
+      <!-- Establish mutual gaze with fallback -->
+      <Action ID="SetOvertAttention" enabled="true"/>
+      <Fallback name="EstablishGaze">
+        <Action ID="IsMutualGazeDiscovered" timeout="10.0"/>
+        <!-- If gaze not established, continue anyway but log -->
+        <Action ID="LogEvent" level="warn" message="Mutual gaze not established, continuing"/>
+      </Fallback>
+      <Action ID="SetOvertAttention" enabled="true"/>
+
+      <!-- Query for tour -->
+      <Action ID="SpeechWithFeedback" say="Would you like me to guide you through the Ubanzi lab?"/>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- III. Query Visitor Response -->
+  <BehaviorTree ID="QueryVisitorResponse">
+    <Sequence name="QueryResponseSequence">
+      <!-- ASR only — no tablet available -->
+      <Action ID="SetSpeechListening" enabled="true"/>
+      <Action ID="GetVisitorResponse" timeout="10.0" visitor_response="{visitor_response}"/>
+      <Action ID="SetSpeechListening" enabled="false"/>
+      
+      <!-- Process response -->
+      <IfThenElse name="ProcessResponse">
+        <Action ID="IsVisitorResponseYes" visitor_response="{visitor_response}"/>
+        <!-- THEN: Visitor wants tour - return SUCCESS -->
+        <Action ID="LogEvent" level="info" message="Visitor accepted tour"/>
+        <!-- ELSE: Visitor declined - say goodbye phrase and return FAILURE -->
+        <Sequence name="DeclineTour">
+          <Action ID="SpeechWithFeedback" say="{maybe_another_time_speech}"/>
+          <AlwaysFailure/>
+        </Sequence>
+      </IfThenElse>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- IV. Visit Exhibit -->
+  <BehaviorTree ID="VisitExhibit">
+    <Sequence name="VisitExhibitSequence">
+      <Action ID="RetrieveListOfExhibits" exhibit_list="{exhibit_queue}"/>
+      <!-- Return to starting position before beginning the tour loop -->
+      <Action ID="Navigate" goal_x="4.0" goal_y="6.8" goal_theta="1.5708"/>
+      
+      <!-- Loop through exhibits using WhileDoElse for cleaner exit -->
+      <WhileDoElse name="ExhibitLoop">
+        <!-- While condition: check if exhibits remain -->
+        <Condition ID="IsListWithExhibit"/>
+        
+        <!-- Do: visit exhibit -->
+        <Sequence name="SingleExhibitVisit">
+          <!-- Select and navigate to exhibit -->
+          <Action ID="SelectExhibit"
+                  exhibit_speech="{exhibit_speech}"
+                  exhibit_goal_x="{exhibit_goal_x}"
+                  exhibit_goal_y="{exhibit_goal_y}"
+                  exhibit_goal_theta="{exhibit_goal_theta}"
+                  exhibit_location_x="{exhibit_location_x}"
+                  exhibit_location_y="{exhibit_location_y}"
+                  exhibit_location_z="{exhibit_location_z}"/>
+          <Action ID="SpeechWithFeedback" say="{follow_me_speech}"/>
+          
+          <!-- Navigate to location with recovery -->
+          <SubTree ID="NavigateToLocation"/>
+          
+          <!-- Present exhibit -->
+          <Sequence name="PresentExhibit">
+            <Action ID="SetOvertAttention" enabled="true"/>
+
+            <!-- Speak description and point simultaneously -->
+            <Parallel success_count="2" failure_count="1">
+              <Action ID="SpeechWithFeedback" say="{exhibit_speech}"/>
+              <Action ID="Gesture"
+                      gesture_type="point"
+                      location_x="{exhibit_location_x}"
+                      location_y="{exhibit_location_y}"
+                      location_z="{exhibit_location_z}"
+                      gesture_duration="3000"/>
+            </Parallel>
+          </Sequence>
+          
+          <!-- Mark exhibit as visited -->
+          <Action ID="PopExhibitFromList" exhibit_list="{exhibit_queue}"/>
+        </Sequence>
+        
+        <!-- Else: no more exhibits, log and exit cleanly -->
+        <Action ID="LogEvent" level="info" message="All exhibits visited"/>
+      </WhileDoElse>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- V. End Tour -->
+  <BehaviorTree ID="EndTour">
+    <Sequence name="EndTourSequence">
+      <!-- Different goodbye based on whether tour was completed or declined -->
+      <Fallback name="SelectGoodbye">
+        <Sequence name="DeclinedGoodbye">
+          <Condition ID="CheckBlackboard" key="tour_declined" expected="true"/>
+          <Action ID="SpeechWithFeedback" say="{brief_goodbye_speech}"/>
+        </Sequence>
+        <Sequence name="FullGoodbye">
+          <Action ID="SpeechWithFeedback" say="{goodbye_speech}"/>
+        </Sequence>
+      </Fallback>
+      
+      <Action ID="Gesture"
+              gesture_type="goodbye"
+              gesture_duration="2000"/>
+      <!-- Return to standby position -->
+      <Action ID="Navigate" goal_x="4.0" goal_y="6.8" goal_theta="1.5708" />
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- Navigation Subtree with Recovery -->
+  <BehaviorTree ID="NavigateToLocation">
+    <Sequence name="NavigationSequence">
+      <Action ID="SetOvertAttention" enabled="false"/>
+      <Action ID="StopAnimateBehavior"/>
+
+      <!-- Navigation with retry — Nav2 handles recovery internally -->
+      <RetryUntilSuccessful num_attempts="3" name="NavigationWithRetry">
+        <Action ID="Navigate"
+                goal_x="{exhibit_goal_x}"
+                goal_y="{exhibit_goal_y}"
+                goal_theta="{exhibit_goal_theta}"
+                />
+      </RetryUntilSuccessful>
+
+      <!-- Re-enable attention and animations -->
+      <Action ID="AnimateBehavior" behavior_type="All" selected_range="0.5" duration_seconds="0"/>
+      <Action ID="SetOvertAttention" enabled="true"/>
+      
+      <!-- Try to establish gaze, but don't fail if we can't -->
+      <Fallback name="PostNavigationGaze">
+        <Action ID="IsMutualGazeDiscovered" timeout="10.0"/>
+        <Action ID="LogEvent" level="info" message="Proceeding without mutual gaze"/>
+      </Fallback>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- Node Models for BehaviorTree.CPP -->
+  <TreeNodesModel>
+    <!-- Actions -->
+    <Action ID="StopAnimateBehavior"/>
+
+    <Action ID="AnimateBehavior">
+      <input_port name="behavior_type" default="All">all | body | hands | rotation</input_port>
+      <input_port name="selected_range" default="0.5">Movement range [0.0, 1.0]</input_port>
+      <input_port name="duration_seconds" default="0">Duration in seconds (0 = indefinite)</input_port>
+      <output_port name="message">Result message from action server</output_port>
+    </Action>
+
+    <Action ID="SetOvertAttention">
+      <input_port name="enabled" default="true">true = enable attention, false = disable</input_port>
+      <output_port name="message">Response message from the service</output_port>
+    </Action>
+
+    <Action ID="Gesture">
+      <input_port name="gesture_type" default="">Gesture type (e.g. wave, point)</input_port>
+      <input_port name="gesture_id" default="0">Gesture ID</input_port>
+      <input_port name="gesture_duration" default="0">Duration in ms</input_port>
+      <input_port name="bow_nod_angle" default="0">Bow/nod angle in degrees</input_port>
+      <input_port name="location_x" default="0.0">Target x (metres)</input_port>
+      <input_port name="location_y" default="0.0">Target y (metres)</input_port>
+      <input_port name="location_z" default="0.0">Target z (metres)</input_port>
+      <output_port name="message">Result message from action server</output_port>
+    </Action>
+
+    <Action ID="SpeechWithFeedback">
+      <input_port name="say" default="">Text to speak</input_port>
+      <output_port name="started">Feedback: true once speech begins</output_port>
+      <output_port name="bookmark">Feedback: current bookmark ID (-1 if none)</output_port>
+      <output_port name="current_word">Feedback: word currently being spoken</output_port>
+    </Action>
+
+    <Action ID="Navigate">
+      <input_port name="goal_x">Goal x position (metres)</input_port>
+      <input_port name="goal_y">Goal y position (metres)</input_port>
+      <input_port name="goal_theta" default="0.0">Goal heading (radians)</input_port>
+      <input_port name="frame_id" default="map">Coordinate frame for the goal pose</input_port>
+      <output_port name="distance_remaining">Feedback: metres remaining to goal</output_port>
+      <output_port name="recoveries">Feedback: number of recovery attempts</output_port>
+    </Action>
+    
+    <Action ID="SelectExhibit">
+      <input_port name="exhibit_list" default="{exhibit_queue}">Queue of remaining location IDs</input_port>
+      <output_port name="exhibit_speech">Gesture message loaded from gesture_message_english</output_port>
+      <output_port name="exhibit_goal_x">Navigation goal x (metres)</output_port>
+      <output_port name="exhibit_goal_y">Navigation goal y (metres)</output_port>
+      <output_port name="exhibit_goal_theta">Navigation goal heading (radians)</output_port>
+      <output_port name="exhibit_location_x">Gesture target x (metres)</output_port>
+      <output_port name="exhibit_location_y">Gesture target y (metres)</output_port>
+      <output_port name="exhibit_location_z">Gesture target z (metres)</output_port>
+    </Action>
+
+    <Action ID="RetrieveListOfExhibits">
+      <output_port name="exhibit_list">Ordered list of location IDs from KnowledgeManager</output_port>
+    </Action>
+    
+    <Action ID="GetVisitorResponse">
+      <input_port name="timeout" default="10.0">Response timeout in seconds</input_port>
+      <output_port name="visitor_response">Recognised visitor utterance</output_port>
+    </Action>
+    
+    <Action ID="SetSpeechListening">
+      <input_port name="enabled" default="true">true = listen, false = mute</input_port>
+      <output_port name="message">Response message from the service</output_port>
+    </Action>
+    
+    <Action ID="LogEvent">
+      <input_port name="level" default="info">Log level: debug, info, warn, error</input_port>
+      <input_port name="message">Log message</input_port>
+    </Action>
+    
+    <Action ID="SetBlackboardValue">
+      <input_port name="key">Blackboard key</input_port>
+      <input_port name="value">Value to set</input_port>
+    </Action>
+    
+    <Action ID="PopExhibitFromList">
+      <input_port name="exhibit_list" default="{exhibit_queue}">Queue to pop from</input_port>
+      <output_port name="remaining_count">Number of exhibits remaining after pop</output_port>
+    </Action>
+    
+    <!-- StatefulActionNodes used as conditions (have timeout ports) -->
+    <Action ID="IsVisitorDiscovered">
+      <input_port name="timeout" default="30.0">Discovery timeout in seconds</input_port>
+    </Action>
+
+    <Action ID="IsMutualGazeDiscovered">
+      <input_port name="timeout"      default="10.0">Overall timeout in seconds</input_port>
+      <input_port name="min_duration" default="0.5">Seconds of continuous gaze required to succeed</input_port>
+    </Action>
+
+    <Action ID="IsVisitorResponseYes">
+      <input_port name="visitor_response" default="{visitor_response}">Raw ASR utterance classified by ConversationManager</input_port>
+    </Action>
+
+    <!-- Conditions -->
+    <Condition ID="IsListWithExhibit">
+      <input_port name="exhibit_list" default="{exhibit_queue}">Queue of remaining location IDs</input_port>
+    </Condition>
+
+    <Condition ID="CheckBlackboard">
+      <input_port name="key">Blackboard key to check</input_port>
+      <input_port name="expected">Expected value</input_port>
+    </Condition>
+  </TreeNodesModel>
+
+</root>
