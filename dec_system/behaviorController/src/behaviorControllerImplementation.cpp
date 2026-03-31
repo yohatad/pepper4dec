@@ -168,7 +168,7 @@ BT::NodeStatus StopAnimateBehavior::onFailure(BT::ServiceNodeErrorCode error)
 //
 // Goal fields:
 //   string  gesture_type
-//   int64   gesture_id
+//   string  gesture_name
 //   int64   gesture_duration
 //   int64   bow_nod_angle
 //   float64 location_x / y / z
@@ -185,8 +185,8 @@ BT::NodeStatus StopAnimateBehavior::onFailure(BT::ServiceNodeErrorCode error)
 BT::PortsList GestureNode::providedPorts()
 {
     return {
-        BT::InputPort<std::string> ("gesture_type",     "",  "Gesture type (e.g. wave, point)"),
-        BT::InputPort<int64_t>     ("gesture_id",       0,   "Gesture ID"),
+        BT::InputPort<std::string> ("gesture_type",     "",  "Gesture type (e.g. iconic, deictic, bow, nod)"),
+        BT::InputPort<std::string> ("gesture_name",     "",  "Gesture name (e.g. welcome, wave, shake)"),
         BT::InputPort<int64_t>     ("gesture_duration", 0,   "Duration in ms"),
         BT::InputPort<int64_t>     ("bow_nod_angle",    0,   "Bow/nod angle in degrees"),
         BT::InputPort<double>      ("location_x",       0.0, "Target x (metres)"),
@@ -200,7 +200,7 @@ BT::PortsList GestureNode::providedPorts()
 bool GestureNode::setGoal(Goal& goal)
 {
     auto gesture_type     = getInput<std::string>("gesture_type");
-    auto gesture_id       = getInput<int64_t>("gesture_id");
+    auto gesture_name     = getInput<std::string>("gesture_name");
     auto gesture_duration = getInput<int64_t>("gesture_duration");
     auto bow_nod_angle    = getInput<int64_t>("bow_nod_angle");
     auto location_x       = getInput<double>("location_x");
@@ -214,7 +214,7 @@ bool GestureNode::setGoal(Goal& goal)
     }
 
     goal.gesture_type     = gesture_type.value();
-    goal.gesture_id       = gesture_id       ? gesture_id.value()       : 0;
+    goal.gesture_name     = gesture_name     ? gesture_name.value()     : "";
     goal.gesture_duration = gesture_duration ? gesture_duration.value() : 0;
     goal.bow_nod_angle    = bow_nod_angle    ? bow_nod_angle.value()    : 0;
     goal.location_x       = location_x       ? location_x.value()       : 0.0;
@@ -223,8 +223,8 @@ bool GestureNode::setGoal(Goal& goal)
 
     if (ConfigManager::instance().isVerbose()) {
         RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
-                    "[GestureNode] Goal → type=%s id=%ld duration=%ldms target=(%.2f,%.2f,%.2f)",
-                    goal.gesture_type.c_str(), goal.gesture_id, goal.gesture_duration,
+                    "[GestureNode] Goal → type=%s name=%s duration=%ldms target=(%.2f,%.2f,%.2f)",
+                    goal.gesture_type.c_str(), goal.gesture_name.c_str(), goal.gesture_duration,
                     goal.location_x, goal.location_y, goal.location_z);
     }
     return true;

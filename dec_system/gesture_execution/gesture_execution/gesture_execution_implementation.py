@@ -162,22 +162,22 @@ class GestureDescriptorManager:
             print(f"Warning: Could not load gestures {gesture_path}: {e}")
             return {}
     
-    def get_gesture_by_id(self, gesture_id: int) -> Optional[Dict]:
-        """Get gesture data by ID"""
+    def get_gesture_by_name(self, gesture_name: str) -> Optional[Dict]:
+        """Get gesture data by name"""
         if "gestures" not in self.gestures_data:
             return None
-        
-        for gesture_name, gesture_data in self.gestures_data["gestures"].items():
-            if gesture_data.get("id") == gesture_id:
-                return {
-                    "name": gesture_name,
-                    "data": gesture_data
-                }
+
+        gesture_data = self.gestures_data["gestures"].get(gesture_name)
+        if gesture_data is not None:
+            return {
+                "name": gesture_name,
+                "data": gesture_data
+            }
         return None
-    
-    def get_gesture_duration(self, gesture_id: int) -> float:
+
+    def get_gesture_duration(self, gesture_name: str) -> float:
         """Get total duration of a gesture from its times data"""
-        gesture_info = self.get_gesture_by_id(gesture_id)
+        gesture_info = self.get_gesture_by_name(gesture_name)
         if not gesture_info:
             return 0.0
         
@@ -288,8 +288,8 @@ class GestureExecutionSystem(Node):
             return GoalResponse.REJECT
         
         self.get_logger().info(
-            f"Accepting goal: {goal_request.gesture_type} "
-            f"(ID: {goal_request.gesture_id})"
+            f"Accepting goal: type='{goal_request.gesture_type}' "
+            f"name='{goal_request.gesture_name}'"
         )
         return GoalResponse.ACCEPT
     
@@ -313,20 +313,20 @@ class GestureExecutionSystem(Node):
             if self.verbose_mode:
                 self.get_logger().info(
                     f"Executing gesture - Type: '{gesture_type}', "
-                    f"ID: {request.gesture_id}, Duration: {request.gesture_duration}ms"
+                    f"Name: '{request.gesture_name}', Duration: {request.gesture_duration}ms"
                 )
-            
+
             # Start feedback thread
             feedback_thread = threading.Thread(
                 target=self.publish_elapsed_feedback,
                 args=(goal_handle, start_time)
             )
             feedback_thread.start()
-            
+
             # Execute gesture (blocking)
             success = self.execute_gesture(
                 gesture_type=gesture_type,
-                gesture_id=request.gesture_id,
+                gesture_name=request.gesture_name,
                 gesture_duration=request.gesture_duration,
                 bow_nod_angle=request.bow_nod_angle,
                 location_x=request.location_x,
@@ -382,7 +382,7 @@ class GestureExecutionSystem(Node):
     def execute_gesture(
         self,
         gesture_type: str,
-        gesture_id: int,
+        gesture_name: str,
         gesture_duration: int,
         bow_nod_angle: int,
         location_x: float,
@@ -390,15 +390,15 @@ class GestureExecutionSystem(Node):
         location_z: float
     ) -> bool:
         """Main gesture execution logic"""
-        
+
         gesture_duration = max(MIN_GESTURE_DURATION, min(gesture_duration, MAX_GESTURE_DURATION))
-        
+
         if gesture_type in ["deictic"]:
             return self.execute_deictic_gesture(
                 location_x, location_y, location_z, gesture_duration
             )
         elif gesture_type == "iconic":
-            return self.execute_iconic_gesture(gesture_id, gesture_duration)
+            return self.execute_iconic_gesture(gesture_name, gesture_duration)
         elif gesture_type == "symbolic":
             self.get_logger().warning("Symbolic gestures not implemented yet")
             return False
@@ -407,8 +407,8 @@ class GestureExecutionSystem(Node):
         elif gesture_type in ["nod"]:
             return self.execute_nodding_gesture(bow_nod_angle, gesture_duration)
         else:
-            self.get_logger().warning(f"Unsupported gesture type: '{gesture_type}'")
-            return False
+            # Treat unrecognised gesture_type as a YAML gesture name
+            return self.execute_iconic_gesture(gesture_type, gesture_duration)
     
     def execute_deictic_gesture(
         self,
@@ -624,12 +624,12 @@ class GestureExecutionSystem(Node):
         
         return head_pitch, head_yaw
     
-    def execute_iconic_gesture(self, gesture_id: int, duration: int) -> bool:
+    def execute_iconic_gesture(self, gesture_name: str, duration: int) -> bool:
         """Execute iconic gesture from YAML configuration"""
         try:
-            gesture_info = self.descriptor_manager.get_gesture_by_id(gesture_id)
+            gesture_info = self.descriptor_manager.get_gesture_by_name(gesture_name)
             if not gesture_info:
-                self.get_logger().error(f"Gesture ID {gesture_id} not found")
+                self.get_logger().error(f"Gesture '{gesture_name}' not found")
                 return False
             
             gesture_data = gesture_info["data"]

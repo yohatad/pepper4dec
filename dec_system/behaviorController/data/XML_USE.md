@@ -123,8 +123,8 @@ Sends a goal to the `Gesture` action server. Supports both iconic gestures (wave
 
 | Port | Direction | Type | Default | Description |
 |------|-----------|------|---------|-------------|
-| `gesture_type` | input | string | `""` | Gesture type (e.g. `wave`, `point`, `welcome`, `goodbye`) |
-| `gesture_id` | input | int64 | `0` | Gesture ID |
+| `gesture_type` | input | string | `""` | Gesture type (`iconic`, `deictic`, `bow`, `nod`) — or omit and use `gesture_name` directly |
+| `gesture_name` | input | string | `""` | Gesture name (e.g. `welcome`, `wave`, `shake`) |
 | `gesture_duration` | input | int64 | `0` | Duration in **milliseconds** |
 | `bow_nod_angle` | input | int64 | `0` | Bow/nod angle in degrees |
 | `location_x` | input | double | `0.0` | Target X (metres) |

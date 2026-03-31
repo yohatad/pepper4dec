@@ -24,38 +24,44 @@
   <!-- I. Detect Visitor -->
   <BehaviorTree ID="DetectVisitor">
     <Sequence name="DetectVisitorSequence">
-      <Parallel success_count="2" failure_count="1" name="SetupDetection">
+      <Action ID="SetOvertAttention" enabled="true"/>
+      <!-- Animate in background while waiting for a visitor;
+           Parallel succeeds as soon as IsVisitorDiscovered succeeds,
+           then halts AnimateBehavior cleanly -->
+      <Parallel success_count="1" failure_count="1" name="AnimateWhileDetecting">
         <Action ID="AnimateBehavior" behavior_type="All" selected_range="0.5" duration_seconds="0"/>
-        <Action ID="SetOvertAttention" enabled="true"/>
+        <Action ID="IsVisitorDiscovered" timeout="30.0"/>
       </Parallel>
-      <Action ID="IsVisitorDiscovered" timeout="30.0"/>
     </Sequence>
   </BehaviorTree>
 
   <!-- II. Engage Visitor -->
   <BehaviorTree ID="EngageVisitor">
     <Sequence name="EngageVisitorSequence">
-      <!-- Welcome gesture -->
-      <ReactiveSequence name="PerformWelcomeGesture">
-        <Action ID="StopAnimateBehavior"/>
-        <Action ID="Gesture" gesture_type="welcome" gesture_duration="2000"/>
+      <!-- Stop animations, perform welcome gesture, then resume -->
+      <Action ID="StopAnimateBehavior"/>
+      <Action ID="Gesture" gesture_type="welcome" gesture_duration="2000"/>
+
+      <!-- Animate in background for the rest of engagement;
+           Parallel succeeds when the inner Sequence completes,
+           then halts AnimateBehavior cleanly -->
+      <Parallel success_count="1" failure_count="1" name="AnimateWhileEngaging">
         <Action ID="AnimateBehavior" behavior_type="All" selected_range="0.5" duration_seconds="0"/>
-      </ReactiveSequence>
+        <Sequence name="EngageSequence">
+          <!-- Welcome speech -->
+          <Action ID="SpeechWithFeedback" say="{welcome_speech}"/>
 
-      <!-- Welcome speech -->
-      <Action ID="SpeechWithFeedback" say="{welcome_speech}"/>
+          <!-- Establish mutual gaze with fallback -->
+          <Action ID="SetOvertAttention" enabled="true"/>
+          <Fallback name="EstablishGaze">
+            <Action ID="IsMutualGazeDiscovered" timeout="10.0"/>
+            <Action ID="LogEvent" level="warn" message="Mutual gaze not established, continuing"/>
+          </Fallback>
 
-      <!-- Establish mutual gaze with fallback -->
-      <Action ID="SetOvertAttention" enabled="true"/>
-      <Fallback name="EstablishGaze">
-        <Action ID="IsMutualGazeDiscovered" timeout="10.0"/>
-        <!-- If gaze not established, continue anyway but log -->
-        <Action ID="LogEvent" level="warn" message="Mutual gaze not established, continuing"/>
-      </Fallback>
-      <Action ID="SetOvertAttention" enabled="true"/>
-
-      <!-- Query for tour -->
-      <Action ID="SpeechWithFeedback" say="Would you like me to guide you through the Ubanzi lab?"/>
+          <!-- Query for tour -->
+          <Action ID="SpeechWithFeedback" say="Would you like me to guide you through the Upanzi lab?"/>
+        </Sequence>
+      </Parallel>
     </Sequence>
   </BehaviorTree>
 
@@ -172,15 +178,17 @@
                 />
       </RetryUntilSuccessful>
 
-      <!-- Re-enable attention and animations -->
-      <Action ID="AnimateBehavior" behavior_type="All" selected_range="0.5" duration_seconds="0"/>
-      <Action ID="SetOvertAttention" enabled="true"/>
-      
-      <!-- Try to establish gaze, but don't fail if we can't -->
-      <Fallback name="PostNavigationGaze">
-        <Action ID="IsMutualGazeDiscovered" timeout="10.0"/>
-        <Action ID="LogEvent" level="info" message="Proceeding without mutual gaze"/>
-      </Fallback>
+      <!-- Animate in background while re-engaging attention and gaze -->
+      <Parallel success_count="1" failure_count="1" name="AnimateWhileGazing">
+        <Action ID="AnimateBehavior" behavior_type="All" selected_range="0.5" duration_seconds="0"/>
+        <Sequence name="PostNavigationEngagement">
+          <Action ID="SetOvertAttention" enabled="true"/>
+          <Fallback name="PostNavigationGaze">
+            <Action ID="IsMutualGazeDiscovered" timeout="10.0"/>
+            <Action ID="LogEvent" level="info" message="Proceeding without mutual gaze"/>
+          </Fallback>
+        </Sequence>
+      </Parallel>
     </Sequence>
   </BehaviorTree>
 
@@ -202,8 +210,8 @@
     </Action>
 
     <Action ID="Gesture">
-      <input_port name="gesture_type" default="">Gesture type (e.g. wave, point)</input_port>
-      <input_port name="gesture_id" default="0">Gesture ID</input_port>
+      <input_port name="gesture_type" default="">Gesture type (e.g. iconic, deictic, bow, nod)</input_port>
+      <input_port name="gesture_name" default="">Gesture name (e.g. welcome, wave, shake)</input_port>
       <input_port name="gesture_duration" default="0">Duration in ms</input_port>
       <input_port name="bow_nod_angle" default="0">Bow/nod angle in degrees</input_port>
       <input_port name="location_x" default="0.0">Target x (metres)</input_port>
