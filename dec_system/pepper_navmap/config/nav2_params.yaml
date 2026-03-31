@@ -51,7 +51,7 @@ bt_navigator:
     global_frame: map
     robot_base_frame: base_footprint
     odom_topic: odom  # No leading slash
-    bt_loop_duration: 10
+    bt_loop_duration: 2
     default_server_timeout: 20
     wait_for_service_timeout: 5 
     
@@ -130,13 +130,13 @@ controller_server:
       debug_trajectory_details: False
       min_vel_x: 0.0
       min_vel_y: 0.0
-      max_vel_x: 0.2  # Reduced for smoother motion
+      max_vel_x: 0.5  # Reduced for smoother motion
       max_vel_y: 0.0
       max_vel_theta: 0.5  # Reduced for stability
       min_speed_xy: 0.0
-      max_speed_xy: 0.2
+      max_speed_xy: 0.5
       min_speed_theta: 0.0
-      acc_lim_x: 1.0  # Gentler acceleration
+      acc_lim_x: 2.0  # Gentler acceleration
       acc_lim_y: 0.0
       acc_lim_theta: 1.5  # Gentler angular
       decel_lim_x: -1.0
@@ -168,7 +168,7 @@ controller_server:
 local_costmap:
   local_costmap:
     ros__parameters:
-      update_frequency: 5.0
+      update_frequency: 15.0
       publish_frequency: 2.0
       global_frame: odom
       robot_base_frame: base_footprint
@@ -202,7 +202,7 @@ local_costmap:
 global_costmap:
   global_costmap:
     ros__parameters:
-      update_frequency: 1.0
+      update_frequency: 5.0
       publish_frequency: 1.0
       global_frame: map
       robot_base_frame: base_footprint
