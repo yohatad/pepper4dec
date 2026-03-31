@@ -3,7 +3,7 @@
 </div>
 
 <div align="center">
-  <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:50%; height:auto;">
+  <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
 The **Person Detection and Tracking** package is a **ROS2** package designed to detect and track multiple persons in real-time by subscribing to image topics. It publishes an array of detected persons with their bounding boxes, labels, and tracking IDs to the **/personDetection/data** topic. Each entry in the published data includes the **label** of the detected person, the **centroid** coordinates, the **width** and **height** of the bounding box, and a unique **track_id** for tracking over time.

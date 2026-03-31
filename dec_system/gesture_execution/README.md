@@ -3,7 +3,7 @@
 </div>
 
 <div align="center">
-  <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:50%; height:auto;">
+  <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
 The **Gesture Execution** package is a **ROS2** package designed to execute various types of gestures on the Pepper humanoid robot. It provides an **Action Server** interface for executing deictic (pointing), iconic (predefined arm motions), bowing, and nodding gestures with smooth Bézier interpolation for natural motion. The system includes real-time feedback on gesture execution progress and comprehensive visualization support for debugging.

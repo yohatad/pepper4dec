@@ -3,7 +3,7 @@
 </div>
 
 <div align="center">
-  <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:50%; height:auto;">
+  <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
 The **Speech Event Recognition and Localization** package is a ROS2 package that provides real-time speech recognition using Whisper ASR, voice activity detection (VAD) with Silero VAD (ONNX), and optional sound-source localization. It processes the robot's microphone audio (48 kHz, `naoqi_bridge_msgs/AudioBuffer`), detects speech segments, transcribes them with a low-latency Whisper model, and publishes the recognized text. The module can also estimate the direction-of-arrival of a sound using SRP-PHAT beamforming on Pepper's 4-microphone array.
@@ -22,14 +22,6 @@ Install the required software components to instantiate and set up the developme
 - CUDA-capable GPU (optional but recommended for Whisper acceleration)
   - CUDA 12.1 or compatible version
   - Check your CUDA version: `nvcc --version` or `nvidia-smi`
-
-## ROS2 Dependencies
-The following ROS2 packages are required (listed in `package.xml`):
-- `rclpy`, `rclcpp`, `rclcpp_action`
-- `std_msgs`, `geometry_msgs`, `sensor_msgs`
-- `naoqi_bridge_msgs` — for `AudioBuffer` microphone messages
-- `dec_interfaces` — for the `SpeechRecognition` action definition
-- `ament_index_python`
 
 ## Python Environment Setup
 
@@ -119,37 +111,6 @@ Node(
 2. **Command line**:
 ```bash
 ros2 run speech_event speech_event --ros-args -p device:=cuda -p language:=en -p action_server:=false
-```
-
-3. **YAML file** (see `config/speech_event_configuration.yaml`):
-```yaml
-speech_recognition:
-  ros__parameters:
-    # Audio Processing
-    sample_rate: 16000
-    input_sample_rate: 48000
-    microphone_topic: "/audio"
-
-    # Whisper ASR Configuration
-    device: "cuda"
-    compute_type: "float16"
-    language: "en"
-    whisper_model_id: "deepdml/faster-whisper-large-v3-turbo-ct2"
-
-    # VAD Parameters
-    speech_threshold: 0.7
-    neg_threshold: 0.35
-    min_silence_duration_ms: 1000
-    min_speech_duration: 0.3
-    max_speech_duration_s: 10.0
-    pre_speech_buffer_ms: 200
-
-    # Audio Gate
-    intensity_threshold: 0.001
-```
-Then load with:
-```bash
-ros2 run speech_event speech_event --ros-args --params-file ~/ros2_ws/src/dec4africa/dec_system/speech_event/config/speech_event_configuration.yaml
 ```
 
 # 🔄 Operating Modes

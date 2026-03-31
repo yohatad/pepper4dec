@@ -3,7 +3,7 @@
 </div>
 
 <div align="center">
-  <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:50%; height:auto;">
+  <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
 The **pepper_navmap** package is a **ROS2** metapackage that provides autonomous localization, mapping, and navigation capabilities for the Pepper robot. It integrates **RTAB-Map** for 3D SLAM using an Intel RealSense depth camera, **SLAM Toolbox** for 2D LiDAR-based mapping, and **Nav2** for path planning, obstacle avoidance, and goal navigation. The package also supports keepout zones and provides a utility node for programmatically sending navigation goals.

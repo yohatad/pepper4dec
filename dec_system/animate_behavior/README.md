@@ -3,7 +3,7 @@
 </div>
 
 <div align="center">
-  <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:50%; height:auto;">
+  <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
 The **Animate Behavior** package is a ROS2 action server that provides natural, lifelike animation for the Pepper humanoid robot during idle periods or social interactions. It generates smooth, randomized gestural movements across various body parts (arms, hands, legs, and base rotation) to enhance the robot's expressiveness and engagement during human-robot interaction. The module uses high-frequency motion updates (30Hz) with exponential smoothing to achieve natural, fluid movements that avoid mechanical or jerky appearance.
@@ -142,64 +142,6 @@ ros2 action send_goal /animate_behavior dec_interfaces/action/AnimateBehavior \
 ros2 action send_goal /animate_behavior dec_interfaces/action/AnimateBehavior \
   "{behavior_type: 'hands', selected_range: 0.3, duration_seconds: 60}"
 ```
-
-### Using Python Action Client
-
-```python
-import rclpy
-from rclpy.action import ActionClient
-from rclpy.node import Node
-from dec_interfaces.action import AnimateBehavior
-
-class AnimationClient(Node):
-    def __init__(self):
-        super().__init__('animation_client')
-        self._action_client = ActionClient(self, AnimateBehavior, '/animate_behavior')
-
-    def send_goal(self, behavior_type='All', selected_range=0.5, duration_seconds=30):
-        goal_msg = AnimateBehavior.Goal()
-        goal_msg.behavior_type = behavior_type
-        goal_msg.selected_range = selected_range
-        goal_msg.duration_seconds = duration_seconds
-
-        self._action_client.wait_for_server()
-        self._send_goal_future = self._action_client.send_goal_async(
-            goal_msg,
-            feedback_callback=self.feedback_callback
-        )
-        self._send_goal_future.add_done_callback(self.goal_response_callback)
-
-    def feedback_callback(self, feedback_msg):
-        feedback = feedback_msg.feedback
-        self.get_logger().info(f'Gestures: {feedback.gestures_completed}, '
-                              f'Elapsed: {feedback.elapsed_time:.1f}s')
-
-    def goal_response_callback(self, future):
-        goal_handle = future.result()
-        if not goal_handle.accepted:
-            self.get_logger().info('Goal rejected')
-            return
-
-        self.get_logger().info('Goal accepted')
-        self._get_result_future = goal_handle.get_result_async()
-        self._get_result_future.add_done_callback(self.get_result_callback)
-
-    def get_result_callback(self, future):
-        result = future.result().result
-        self.get_logger().info(f'Result: {result.message}, '
-                              f'Duration: {result.total_duration:.1f}s')
-
-def main():
-    rclpy.init()
-    client = AnimationClient()
-    client.send_goal(behavior_type='arms', selected_range=0.6, duration_seconds=45)
-    rclpy.spin(client)
-    rclpy.shutdown()
-
-if __name__ == '__main__':
-    main()
-```
-
 ### Integration with BehaviorTree.CPP
 
 ```xml
@@ -265,64 +207,6 @@ animate_behavior/
 ├── setup.cfg                                # Setup configuration
 └── README.md                                # This file
 ```
-
-# 🔍 Debugging Tips
-
-## Animation Server
-- Check that the action server is running: `ros2 action list | grep animate_behavior`
-- Monitor action server status: `ros2 action info /animate_behavior`
-- Send a test goal: `ros2 action send_goal /animate_behavior dec_interfaces/action/AnimateBehavior "{behavior_type: 'hands', selected_range: 0.5, duration_seconds: 10}"`
-- Monitor feedback during execution: Add `--feedback` flag to the action send_goal command
-- Check for joint state reception: Look for "✓ Joint states received" in the node logs
-
-## Topic Monitoring
-- Verify joint commands are published: `ros2 topic echo /joint_angles`
-- Check velocity commands: `ros2 topic echo /cmd_vel`
-- Monitor joint state feedback: `ros2 topic echo /joint_states --once`
-- Check topic rates: `ros2 topic hz /joint_angles` (should be ~30Hz during animation)
-
-## Common Issues
-
-### Animation not starting
-- Ensure the robot is launched and publishing `/joint_states`
-- Check that the goal parameters are valid (behavior_type must be one of: All, body, hands, arms, rotation, home)
-- Verify `selected_range` is between 0.0 and 1.0
-
-### Jerky or unnatural motion
-- The node uses 30Hz updates with exponential smoothing for smooth motion
-- If motion appears jerky, check CPU load (high load may affect timing)
-- Verify `/joint_states` is being received (check logs for "Joint states received")
-
-### Animation won't stop
-- Use the `home` behavior type to stop: `ros2 action send_goal /animate_behavior dec_interfaces/action/AnimateBehavior "{behavior_type: 'home', selected_range: 0.0, duration_seconds: 0}"`
-- Alternatively, use the stop service: `ros2 service call /animate_behavior/stop std_srvs/srv/Trigger`
-- Cancel via action: `ros2 action send_goal /animate_behavior dec_interfaces/action/AnimateBehavior "{behavior_type: 'All', selected_range: 0.5, duration_seconds: 10}" --cancel`
-
-## Logging
-- View detailed logs: `ros2 run animate_behavior animate_behavior --ros-args --log-level debug`
-- Monitor ROS2 logs: `ros2 topic echo /rosout | grep animate_behavior`
-
-# 🎨 Implementation Details
-
-## Motion Generation Algorithm
-
-The animation system uses a sophisticated motion generation approach:
-
-1. **Target Generation:** New random target positions are generated every 2.5-4.5 seconds (randomized for natural variation)
-2. **Smooth Interpolation:** 30Hz update loop smoothly interpolates from current to target positions using exponential smoothing
-3. **Natural Bias:** 30% probability of returning toward home position to create natural oscillatory motion
-4. **Range Limiting:** All movements constrained by joint limits and scaled by `selected_range` parameter
-5. **Staggered Timing:** Limb animations start with random time offsets for asynchronous, natural motion
-
-## Performance Characteristics
-
-- **Update Rate:** 30Hz joint position commands for smooth motion
-- **Feedback Rate:** 2Hz feedback updates to clients
-- **Gesture Frequency:** New gesture every 2.5-4.5 seconds (randomized)
-- **Rotation Frequency:** Base rotation every 5 seconds
-- **CPU Usage:** Low CPU footprint (~1-2% on typical systems)
-- **Latency:** <100ms goal acceptance, immediate feedback stream
-
 # 💡 Support
 
 For issues or questions:
