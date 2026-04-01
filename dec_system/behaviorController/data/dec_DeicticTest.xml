@@ -43,9 +43,6 @@
           <Action ID="PopExhibitFromList" exhibit_list="{exhibit_queue}"/>
         </Sequence>
 
-        <!-- Else: list exhausted -->
-        <Action ID="LogEvent" level="info" message="All exhibits visited"/>
-
       </WhileDoElse>
 
     </Sequence>
