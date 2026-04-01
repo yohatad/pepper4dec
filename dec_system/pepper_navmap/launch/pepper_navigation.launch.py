@@ -8,7 +8,7 @@ from ament_index_python.packages import get_package_share_directory
 def generate_launch_description():
     # Paths
     pkg_dir = get_package_share_directory('pepper_navigation')
-    map_file = os.path.join(pkg_dir, 'map', 'rtabmap_feb_26.yaml')
+    map_file = os.path.join(pkg_dir, 'map', 'rtabmap_march_28.yaml')
     params_file = os.path.join(pkg_dir, 'config', 'nav2_params.yaml')
     keepout_mask_file = os.path.join(pkg_dir, 'map', 'keepout_zones.yaml')
     
@@ -45,13 +45,13 @@ def generate_launch_description():
         ),
         
         # AMCL (Localization)
-        # Node(
-        #     package='nav2_amcl',
-        #     executable='amcl',
-        #     name='amcl',
-        #     output='screen',
-        #     parameters=[params_file]
-        # ),
+        Node(
+            package='nav2_amcl',
+            executable='amcl',
+            name='amcl',
+            output='screen',
+            parameters=[params_file]
+        ),
         
         # Nav2 Controller
         Node(
@@ -109,7 +109,7 @@ def generate_launch_description():
                     'map_server',
                     'filter_mask_server',
                     'costmap_filter_info_server',  # Must activate lifecycle node
-                    # 'amcl',
+                    'amcl',
                     'controller_server',
                     'planner_server',
                     'behavior_server',
