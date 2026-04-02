@@ -249,7 +249,7 @@ The navigation stack integrates three main subsystems:
 For issues or questions:
 - Create an issue on GitHub
 - Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a><br>
-- Visit: <a href="http://www.dec4africa.org">www.dec4africa.org</a>
+<!-- - Visit: <a href="http://www.dec4africa.org">www.dec4africa.org</a> -->
 
 # 📜 License
 Copyright (C) 2026 Upanzi Network
