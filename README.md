@@ -16,6 +16,10 @@ Beyond automation, the project serves as a real-world testbed for **culturally a
 
 ## 🏗️ System Architecture
 
+<div align="center">
+<img src="dec_system/System_arch.png" alt="System Architecture" width="1200px">
+</div>
+
 The system is built on **ROS2 (Humble)** and follows a modular architecture with specialized packages handling different aspects of robot behavior and perception:
 
 ### **Core Control Packages**
