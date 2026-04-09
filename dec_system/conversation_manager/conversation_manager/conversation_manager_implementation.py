@@ -736,6 +736,184 @@ def handle_query(
     }
 
 
+# =============================================================================
+# Streaming Response Generation
+# =============================================================================
+
+def _parse_json_string_value(s: str) -> Tuple[str, bool]:
+    """
+    Parse characters of a JSON string value after the opening quote.
+
+    Returns (decoded_text, is_complete).
+    is_complete is True when the unescaped closing quote is found.
+    Stops at buffer boundary (incomplete escape) without error.
+    """
+    result: List[str] = []
+    i = 0
+    escape_map = {'n': '\n', 't': '\t', 'r': '\r', '"': '"', '\\': '\\', '/': '/'}
+    while i < len(s):
+        c = s[i]
+        if c == '\\':
+            if i + 1 < len(s):
+                result.append(escape_map.get(s[i + 1], s[i + 1]))
+                i += 2
+            else:
+                break  # Incomplete escape at buffer boundary
+        elif c == '"':
+            return ''.join(result), True
+        else:
+            result.append(c)
+            i += 1
+    return ''.join(result), False
+
+
+def extract_answer_from_raw(raw: str) -> str:
+    """
+    Extract the spoken answer from a raw LLM response.
+
+    Handles:
+      - Thinking-capable models:  <think>...</think>{"answer": "..."}
+      - JSON structured response: {"intent": "...", "answer": "..."}
+      - Plain-text fallback:      raw text returned as-is
+    """
+    cleaned = raw
+    if "</think>" in cleaned:
+        cleaned = cleaned.split("</think>", 1)[1].strip()
+    try:
+        parsed = json.loads(cleaned)
+        return parsed.get("answer", cleaned)
+    except (json.JSONDecodeError, AttributeError, ValueError):
+        return cleaned
+
+
+def generate_response_stream(
+    query: str,
+    search_results: List[Dict],
+    conversation_history: Optional[List[Dict]],
+    raw_response_out: List[str],
+) -> Any:  # Iterator[str]
+    """
+    Stream the LLM response, yielding each answer sentence as soon as it arrives.
+
+    The LLM is expected to return a JSON object with an "answer" field
+    (matching the system prompt format).  Characters of the answer value are
+    extracted token-by-token and yielded as complete sentences.
+
+    Args:
+        query:               User question.
+        search_results:      Documents returned by vector search.
+        conversation_history: Previous conversation turns (may be None).
+        raw_response_out:    Single-element mutable list.  The full raw LLM
+                             response is appended here when streaming finishes,
+                             allowing the caller to parse intent/confidence.
+
+    Yields:
+        Individual answer sentences (str).
+    """
+    config = get_config()
+    client = get_openai_client()
+
+    # ---- Build messages (same logic as generate_response) ----
+    messages: List[Dict] = [{"role": "system", "content": load_system_prompt()}]
+    if conversation_history:
+        for turn in conversation_history[-config.context_turns:]:
+            messages.append({"role": "user", "content": turn.get("query", "")})
+            messages.append({"role": "assistant", "content": turn.get("response", "")})
+
+    user_content = f'Question: "{query}"'
+    if search_results:
+        context_parts = [f"[{r['title']}]\n{r['content']}" for r in search_results]
+        user_content += "\n\nRelevant information:\n" + "\n\n".join(context_parts)
+    messages.append({"role": "user", "content": user_content})
+
+    max_tokens = config.max_response_sentences * 50 + 512
+
+    raw_buffer = ""
+    answer_chars = ""    # Accumulated decoded answer-value text seen so far
+    answer_open_idx = -1  # Index in post-thinking buffer where answer value begins
+    answer_done = False
+    pending = ""          # Characters awaiting a sentence boundary
+
+    try:
+        stream = client.chat.completions.create(
+            model=config.llm_model,
+            messages=messages,
+            max_tokens=max_tokens,
+            stream=True,
+        )
+
+        for chunk in stream:
+            delta = chunk.choices[0].delta.content
+            if not delta:
+                continue
+            raw_buffer += delta
+
+            if answer_done:
+                continue
+
+            # ---- Strip chain-of-thought thinking section ----
+            # Once </think> is present, post_think is everything after it.
+            # While still inside <think>...</think>, skip processing.
+            if "</think>" in raw_buffer:
+                post_think = raw_buffer.split("</think>", 1)[1]
+            elif "<think>" in raw_buffer:
+                continue  # Still inside thinking block
+            else:
+                post_think = raw_buffer
+
+            # ---- Locate the "answer" value start ----
+            if answer_open_idx < 0:
+                import re as _re
+                m = _re.search(r'"answer"\s*:\s*"', post_think)
+                if m:
+                    answer_open_idx = m.end()
+
+            if answer_open_idx < 0:
+                continue  # Haven't reached the answer field yet
+
+            # ---- Parse new characters from the answer value ----
+            new_text, complete = _parse_json_string_value(post_think[answer_open_idx:])
+            new_chars = new_text[len(answer_chars):]
+            answer_chars = new_text
+            pending += new_chars
+
+            if complete:
+                answer_done = True
+                if pending.strip():
+                    yield pending.strip()
+                pending = ""
+            else:
+                # Yield all complete sentences (ended by .!? followed by space)
+                import re as _re
+                while True:
+                    m2 = _re.search(r'[.!?](?:\s|$)', pending)
+                    if not m2:
+                        break
+                    cut = m2.end()
+                    sentence = pending[:cut].strip()
+                    if sentence:
+                        yield sentence
+                    pending = pending[cut:]
+
+        # Yield any remaining partial sentence at end of stream
+        if pending.strip():
+            yield pending.strip()
+
+        # Fallback: if the answer field was never found (non-JSON response),
+        # yield the cleaned full response.
+        if not answer_chars:
+            fallback = extract_answer_from_raw(raw_buffer)
+            if fallback.strip():
+                yield fallback.strip()
+
+    except Exception as e:
+        logger.error(f"LLM streaming failed: {e}")
+        yield "I'm sorry, I couldn't generate a response. Please try again."
+
+    finally:
+        raw_response_out.append(raw_buffer)
+
+
 def safe_float(value: Any, default: float, name: str) -> Tuple[float, Optional[str]]:
     """Safely convert value to float"""
     if value is None:

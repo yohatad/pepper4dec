@@ -32,6 +32,7 @@ from typing import List, Dict
 from rclpy.node import Node
 from rclpy.action import ActionServer
 from ament_index_python.packages import get_package_share_directory
+from std_msgs.msg import String
 from dec_interfaces.action import ConversationManager
 from .conversation_manager_implementation import (
     get_config,
@@ -40,6 +41,8 @@ from .conversation_manager_implementation import (
     handle_query,
     search,
     generate_response,
+    generate_response_stream,
+    extract_answer_from_raw,
     apply_config_file,
 )
 
@@ -91,6 +94,10 @@ class conversationManager(Node):
         collection_name = self.get_parameter('collection_name').get_parameter_value().string_value
         self.initialize_collection(collection_name)
         
+        # Publisher: individual answer sentences streamed as they arrive from the LLM.
+        # text_to_speech subscribes here to start speaking before generation is complete.
+        self.stream_pub = self.create_publisher(String, '/conversation_manager/response_stream', 10)
+
         # Action server
         self._action_server = ActionServer(self, ConversationManager, 'prompt', self.execute_callback)
 
@@ -162,13 +169,19 @@ class conversationManager(Node):
             self.get_logger().info(f"[VERBOSE] {message}")
     
     def execute_callback(self, goal_handle):
-        """Handle RAG query as an action, publishing feedback at each stage."""
+        """Handle RAG query as an action, streaming sentences to TTS as they arrive.
 
+        Flow:
+          1. Vector search (fast, ~50-200ms)
+          2. Streaming LLM call — each complete answer sentence is published to
+             /conversation_manager/response_stream so text_to_speech can begin
+             speaking before the full response is ready.
+          3. Action result carries the full answer text for any other consumer.
+        """
         self.log_verbose(f"Action goal received: prompt=\"{goal_handle.request.prompt}\"")
 
         result = ConversationManager.Result()
 
-        # Check collection
         if self.collection is None:
             self.log_verbose("Collection is None - knowledge base not initialized")
             result.success = False
@@ -185,7 +198,6 @@ class conversationManager(Node):
             return result
 
         self.log_verbose(f"Processing query: '{query}'")
-        self.log_verbose(f"Current conversation history length: {len(self.conversation_history)}")
 
         feedback_msg = ConversationManager.Feedback()
 
@@ -198,19 +210,40 @@ class conversationManager(Node):
             self.log_verbose("Searching knowledge base...")
             search_results = search(self.collection, query)
 
-            # Stage 2: LLM generation
+            # Stage 2: streaming LLM generation
+            # Sentences are published to /conversation_manager/response_stream
+            # as they arrive, allowing TTS to start speaking immediately.
             feedback_msg.status = 'generating'
             goal_handle.publish_feedback(feedback_msg)
-            self.log_verbose("Generating response...")
-            response_text = generate_response(query, search_results, self.conversation_history)
+            self.log_verbose("Streaming response...")
+
+            raw_out: List[str] = []
+            yielded_sentences: List[str] = []
+
+            for sentence in generate_response_stream(
+                query, search_results, self.conversation_history, raw_out
+            ):
+                yielded_sentences.append(sentence)
+                msg = String()
+                msg.data = sentence
+                self.stream_pub.publish(msg)
+                self.log_verbose(f"Streamed: '{sentence}'")
+
+            # Derive the canonical answer text from the raw LLM buffer
+            if raw_out:
+                response_text = extract_answer_from_raw(raw_out[0])
+                if not response_text.strip():
+                    response_text = " ".join(yielded_sentences)
+            else:
+                response_text = " ".join(yielded_sentences)
 
             # Update conversation history
             self.conversation_history.append({'query': query, 'response': response_text})
             if len(self.conversation_history) > config.max_history_turns:
-                self.log_verbose(f"Truncating conversation history to {config.max_history_turns} turns")
+                self.log_verbose(f"Truncating history to {config.max_history_turns} turns")
                 self.conversation_history = self.conversation_history[-config.max_history_turns:]
 
-            self.log_verbose(f"Response generated: {response_text[:200]}...")
+            self.log_verbose(f"Response: {response_text[:200]}")
 
             result.success = True
             result.response = response_text
