@@ -1,0 +1,21 @@
+# Text-to-Speech Configuration
+
+# Synthesis backend: "naoqi_ros", "kokoro_local", or "kokoro_pepper"
+engine: "naoqi_ros"
+
+# Playback method for kokoro_pepper: "file" or "stream"
+playback_method: "file"
+
+# naoqi_ros backend settings
+naoqi_speech_topic: "/speech"
+chars_per_second: 12.0
+speech_padding_s: 0.5
+
+# Kokoro backends settings
+voice: "af_bella"
+sample_rate: 24000
+output_device: -1
+
+# Barge-in detection settings
+barge_in_threshold: 0.85
+barge_in_chunks: 3
