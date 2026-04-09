@@ -152,6 +152,7 @@ class SpeechRecognitionNode(Node):
         self.declare_parameter("transcription_timeout_s", 5.0)
         self.declare_parameter("microphone_topic", "/audio")
         self.declare_parameter("action_server", True)
+        self.declare_parameter("vad_always_active", False)
 
         self.sample_rate = int(self.get_parameter("sample_rate").value)
         self.input_sample_rate = int(self.get_parameter("input_sample_rate").value)
@@ -171,6 +172,7 @@ class SpeechRecognitionNode(Node):
         self.transcription_timeout_s = float(self.get_parameter("transcription_timeout_s").value)
         self.microphone_topic = self.get_parameter("microphone_topic").value
         self.action_server_enabled = bool(self.get_parameter("action_server").value)
+        self.vad_always_active = bool(self.get_parameter("vad_always_active").value)
 
         # =====================================================
         # Validate parameters
@@ -330,6 +332,7 @@ class SpeechRecognitionNode(Node):
                               f"min_speech={self.min_speech_duration}s, max_speech={self.max_speech_duration_s}s")
         self.get_logger().info(f"Pre-speech buffer: {self.pre_speech_buffer_ms}ms ({self.pre_speech_samples} samples)")
         self.get_logger().info(f"Action server: {'enabled' if self.action_server_enabled else 'disabled'}")
+        self.get_logger().info(f"VAD always active: {'yes (barge-in monitoring enabled)' if self.vad_always_active else 'no'}")
 
     def _set_enabled_callback(self, request, response):
         """Enable or disable audio processing (e.g. mute mic during TTS)."""
@@ -555,10 +558,17 @@ class SpeechRecognitionNode(Node):
     # Audio Callback
     # =========================================================================
     def should_process_audio(self) -> bool:
-        """Return True if audio should be processed right now."""
+        """Return True if audio should be processed right now.
+
+        With vad_always_active=True, audio is processed (and VAD probabilities
+        published) even when no ASR action goal is active.  Transcription is
+        still only attempted when a goal IS active (see finalize_speech).
+        """
         if not self.listening_enabled:
             return False
         if self.action_server_enabled:
+            if self.vad_always_active:
+                return True
             with self.action_server_lock:
                 return self.action_started
         return True
@@ -705,6 +715,12 @@ class SpeechRecognitionNode(Node):
         # Capture action mode flag before resetting state
         with self.action_server_lock:
             in_action_mode = self.action_started
+
+        # In vad_always_active mode without an active goal: VAD ran for barge-in
+        # monitoring only.  Skip transcription — there is nobody waiting for it.
+        if self.vad_always_active and not in_action_mode:
+            self.reset_speech_state()
+            return
 
         with self.transcription_lock:
             if self.is_transcribing:

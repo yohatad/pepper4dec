@@ -41,7 +41,7 @@ speech_recognition:
     # -------------------------------------------------------------------------
     speech_threshold: 0.7        # Probability above which speech is considered started (0.0–1.0)
     neg_threshold: 0.35          # Probability below which silence is accumulated (0.0–1.0)
-    min_silence_duration_ms: 1000 # Minimum continuous silence to end a speech segment (ms)
+    min_silence_duration_ms: 400  # Minimum continuous silence to end a speech segment (ms)
     min_speech_duration: 0.3     # Minimum segment duration to submit for transcription (seconds)
     max_speech_duration_s: 10.0  # Hard limit on speech segment length (seconds)
     pre_speech_buffer_ms: 200    # Lookback audio prepended before speech onset (ms)
@@ -61,6 +61,14 @@ speech_recognition:
     #                         /speech_event/text topic (standalone mode).
     # -------------------------------------------------------------------------
     action_server: true
+
+    # -------------------------------------------------------------------------
+    # VAD Always Active
+    # When true, VAD runs and publishes /speech_event/vad_speech_prob even when
+    # no ASR action goal is active. Speech is detected but NOT transcribed unless
+    # a goal is active. Enables barge-in monitoring during TTS playback.
+    # -------------------------------------------------------------------------
+    vad_always_active: true
 
 # =============================================================================
 # speech_event_localization (sound_localization node)
