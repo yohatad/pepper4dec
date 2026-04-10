@@ -75,9 +75,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-sensor-msgs \
     ros-humble-std-msgs \
     ros-humble-std-srvs \
-    ros-humble-naoqi-bridge-msgs \
     ros-humble-robot-state-publisher \
     ros-humble-joint-state-publisher \
+    ros-humble-naoqi-libqi \
+    ros-humble-naoqi-libqicore \
+    ros-humble-pepper-meshes \
+    ros-humble-nao-meshes \
     \
     # Additional libraries
     libyaml-cpp-dev \
@@ -164,12 +167,29 @@ RUN pip install \
     && pip cache purge
 
 # -----------------------------------------------------------------------------
-# Create workspace and clone repository
+# Create workspace and clone repositories
 # -----------------------------------------------------------------------------
 RUN mkdir -p /home/pepper/ros2_ws/src
 WORKDIR /home/pepper/ros2_ws
 
-# Clone the repository
+# Clone NAOqi driver repositories
+# User's fork for naoqi_bridge_msgs
+RUN git clone https://github.com/yohatad/naoqi_driver_bridge_msgs2.git src/naoqi_bridge_msgs
+
+# Clone naoqi_driver2 (user's fork)
+RUN git clone https://github.com/yohatad/naoqi_driver2.git src/naoqi_driver2
+
+# Clone other NAOqi dependencies from ros-naoqi
+RUN git clone https://github.com/ros-naoqi/libqi.git -b ros2 src/naoqi_libqi && \
+    git clone https://github.com/ros-naoqi/libqicore.git -b ros2 src/naoqi_libqicore && \
+    git clone https://github.com/ros-naoqi/nao_meshes2.git src/nao_meshes && \
+    git clone https://github.com/ros-naoqi/pepper_meshes2.git src/pepper_meshes
+
+# Clone BehaviorTree.CPP and BehaviorTree.ROS2
+RUN git clone https://github.com/BehaviorTree/BehaviorTree.CPP.git src/BehaviorTree.CPP && \
+    git clone https://github.com/BehaviorTree/BehaviorTree.ROS2.git src/BehaviorTree.ROS2
+
+# Clone the main repository
 RUN git clone https://github.com/yohatad/pepper4dec.git src/pepper4dec
 
 # -----------------------------------------------------------------------------
@@ -182,7 +202,7 @@ RUN cd /home/pepper/ros2_ws && \
 # Build ROS2 packages
 # -----------------------------------------------------------------------------
 RUN cd /home/pepper/ros2_ws && \
-    colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
+    I_AGREE_TO_NAO_MESHES_LICENSE=1 I_AGREE_TO_PEPPER_MESHES_LICENSE=1 colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
 
 # -----------------------------------------------------------------------------
 # Install package-specific Python requirements
