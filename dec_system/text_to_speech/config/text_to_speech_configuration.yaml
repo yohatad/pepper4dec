@@ -1,10 +1,18 @@
 # Text-to-Speech Configuration
 
-# Synthesis backend: "naoqi_ros", "kokoro_local", or "kokoro_pepper"
-engine: "naoqi_ros"
+# Synthesis + playback backend:
+#   "naoqi_ros"          - Pepper's on-board ALTextToSpeech (no extra deps)
+#   "kokoro_local"       - Kokoro-82M synthesised locally, laptop speakers
+#   "kokoro_pepper"      - Kokoro-82M synthesised locally, Pepper's speakers
+#   "elevenlabs_local"   - ElevenLabs API synthesised, laptop speakers
+#   "elevenlabs_pepper"  - ElevenLabs API synthesised, Pepper's speakers
+engine: "kokoro_pepper"
 
-# Playback method for kokoro_pepper: "file" or "stream"
-playback_method: "file"
+# Playback method for *_pepper backends:
+#   "file"   - naoqi_driver SCPs WAV to robot, plays via ALAudioPlayer (full feedback)
+#              Requires passwordless SSH key access from driver machine to robot.
+#   "stream" - Raw PCM chunks via send_audio_buffer / ALAudioDevice (no SCP needed)
+playback_method: "stream"
 
 # naoqi_ros backend settings
 naoqi_speech_topic: "/speech"
@@ -15,6 +23,11 @@ speech_padding_s: 0.5
 voice: "af_bella"
 sample_rate: 24000
 output_device: -1
+
+# ElevenLabs backend settings
+elevenlabs_api_key: "your_api_key_here"
+elevenlabs_voice_id: "21m00Tcm4TlvDq8ikWAM"   # Rachel (default)
+elevenlabs_model: "eleven_turbo_v2_5"           # fastest model; eleven_multilingual_v2 for more languages
 
 # Barge-in detection settings
 barge_in_threshold: 0.85

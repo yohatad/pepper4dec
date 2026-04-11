@@ -12,10 +12,13 @@ Backends (set via config key 'engine'):
   naoqi_ros      — Pepper's on-board ALTextToSpeech via naoqi_bridge.
   kokoro_local   — Kokoro-82M synthesised locally, played on the laptop speakers.
                    Useful for development / testing without the robot.
-  kokoro_pepper  — Kokoro-82M synthesised locally.  Raw WAV bytes are sent to
-                   naoqi_driver via the load_audio_file service (no SCP/SSH).
-                   naoqi_driver writes the bytes to the robot via ALFileManager
-                   and plays them through Pepper's speakers via play_audio action.
+  kokoro_pepper  — Kokoro-82M synthesised locally, played on Pepper's speakers.
+                   Two playback methods (set via config key 'playback_method'):
+                     "file"   — SCP WAV to robot, then ALAudioPlayer.loadFile.
+                                Full feedback + cancellable. Requires SSH key access.
+                                Set robot_ip, robot_user, robot_audio_dir in config.
+                     "stream" — Raw PCM chunks via send_audio_buffer / ALAudioDevice.
+                                No SCP needed, works out of the box.
 
 Features:
   - Sentence queue with a background playback thread.
@@ -72,6 +75,7 @@ from .text_to_speech_implementation import (
     audio_to_wav_bytes,
     split_into_sentences,
     synthesize_kokoro,
+    synthesize_elevenlabs,
 )
 
 SOFTWARE_VERSION = "v3.0"
@@ -112,6 +116,7 @@ class TextToSpeechNode(Node):
         self._barge_in_counter = 0
         self._barge_in_triggered = False
         self._state_lock = threading.Lock()
+        self._shutdown = False
 
         # ── Per-backend initialisation ────────────────────────────────────────
         self._audio_player = None
@@ -121,7 +126,7 @@ class TextToSpeechNode(Node):
         if self.engine in ("kokoro_local", "kokoro_pepper"):
             self.warmup_kokoro()
 
-        if self.engine == "kokoro_local":
+        if self.engine in ("kokoro_local", "elevenlabs_local"):
             self._audio_player = AudioPlayer(
                 sample_rate=config["sample_rate"],
                 output_device=config["output_device"],
@@ -142,7 +147,7 @@ class TextToSpeechNode(Node):
         # ── Service clients ───────────────────────────────────────────────────
         self._mic_client = self.create_client(SetBool, "/speech_event/set_enabled")
 
-        if self.engine == "kokoro_pepper":
+        if self.engine in ("kokoro_pepper", "elevenlabs_pepper"):
             self._load_client = self.create_client(
                 LoadAudioFile, "/naoqi_driver/load_audio_file"
             )
@@ -297,11 +302,14 @@ class TextToSpeechNode(Node):
           str       — sentence to speak
           callable  — sentinel signalling that a /tts action goal is done
         """
-        while True:
+        while not self._shutdown:
             try:
                 item = self._sentence_queue.get(timeout=0.1)
             except queue.Empty:
                 continue
+
+            if item is None:  # shutdown sentinel
+                break
 
             if callable(item):
                 try:
@@ -328,6 +336,10 @@ class TextToSpeechNode(Node):
                 self.speak_kokoro_local(sentence)
             elif self.engine == "kokoro_pepper":
                 self.speak_kokoro_pepper(sentence)
+            elif self.engine == "elevenlabs_local":
+                self.speak_elevenlabs_local(sentence)
+            elif self.engine == "elevenlabs_pepper":
+                self.speak_elevenlabs_pepper(sentence)
             else:
                 self.get_logger().error(
                     f"{self.node_name}: unknown engine '{self.engine}'"
@@ -432,14 +444,71 @@ class TextToSpeechNode(Node):
         else:
             self.play_via_file(wav_bytes)
 
+    # ── elevenlabs_local backend ─────────────────────────────────────────────────
+
+    def speak_elevenlabs_local(self, sentence: str):
+        """Synthesise with ElevenLabs API and play on the local machine's speakers."""
+        self.get_logger().info(
+            f"{self.node_name}: [elevenlabs_local] synthesising: '{sentence}'"
+        )
+        self.set_mic_enabled(False)
+        try:
+            audio = synthesize_elevenlabs(
+                sentence,
+                voice_id=self.config["elevenlabs_voice_id"],
+                api_key=self.config["elevenlabs_api_key"],
+                sample_rate=self.config["sample_rate"],
+                model_id=self.config.get("elevenlabs_model", "eleven_turbo_v2_5"),
+            )
+            completed = self._audio_player.play(audio)
+            if not completed:
+                self.get_logger().info(
+                    f"{self.node_name}: [elevenlabs_local] playback interrupted"
+                )
+        except RuntimeError as e:
+            self.get_logger().error(str(e))
+        finally:
+            self.set_mic_enabled(True)
+
+    # ── elevenlabs_pepper backend ────────────────────────────────────────────────
+
+    def speak_elevenlabs_pepper(self, sentence: str):
+        """Synthesise with ElevenLabs API and play through Pepper's speakers."""
+        playback_method = self.config.get("playback_method", "stream")
+        self.get_logger().info(
+            f"{self.node_name}: [elevenlabs_pepper] synthesising: '{sentence}' "
+            f"(method={playback_method})"
+        )
+        try:
+            audio = synthesize_elevenlabs(
+                sentence,
+                voice_id=self.config["elevenlabs_voice_id"],
+                api_key=self.config["elevenlabs_api_key"],
+                sample_rate=self.config["sample_rate"],
+                model_id=self.config.get("elevenlabs_model", "eleven_turbo_v2_5"),
+            )
+        except RuntimeError as e:
+            self.get_logger().error(str(e))
+            return
+
+        wav_bytes = audio_to_wav_bytes(audio, self.config["sample_rate"])
+
+        if playback_method == "stream":
+            self.play_via_stream(wav_bytes)
+        else:
+            self.play_via_file(wav_bytes)
+
     def play_via_file(self, wav_bytes: bytes):
-        """Play audio via load_audio_file + play_audio action."""
-        # Load on Pepper by sending bytes through naoqi_driver
+        """
+        Play audio via load_audio_file + play_audio action.
+
+        Sends raw WAV bytes to naoqi_driver, which SCPs them to the robot and
+        calls ALAudioPlayer.loadFile internally.
+        """
         file_id = self.load_audio_file_from_bytes(wav_bytes)
         if file_id < 0:
             return
 
-        # Play via action
         self._play_done_event.clear()
         self._play_goal_handle = None
 
@@ -451,10 +520,8 @@ class TextToSpeechNode(Node):
 
         send_future = self._play_client.send_goal_async(goal)
         send_future.add_done_callback(self.on_play_goal_response)
-
         self._play_done_event.wait(timeout=60.0)
 
-        # Unload
         self.unload_audio_file(file_id)
 
     def play_via_stream(self, wav_bytes: bytes):
@@ -484,15 +551,16 @@ class TextToSpeechNode(Node):
         else:
             sample_rate = kokoro_rate
         
-        # Convert to stereo by duplicating mono channel
-        stereo_audio = np.column_stack([audio, audio]).flatten().astype(np.int16)
-        
-        # Send in chunks (max 16384 frames = 32768 bytes for stereo)
-        # Each frame = 2 channels * 2 bytes = 4 bytes
-        max_chunk_size = 16384 * 4  # 32768 bytes
-        
-        # Calculate duration of each chunk in seconds
-        # sample_rate * channels * bytes_per_sample = bytes_per_second
+        # Convert to stereo by duplicating mono channel, scale float32→int16
+        stereo_audio = (
+            np.column_stack([audio, audio]).flatten() * 32767
+        ).clip(-32768, 32767).astype(np.int16)
+
+        # Send in chunks: 16384 frames × 2 channels = 32768 int16 samples
+        # Driver cap is 16384 frames; 32768 int16 samples × 2 bytes = 65536 bytes → 16384 frames ✓
+        max_chunk_size = 16384 * 2  # 32768 int16 samples per chunk
+
+        # bytes_per_second for timing: 48000 Hz × 2 ch × 2 B = 192000 B/s
         bytes_per_second = sample_rate * 2 * 2
         
         self.set_mic_enabled(False)
@@ -520,8 +588,8 @@ class TextToSpeechNode(Node):
                     )
                     break
                 
-                # Calculate how long this chunk will play
-                chunk_duration = len(chunk) / bytes_per_second
+                # Calculate how long this chunk will play (samples → seconds)
+                chunk_duration = chunk.nbytes / bytes_per_second
                 
                 # Wait for the chunk to finish playing before sending the next
                 # Subtract a small margin (10ms) to keep audio flowing smoothly
@@ -549,13 +617,10 @@ class TextToSpeechNode(Node):
         req.audio_data = audio_data
         future = self._send_buffer_client.call_async(req)
 
-        try:
-            rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
-        except Exception as e:
-            self.get_logger().error(f"{self.node_name}: send_audio_buffer error: {e}")
-            return False
-
-        if not future.done():
+        # Wait without spinning — the MultiThreadedExecutor resolves the future.
+        done = threading.Event()
+        future.add_done_callback(lambda _: done.set())
+        if not done.wait(timeout=2.0):
             self.get_logger().error(f"{self.node_name}: send_audio_buffer timed out")
             return False
 
@@ -622,9 +687,9 @@ class TextToSpeechNode(Node):
         req.audio_data  = audio_data
         future = self._load_client.call_async(req)
 
-        rclpy.spin_until_future_complete(self, future, timeout_sec=10.0)
-
-        if not future.done():
+        done = threading.Event()
+        future.add_done_callback(lambda _: done.set())
+        if not done.wait(timeout=30.0):  # SCP can take a few seconds
             self.get_logger().error(f"{self.node_name}: load_audio_file timed out")
             return -1
 
@@ -658,18 +723,42 @@ class TextToSpeechNode(Node):
     # ── Speaking state publisher ──────────────────────────────────────────────────
 
     def publish_speaking(self, speaking: bool):
-        msg = Bool()
-        msg.data = speaking
-        self._speaking_pub.publish(msg)
+        if self._shutdown:
+            return
+        try:
+            msg = Bool()
+            msg.data = speaking
+            self._speaking_pub.publish(msg)
+        except Exception:
+            pass
 
     # ── Cleanup ───────────────────────────────────────────────────────────────────
 
     def cleanup(self):
-        """Cancel any in-flight play_audio goal and wake the playback thread."""
-        self.get_logger().info(f"{self.node_name}: shutting down…")
-        self._sentence_queue.put(None)
+        """Stop playback, drain the queue, and join the playback thread."""
+        try:
+            self.get_logger().info(f"{self.node_name}: shutting down…")
+        except Exception:
+            print("[text_to_speech] shutting down…")
+        self._shutdown = True
+
+        # Trigger barge-in to break out of any active stream sleep loop
+        with self._state_lock:
+            self._barge_in_triggered = True
+
+        # Stop local audio player if active
+        if self.engine == "kokoro_local" and self._audio_player is not None:
+            self._audio_player.stop()
+
+        # Cancel in-flight play_audio action goal
         if self.engine == "kokoro_pepper" and self._play_goal_handle is not None:
             self._play_goal_handle.cancel_goal_async()
+
+        # Unblock the playback thread (None is the exit sentinel)
+        self._sentence_queue.put(None)
+
+        # Wait up to 2 s for the playback thread to exit cleanly
+        self._playback_thread.join(timeout=2.0)
 
 
 # ---------------------------------------------------------------------------

@@ -90,13 +90,18 @@ def load_configuration() -> dict:
         'output_device': -1,          # kokoro_local only; -1 = system default
 
         # kokoro_pepper playback method: "file" or "stream"
-        #   "file"   - load_audio_file + play_audio action (default, supports long audio)
-        #   "stream" - send_audio_buffer service (low-latency, max ~170ms per call)
-        'playback_method': 'file',
+        #   "file"   - naoqi_driver SCPs WAV to robot, plays via ALAudioPlayer (full feedback)
+        #   "stream" - send_audio_buffer / ALAudioDevice (no SCP needed)
+        'playback_method': 'stream',
 
         # Barge-in detection (all backends)
         'barge_in_threshold': 0.85,
         'barge_in_chunks': 3,
+
+        # ElevenLabs backend
+        'elevenlabs_api_key': '',
+        'elevenlabs_voice_id': '21m00Tcm4TlvDq8ikWAM',  # Rachel
+        'elevenlabs_model': 'eleven_turbo_v2_5',
     }
 
     try:
@@ -142,9 +147,20 @@ def _get_kokoro_pipeline():
                     "  pip install kokoro soundfile sounddevice\n"
                     "  sudo apt-get install espeak-ng"
                 ) from exc
-            logger.info("Loading Kokoro-82M model (first call only)…")
-            _kokoro_pipeline = KPipeline(lang_code="a")
-            logger.info("Kokoro-82M loaded.")
+            import torch
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            logger.info(f"Loading Kokoro-82M model on {device} (first call only)…")
+            try:
+                _kokoro_pipeline = KPipeline(lang_code="a", device=device)
+            except Exception as exc:
+                if device == "cuda" and (
+                    "cuda" in str(exc).lower() or "cudnn" in str(exc).lower()
+                ):
+                    logger.warn(f"CUDA failed ({exc}); falling back to CPU.")
+                    _kokoro_pipeline = KPipeline(lang_code="a", device="cpu")
+                else:
+                    raise
+            logger.info(f"Kokoro-82M loaded on {device}.")
     return _kokoro_pipeline
 
 
@@ -158,8 +174,9 @@ def synthesize_kokoro(text: str, voice: str, sample_rate: int) -> np.ndarray:
     pipeline = _get_kokoro_pipeline()
 
     chunks = []
-    for audio_chunk, _, _ in pipeline(text, voice=voice, speed=1.0):
-        chunks.append(np.asarray(audio_chunk, dtype=np.float32))
+    for _, _, audio_chunk in pipeline(text, voice=voice, speed=1.0):
+        if audio_chunk is not None:
+            chunks.append(np.asarray(audio_chunk, dtype=np.float32))
 
     if not chunks:
         return np.zeros(0, dtype=np.float32)
@@ -184,6 +201,70 @@ def audio_to_wav_bytes(audio: np.ndarray, sample_rate: int) -> bytes:
     buf = io.BytesIO()
     sf.write(buf, audio, sample_rate, subtype="PCM_16", format="WAV")
     return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# ElevenLabs synthesis
+# ---------------------------------------------------------------------------
+
+# Supported PCM output rates by ElevenLabs API
+_ELEVENLABS_PCM_RATES = {16000, 22050, 24000, 44100}
+
+
+def synthesize_elevenlabs(
+    text: str,
+    voice_id: str,
+    api_key: str,
+    sample_rate: int,
+    model_id: str = "eleven_turbo_v2_5",
+) -> np.ndarray:
+    """
+    Synthesise *text* via the ElevenLabs API.
+
+    Requests raw PCM output (no WAV header) at the nearest supported rate,
+    then resamples to *sample_rate* if needed.
+    Returns a float32 numpy array at *sample_rate* Hz.
+
+    Requires:  pip install elevenlabs
+    """
+    try:
+        from elevenlabs.client import ElevenLabs  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "ElevenLabs SDK is not installed.\n"
+            "  pip install elevenlabs"
+        ) from exc
+
+    # Pick the nearest PCM rate the API supports
+    api_rate = min(_ELEVENLABS_PCM_RATES, key=lambda r: abs(r - sample_rate))
+    output_format = f"pcm_{api_rate}"
+
+    client = ElevenLabs(api_key=api_key)
+    logger.info(
+        f"ElevenLabs: synthesising with voice={voice_id}, "
+        f"model={model_id}, format={output_format}"
+    )
+
+    raw = b"".join(
+        client.text_to_speech.convert(
+            voice_id=voice_id,
+            text=text,
+            model_id=model_id,
+            output_format=output_format,
+        )
+    )
+
+    # Raw PCM is signed 16-bit little-endian → float32
+    audio = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+
+    if api_rate != sample_rate:
+        from scipy.signal import resample_poly
+        gcd = math.gcd(api_rate, sample_rate)
+        audio = resample_poly(
+            audio, sample_rate // gcd, api_rate // gcd
+        ).astype(np.float32)
+
+    return audio
 
 
 # ---------------------------------------------------------------------------
