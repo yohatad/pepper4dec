@@ -548,7 +548,7 @@ BT::NodeStatus ConversationManagerNode::onFailure(BT::ActionNodeErrorCode error)
 BT::PortsList SpeechWithFeedbackNode::providedPorts()
 {
     return {
-        BT::InputPort<std::string> ("action_name", "/speech_with_feedback", "Action server name"),
+        BT::InputPort<std::string> ("action_name", "/naoqi_driver/speech_with_feedback", "Action server name"),
         BT::InputPort<std::string> ("say",          "",    "Text to speak (supports \\mrk=N\\ bookmarks)"),
         BT::OutputPort<bool>       ("started",             "Feedback: true once speech begins"),
         BT::OutputPort<int>        ("bookmark",            "Feedback: current bookmark ID (-1 if none)"),
