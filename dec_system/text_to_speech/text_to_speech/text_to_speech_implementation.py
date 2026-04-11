@@ -94,6 +94,10 @@ def load_configuration() -> dict:
         #   "stream" - send_audio_buffer / ALAudioDevice (no SCP needed)
         'playback_method': 'stream',
 
+        # Stream volume multiplier (kokoro_pepper / elevenlabs_pepper, stream mode)
+        # 1.0 = unity gain; 2.0 = double amplitude (clips at ±32767)
+        'stream_volume': 1.0,
+
         # Barge-in detection (all backends)
         'barge_in_threshold': 0.85,
         'barge_in_chunks': 3,
@@ -204,11 +208,60 @@ def audio_to_wav_bytes(audio: np.ndarray, sample_rate: int) -> bytes:
 
 
 # ---------------------------------------------------------------------------
-# ElevenLabs synthesis
+# ElevenLabs synthesis  (streaming + batch)
 # ---------------------------------------------------------------------------
 
 # Supported PCM output rates by ElevenLabs API
 _ELEVENLABS_PCM_RATES = {16000, 22050, 24000, 44100}
+
+
+def _elevenlabs_client(api_key: str):
+    try:
+        from elevenlabs.client import ElevenLabs  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "ElevenLabs SDK is not installed.\n"
+            "  pip install elevenlabs"
+        ) from exc
+    return ElevenLabs(api_key=api_key)
+
+
+def stream_elevenlabs(
+    text: str,
+    voice_id: str,
+    api_key: str,
+    model_id: str = "eleven_turbo_v2_5",
+    sample_rate: int = 24000,
+):
+    """
+    Stream audio from ElevenLabs as an iterator of float32 numpy chunks.
+
+    Returns ``(generator, api_rate)``.  Each yielded chunk is a float32 array
+    at *api_rate* Hz (the nearest PCM rate the API supports to *sample_rate*).
+    The caller is responsible for resampling if api_rate ≠ the target rate.
+
+    Audio starts arriving within ~200 ms (TTFA = first API chunk).
+
+    Requires:  pip install elevenlabs
+    """
+    api_rate = min(_ELEVENLABS_PCM_RATES, key=lambda r: abs(r - sample_rate))
+
+    def _gen():
+        client = _elevenlabs_client(api_key)
+        logger.info(
+            f"ElevenLabs stream: voice={voice_id}, model={model_id}, "
+            f"format=pcm_{api_rate}"
+        )
+        for raw in client.text_to_speech.convert(
+            voice_id=voice_id,
+            text=text,
+            model_id=model_id,
+            output_format=f"pcm_{api_rate}",
+        ):
+            if raw:
+                yield np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+
+    return _gen(), api_rate
 
 
 def synthesize_elevenlabs(
@@ -219,49 +272,27 @@ def synthesize_elevenlabs(
     model_id: str = "eleven_turbo_v2_5",
 ) -> np.ndarray:
     """
-    Synthesise *text* via the ElevenLabs API.
+    Batch-synthesise *text* via the ElevenLabs API (collects full audio).
 
-    Requests raw PCM output (no WAV header) at the nearest supported rate,
-    then resamples to *sample_rate* if needed.
     Returns a float32 numpy array at *sample_rate* Hz.
+    For lower latency use stream_elevenlabs() instead.
 
     Requires:  pip install elevenlabs
     """
-    try:
-        from elevenlabs.client import ElevenLabs  # type: ignore
-    except ImportError as exc:
-        raise RuntimeError(
-            "ElevenLabs SDK is not installed.\n"
-            "  pip install elevenlabs"
-        ) from exc
-
-    # Pick the nearest PCM rate the API supports
-    api_rate = min(_ELEVENLABS_PCM_RATES, key=lambda r: abs(r - sample_rate))
-    output_format = f"pcm_{api_rate}"
-
-    client = ElevenLabs(api_key=api_key)
-    logger.info(
-        f"ElevenLabs: synthesising with voice={voice_id}, "
-        f"model={model_id}, format={output_format}"
+    gen, api_rate = stream_elevenlabs(
+        text, voice_id, api_key, model_id=model_id, sample_rate=sample_rate
     )
+    chunks = list(gen)
+    if not chunks:
+        return np.zeros(0, dtype=np.float32)
 
-    raw = b"".join(
-        client.text_to_speech.convert(
-            voice_id=voice_id,
-            text=text,
-            model_id=model_id,
-            output_format=output_format,
-        )
-    )
-
-    # Raw PCM is signed 16-bit little-endian → float32
-    audio = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+    audio = np.concatenate(chunks)
 
     if api_rate != sample_rate:
         from scipy.signal import resample_poly
-        gcd = math.gcd(api_rate, sample_rate)
+        g = math.gcd(api_rate, sample_rate)
         audio = resample_poly(
-            audio, sample_rate // gcd, api_rate // gcd
+            audio, sample_rate // g, api_rate // g
         ).astype(np.float32)
 
     return audio
@@ -322,6 +353,41 @@ class AudioPlayer:
                     pos += chunk_size
         except Exception as exc:
             logger.error(f"AudioPlayer error: {exc}")
+            return False
+
+        return True
+
+    def play_chunks(self, chunks) -> bool:
+        """
+        Stream an iterable of float32 arrays through one OutputStream.
+
+        Audio starts playing as soon as the first chunk arrives.
+        Returns True on natural completion, False if interrupted by stop().
+        """
+        self._stop_event.clear()
+
+        try:
+            import sounddevice as sd  # type: ignore
+        except ImportError as exc:
+            raise RuntimeError(
+                "sounddevice is not installed.  Run:  pip install sounddevice"
+            ) from exc
+
+        device_kw = {} if self.output_device is None else {"device": self.output_device}
+        try:
+            with sd.OutputStream(
+                samplerate=self.sample_rate,
+                channels=1,
+                dtype="float32",
+                **device_kw,
+            ) as stream:
+                for chunk in chunks:
+                    if self._stop_event.is_set():
+                        return False
+                    if len(chunk) > 0:
+                        stream.write(chunk.reshape(-1, 1))
+        except Exception as exc:
+            logger.error(f"AudioPlayer.play_chunks error: {exc}")
             return False
 
         return True

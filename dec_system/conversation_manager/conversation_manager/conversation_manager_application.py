@@ -96,7 +96,7 @@ class conversationManager(Node):
         
         # Publisher: individual answer sentences streamed as they arrive from the LLM.
         # text_to_speech subscribes here to start speaking before generation is complete.
-        self.stream_pub = self.create_publisher(String, '/conversation_manager/response_stream', 10)
+        self.stream_pub = self.create_publisher(String, '/tts/input', 10)
 
         # Action server
         self._action_server = ActionServer(self, ConversationManager, 'prompt', self.execute_callback)
@@ -174,7 +174,7 @@ class conversationManager(Node):
         Flow:
           1. Vector search (fast, ~50-200ms)
           2. Streaming LLM call — each complete answer sentence is published to
-             /conversation_manager/response_stream so text_to_speech can begin
+             /tts/input so text_to_speech can begin
              speaking before the full response is ready.
           3. Action result carries the full answer text for any other consumer.
         """
@@ -211,7 +211,7 @@ class conversationManager(Node):
             search_results = search(self.collection, query)
 
             # Stage 2: streaming LLM generation
-            # Sentences are published to /conversation_manager/response_stream
+            # Sentences are published to /tts/input
             # as they arrive, allowing TTS to start speaking immediately.
             feedback_msg.status = 'generating'
             goal_handle.publish_feedback(feedback_msg)

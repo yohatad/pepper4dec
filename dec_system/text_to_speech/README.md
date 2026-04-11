@@ -6,32 +6,32 @@
   <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
-The **Text-to-Speech (TTS)** package is a **ROS2** package designed to synthesize and play speech on the Pepper robot. It receives sentences from `/conversation_manager/response_stream` and speaks them as they arrive — enabling Pepper to start talking before the LLM has finished generating the full response.
+The **Text-to-Speech (TTS)** package is a **ROS2** package designed to synthesize and play speech on the Pepper robot. It receives text sentences on `/tts/input` and speaks them as they arrive — enabling Pepper to start talking before the LLM has finished generating the full response.
 
 ## Key Features
 - **ROS2 Native**: Built for ROS2 Humble
-- **Three Backend Options**: naoqi_ros, kokoro_local, kokoro_pepper
+- **Five Backend Options**: `naoqi_ros`, `kokoro_local`, `kokoro_pepper`, `elevenlabs_local`, `elevenlabs_pepper`
+- **Two Playback Methods**: `stream` (PCM chunks via ALAudioDevice, no SCP) and `file` (SCP + ALAudioPlayer action)
+- **ElevenLabs Streaming**: Audio starts playing within ~200 ms of the first API chunk
 - **Sentence Queue**: Background playback thread ensures strict ordering
 - **Barge-in Detection**: User speech during playback stops Pepper immediately
 - **Microphone Muting**: Automatic mic control during playback
-- **ROS2 Action Server**: `/tts` action for programmatic TTS calls
+- **ROS2 Action Server**: `/tts` action for programmatic TTS calls with completion feedback
 
 # 🛠️ Installation 
 
 ## Prerequisites
 - **ROS2 Humble** or newer
 - **Python 3.10** or compatible version
-- **Pepper Robot** (for naoqi_ros and kokoro_pepper backends)
+- **Pepper Robot** (for `naoqi_ros`, `kokoro_pepper`, `elevenlabs_pepper` backends)
 
 ## Package Installation
 
 1. **Clone and Build the Workspace**
 ```bash
-# Clone the repository (if not already done)
 cd ~/ros2_ws/src
 git clone <repository-url>
 
-# Build the workspace
 cd ~/ros2_ws
 colcon build --packages-select text_to_speech
 source install/setup.bash
@@ -39,118 +39,158 @@ source install/setup.bash
 
 2. **Set Up Python Virtual Environment**
 ```bash
-# Create virtual environment
-python3.10 -m venv ~/tts_virtual_env
-
-# Activate the virtual environment
-source ~/tts_virtual_env/bin/activate
-
-# Upgrade pip
+python3.10 -m venv ~/tts_kokoro
+source ~/tts_kokoro/bin/activate
 pip install --upgrade pip
 ```
 
 3. **Install Python Dependencies**
 ```bash
-# Install package requirements
-pip install -r ~/ros2_ws/src/pepper4dec/dec_system/text_to_speech/requirements.txt
+# Core (all backends)
+pip install kokoro soundfile sounddevice scipy
+
+# ElevenLabs backend only
+pip install elevenlabs
+
+# espeak-ng for Kokoro phonemiser
+sudo apt-get install espeak-ng
 ```
 
-# 🔧 Configuration Parameters
-The configuration is managed via `config/text_to_speech_configuration.yaml`:
+# 🔧 Configuration
 
-| Parameter | Description | Range/Values | Default |
-|-----------|-------------|--------------|---------|
-| `engine` | Synthesis backend | `naoqi_ros`, `kokoro_local`, `kokoro_pepper` | `naoqi_ros` |
-| `playback_method` | Playback method for kokoro_pepper | `file`, `stream` | `file` |
-| `naoqi_speech_topic` | ROS2 topic for naoqi_bridge | string | `/speech` |
-| `chars_per_second` | Estimated speaking rate | float | `12.0` |
-| `speech_padding_s` | Extra seconds to wait after speech | float | `0.5` |
-| `voice` | Kokoro-82M voice name | `af_bella`, `af_heart`, etc. | `af_bella` |
-| `sample_rate` | Output sample rate (Hz) | integer | `24000` |
-| `output_device` | sounddevice output device index | integer (-1 = system default) | `-1` |
-| `barge_in_threshold` | VAD probability to trigger barge-in | `[0.0 - 1.0]` | `0.85` |
-| `barge_in_chunks` | Consecutive chunks above threshold required | integer | `3` |
+Configuration is managed via `config/text_to_speech_configuration.yaml`.
 
-> **Note:**  
-> The **kokoro_local** backend requires `sounddevice` package. The **kokoro_pepper** backend requires `kokoro` and `soundfile` packages.
+## Backend selection
+
+| `engine` value | Synthesis | Playback |
+|---|---|---|
+| `naoqi_ros` | Pepper on-board ALTextToSpeech | Pepper speakers (no extra deps) |
+| `kokoro_local` | Kokoro-82M (local GPU/CPU) | Laptop speakers via sounddevice |
+| `kokoro_pepper` | Kokoro-82M (local GPU/CPU) | Pepper speakers via naoqi_driver |
+| `elevenlabs_local` | ElevenLabs API (streaming) | Laptop speakers via sounddevice |
+| `elevenlabs_pepper` | ElevenLabs API (streaming) | Pepper speakers via naoqi_driver |
+
+## Playback method (`kokoro_pepper` / `elevenlabs_pepper` only)
+
+| `playback_method` | How it works | Requirements |
+|---|---|---|
+| `stream` | Raw PCM chunks → `ALAudioDevice.sendRemoteBufferToOutput` (no SCP) | None |
+| `file` | SCP WAV to robot → `ALAudioPlayer.loadFile` → `play_audio` action | Passwordless SSH key to robot |
+
+## All parameters
+
+| Parameter | Description | Default |
+|---|---|---|
+| `engine` | Synthesis + playback backend (see table above) | `naoqi_ros` |
+| `playback_method` | `stream` or `file` (pepper backends only) | `stream` |
+| `naoqi_speech_topic` | ROS topic for naoqi_bridge (naoqi_ros only) | `/speech` |
+| `chars_per_second` | Estimated speaking rate for duration estimation | `12.0` |
+| `speech_padding_s` | Extra wait after estimated speech end | `0.5` |
+| `voice` | Kokoro-82M voice name (`af_bella`, `af_heart`, …) | `af_bella` |
+| `sample_rate` | Synthesis sample rate in Hz | `24000` |
+| `output_device` | sounddevice output device index (-1 = system default) | `-1` |
+| `stream_volume` | PCM amplitude multiplier for stream mode (1.0 = unity, clips at ±32767) | `1.0` |
+| `elevenlabs_api_key` | ElevenLabs API key | `""` |
+| `elevenlabs_voice_id` | ElevenLabs voice ID (from elevenlabs.io/voices) | Rachel |
+| `elevenlabs_model` | ElevenLabs model ID | `eleven_turbo_v2_5` |
+| `barge_in_threshold` | VAD probability to trigger barge-in | `0.85` |
+| `barge_in_chunks` | Consecutive VAD chunks above threshold required | `3` |
 
 # 🚀 Running the Node
 
-## Launch All Components
 ```bash
-# Source the workspace
 source ~/ros2_ws/install/setup.bash
-
-# Launch with default configuration
-ros2 launch text_to_speech text_to_speech.launch.py
-```
-
-## Manual Node Execution
-```bash
-# Activate Python environment
-source ~/tts_virtual_env/bin/activate
-
-# Run TTS node
 ros2 run text_to_speech text_to_speech
 ```
 
-### Using the Action Server
+## Sending text from the command line
+
 ```bash
+# Generic input topic (any source)
+ros2 topic pub --once /tts/input std_msgs/String 'data: "Hello, I am Pepper."'
+
+# Programmatic call via action server (blocks until speech is complete)
 ros2 action send_goal /tts dec_interfaces/action/TTS "{text: 'Hello, how can I help you?'}"
 ```
 
-# 🖥️ Output
-The node publishes speaking status and handles audio playback.
-
-## Topic Structure
-- **Subscriptions**:
-  - `/conversation_manager/response_stream` (std_msgs/String)
-  - `/speech_event/vad_speech_prob` (std_msgs/Float32)
-
-- **Publishers**:
-  - `/text_to_speech/speaking` (std_msgs/Bool)
-
-- **Service Clients**:
-  - `/speech_event/set_enabled` (std_srvs/SetBool)
-  - `/naoqi_driver/load_audio_file` (naoqi_bridge_msgs/srv/LoadAudioFile)
-  - `/naoqi_driver/unload_audio_file` (naoqi_bridge_msgs/srv/UnloadAudioFile)
-  - `/naoqi_driver/send_audio_buffer` (naoqi_bridge_msgs/srv/SendAudioBuffer)
-
-- **Action Clients**:
-  - `/naoqi_driver/play_audio` (naoqi_bridge_msgs/action/PlayAudio)
-
-- **Action Servers**:
-  - `/tts` (dec_interfaces/action/TTS)
-
-## Verification
-To verify the node is publishing data:
+## Testing audio playback directly
 
 ```bash
-# Monitor speaking output
-ros2 topic echo /text_to_speech/speaking
+cd ~/ros2_ws/src/pepper4dec/dec_system/text_to_speech
 
-# Check node status
-ros2 node list
-ros2 topic list
+# Stream mode (robot speakers)
+/home/yoha/tts_kokoro/bin/python3 tests/test_play_audio.py "Hello." --method stream
+
+# File mode (robot speakers, requires SSH key)
+/home/yoha/tts_kokoro/bin/python3 tests/test_play_audio.py "Hello." --method file
+
+# Local speakers only
+/home/yoha/tts_kokoro/bin/python3 tests/test_play_audio.py "Hello." --local
 ```
 
-# 🏗️ Architecture
-The TTS system consists of three main components:
+# 🖥️ ROS Interface
 
-1. **Sentence Receiver**: Subscribes to `/conversation_manager/response_stream` and `/tts` action
-2. **Queue Manager**: Thread-safe queue that orders sentences for playback
-3. **Playback Backend**: 
-   - **naoqi_ros**: Publishes to naoqi_bridge topic
-   - **kokoro_local**: Synthesizes locally, plays via sounddevice
-   - **kokoro_pepper**: Synthesizes locally, sends audio to robot via naoqi_driver
+## Subscriptions
+
+| Topic | Type | Description |
+|---|---|---|
+| `/tts/input` | `std_msgs/String` | Text to speak — accepts sentences from any source (LLM, dialogue manager, CLI, etc.) |
+| `/speech_event/vad_speech_prob` | `std_msgs/Float32` | VAD probability used for barge-in detection |
+
+## Publishers
+
+| Topic | Type | Description |
+|---|---|---|
+| `/text_to_speech/speaking` | `std_msgs/Bool` | `True` while Pepper is speaking |
+| `/speech` | `std_msgs/String` | Text forwarded to NAOqi TTS (`naoqi_ros` backend only) |
+
+## Action Servers
+
+| Action | Type | Description |
+|---|---|---|
+| `/tts` | `dec_interfaces/action/TTS` | Speak text and block until complete; returns success/failure |
+
+## Service Clients
+
+| Service | Type | Used when |
+|---|---|---|
+| `/speech_event/set_enabled` | `std_srvs/SetBool` | Mute/unmute mic during playback |
+| `/naoqi_driver/load_audio_file` | `naoqi_bridge_msgs/srv/LoadAudioFile` | `file` playback mode |
+| `/naoqi_driver/unload_audio_file` | `naoqi_bridge_msgs/srv/UnloadAudioFile` | `file` playback mode |
+| `/naoqi_driver/send_audio_buffer` | `naoqi_bridge_msgs/srv/SendAudioBuffer` | `stream` playback mode |
+
+## Action Clients
+
+| Action | Type | Used when |
+|---|---|---|
+| `/naoqi_driver/play_audio` | `naoqi_bridge_msgs/action/PlayAudio` | `file` playback mode |
+
+# 🏗️ Architecture
+
+```
+/tts/input  ──┐
+              ├──► Sentence Queue ──► speak_sentence()
+/tts action ──┘                           │
+                                          ├── naoqi_ros     → publish /speech
+                                          ├── kokoro_local  → sounddevice
+                                          ├── kokoro_pepper ─┐
+                                          └── elevenlabs_*  ─┤
+                                                             ├─ stream → send_audio_buffer → ALAudioDevice
+                                                             └─ file   → SCP + play_audio → ALAudioPlayer
+```
+
+1. **Input**: Text arrives via `/tts/input` topic or `/tts` action goal
+2. **Queue**: Sentences are enqueued and drained in order by a background thread
+3. **Synthesis**: Kokoro-82M (local GPU/CPU) or ElevenLabs API
+4. **Playback**: Stream mode sends aligned 16 384-frame PCM chunks directly to the robot; file mode SCPs a WAV file and plays via ALAudioPlayer with completion feedback
+5. **Barge-in**: VAD probability on `/speech_event/vad_speech_prob` interrupts playback and flushes the queue when the user starts speaking
 
 # 💡 Support
 
 For issues or questions:
 - Create an issue on GitHub
-- Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a><br>
+- Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a>
 
 # 📜 License
 Copyright (C) 2026 Upanzi Network
 Licensed under the BSD-3-Clause License. See individual package licenses for details.
-

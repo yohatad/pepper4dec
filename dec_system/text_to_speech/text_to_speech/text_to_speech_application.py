@@ -4,7 +4,7 @@
 text_to_speech_application.py
 ROS2 node for Text-to-Speech synthesis and playback on the Pepper robot.
 
-Receives sentences from /conversation_manager/response_stream and speaks them
+Receives sentences from /tts/input and speaks them
 as they arrive — enabling Pepper to start talking before the LLM has finished
 generating the full response.
 
@@ -27,7 +27,7 @@ Features:
   - /tts action server for programmatic TTS calls.
 
 ROS Subscriptions:
-  /conversation_manager/response_stream (std_msgs/String)
+  /tts/input (std_msgs/String)
   /speech_event/vad_speech_prob         (std_msgs/Float32)
 
 ROS Service clients:
@@ -55,6 +55,8 @@ import sys
 import threading
 import time
 
+import numpy as np
+
 import rclpy
 from rclpy.action import ActionServer, ActionClient
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
@@ -75,7 +77,7 @@ from .text_to_speech_implementation import (
     audio_to_wav_bytes,
     split_into_sentences,
     synthesize_kokoro,
-    synthesize_elevenlabs,
+    stream_elevenlabs,
 )
 
 SOFTWARE_VERSION = "v3.0"
@@ -90,7 +92,7 @@ class TextToSpeechNode(Node):
     ROS2 node that drives Pepper's voice.
 
     Sentences arrive either via:
-      (a) /conversation_manager/response_stream  — streaming from LLM
+      (a) /tts/input  — streaming from LLM
       (b) /tts action goal                       — programmatic calls
 
     Both routes enqueue sentences into a thread-safe queue that is drained by
@@ -168,7 +170,7 @@ class TextToSpeechNode(Node):
 
         self.create_subscription(
             String,
-            "/conversation_manager/response_stream",
+            "/tts/input",
             self.stream_sentence_callback,
             10,
             callback_group=stream_cb_group,
@@ -447,20 +449,39 @@ class TextToSpeechNode(Node):
     # ── elevenlabs_local backend ─────────────────────────────────────────────────
 
     def speak_elevenlabs_local(self, sentence: str):
-        """Synthesise with ElevenLabs API and play on the local machine's speakers."""
+        """
+        Stream from ElevenLabs and play on the local machine's speakers.
+        Audio starts as soon as the first API chunk arrives (~200 ms TTFA).
+        """
         self.get_logger().info(
-            f"{self.node_name}: [elevenlabs_local] synthesising: '{sentence}'"
+            f"{self.node_name}: [elevenlabs_local] streaming: '{sentence}'"
         )
         self.set_mic_enabled(False)
         try:
-            audio = synthesize_elevenlabs(
+            gen, api_rate = stream_elevenlabs(
                 sentence,
                 voice_id=self.config["elevenlabs_voice_id"],
                 api_key=self.config["elevenlabs_api_key"],
-                sample_rate=self.config["sample_rate"],
                 model_id=self.config.get("elevenlabs_model", "eleven_turbo_v2_5"),
+                sample_rate=self.config["sample_rate"],
             )
-            completed = self._audio_player.play(audio)
+
+            target_rate = self.config["sample_rate"]
+
+            # Resample on-the-fly if api_rate differs from target
+            if api_rate != target_rate:
+                import math
+                from scipy.signal import resample_poly
+                _g = math.gcd(api_rate, target_rate)
+                _up, _down = target_rate // _g, api_rate // _g
+
+                def _resampled(g):
+                    for chunk in g:
+                        yield resample_poly(chunk, _up, _down).astype(np.float32)
+
+                gen = _resampled(gen)
+
+            completed = self._audio_player.play_chunks(gen)
             if not completed:
                 self.get_logger().info(
                     f"{self.node_name}: [elevenlabs_local] playback interrupted"
@@ -473,30 +494,104 @@ class TextToSpeechNode(Node):
     # ── elevenlabs_pepper backend ────────────────────────────────────────────────
 
     def speak_elevenlabs_pepper(self, sentence: str):
-        """Synthesise with ElevenLabs API and play through Pepper's speakers."""
+        """
+        Stream from ElevenLabs and play through Pepper's speakers.
+
+        stream mode: Chunks are accumulated at api_rate until a full 16 384-frame
+                     robot chunk is ready, then resampled to 48 kHz and sent —
+                     avoiding click artifacts from resampling tiny API chunks.
+        file mode:   Collects full audio then uses SCP + ALAudioPlayer (fallback).
+        """
         playback_method = self.config.get("playback_method", "stream")
         self.get_logger().info(
-            f"{self.node_name}: [elevenlabs_pepper] synthesising: '{sentence}' "
+            f"{self.node_name}: [elevenlabs_pepper] streaming: '{sentence}' "
             f"(method={playback_method})"
         )
+
         try:
-            audio = synthesize_elevenlabs(
+            gen, api_rate = stream_elevenlabs(
                 sentence,
                 voice_id=self.config["elevenlabs_voice_id"],
                 api_key=self.config["elevenlabs_api_key"],
-                sample_rate=self.config["sample_rate"],
                 model_id=self.config.get("elevenlabs_model", "eleven_turbo_v2_5"),
+                sample_rate=self.config["sample_rate"],
             )
         except RuntimeError as e:
             self.get_logger().error(str(e))
             return
 
-        wav_bytes = audio_to_wav_bytes(audio, self.config["sample_rate"])
-
         if playback_method == "stream":
-            self.play_via_stream(wav_bytes)
+            self._stream_elevenlabs_to_robot(gen, api_rate)
         else:
+            # file mode: collect full audio → WAV bytes → SCP + action
+            import math
+            from scipy.signal import resample_poly
+            chunks = list(gen)
+            if not chunks:
+                return
+            audio = np.concatenate(chunks)
+            target_rate = self.config["sample_rate"]
+            if api_rate != target_rate:
+                _g = math.gcd(api_rate, target_rate)
+                audio = resample_poly(
+                    audio, target_rate // _g, api_rate // _g
+                ).astype(np.float32)
+            wav_bytes = audio_to_wav_bytes(audio, target_rate)
             self.play_via_file(wav_bytes)
+
+    def _stream_elevenlabs_to_robot(self, gen, api_rate: int):
+        """
+        Accumulate streaming float32 chunks (at api_rate) into aligned 16 384-frame
+        robot buffers, resample to 48 kHz stereo, and send via send_audio_buffer.
+
+        Resampling on aligned boundaries avoids the click artifacts that occur when
+        each tiny API chunk is resampled independently.
+        """
+        import math
+        from scipy.signal import resample_poly
+
+        ROBOT_RATE = 48000
+        ROBOT_CHUNK_FRAMES = 16384  # driver hard cap
+
+        # How many source frames fill one robot chunk
+        _g = math.gcd(api_rate, ROBOT_RATE)
+        src_frames_per_robot_chunk = ROBOT_CHUNK_FRAMES * api_rate // ROBOT_RATE
+        up, down = ROBOT_RATE // _g, api_rate // _g
+
+        volume = float(self.config.get("stream_volume", 1.0))
+
+        def _flush(src_buf: np.ndarray) -> bool:
+            resampled = resample_poly(src_buf, up, down).astype(np.float32)
+            stereo = (
+                np.column_stack([resampled, resampled]).flatten() * 32767 * volume
+            ).clip(-32768, 32767).astype(np.int16)
+            if not self.send_audio_buffer(list(stereo.tobytes())):
+                return False
+            duration = len(stereo) // 2 / ROBOT_RATE
+            time.sleep(max(0.01, duration - 0.01))
+            return True
+
+        self.set_mic_enabled(False)
+        try:
+            buf = np.zeros(0, dtype=np.float32)
+
+            for chunk in gen:
+                with self._state_lock:
+                    if self._barge_in_triggered:
+                        return
+                buf = np.concatenate([buf, chunk])
+
+                while len(buf) >= src_frames_per_robot_chunk:
+                    if not _flush(buf[:src_frames_per_robot_chunk]):
+                        return
+                    buf = buf[src_frames_per_robot_chunk:]
+
+            # Flush remainder (last partial chunk)
+            if len(buf) > 0:
+                _flush(buf)
+
+        finally:
+            self.set_mic_enabled(True)
 
     def play_via_file(self, wav_bytes: bytes):
         """
@@ -552,8 +647,10 @@ class TextToSpeechNode(Node):
             sample_rate = kokoro_rate
         
         # Convert to stereo by duplicating mono channel, scale float32→int16
+        # stream_volume > 1.0 boosts volume (clip prevents integer overflow)
+        volume = float(self.config.get("stream_volume", 1.0))
         stereo_audio = (
-            np.column_stack([audio, audio]).flatten() * 32767
+            np.column_stack([audio, audio]).flatten() * 32767 * volume
         ).clip(-32768, 32767).astype(np.int16)
 
         # Send in chunks: 16384 frames × 2 channels = 32768 int16 samples
