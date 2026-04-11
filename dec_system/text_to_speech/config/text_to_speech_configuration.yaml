@@ -25,7 +25,7 @@ sample_rate: 24000
 output_device: -1
 
 # ElevenLabs backend settings
-elevenlabs_api_key: "sk_9dfe98dd86795619e7c388092d2cddf88ce2aed06f92b46f"
+elevenlabs_api_key: ""  # Set via: export ELEVENLABS_API_KEY="sk_..."
 elevenlabs_voice_id: "EXAVITQu4vr4xnSDxMaL"   # Rachel (default)
 elevenlabs_model: "eleven_turbo_v2_5"           # fastest model; eleven_multilingual_v2 for more languages
 
