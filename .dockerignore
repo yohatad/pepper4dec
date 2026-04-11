@@ -1,0 +1,49 @@
+# Git
+.git
+.gitignore
+
+# Build artifacts
+build/
+install/
+log/
+*.egg-info/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# ROS2 build
+*.cmake
+Makefile
+*.o
+*.so
+*.a
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Documentation
+*.md
+docs/
+
+# Temporary files
+*.tmp
+*.log
+*.cache
+
+# Large model files (should be downloaded separately)
+*.onnx
+*.pt
+*.pth
+*.h5
+
+# Data files that should be mounted
+data/
+models/
+maps/

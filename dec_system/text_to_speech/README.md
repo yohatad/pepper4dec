@@ -30,7 +30,7 @@ The **Text-to-Speech (TTS)** package is a **ROS2** package designed to synthesiz
 1. **Clone and Build the Workspace**
 ```bash
 cd ~/ros2_ws/src
-git clone <repository-url>
+git clone https://github.com/yohatad/pepper4dec.git
 
 cd ~/ros2_ws
 colcon build --packages-select text_to_speech

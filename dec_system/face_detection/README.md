@@ -31,7 +31,7 @@ The **Face and Mutual Gaze Detection and Localization** package is a **ROS2** pa
 ```bash
 # Clone the repository (if not already done)
 cd ~/ros2_ws/src
-git clone <repository-url>
+git clone https://github.com/yohatad/pepper4dec.git
 
 # Build the workspace
 cd ~/ros2_ws

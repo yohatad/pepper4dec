@@ -34,7 +34,7 @@ The **Behavior Controller** package is a **ROS2** package that orchestrates robo
 ```bash
 # Clone the repository (if not already done)
 cd ~/ros2_ws/src
-# git clone https://github.com/dec_ros2/dec4africa.git
+git clone https://github.com/yohatad/pepper4dec.git
 
 # Build the package
 cd ~/ros2_ws

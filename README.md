@@ -36,12 +36,11 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 - **`overt_attention`** - Controls robot's attention mechanism based on visitor presence
 
 ### **Navigation & Localization**
-- **`pepper_navmap`** - For navigation, RTAB-Map for SLAM and Nav2 for Navigation.
+- **`pepper_navigation`** - For navigation, RTAB-Map for SLAM and Nav2 for Navigation.
 
 ### **Infrastructure & Utilities**
-- **`dec_bringup`** - System launch files and startup configurations
+- **`dec_launch`** - System launch files and startup configurations
 - **`dec_interfaces`** - Custom ROS2 message and service definitions
-- **`dec_launch`** - Custom launch configurations
 
 ## 🖥️ Hardware Diagram
 
@@ -85,15 +84,15 @@ pip install -r ros2_ws/src/pepper4dec/dec_system/face_detection/requirements.txt
    - Place required ONNX model files in their respective `models/` directories
    - Ensure face detection models are in `dec_system/face_detection/models/`
 
-## 🎯 Running the Tour System
+## 🚀 Running the Tour System
 
 ### Basic Launch
 ```bash
 # Source the workspace
 source ~/ros2_ws/install/setup.bash
 
-# Launch the complete system
-ros2 launch dec_bringup complete_system.launch.py
+# Launch the complete system (requires all dependencies and robot hardware)
+ros2 launch dec_launch rtabmap_realsense.launch.py
 ```
 
 ### Component-Based Launch
@@ -106,17 +105,17 @@ ros2 launch face_detection face_detection_launch_robot.launch.py
 
 2. **Launch Behavior Controller**
 ```bash
-ros2 run behavior_controller behavior_controller
+ros2 run behaviorController behaviorController
 ```
 
-3. **Launch Navigation**
+3. **Launch SLAM Toolbox (2D Mapping)**
 ```bash
-ros2 launch pepper_navigation navigation.launch.py
+ros2 launch dec_launch slam_toolbox.launch.py
 ```
 
 ### Configuration
 Each package contains configuration files in their `config/` directories:
-- `behavior_controller/config/behaviorControllerConfiguration.ini` - Mission parameters
+- `behaviorController/config/behaviorControllerConfiguration.ini` - Mission parameters
 - `face_detection/config/face_detection_configuration.yaml` - Perception settings
 - Navigation and gesture parameters in respective package configs
 
@@ -138,16 +137,16 @@ Each package contains configuration files in their `config/` directories:
 ### **Navigation System**
 - **Localization**: Adaptive Monte Carlo Localization (AMCL) or RTAB-MAP
 - **Mapping**: Uses pre-built maps (`dec_system/map.pgm`)
-- **Path Planning**: Dynamic Window Approach (DWA) for safe navigation
+- **Path Planning**: Nav2 stack for safe navigation
 - **Integration**: Full coordination with behavior controller
 
-## 🔧 Development
+## �️ Development
 
 ### Adding New Features
 1. Create new package in `dec_system/` directory
 2. Follow ROS2 package structure conventions
 3. Define interfaces in `dec_interfaces` if needed
-4. Update `dec_bringup` launch files
+4. Update `dec_launch` launch files
 
 ### Code Style
 - Follow ROS2 C++ and Python style guides
@@ -163,7 +162,7 @@ Detailed documentation is available:
 <!-- - **Deliverable reports**: [DEC4Africa Deliverables](https://dec4africa.github.io/deliverables/) -->
 
 
-## 🆘 Support
+## ❓ Support
 
 For issues or questions:
 - **Contact**: 
