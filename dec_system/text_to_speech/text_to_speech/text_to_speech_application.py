@@ -113,12 +113,12 @@ class TextToSpeechNode(Node):
         )
 
         # ── Internal state ────────────────────────────────────────────────────
-        self._sentence_queue: queue.Queue = queue.Queue()
-        self._is_speaking = False
-        self._barge_in_counter = 0
-        self._barge_in_triggered = False
-        self._state_lock = threading.Lock()
-        self._shutdown = False
+        self.sentence_queue: queue.Queue = queue.Queue()
+        self.is_speaking = False
+        self.barge_in_counter = 0
+        self.barge_in_triggered = False
+        self.state_lock = threading.Lock()
+        self.shutdown = False
 
         # ── Per-backend initialisation ────────────────────────────────────────
         self._audio_player = None
@@ -135,7 +135,7 @@ class TextToSpeechNode(Node):
             )
 
         # ── Publishers ────────────────────────────────────────────────────────
-        self._speaking_pub = self.create_publisher(Bool, "/text_to_speech/speaking", 10)
+        self.speaking_pub = self.create_publisher(Bool, "/text_to_speech/speaking", 10)
 
         if self.engine == "naoqi_ros":
             self._naoqi_pub = self.create_publisher(
@@ -147,7 +147,7 @@ class TextToSpeechNode(Node):
             )
 
         # ── Service clients ───────────────────────────────────────────────────
-        self._mic_client = self.create_client(SetBool, "/speech_event/set_enabled")
+        self.mic_client = self.create_client(SetBool, "/speech_event/set_enabled")
 
         if self.engine in ("kokoro_pepper", "elevenlabs_pepper"):
             self._load_client = self.create_client(
@@ -220,34 +220,34 @@ class TextToSpeechNode(Node):
         """Enqueue each sentence published by conversation_manager."""
         sentence = msg.data.strip()
         if sentence:
-            self._sentence_queue.put(sentence)
+            self.sentence_queue.put(sentence)
 
     # ── VAD / barge-in ──────────────────────────────────────────────────────────
 
     def vad_prob_callback(self, msg: Float32):
         """Detect user speech during playback and trigger barge-in."""
-        with self._state_lock:
-            if not self._is_speaking:
-                self._barge_in_counter = 0
+        with self.state_lock:
+            if not self.is_speaking:
+                self.barge_in_counter = 0
                 return
 
             if msg.data >= self.config["barge_in_threshold"]:
-                self._barge_in_counter += 1
+                self.barge_in_counter += 1
             else:
-                self._barge_in_counter = 0
+                self.barge_in_counter = 0
 
-            if self._barge_in_counter >= self.config["barge_in_chunks"]:
-                if not self._barge_in_triggered:
-                    self._barge_in_triggered = True
+            if self.barge_in_counter >= self.config["barge_in_chunks"]:
+                if not self.barge_in_triggered:
+                    self.barge_in_triggered = True
                     self.get_logger().info(
                         f"{self.node_name}: barge-in detected "
-                        f"(VAD={msg.data:.2f} × {self._barge_in_counter}). "
+                        f"(VAD={msg.data:.2f} × {self.barge_in_counter}). "
                         "Interrupting playback."
                     )
                     self.interrupt_playback()
-                    while not self._sentence_queue.empty():
+                    while not self.sentence_queue.empty():
                         try:
-                            self._sentence_queue.get_nowait()
+                            self.sentence_queue.get_nowait()
                         except queue.Empty:
                             break
 
@@ -281,8 +281,8 @@ class TextToSpeechNode(Node):
             done_event.set()
 
         for sentence in split_into_sentences(text):
-            self._sentence_queue.put(sentence)
-        self._sentence_queue.put(sentinel)
+            self.sentence_queue.put(sentence)
+        self.sentence_queue.put(sentinel)
 
         feedback_msg.status = "speaking"
         goal_handle.publish_feedback(feedback_msg)
@@ -304,9 +304,9 @@ class TextToSpeechNode(Node):
           str       — sentence to speak
           callable  — sentinel signalling that a /tts action goal is done
         """
-        while not self._shutdown:
+        while not self.shutdown:
             try:
-                item = self._sentence_queue.get(timeout=0.1)
+                item = self.sentence_queue.get(timeout=0.1)
             except queue.Empty:
                 continue
 
@@ -324,10 +324,10 @@ class TextToSpeechNode(Node):
 
     def speak_sentence(self, sentence: str):
         """Dispatch a single sentence to the active backend."""
-        with self._state_lock:
-            self._barge_in_triggered = False
-            self._barge_in_counter = 0
-            self._is_speaking = True
+        with self.state_lock:
+            self.barge_in_triggered = False
+            self.barge_in_counter = 0
+            self.is_speaking = True
 
         self.publish_speaking(True)
 
@@ -351,9 +351,9 @@ class TextToSpeechNode(Node):
                 f"{self.node_name}: playback error — '{sentence[:40]}': {e}"
             )
         finally:
-            with self._state_lock:
-                if self._sentence_queue.empty():
-                    self._is_speaking = False
+            with self.state_lock:
+                if self.sentence_queue.empty():
+                    self.is_speaking = False
                     self.publish_speaking(False)
 
     # ── naoqi_ros backend ────────────────────────────────────────────────────────
@@ -378,8 +378,8 @@ class TextToSpeechNode(Node):
         deadline = time.monotonic() + duration
         while time.monotonic() < deadline:
             time.sleep(0.05)
-            with self._state_lock:
-                if self._barge_in_triggered:
+            with self.state_lock:
+                if self.barge_in_triggered:
                     return
 
     # ── kokoro_local backend ─────────────────────────────────────────────────────
@@ -521,7 +521,7 @@ class TextToSpeechNode(Node):
             return
 
         if playback_method == "stream":
-            self._stream_elevenlabs_to_robot(gen, api_rate)
+            self.stream_elevenlabs_to_robot(gen, api_rate)
         else:
             # file mode: collect full audio → WAV bytes → SCP + action
             import math
@@ -539,7 +539,7 @@ class TextToSpeechNode(Node):
             wav_bytes = audio_to_wav_bytes(audio, target_rate)
             self.play_via_file(wav_bytes)
 
-    def _stream_elevenlabs_to_robot(self, gen, api_rate: int):
+    def stream_elevenlabs_to_robot(self, gen, api_rate: int):
         """
         Accumulate streaming float32 chunks (at api_rate) into aligned 16 384-frame
         robot buffers, resample to 48 kHz stereo, and send via send_audio_buffer.
@@ -576,8 +576,8 @@ class TextToSpeechNode(Node):
             buf = np.zeros(0, dtype=np.float32)
 
             for chunk in gen:
-                with self._state_lock:
-                    if self._barge_in_triggered:
+                with self.state_lock:
+                    if self.barge_in_triggered:
                         return
                 buf = np.concatenate([buf, chunk])
 
@@ -665,8 +665,8 @@ class TextToSpeechNode(Node):
             offset = 0
             while offset < len(stereo_audio):
                 # Check for barge-in
-                with self._state_lock:
-                    if self._barge_in_triggered:
+                with self.state_lock:
+                    if self.barge_in_triggered:
                         break
                 
                 chunk = stereo_audio[offset:offset + max_chunk_size]
@@ -811,21 +811,21 @@ class TextToSpeechNode(Node):
 
     def set_mic_enabled(self, enabled: bool):
         """Call /speech_event/set_enabled (best-effort, non-blocking)."""
-        if not self._mic_client.service_is_ready():
+        if not self.mic_client.service_is_ready():
             return
         req = SetBool.Request()
         req.data = enabled
-        self._mic_client.call_async(req)
+        self.mic_client.call_async(req)
 
     # ── Speaking state publisher ──────────────────────────────────────────────────
 
     def publish_speaking(self, speaking: bool):
-        if self._shutdown:
+        if self.shutdown:
             return
         try:
             msg = Bool()
             msg.data = speaking
-            self._speaking_pub.publish(msg)
+            self.speaking_pub.publish(msg)
         except Exception:
             pass
 
@@ -837,11 +837,11 @@ class TextToSpeechNode(Node):
             self.get_logger().info(f"{self.node_name}: shutting down…")
         except Exception:
             print("[text_to_speech] shutting down…")
-        self._shutdown = True
+        self.shutdown = True
 
         # Trigger barge-in to break out of any active stream sleep loop
-        with self._state_lock:
-            self._barge_in_triggered = True
+        with self.state_lock:
+            self.barge_in_triggered = True
 
         # Stop local audio player if active
         if self.engine == "kokoro_local" and self._audio_player is not None:
@@ -852,7 +852,7 @@ class TextToSpeechNode(Node):
             self._play_goal_handle.cancel_goal_async()
 
         # Unblock the playback thread (None is the exit sentinel)
-        self._sentence_queue.put(None)
+        self.sentence_queue.put(None)
 
         # Wait up to 2 s for the playback thread to exit cleanly
         self._playback_thread.join(timeout=2.0)

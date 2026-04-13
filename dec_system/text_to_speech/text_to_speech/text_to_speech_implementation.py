@@ -43,12 +43,12 @@ logger = rclpy.logging.get_logger("text_to_speech")
 # Sentence splitting
 # ---------------------------------------------------------------------------
 
-_SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
+SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
 
 
 def split_into_sentences(text: str) -> list:
     """Split *text* into individual sentences at .!? boundaries."""
-    parts = _SENTENCE_BOUNDARY.split(text.strip())
+    parts = SENTENCE_BOUNDARY.split(text.strip())
     return [p.strip() for p in parts if p.strip()]
 
 
@@ -132,17 +132,17 @@ def load_configuration() -> dict:
 # Kokoro-82M synthesis
 # ---------------------------------------------------------------------------
 
-_kokoro_pipeline = None
-_kokoro_pipeline_lock = threading.Lock()
+kokoro_pipeline = None
+kokoro_pipeline_lock = threading.Lock()
 
 
-def _get_kokoro_pipeline():
+def getkokoro_pipeline():
     """Return (and lazily load) the shared KPipeline instance."""
-    global _kokoro_pipeline
-    if _kokoro_pipeline is not None:
-        return _kokoro_pipeline
-    with _kokoro_pipeline_lock:
-        if _kokoro_pipeline is None:
+    global kokoro_pipeline
+    if kokoro_pipeline is not None:
+        return kokoro_pipeline
+    with kokoro_pipeline_lock:
+        if kokoro_pipeline is None:
             try:
                 from kokoro import KPipeline  # type: ignore
             except ImportError as exc:
@@ -155,17 +155,17 @@ def _get_kokoro_pipeline():
             device = "cuda" if torch.cuda.is_available() else "cpu"
             logger.info(f"Loading Kokoro-82M model on {device} (first call only)…")
             try:
-                _kokoro_pipeline = KPipeline(lang_code="a", device=device)
+                kokoro_pipeline = KPipeline(lang_code="a", device=device)
             except Exception as exc:
                 if device == "cuda" and (
                     "cuda" in str(exc).lower() or "cudnn" in str(exc).lower()
                 ):
                     logger.warn(f"CUDA failed ({exc}); falling back to CPU.")
-                    _kokoro_pipeline = KPipeline(lang_code="a", device="cpu")
+                    kokoro_pipeline = KPipeline(lang_code="a", device="cpu")
                 else:
                     raise
             logger.info(f"Kokoro-82M loaded on {device}.")
-    return _kokoro_pipeline
+    return kokoro_pipeline
 
 
 def synthesize_kokoro(text: str, voice: str, sample_rate: int) -> np.ndarray:
@@ -175,7 +175,7 @@ def synthesize_kokoro(text: str, voice: str, sample_rate: int) -> np.ndarray:
     Returns a float32 numpy array at *sample_rate* Hz.
     The model is loaded once and cached for the process lifetime.
     """
-    pipeline = _get_kokoro_pipeline()
+    pipeline = getkokoro_pipeline()
 
     chunks = []
     for _, _, audio_chunk in pipeline(text, voice=voice, speed=1.0):
@@ -212,7 +212,7 @@ def audio_to_wav_bytes(audio: np.ndarray, sample_rate: int) -> bytes:
 # ---------------------------------------------------------------------------
 
 # Supported PCM output rates by ElevenLabs API
-_ELEVENLABS_PCM_RATES = {16000, 22050, 24000, 44100}
+ELEVENLABS_PCM_RATES = {16000, 22050, 24000, 44100}
 
 
 def _elevenlabs_client(api_key: str):
@@ -244,7 +244,7 @@ def stream_elevenlabs(
 
     Requires:  pip install elevenlabs
     """
-    api_rate = min(_ELEVENLABS_PCM_RATES, key=lambda r: abs(r - sample_rate))
+    api_rate = min(ELEVENLABS_PCM_RATES, key=lambda r: abs(r - sample_rate))
 
     def _gen():
         client = _elevenlabs_client(api_key)
