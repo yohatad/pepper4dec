@@ -740,7 +740,7 @@ def handle_query(
 # Streaming Response Generation
 # =============================================================================
 
-def _parse_json_string_value(s: str) -> Tuple[str, bool]:
+def parse_json_string_value(s: str) -> Tuple[str, bool]:
     """
     Parse characters of a JSON string value after the opening quote.
 
@@ -872,7 +872,7 @@ def generate_response_stream(
                 continue  # Haven't reached the answer field yet
 
             # ---- Parse new characters from the answer value ----
-            new_text, complete = _parse_json_string_value(post_think[answer_open_idx:])
+            new_text, complete = parse_json_string_value(post_think[answer_open_idx:])
             new_chars = new_text[len(answer_chars):]
             answer_chars = new_text
             pending += new_chars
@@ -912,7 +912,6 @@ def generate_response_stream(
 
     finally:
         raw_response_out.append(raw_buffer)
-
 
 def safe_float(value: Any, default: float, name: str) -> Tuple[float, Optional[str]]:
     """Safely convert value to float"""

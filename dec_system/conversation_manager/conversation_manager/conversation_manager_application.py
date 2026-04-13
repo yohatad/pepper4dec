@@ -99,7 +99,7 @@ class conversationManager(Node):
         self.stream_pub = self.create_publisher(String, '/tts/input', 10)
 
         # Action server
-        self._action_server = ActionServer(self, ConversationManager, 'prompt', self.execute_callback)
+        self._action_server = ActionServer(self, ConversationManager, 'conversation_manager', self.execute_callback)
 
         status = f"Collection: {collection_name} ({self.collection.count()} docs)" if self.collection else "Collection: Failed to load"
         self.get_logger().info(f"RAG Node ready. {status}")
