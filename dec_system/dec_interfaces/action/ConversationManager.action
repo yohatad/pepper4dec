@@ -1,11 +1,29 @@
-# goal
+# ConversationManager.action
+#
+# Action server: /conversation_manager  (conversation_manager node)
+#
+# Receives a natural-language prompt, performs a RAG (Retrieval-Augmented
+# Generation) query against the ChromaDB knowledge base, and streams the
+# answer sentence-by-sentence to /tts/input while the LLM is still
+# generating. The full answer text is returned in the result so that
+# downstream BT nodes (e.g. TTSNode) can act on the complete response.
+
+# ── Goal ──────────────────────────────────────────────────────────────────────
+# Natural-language question or utterance to process
 string prompt
 
 ---
-# result
+
+# ── Result ────────────────────────────────────────────────────────────────────
+# True if the query completed without error
 bool success
+# Full generated answer text (plain text, extracted from LLM output)
 string response
 
 ---
-# feedback
+
+# ── Feedback ──────────────────────────────────────────────────────────────────
+# Current processing stage
+# "searching"  – performing vector similarity search in ChromaDB
+# "generating" – streaming LLM response; sentences appear on /tts/input
 string status
