@@ -88,7 +88,6 @@ ros2 run behavior_controller behaviorController
 ## Required Action Servers and Topics
 
 <div style="background-color: #1e1e1e; padding: 15px; border-radius: 4px; border: 1px solid #404040; margin: 10px 0;">
-<span style="color: #ff3333; font-weight: bold;">NOTE: </span>
 <span style="color: #cccccc;">The following <strong>ROS2 action servers</strong> must be available before the behavior controller starts executing:
 
 - `AnimateBehavior` — `dec_interfaces::action::AnimateBehavior`

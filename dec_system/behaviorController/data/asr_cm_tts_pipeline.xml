@@ -6,11 +6,12 @@
   Loop:
     1. CheckFaceDetected  – block until mutual gaze detected (engagement gate)
     2. SpeechRecognition  – listen for user speech
-    3. ConversationManager – RAG + LLM generates a response
-    4. SpeechWithFeedback  – robot speaks the response
+    3. ConversationManager – RAG + LLM generates a response (streams sentences
+                             to /tts/input in parallel so TTS can start early)
+    4. TTS                – calls /tts action server; blocks until playback is done
 
   If SpeechRecognition times out (no speech heard) the Fallback catches the
-  failure, speaks a prompt, and the outer Repeat restarts from step 1.
+  failure, speaks a prompt via TTS, and the outer Repeat restarts from step 1.
 -->
 <root BTCPP_format="4">
 
@@ -50,19 +51,19 @@
               response="{llm_response}"
               status="{cm_status}"/>
 
-            <SpeechWithFeedback
-              say="{llm_response}"
-              started="{tts_started}"
-              bookmark="{tts_bookmark}"
-              current_word="{tts_word}"/>
+            <!-- TTS action server (Kokoro / ElevenLabs backend).         -->
+            <!-- Blocks until the full response has been spoken.          -->
+            <TTS
+              text="{llm_response}"
+              status="{tts_status}"
+              message="{tts_message}"/>
           </Sequence>
 
-          <!-- Fallback: no speech heard → prompt and retry              -->
-          <SpeechWithFeedback
-            say="I didn't catch that. Could you please repeat?"
-            started="{tts_started}"
-            bookmark="{tts_bookmark}"
-            current_word="{tts_word}"/>
+          <!-- Fallback: no speech heard → prompt via TTS and retry       -->
+          <TTS
+            text="I didn't catch that. Could you please repeat?"
+            status="{tts_status}"
+            message="{tts_message}"/>
 
         </Fallback>
 

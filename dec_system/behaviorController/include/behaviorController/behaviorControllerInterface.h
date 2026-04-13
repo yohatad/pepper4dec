@@ -311,6 +311,26 @@ public:
     BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
 };
 
+// Wraps dec_interfaces::action::TTS
+// Sends text to the /tts action server (text_to_speech node), which synthesises
+// audio via Kokoro or ElevenLabs and plays it through the configured backend.
+// Blocks until playback is complete.
+class TTSNode
+    : public BT::RosActionNode<dec_interfaces::action::TTS>
+{
+public:
+    TTSNode(const std::string& name,
+            const BT::NodeConfig& config,
+            const BT::RosNodeParams& params)
+        : BT::RosActionNode<dec_interfaces::action::TTS>(name, config, params) {}
+
+    static BT::PortsList providedPorts();
+    bool setGoal(Goal& goal) override;
+    BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
+    BT::NodeStatus onResultReceived(const WrappedResult& result) override;
+    BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
+};
+
 // Calls animate_behavior/stop (std_srvs::srv::Trigger) to immediately stop animation.
 // Returns SUCCESS if the service reports success, FAILURE otherwise.
 class StopAnimateBehavior
