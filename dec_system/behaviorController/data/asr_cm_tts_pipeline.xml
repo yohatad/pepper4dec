@@ -1,45 +1,31 @@
 <?xml version="1.0"?>
 <!--
   asr_cm_tts_pipeline.xml
-  ASR → Conversation Manager → TTS pipeline
+  ASR → Conversation Manager → TTS  (testing pipeline)
 
-  Loop:
-    1. CheckFaceDetected  – block until mutual gaze detected (engagement gate)
-    2. SpeechRecognition  – listen for user speech
-    3. ConversationManager – RAG + LLM generates a response (streams sentences
-                             to /tts/input in parallel so TTS can start early)
-    4. TTS                – calls /tts action server; blocks until playback is done
+  A minimal 3-step loop for validating the full speech pipeline end-to-end:
+    1. SpeechRecognition  – listen for up to 7 s
+    2. ConversationManager – RAG + LLM; streams sentences to /tts/input;
+                             writes {intent} and {confidence} to the blackboard
+    3. TTS                – calls /tts action server; blocks until playback done
 
-  If SpeechRecognition times out (no speech heard) the Fallback catches the
-  failure, speaks a prompt via TTS, and the outer Repeat restarts from step 1.
+  Intent routing belongs in scenario-specific trees (e.g. lab_tour.xml).
+  Here, {intent} and {confidence} are captured but not acted on — useful
+  for verifying that the LLM is classifying correctly during development.
 -->
 <root BTCPP_format="4">
 
   <BehaviorTree ID="asr_cm_tts_pipeline">
-
-    <!-- Run the dialogue loop forever -->
     <Repeat num_cycles="-1">
       <Sequence>
 
-        <!-- ── Step 1: Wait for engagement ───────────────────────────── -->
-        <!-- Blocks (RUNNING) until a person makes eye contact.           -->
-        <!-- Remove or set require_mutual_gaze="false" to always listen.  -->
-        <!-- <CheckFaceDetected
-          require_mutual_gaze="true"
-          face_count="{face_count}"
-          mutual_gaze="{mutual_gaze}"
-          face_id="{face_id}"
-          face_depth="{face_depth}"
-          face_x="{face_x}"
-          face_y="{face_y}"/> -->
+        <!-- ── Step 1: Wait for engagement (optional) ───────────────────── -->
+        <!-- <IsMutualGazeDiscovered timeout="30.0"/> -->
 
-        <!-- ── Step 2: Listen → Think → Speak ───────────────────────── -->
-        <!-- Fallback handles the case where no speech is heard:          -->
-        <!--   • inner Sequence runs the full ASR → CM → TTS chain       -->
-        <!--   • if ASR fails, the robot prompts the user and loops back  -->
+        <!-- ── Step 2: Listen → Think → Speak ───────────────────────────── -->
         <Fallback>
 
-          <!-- Happy path: speech detected, response generated and spoken -->
+          <!-- Happy path: speech heard → LLM responds → TTS speaks -->
           <Sequence>
             <SpeechRecognition
               wait="7.0"
@@ -49,27 +35,25 @@
             <ConversationManager
               prompt="{user_speech}"
               response="{llm_response}"
+              intent="{intent}"
+              confidence="{confidence}"
               status="{cm_status}"/>
 
-            <!-- TTS action server (Kokoro / ElevenLabs backend).         -->
-            <!-- Blocks until the full response has been spoken.          -->
             <TTS
               text="{llm_response}"
               status="{tts_status}"
               message="{tts_message}"/>
           </Sequence>
 
-          <!-- Fallback: no speech heard → prompt via TTS and retry       -->
+          <!-- Fallback: no speech heard → prompt and retry -->
           <TTS
             text="I didn't catch that. Could you please repeat?"
             status="{tts_status}"
             message="{tts_message}"/>
 
         </Fallback>
-
       </Sequence>
     </Repeat>
-
   </BehaviorTree>
 
 </root>

@@ -43,6 +43,7 @@ from .conversation_manager_implementation import (
     generate_response,
     generate_response_stream,
     extract_answer_from_raw,
+    extract_intent_from_raw,
     apply_config_file,
 )
 
@@ -229,13 +230,16 @@ class conversationManager(Node):
                 self.stream_pub.publish(msg)
                 self.log_verbose(f"Streamed: '{sentence}'")
 
-            # Derive the canonical answer text from the raw LLM buffer
-            if raw_out:
-                response_text = extract_answer_from_raw(raw_out[0])
-                if not response_text.strip():
-                    response_text = " ".join(yielded_sentences)
-            else:
+            # Derive the canonical answer text, intent, and confidence
+            # from the full raw LLM buffer captured during streaming.
+            raw = raw_out[0] if raw_out else ""
+
+            response_text = extract_answer_from_raw(raw) if raw else ""
+            if not response_text.strip():
                 response_text = " ".join(yielded_sentences)
+
+            intent, confidence = extract_intent_from_raw(raw) if raw else ("UNKNOWN", 0.0)
+            self.log_verbose(f"Intent: {intent} (confidence={confidence:.2f})")
 
             # Update conversation history
             self.conversation_history.append({'query': query, 'response': response_text})
@@ -245,8 +249,10 @@ class conversationManager(Node):
 
             self.log_verbose(f"Response: {response_text[:200]}")
 
-            result.success = True
-            result.response = response_text
+            result.success    = True
+            result.response   = response_text
+            result.intent     = intent
+            result.confidence = confidence
             goal_handle.succeed()
 
         except Exception as e:

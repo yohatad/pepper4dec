@@ -469,9 +469,11 @@ BT::PortsList ConversationManagerNode::providedPorts()
 {
     return {
         BT::InputPort<std::string> ("action_name", "/conversation_manager", "Action server name"),
-        BT::InputPort<std::string> ("prompt",   "", "Natural-language prompt to send"),
-        BT::OutputPort<std::string>("response",     "Reply from the conversation manager"),
-        BT::OutputPort<std::string>("status",       "Feedback: searching | generating"),
+        BT::InputPort<std::string> ("prompt",      "",    "Natural-language prompt to send"),
+        BT::OutputPort<std::string>("response",           "Full answer text from the LLM"),
+        BT::OutputPort<std::string>("intent",             "Classified intent (ASK_EXHIBIT_QUESTION | NAVIGATION_REQUEST | STOP | …)"),
+        BT::OutputPort<double>     ("confidence",         "LLM confidence in the intent (0.0 – 1.0)"),
+        BT::OutputPort<std::string>("status",             "Feedback: searching | generating"),
     };
 }
 
@@ -507,7 +509,9 @@ BT::NodeStatus ConversationManagerNode::onFeedback(const std::shared_ptr<const F
 
 BT::NodeStatus ConversationManagerNode::onResultReceived(const WrappedResult& result)
 {
-    setOutput("response", result.result->response);
+    setOutput("response",   result.result->response);
+    setOutput("intent",     result.result->intent);
+    setOutput("confidence", static_cast<double>(result.result->confidence));
 
     if (!result.result->success) {
         RCLCPP_WARN(rclcpp::get_logger("behavior_controller"),
@@ -517,7 +521,10 @@ BT::NodeStatus ConversationManagerNode::onResultReceived(const WrappedResult& re
 
     if (ConfigManager::instance().isVerbose()) {
         RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
-                    "[ConversationManagerNode] Response → \"%s\"", result.result->response.c_str());
+                    "[ConversationManagerNode] Response=\"%s\" intent=%s confidence=%.2f",
+                    result.result->response.c_str(),
+                    result.result->intent.c_str(),
+                    result.result->confidence);
     }
     return BT::NodeStatus::SUCCESS;
 }

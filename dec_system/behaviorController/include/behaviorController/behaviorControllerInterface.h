@@ -278,6 +278,12 @@ public:
 };
 
 // Wraps dec_interfaces::action::ConversationManager
+//
+// Output ports written from the action result:
+//   response   – full generated answer text
+//   intent     – classified intent (ASK_EXHIBIT_QUESTION | NAVIGATION_REQUEST |
+//                SOCIAL_SMALL_TALK | OFF_TOPIC | STOP | AFFIRMATIVE | NEGATIVE | …)
+//   confidence – LLM confidence in the intent (0.0 – 1.0)
 class ConversationManagerNode
     : public BT::RosActionNode<dec_interfaces::action::ConversationManager>
 {
