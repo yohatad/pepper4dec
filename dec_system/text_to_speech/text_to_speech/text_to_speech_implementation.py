@@ -28,11 +28,12 @@ Date: April 2025
 Version: v3.0
 """
 
+import io
 import math
 import os
 import re
 import threading
-from typing import Optional, Dict
+from typing import Generator, Iterator, List, Optional, Tuple
 
 import numpy as np
 import rclpy.logging
@@ -200,11 +201,125 @@ def synthesize_kokoro(text: str, voice: str, sample_rate: int) -> np.ndarray:
 
 def audio_to_wav_bytes(audio: np.ndarray, sample_rate: int) -> bytes:
     """Encode a float32 numpy array as PCM-16 WAV and return the raw bytes."""
-    import io
     import soundfile as sf  # type: ignore
     buf = io.BytesIO()
     sf.write(buf, audio, sample_rate, subtype="PCM_16", format="WAV")
     return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Robot audio helpers  (kokoro_pepper / elevenlabs_pepper backends)
+# ---------------------------------------------------------------------------
+
+ROBOT_RATE = 48_000
+ROBOT_CHUNK_FRAMES = 16_384  # driver hard cap
+
+
+def prepare_stream_audio(
+    wav_bytes: bytes,
+    stream_volume: float = 1.0,
+) -> Iterator[Tuple[List[int], float]]:
+    """
+    Decode WAV bytes, resample to ROBOT_RATE stereo int16, and yield
+    ``(audio_list, wait_time)`` pairs ready for send_audio_buffer.
+
+    ``audio_list`` is a ``List[int]`` of raw bytes (as unsigned ints).
+    ``wait_time``  is how long to sleep before sending the next chunk.
+    """
+    import soundfile as sf  # type: ignore
+    from scipy.signal import resample_poly
+
+    audio, src_rate = sf.read(io.BytesIO(wav_bytes), dtype="float32")
+    if audio.ndim > 1:
+        audio = audio[:, 0]
+
+    if src_rate != ROBOT_RATE:
+        _g = math.gcd(src_rate, ROBOT_RATE)
+        audio = resample_poly(audio, ROBOT_RATE // _g, src_rate // _g).astype(np.float32)
+
+    stereo = (
+        np.column_stack([audio, audio]).flatten() * 32767 * stream_volume
+    ).clip(-32768, 32767).astype(np.int16)
+
+    max_chunk = ROBOT_CHUNK_FRAMES * 2          # stereo int16 samples per send
+    bytes_per_second = ROBOT_RATE * 2 * 2       # 48 kHz × 2 ch × 2 B
+
+    offset = 0
+    while offset < len(stereo):
+        chunk = stereo[offset : offset + max_chunk]
+        wait_time = max(0.01, chunk.nbytes / bytes_per_second - 0.01)
+        yield list(chunk.tobytes()), wait_time
+        offset += max_chunk
+
+
+def iter_robot_chunks(
+    gen,
+    api_rate: int,
+    stream_volume: float = 1.0,
+) -> Iterator[Tuple[List[int], float]]:
+    """
+    Accumulate streaming float32 chunks (at *api_rate*), resample to
+    ROBOT_RATE stereo int16 on aligned ROBOT_CHUNK_FRAMES boundaries, and
+    yield ``(audio_list, wait_time)`` pairs ready for send_audio_buffer.
+
+    Resampling on aligned boundaries avoids click artifacts that occur when
+    each tiny API chunk is resampled independently.
+    """
+    from scipy.signal import resample_poly
+
+    _g = math.gcd(api_rate, ROBOT_RATE)
+    src_frames_per_chunk = ROBOT_CHUNK_FRAMES * api_rate // ROBOT_RATE
+    up, down = ROBOT_RATE // _g, api_rate // _g
+
+    def _flush(src_buf: np.ndarray) -> Tuple[List[int], float]:
+        resampled = resample_poly(src_buf, up, down).astype(np.float32)
+        stereo = (
+            np.column_stack([resampled, resampled]).flatten() * 32767 * stream_volume
+        ).clip(-32768, 32767).astype(np.int16)
+        duration = len(stereo) // 2 / ROBOT_RATE
+        return list(stereo.tobytes()), max(0.01, duration - 0.01)
+
+    buf = np.zeros(0, dtype=np.float32)
+    for chunk in gen:
+        buf = np.concatenate([buf, chunk])
+        while len(buf) >= src_frames_per_chunk:
+            yield _flush(buf[:src_frames_per_chunk])
+            buf = buf[src_frames_per_chunk:]
+
+    if len(buf) > 0:
+        yield _flush(buf)
+
+
+def collect_and_resample(gen, src_rate: int, target_rate: int) -> np.ndarray:
+    """Drain *gen*, concatenate chunks, and resample to *target_rate*."""
+    from scipy.signal import resample_poly
+
+    chunks = list(gen)
+    if not chunks:
+        return np.zeros(0, dtype=np.float32)
+
+    audio = np.concatenate(chunks)
+    if src_rate != target_rate:
+        _g = math.gcd(src_rate, target_rate)
+        audio = resample_poly(
+            audio, target_rate // _g, src_rate // _g
+        ).astype(np.float32)
+
+    return audio
+
+
+def resample_chunks(gen, src_rate: int, target_rate: int) -> Generator[np.ndarray, None, None]:
+    """Yield resampled float32 chunks from *gen* (no-op if rates match)."""
+    if src_rate == target_rate:
+        yield from gen
+        return
+
+    from scipy.signal import resample_poly
+
+    _g = math.gcd(src_rate, target_rate)
+    _up, _down = target_rate // _g, src_rate // _g
+    for chunk in gen:
+        yield resample_poly(chunk, _up, _down).astype(np.float32)
 
 
 # ---------------------------------------------------------------------------
