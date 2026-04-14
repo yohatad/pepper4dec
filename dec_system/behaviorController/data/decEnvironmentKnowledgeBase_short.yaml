@@ -12,7 +12,7 @@ locations:
       x: 0.0
       y: 0.0
       z: 0.0
-    gesture_message_english: "Thank you for visiting Upanzi's Digital Experience Center. My name is Pepper, and I will be your tour guide. The Digital Experience Center is a physical space designed to showcase cutting-edge digital technologies, such as digital public infrastructure and digital public goods, allowing visitors like you to interact with solutions like digital identity, payments, and cybersecurity. Feel free to ask questions as we go along"
+    gesture_message_english: "Thank you for visiting Upanzi's Digital Experience Center. My name is Pepper, and I will be your tour guide. The Digital Experience Center is a physical space designed to showcase cutting-edge digital technologies, such as digital public infrastructure and digital public goods, allowing visitors like you to interact with solutions like digital identity, payments, and cybersecurity. Feel free to ask questions as we go along."
     cultural_knowledge: ["SymbolicShapeRespect", "BowExtentRespect"]
 
   2:

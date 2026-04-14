@@ -1626,6 +1626,7 @@ BT::Tree initializeTree(const std::string& scenario,
     factory.registerNodeType<SpeechRecognitionNode>    ("SpeechRecognition",    params);
     factory.registerNodeType<ConversationManagerNode>  ("ConversationManager",  params);
     factory.registerNodeType<SpeechWithFeedbackNode>   ("SpeechWithFeedback",   params);
+    factory.registerNodeType<TTSNode>                  ("TTS",                  params);
 
     // Nodes that require the node handle at construction time
     factory.registerBuilder<CheckFaceDetected>(
@@ -1659,7 +1660,7 @@ BT::Tree initializeTree(const std::string& scenario,
         });
 
     if (ConfigManager::instance().isVerbose()) {
-        RCLCPP_INFO(logger, "[initializeTree] Registered nodes: AnimateBehavior, StopAnimateBehavior, SetOvertAttention, SetSpeechListening, Gesture, Navigate, SpeechRecognition, ConversationManager, SpeechWithFeedback, CheckFaceDetected, ListenForSpeech");
+        RCLCPP_INFO(logger, "[initializeTree] Registered nodes: AnimateBehavior, StopAnimateBehavior, SetOvertAttention, SetSpeechListening, Gesture, Navigate, SpeechRecognition, ConversationManager, SpeechWithFeedback, TTS, CheckFaceDetected, ListenForSpeech");
         RCLCPP_INFO(logger, "[initializeTree] Loading tree: %s", xmlPath.c_str());
     }
 

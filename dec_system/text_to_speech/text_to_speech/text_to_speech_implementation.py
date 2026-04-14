@@ -339,7 +339,7 @@ def resample_chunks(gen, src_rate: int, target_rate: int) -> Generator[np.ndarra
 ELEVENLABS_PCM_RATES = {16000, 22050, 24000, 44100}
 
 
-def _elevenlabs_client(api_key: str):
+def elevenlabs_client(api_key: str):
     try:
         from elevenlabs.client import ElevenLabs  # type: ignore
     except ImportError as exc:
@@ -373,11 +373,11 @@ def stream_elevenlabs(
     Requires:  pip install elevenlabs
     """
     from elevenlabs import VoiceSettings
-    api_rate = min(_ELEVENLABS_PCM_RATES, key=lambda r: abs(r - sample_rate))
+    api_rate = min(ELEVENLABS_PCM_RATES, key=lambda r: abs(r - sample_rate))
     api_rate = min(ELEVENLABS_PCM_RATES, key=lambda r: abs(r - sample_rate))
 
     def _gen():
-        client = _elevenlabs_client(api_key)
+        client = elevenlabs_client(api_key)
         logger.info(
             f"ElevenLabs stream: voice={voice_id}, model={model_id}, "
             f"format=pcm_{api_rate}, speed={speed}, stability={stability}"
