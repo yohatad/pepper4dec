@@ -464,6 +464,10 @@ class TextToSpeechNode(Node):
                 api_key=self.config["elevenlabs_api_key"],
                 model_id=self.config.get("elevenlabs_model", "eleven_turbo_v2_5"),
                 sample_rate=self.config["sample_rate"],
+                stability=self.config.get("elevenlabs_stability", 0.5),
+                similarity_boost=self.config.get("elevenlabs_similarity_boost", 0.75),
+                style=self.config.get("elevenlabs_style", 0.0),
+                speed=self.config.get("elevenlabs_speed", 1.0),
             )
 
             target_rate = self.config["sample_rate"]
@@ -515,6 +519,10 @@ class TextToSpeechNode(Node):
                 api_key=self.config["elevenlabs_api_key"],
                 model_id=self.config.get("elevenlabs_model", "eleven_turbo_v2_5"),
                 sample_rate=self.config["sample_rate"],
+                stability=self.config.get("elevenlabs_stability", 0.5),
+                similarity_boost=self.config.get("elevenlabs_similarity_boost", 0.75),
+                style=self.config.get("elevenlabs_style", 0.0),
+                speed=self.config.get("elevenlabs_speed", 1.0),
             )
         except RuntimeError as e:
             self.get_logger().error(str(e))

@@ -106,6 +106,10 @@ def load_configuration() -> dict:
         'elevenlabs_api_key': '',
         'elevenlabs_voice_id': '21m00Tcm4TlvDq8ikWAM',  # Rachel
         'elevenlabs_model': 'eleven_turbo_v2_5',
+        'elevenlabs_stability': 0.5,
+        'elevenlabs_similarity_boost': 0.75,
+        'elevenlabs_style': 0.0,
+        'elevenlabs_speed': 1.0,
     }
 
     try:
@@ -124,6 +128,11 @@ def load_configuration() -> dict:
             )
     except Exception as e:
         logger.error(f"Error reading configuration: {e} — using defaults")
+
+    # Allow overriding the ElevenLabs key via environment variable
+    env_key = os.environ.get("ELEVENLABS_API_KEY", "")
+    if env_key:
+        config["elevenlabs_api_key"] = env_key
 
     return config
 
@@ -232,6 +241,10 @@ def stream_elevenlabs(
     api_key: str,
     model_id: str = "eleven_turbo_v2_5",
     sample_rate: int = 24000,
+    stability: float = 0.5,
+    similarity_boost: float = 0.75,
+    style: float = 0.0,
+    speed: float = 1.0,
 ):
     """
     Stream audio from ElevenLabs as an iterator of float32 numpy chunks.
@@ -244,19 +257,26 @@ def stream_elevenlabs(
 
     Requires:  pip install elevenlabs
     """
+    from elevenlabs import VoiceSettings
     api_rate = min(_ELEVENLABS_PCM_RATES, key=lambda r: abs(r - sample_rate))
 
     def _gen():
         client = _elevenlabs_client(api_key)
         logger.info(
             f"ElevenLabs stream: voice={voice_id}, model={model_id}, "
-            f"format=pcm_{api_rate}"
+            f"format=pcm_{api_rate}, speed={speed}, stability={stability}"
         )
         for raw in client.text_to_speech.convert(
             voice_id=voice_id,
             text=text,
             model_id=model_id,
             output_format=f"pcm_{api_rate}",
+            voice_settings=VoiceSettings(
+                stability=stability,
+                similarity_boost=similarity_boost,
+                style=style,
+                speed=speed,
+            ),
         ):
             if raw:
                 yield np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0

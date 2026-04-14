@@ -6,7 +6,7 @@
 #   "kokoro_pepper"      - Kokoro-82M synthesised locally, Pepper's speakers
 #   "elevenlabs_local"   - ElevenLabs API synthesised, laptop speakers
 #   "elevenlabs_pepper"  - ElevenLabs API synthesised, Pepper's speakers
-engine: "kokoro_pepper"
+engine: "elevenlabs_pepper"
 
 # Playback method for *_pepper backends:
 #   "file"   - naoqi_driver SCPs WAV to robot, plays via ALAudioPlayer (full feedback)
@@ -26,8 +26,18 @@ output_device: -1
 
 # ElevenLabs backend settings
 elevenlabs_api_key: ""  # Set via: export ELEVENLABS_API_KEY="sk_..."
-elevenlabs_voice_id: "EXAVITQu4vr4xnSDxMaL"   # Rachel (default)
+elevenlabs_voice_id: "kXsOSDWolD7e9l1Z0sbH"   # Rachel (default)
 elevenlabs_model: "eleven_turbo_v2_5"           # fastest model; eleven_multilingual_v2 for more languages
+
+# ElevenLabs voice settings (all 0.0–1.0; speed 0.7–1.2)
+# stability:        0.0 = more expressive/variable, 1.0 = very consistent
+# similarity_boost: how closely to match the original voice clone
+# style:            speaking style exaggeration (0.0 = off; costs more latency)
+# speed:            0.7 = slower, 1.0 = normal, 1.2 = faster
+elevenlabs_stability: 0.83
+elevenlabs_similarity_boost: 0.75
+elevenlabs_style: 0.3
+elevenlabs_speed: 1.05
 
 # Stream volume multiplier (kokoro_pepper / elevenlabs_pepper with playback_method=stream)
 # 1.0 = unity; clips at ±32767. Try 1.5–3.0 to boost Kokoro volume on Pepper.

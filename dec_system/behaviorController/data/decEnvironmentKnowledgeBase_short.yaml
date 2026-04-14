@@ -25,7 +25,7 @@ locations:
       x: 6.0
       y: 8.0
       z: 0.0
-    gesture_message_english: "Our first stop is the Digital Public Goods and Infrastructure section. Here, we showcase the interoperable building blocks that make up the Upanzi Network. These include our flagship digital public goods: the Upanzi Digital Identity (UDI) system, which provides a secure and user-friendly way for citizens to prove their identity online; the Upanzi Payments System (UPS), which enables seamless digital transactions; and the Upanzi Programs Management System (UPMS), which helps governments efficiently manage social benefit programs. These solutions are designed to be open-source and scalable, allowing them to be adopted and adapted by other countries across Africa and beyond."
+    gesture_message_english: "Our first stop is the Digital Public Goods and Infrastructure section. Here, we showcase the interoperable building blocks that make up the Upanzi Network. These include our flagship digital public goods: the Upanzi Digital Identity (UDI) system, which provides a secure and user-friendly way for citizens to prove their identity online; the Upanzi Payments System (UPS), which enables seamless digital transactions; and the Upanzi Programs Management System (UPMS), which helps governments efficiently manage social benefit programs. These solutions are designed to be open-source and scalable, allowing them to be adopted by other countries across Africa and beyond."
     cultural_knowledge: ["DeicticShape"]
 
   3:
