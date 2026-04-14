@@ -740,7 +740,7 @@ def handle_query(
 # Streaming Response Generation
 # =============================================================================
 
-def _parse_json_string_value(s: str) -> Tuple[str, bool]:
+def parse_json_string_value(s: str) -> Tuple[str, bool]:
     """
     Parse characters of a JSON string value after the opening quote.
 
@@ -767,6 +767,21 @@ def _parse_json_string_value(s: str) -> Tuple[str, bool]:
     return ''.join(result), False
 
 
+def _parse_llm_json(raw: str) -> dict:
+    """
+    Parse the JSON object from a raw LLM response, stripping any
+    <think>…</think> chain-of-thought prefix first.
+    Returns an empty dict if parsing fails.
+    """
+    cleaned = raw.strip()
+    if "</think>" in cleaned:
+        cleaned = cleaned.split("</think>", 1)[1].strip()
+    try:
+        return json.loads(cleaned)
+    except (json.JSONDecodeError, AttributeError, ValueError):
+        return {}
+
+
 def extract_answer_from_raw(raw: str) -> str:
     """
     Extract the spoken answer from a raw LLM response.
@@ -776,14 +791,36 @@ def extract_answer_from_raw(raw: str) -> str:
       - JSON structured response: {"intent": "...", "answer": "..."}
       - Plain-text fallback:      raw text returned as-is
     """
-    cleaned = raw
+    parsed = _parse_llm_json(raw)
+    if parsed:
+        return parsed.get("answer", raw)
+    # Plain-text fallback
+    cleaned = raw.strip()
     if "</think>" in cleaned:
         cleaned = cleaned.split("</think>", 1)[1].strip()
+    return cleaned
+
+
+def extract_intent_from_raw(raw: str) -> Tuple[str, float]:
+    """
+    Extract the intent label and confidence score from a raw LLM response.
+
+    Returns ``(intent, confidence)`` where intent is one of:
+      ASK_EXHIBIT_QUESTION | ASK_TOUR_META | NAVIGATION_REQUEST |
+      SOCIAL_SMALL_TALK | OFF_TOPIC | STOP | AFFIRMATIVE | NEGATIVE
+    and confidence is in [0.0, 1.0].
+
+    Falls back to ("UNKNOWN", 0.0) if the JSON cannot be parsed or the
+    fields are missing.
+    """
+    parsed = _parse_llm_json(raw)
+    intent     = parsed.get("intent",     "UNKNOWN") if parsed else "UNKNOWN"
+    confidence = parsed.get("confidence", 0.0)       if parsed else 0.0
     try:
-        parsed = json.loads(cleaned)
-        return parsed.get("answer", cleaned)
-    except (json.JSONDecodeError, AttributeError, ValueError):
-        return cleaned
+        confidence = float(confidence)
+    except (TypeError, ValueError):
+        confidence = 0.0
+    return str(intent), confidence
 
 
 def generate_response_stream(
@@ -872,7 +909,7 @@ def generate_response_stream(
                 continue  # Haven't reached the answer field yet
 
             # ---- Parse new characters from the answer value ----
-            new_text, complete = _parse_json_string_value(post_think[answer_open_idx:])
+            new_text, complete = parse_json_string_value(post_think[answer_open_idx:])
             new_chars = new_text[len(answer_chars):]
             answer_chars = new_text
             pending += new_chars
@@ -912,7 +949,6 @@ def generate_response_stream(
 
     finally:
         raw_response_out.append(raw_buffer)
-
 
 def safe_float(value: Any, default: float, name: str) -> Tuple[float, Optional[str]]:
     """Safely convert value to float"""

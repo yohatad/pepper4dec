@@ -278,6 +278,12 @@ public:
 };
 
 // Wraps dec_interfaces::action::ConversationManager
+//
+// Output ports written from the action result:
+//   response   – full generated answer text
+//   intent     – classified intent (ASK_EXHIBIT_QUESTION | NAVIGATION_REQUEST |
+//                SOCIAL_SMALL_TALK | OFF_TOPIC | STOP | AFFIRMATIVE | NEGATIVE | …)
+//   confidence – LLM confidence in the intent (0.0 – 1.0)
 class ConversationManagerNode
     : public BT::RosActionNode<dec_interfaces::action::ConversationManager>
 {
@@ -303,6 +309,26 @@ public:
                            const BT::NodeConfig& config,
                            const BT::RosNodeParams& params)
         : BT::RosActionNode<naoqi_bridge_msgs::action::SpeechWithFeedback>(name, config, params) {}
+
+    static BT::PortsList providedPorts();
+    bool setGoal(Goal& goal) override;
+    BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
+    BT::NodeStatus onResultReceived(const WrappedResult& result) override;
+    BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
+};
+
+// Wraps dec_interfaces::action::TTS
+// Sends text to the /tts action server (text_to_speech node), which synthesises
+// audio via Kokoro or ElevenLabs and plays it through the configured backend.
+// Blocks until playback is complete.
+class TTSNode
+    : public BT::RosActionNode<dec_interfaces::action::TTS>
+{
+public:
+    TTSNode(const std::string& name,
+            const BT::NodeConfig& config,
+            const BT::RosNodeParams& params)
+        : BT::RosActionNode<dec_interfaces::action::TTS>(name, config, params) {}
 
     static BT::PortsList providedPorts();
     bool setGoal(Goal& goal) override;

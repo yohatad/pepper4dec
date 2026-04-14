@@ -1,11 +1,36 @@
-# goal
+# ConversationManager.action
+#
+# Action server: /conversation_manager  (conversation_manager node)
+#
+# Receives a natural-language prompt, performs a RAG (Retrieval-Augmented
+# Generation) query against the ChromaDB knowledge base, and streams the
+# answer sentence-by-sentence to /tts/input while the LLM is still
+# generating. The full answer text, classified intent, and confidence score
+# are returned in the result so that downstream BT nodes can route behavior
+# accordingly (e.g. navigate on NAVIGATION_REQUEST, stop on STOP, etc.).
+
+# ── Goal ──────────────────────────────────────────────────────────────────────
+# Natural-language question or utterance to process
 string prompt
 
 ---
-# result
+
+# ── Result ────────────────────────────────────────────────────────────────────
+# True if the query completed without error
 bool success
+# Full generated answer text (plain text, extracted from LLM JSON output)
 string response
+# Intent classification from the LLM
+# One of: ASK_EXHIBIT_QUESTION | ASK_TOUR_META | NAVIGATION_REQUEST |
+#         SOCIAL_SMALL_TALK | OFF_TOPIC | STOP | AFFIRMATIVE | NEGATIVE
+string intent
+# LLM confidence in the intent classification (0.0 – 1.0)
+float32 confidence
 
 ---
-# feedback
+
+# ── Feedback ──────────────────────────────────────────────────────────────────
+# Current processing stage
+# "searching"  – performing vector similarity search in ChromaDB
+# "generating" – streaming LLM response; sentences appear on /tts/input
 string status

@@ -1,5 +1,13 @@
-# Request
+# ConversationManagerPrompt.srv
+#
+# Legacy direct-call service interface for the conversation manager.
+# Prefer the ConversationManager action (/conversation_manager) for new
+# integrations — it provides streaming feedback and barge-in support.
+
+# ── Request ───────────────────────────────────────────────────────────────────
 string prompt
+
 ---
-# Response
+
+# ── Response ──────────────────────────────────────────────────────────────────
 string response

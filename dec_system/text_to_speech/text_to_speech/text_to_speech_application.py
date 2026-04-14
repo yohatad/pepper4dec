@@ -46,16 +46,13 @@ ROS Publishers:
 
 Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
 Date: April 2025
-Version: v3.0
+Version: v1.0
 """
 
-import io
 import queue
 import sys
 import threading
 import time
-
-import numpy as np
 
 import rclpy
 from rclpy.action import ActionServer, ActionClient
@@ -72,15 +69,19 @@ from naoqi_bridge_msgs.srv import LoadAudioFile, UnloadAudioFile, SendAudioBuffe
 
 from .text_to_speech_implementation import (
     AudioPlayer,
-    estimate_duration,
-    load_configuration,
     audio_to_wav_bytes,
+    collect_and_resample,
+    estimate_duration,
+    iter_robot_chunks,
+    load_configuration,
+    prepare_stream_audio,
+    resample_chunks,
     split_into_sentences,
     synthesize_kokoro,
     stream_elevenlabs,
 )
 
-SOFTWARE_VERSION = "v3.0"
+SOFTWARE_VERSION = "v1.0"
 
 
 # ---------------------------------------------------------------------------
@@ -113,32 +114,32 @@ class TextToSpeechNode(Node):
         )
 
         # ── Internal state ────────────────────────────────────────────────────
-        self._sentence_queue: queue.Queue = queue.Queue()
-        self._is_speaking = False
-        self._barge_in_counter = 0
-        self._barge_in_triggered = False
-        self._state_lock = threading.Lock()
-        self._shutdown = False
+        self.sentence_queue: queue.Queue = queue.Queue()
+        self.is_speaking = False
+        self.barge_in_counter = 0
+        self.barge_in_triggered = False
+        self.state_lock = threading.Lock()
+        self.shutdown = False
 
         # ── Per-backend initialisation ────────────────────────────────────────
-        self._audio_player = None
-        self._play_goal_handle = None
-        self._play_done_event = threading.Event()
+        self.audio_player = None
+        self.play_goal_handle = None
+        self.play_done_event = threading.Event()
 
         if self.engine in ("kokoro_local", "kokoro_pepper"):
             self.warmup_kokoro()
 
         if self.engine in ("kokoro_local", "elevenlabs_local"):
-            self._audio_player = AudioPlayer(
+            self.audio_player = AudioPlayer(
                 sample_rate=config["sample_rate"],
                 output_device=config["output_device"],
             )
 
         # ── Publishers ────────────────────────────────────────────────────────
-        self._speaking_pub = self.create_publisher(Bool, "/text_to_speech/speaking", 10)
+        self.speaking_pub = self.create_publisher(Bool, "/text_to_speech/speaking", 10)
 
         if self.engine == "naoqi_ros":
-            self._naoqi_pub = self.create_publisher(
+            self.naoqi_pub = self.create_publisher(
                 String, config["naoqi_speech_topic"], 10
             )
             self.get_logger().info(
@@ -147,13 +148,13 @@ class TextToSpeechNode(Node):
             )
 
         # ── Service clients ───────────────────────────────────────────────────
-        self._mic_client = self.create_client(SetBool, "/speech_event/set_enabled")
+        self.mic_client = self.create_client(SetBool, "/speech_event/set_enabled")
 
         if self.engine in ("kokoro_pepper", "elevenlabs_pepper"):
-            self._load_client = self.create_client(
+            self.load_client = self.create_client(
                 LoadAudioFile, "/naoqi_driver/load_audio_file"
             )
-            self._unload_client = self.create_client(
+            self.unload_client = self.create_client(
                 UnloadAudioFile, "/naoqi_driver/unload_audio_file"
             )
             self._play_client = ActionClient(
@@ -220,43 +221,43 @@ class TextToSpeechNode(Node):
         """Enqueue each sentence published by conversation_manager."""
         sentence = msg.data.strip()
         if sentence:
-            self._sentence_queue.put(sentence)
+            self.sentence_queue.put(sentence)
 
     # ── VAD / barge-in ──────────────────────────────────────────────────────────
 
     def vad_prob_callback(self, msg: Float32):
         """Detect user speech during playback and trigger barge-in."""
-        with self._state_lock:
-            if not self._is_speaking:
-                self._barge_in_counter = 0
+        with self.state_lock:
+            if not self.is_speaking:
+                self.barge_in_counter = 0
                 return
 
             if msg.data >= self.config["barge_in_threshold"]:
-                self._barge_in_counter += 1
+                self.barge_in_counter += 1
             else:
-                self._barge_in_counter = 0
+                self.barge_in_counter = 0
 
-            if self._barge_in_counter >= self.config["barge_in_chunks"]:
-                if not self._barge_in_triggered:
-                    self._barge_in_triggered = True
+            if self.barge_in_counter >= self.config["barge_in_chunks"]:
+                if not self.barge_in_triggered:
+                    self.barge_in_triggered = True
                     self.get_logger().info(
                         f"{self.node_name}: barge-in detected "
-                        f"(VAD={msg.data:.2f} × {self._barge_in_counter}). "
+                        f"(VAD={msg.data:.2f} × {self.barge_in_counter}). "
                         "Interrupting playback."
                     )
                     self.interrupt_playback()
-                    while not self._sentence_queue.empty():
+                    while not self.sentence_queue.empty():
                         try:
-                            self._sentence_queue.get_nowait()
+                            self.sentence_queue.get_nowait()
                         except queue.Empty:
                             break
 
     def interrupt_playback(self):
         """Stop whichever backend is currently playing."""
-        if self.engine == "kokoro_local" and self._audio_player is not None:
-            self._audio_player.stop()
-        elif self.engine == "kokoro_pepper" and self._play_goal_handle is not None:
-            self._play_goal_handle.cancel_goal_async()
+        if self.engine == "kokoro_local" and self.audio_player is not None:
+            self.audio_player.stop()
+        elif self.engine == "kokoro_pepper" and self.play_goal_handle is not None:
+            self.play_goal_handle.cancel_goal_async()
 
     # ── TTS action server ───────────────────────────────────────────────────────
 
@@ -281,8 +282,8 @@ class TextToSpeechNode(Node):
             done_event.set()
 
         for sentence in split_into_sentences(text):
-            self._sentence_queue.put(sentence)
-        self._sentence_queue.put(sentinel)
+            self.sentence_queue.put(sentence)
+        self.sentence_queue.put(sentinel)
 
         feedback_msg.status = "speaking"
         goal_handle.publish_feedback(feedback_msg)
@@ -304,9 +305,9 @@ class TextToSpeechNode(Node):
           str       — sentence to speak
           callable  — sentinel signalling that a /tts action goal is done
         """
-        while not self._shutdown:
+        while not self.shutdown:
             try:
-                item = self._sentence_queue.get(timeout=0.1)
+                item = self.sentence_queue.get(timeout=0.1)
             except queue.Empty:
                 continue
 
@@ -324,10 +325,10 @@ class TextToSpeechNode(Node):
 
     def speak_sentence(self, sentence: str):
         """Dispatch a single sentence to the active backend."""
-        with self._state_lock:
-            self._barge_in_triggered = False
-            self._barge_in_counter = 0
-            self._is_speaking = True
+        with self.state_lock:
+            self.barge_in_triggered = False
+            self.barge_in_counter = 0
+            self.is_speaking = True
 
         self.publish_speaking(True)
 
@@ -351,9 +352,9 @@ class TextToSpeechNode(Node):
                 f"{self.node_name}: playback error — '{sentence[:40]}': {e}"
             )
         finally:
-            with self._state_lock:
-                if self._sentence_queue.empty():
-                    self._is_speaking = False
+            with self.state_lock:
+                if self.sentence_queue.empty():
+                    self.is_speaking = False
                     self.publish_speaking(False)
 
     # ── naoqi_ros backend ────────────────────────────────────────────────────────
@@ -367,7 +368,7 @@ class TextToSpeechNode(Node):
         """
         msg = String()
         msg.data = sentence
-        self._naoqi_pub.publish(msg)
+        self.naoqi_pub.publish(msg)
         self.get_logger().info(f"{self.node_name}: [naoqi_ros] speaking: '{sentence}'")
 
         duration = estimate_duration(
@@ -378,8 +379,8 @@ class TextToSpeechNode(Node):
         deadline = time.monotonic() + duration
         while time.monotonic() < deadline:
             time.sleep(0.05)
-            with self._state_lock:
-                if self._barge_in_triggered:
+            with self.state_lock:
+                if self.barge_in_triggered:
                     return
 
     # ── kokoro_local backend ─────────────────────────────────────────────────────
@@ -403,7 +404,7 @@ class TextToSpeechNode(Node):
             self.get_logger().info(
                 f"{self.node_name}: [kokoro_local] playing {duration_s:.2f}s"
             )
-            completed = self._audio_player.play(audio)
+            completed = self.audio_player.play(audio)
             if not completed:
                 self.get_logger().info(
                     f"{self.node_name}: [kokoro_local] playback interrupted"
@@ -469,23 +470,9 @@ class TextToSpeechNode(Node):
                 style=self.config.get("elevenlabs_style", 0.0),
                 speed=self.config.get("elevenlabs_speed", 1.0),
             )
-
-            target_rate = self.config["sample_rate"]
-
-            # Resample on-the-fly if api_rate differs from target
-            if api_rate != target_rate:
-                import math
-                from scipy.signal import resample_poly
-                _g = math.gcd(api_rate, target_rate)
-                _up, _down = target_rate // _g, api_rate // _g
-
-                def _resampled(g):
-                    for chunk in g:
-                        yield resample_poly(chunk, _up, _down).astype(np.float32)
-
-                gen = _resampled(gen)
-
-            completed = self._audio_player.play_chunks(gen)
+            completed = self.audio_player.play_chunks(
+                resample_chunks(gen, api_rate, self.config["sample_rate"])
+            )
             if not completed:
                 self.get_logger().info(
                     f"{self.node_name}: [elevenlabs_local] playback interrupted"
@@ -529,75 +516,29 @@ class TextToSpeechNode(Node):
             return
 
         if playback_method == "stream":
-            self._stream_elevenlabs_to_robot(gen, api_rate)
+            self.stream_elevenlabs_to_robot(gen, api_rate)
         else:
-            # file mode: collect full audio → WAV bytes → SCP + action
-            import math
-            from scipy.signal import resample_poly
-            chunks = list(gen)
-            if not chunks:
+            # file mode: collect full audio → WAV bytes → play via action
+            audio = collect_and_resample(gen, api_rate, self.config["sample_rate"])
+            if len(audio) == 0:
                 return
-            audio = np.concatenate(chunks)
-            target_rate = self.config["sample_rate"]
-            if api_rate != target_rate:
-                _g = math.gcd(api_rate, target_rate)
-                audio = resample_poly(
-                    audio, target_rate // _g, api_rate // _g
-                ).astype(np.float32)
-            wav_bytes = audio_to_wav_bytes(audio, target_rate)
-            self.play_via_file(wav_bytes)
+            self.play_via_file(audio_to_wav_bytes(audio, self.config["sample_rate"]))
 
-    def _stream_elevenlabs_to_robot(self, gen, api_rate: int):
+    def stream_elevenlabs_to_robot(self, gen, api_rate: int):
         """
-        Accumulate streaming float32 chunks (at api_rate) into aligned 16 384-frame
-        robot buffers, resample to 48 kHz stereo, and send via send_audio_buffer.
-
-        Resampling on aligned boundaries avoids the click artifacts that occur when
-        each tiny API chunk is resampled independently.
+        Accumulate streaming float32 chunks into aligned robot buffers,
+        resample to 48 kHz stereo, and send via send_audio_buffer.
         """
-        import math
-        from scipy.signal import resample_poly
-
-        ROBOT_RATE = 48000
-        ROBOT_CHUNK_FRAMES = 16384  # driver hard cap
-
-        # How many source frames fill one robot chunk
-        _g = math.gcd(api_rate, ROBOT_RATE)
-        src_frames_per_robot_chunk = ROBOT_CHUNK_FRAMES * api_rate // ROBOT_RATE
-        up, down = ROBOT_RATE // _g, api_rate // _g
-
         volume = float(self.config.get("stream_volume", 1.0))
-
-        def _flush(src_buf: np.ndarray) -> bool:
-            resampled = resample_poly(src_buf, up, down).astype(np.float32)
-            stereo = (
-                np.column_stack([resampled, resampled]).flatten() * 32767 * volume
-            ).clip(-32768, 32767).astype(np.int16)
-            if not self.send_audio_buffer(list(stereo.tobytes())):
-                return False
-            duration = len(stereo) // 2 / ROBOT_RATE
-            time.sleep(max(0.01, duration - 0.01))
-            return True
-
         self.set_mic_enabled(False)
         try:
-            buf = np.zeros(0, dtype=np.float32)
-
-            for chunk in gen:
-                with self._state_lock:
-                    if self._barge_in_triggered:
+            for audio_list, wait_time in iter_robot_chunks(gen, api_rate, volume):
+                with self.state_lock:
+                    if self.barge_in_triggered:
                         return
-                buf = np.concatenate([buf, chunk])
-
-                while len(buf) >= src_frames_per_robot_chunk:
-                    if not _flush(buf[:src_frames_per_robot_chunk]):
-                        return
-                    buf = buf[src_frames_per_robot_chunk:]
-
-            # Flush remainder (last partial chunk)
-            if len(buf) > 0:
-                _flush(buf)
-
+                if not self.send_audio_buffer(audio_list):
+                    return
+                time.sleep(wait_time)
         finally:
             self.set_mic_enabled(True)
 
@@ -612,8 +553,8 @@ class TextToSpeechNode(Node):
         if file_id < 0:
             return
 
-        self._play_done_event.clear()
-        self._play_goal_handle = None
+        self.play_done_event.clear()
+        self.play_goal_handle = None
 
         goal = PlayAudio.Goal()
         goal.file_id = file_id
@@ -623,90 +564,23 @@ class TextToSpeechNode(Node):
 
         send_future = self._play_client.send_goal_async(goal)
         send_future.add_done_callback(self.on_play_goal_response)
-        self._play_done_event.wait(timeout=60.0)
+        self.play_done_event.wait(timeout=60.0)
 
         self.unload_audio_file(file_id)
 
     def play_via_stream(self, wav_bytes: bytes):
         """Play audio via send_audio_buffer service (low-latency streaming)."""
-        import numpy as np
-        import io
-        import soundfile as sf
-        from scipy.signal import resample_poly
-        
-        # Robot expects 48000 Hz stereo 16-bit PCM
-        ROBOT_SAMPLE_RATE = 48000
-        
-        # Read audio from WAV bytes (mono)
-        audio, kokoro_rate = sf.read(io.BytesIO(wav_bytes), dtype='float32')
-        
-        # Ensure mono
-        if len(audio.shape) > 1:
-            audio = audio[:, 0]  # Take first channel if stereo
-        
-        # Resample from Kokoro rate (24000) to robot rate (48000)
-        if kokoro_rate != ROBOT_SAMPLE_RATE:
-            gcd = np.gcd(kokoro_rate, ROBOT_SAMPLE_RATE)
-            audio = resample_poly(
-                audio, ROBOT_SAMPLE_RATE // gcd, kokoro_rate // gcd
-            ).astype(np.float32)
-            sample_rate = ROBOT_SAMPLE_RATE
-        else:
-            sample_rate = kokoro_rate
-        
-        # Convert to stereo by duplicating mono channel, scale float32→int16
-        # stream_volume > 1.0 boosts volume (clip prevents integer overflow)
         volume = float(self.config.get("stream_volume", 1.0))
-        stereo_audio = (
-            np.column_stack([audio, audio]).flatten() * 32767 * volume
-        ).clip(-32768, 32767).astype(np.int16)
-
-        # Send in chunks: 16384 frames × 2 channels = 32768 int16 samples
-        # Driver cap is 16384 frames; 32768 int16 samples × 2 bytes = 65536 bytes → 16384 frames ✓
-        max_chunk_size = 16384 * 2  # 32768 int16 samples per chunk
-
-        # bytes_per_second for timing: 48000 Hz × 2 ch × 2 B = 192000 B/s
-        bytes_per_second = sample_rate * 2 * 2
-        
         self.set_mic_enabled(False)
         try:
-            offset = 0
-            while offset < len(stereo_audio):
-                # Check for barge-in
-                with self._state_lock:
-                    if self._barge_in_triggered:
+            for audio_list, wait_time in prepare_stream_audio(wav_bytes, volume):
+                with self.state_lock:
+                    if self.barge_in_triggered:
                         break
-                
-                chunk = stereo_audio[offset:offset + max_chunk_size]
-                if len(chunk) == 0:
-                    break
-                
-                # Convert int16 to bytes (little-endian)
-                audio_bytes = chunk.tobytes()
-                # Convert to list of uint8
-                audio_list = list(audio_bytes)
-                    
-                # Send chunk to robot
                 if not self.send_audio_buffer(audio_list):
-                    self.get_logger().error(
-                        f"{self.node_name}: send_audio_buffer failed at offset {offset}"
-                    )
+                    self.get_logger().error(f"{self.node_name}: send_audio_buffer failed")
                     break
-                
-                # Calculate how long this chunk will play (samples → seconds)
-                chunk_duration = chunk.nbytes / bytes_per_second
-                
-                # Wait for the chunk to finish playing before sending the next
-                # Subtract a small margin (10ms) to keep audio flowing smoothly
-                wait_time = max(0.01, chunk_duration - 0.01)
                 time.sleep(wait_time)
-                
-                offset += max_chunk_size
-                
-            duration = len(stereo_audio) / bytes_per_second
-            self.get_logger().info(
-                f"{self.node_name}: [stream] played {duration:.2f}s of audio"
-            )
         finally:
             self.set_mic_enabled(True)
 
@@ -743,10 +617,10 @@ class TextToSpeechNode(Node):
         goal_handle = future.result()
         if not goal_handle.accepted:
             self.get_logger().warn(f"{self.node_name}: play_audio goal rejected")
-            self._play_done_event.set()
+            self.play_done_event.set()
             return
 
-        self._play_goal_handle = goal_handle
+        self.play_goal_handle = goal_handle
         result_future = goal_handle.get_result_async()
         result_future.add_done_callback(self.on_play_result)
 
@@ -761,8 +635,8 @@ class TextToSpeechNode(Node):
         except Exception as e:
             self.get_logger().warn(f"{self.node_name}: play_audio result error: {e}")
         finally:
-            self._play_goal_handle = None
-            self._play_done_event.set()
+            self.play_goal_handle = None
+            self.play_done_event.set()
 
     # ── Audio-player service helpers ─────────────────────────────────────────────
 
@@ -781,7 +655,7 @@ class TextToSpeechNode(Node):
 
     def call_load_service(self, remote_path: str, audio_data: list) -> int:
         """Shared implementation for load_audio_file service calls."""
-        if not self._load_client.service_is_ready():
+        if not self.load_client.service_is_ready():
             self.get_logger().warn(
                 f"{self.node_name}: load_audio_file service not ready"
             )
@@ -790,7 +664,7 @@ class TextToSpeechNode(Node):
         req = LoadAudioFile.Request()
         req.remote_path = remote_path
         req.audio_data  = audio_data
-        future = self._load_client.call_async(req)
+        future = self.load_client.call_async(req)
 
         done = threading.Event()
         future.add_done_callback(lambda _: done.set())
@@ -809,31 +683,31 @@ class TextToSpeechNode(Node):
 
     def unload_audio_file(self, file_id: int) -> None:
         """Call unload_audio_file service (fire-and-forget)."""
-        if not self._unload_client.service_is_ready():
+        if not self.unload_client.service_is_ready():
             return
         req = UnloadAudioFile.Request()
         req.file_id = file_id
-        self._unload_client.call_async(req)
+        self.unload_client.call_async(req)
 
     # ── Mic mute helpers ─────────────────────────────────────────────────────────
 
     def set_mic_enabled(self, enabled: bool):
         """Call /speech_event/set_enabled (best-effort, non-blocking)."""
-        if not self._mic_client.service_is_ready():
+        if not self.mic_client.service_is_ready():
             return
         req = SetBool.Request()
         req.data = enabled
-        self._mic_client.call_async(req)
+        self.mic_client.call_async(req)
 
     # ── Speaking state publisher ──────────────────────────────────────────────────
 
     def publish_speaking(self, speaking: bool):
-        if self._shutdown:
+        if self.shutdown:
             return
         try:
             msg = Bool()
             msg.data = speaking
-            self._speaking_pub.publish(msg)
+            self.speaking_pub.publish(msg)
         except Exception:
             pass
 
@@ -845,22 +719,22 @@ class TextToSpeechNode(Node):
             self.get_logger().info(f"{self.node_name}: shutting down…")
         except Exception:
             print("[text_to_speech] shutting down…")
-        self._shutdown = True
+        self.shutdown = True
 
         # Trigger barge-in to break out of any active stream sleep loop
-        with self._state_lock:
-            self._barge_in_triggered = True
+        with self.state_lock:
+            self.barge_in_triggered = True
 
         # Stop local audio player if active
-        if self.engine == "kokoro_local" and self._audio_player is not None:
-            self._audio_player.stop()
+        if self.engine == "kokoro_local" and self.audio_player is not None:
+            self.audio_player.stop()
 
         # Cancel in-flight play_audio action goal
-        if self.engine == "kokoro_pepper" and self._play_goal_handle is not None:
-            self._play_goal_handle.cancel_goal_async()
+        if self.engine == "kokoro_pepper" and self.play_goal_handle is not None:
+            self.play_goal_handle.cancel_goal_async()
 
         # Unblock the playback thread (None is the exit sentinel)
-        self._sentence_queue.put(None)
+        self.sentence_queue.put(None)
 
         # Wait up to 2 s for the playback thread to exit cleanly
         self._playback_thread.join(timeout=2.0)

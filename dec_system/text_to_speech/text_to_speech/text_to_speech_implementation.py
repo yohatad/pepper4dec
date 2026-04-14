@@ -28,11 +28,12 @@ Date: April 2025
 Version: v3.0
 """
 
+import io
 import math
 import os
 import re
 import threading
-from typing import Optional, Dict
+from typing import Generator, Iterator, List, Optional, Tuple
 
 import numpy as np
 import rclpy.logging
@@ -43,12 +44,12 @@ logger = rclpy.logging.get_logger("text_to_speech")
 # Sentence splitting
 # ---------------------------------------------------------------------------
 
-_SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
+SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
 
 
 def split_into_sentences(text: str) -> list:
     """Split *text* into individual sentences at .!? boundaries."""
-    parts = _SENTENCE_BOUNDARY.split(text.strip())
+    parts = SENTENCE_BOUNDARY.split(text.strip())
     return [p.strip() for p in parts if p.strip()]
 
 
@@ -141,17 +142,17 @@ def load_configuration() -> dict:
 # Kokoro-82M synthesis
 # ---------------------------------------------------------------------------
 
-_kokoro_pipeline = None
-_kokoro_pipeline_lock = threading.Lock()
+kokoro_pipeline = None
+kokoro_pipeline_lock = threading.Lock()
 
 
-def _get_kokoro_pipeline():
+def getkokoro_pipeline():
     """Return (and lazily load) the shared KPipeline instance."""
-    global _kokoro_pipeline
-    if _kokoro_pipeline is not None:
-        return _kokoro_pipeline
-    with _kokoro_pipeline_lock:
-        if _kokoro_pipeline is None:
+    global kokoro_pipeline
+    if kokoro_pipeline is not None:
+        return kokoro_pipeline
+    with kokoro_pipeline_lock:
+        if kokoro_pipeline is None:
             try:
                 from kokoro import KPipeline  # type: ignore
             except ImportError as exc:
@@ -164,17 +165,17 @@ def _get_kokoro_pipeline():
             device = "cuda" if torch.cuda.is_available() else "cpu"
             logger.info(f"Loading Kokoro-82M model on {device} (first call only)…")
             try:
-                _kokoro_pipeline = KPipeline(lang_code="a", device=device)
+                kokoro_pipeline = KPipeline(lang_code="a", device=device)
             except Exception as exc:
                 if device == "cuda" and (
                     "cuda" in str(exc).lower() or "cudnn" in str(exc).lower()
                 ):
                     logger.warn(f"CUDA failed ({exc}); falling back to CPU.")
-                    _kokoro_pipeline = KPipeline(lang_code="a", device="cpu")
+                    kokoro_pipeline = KPipeline(lang_code="a", device="cpu")
                 else:
                     raise
             logger.info(f"Kokoro-82M loaded on {device}.")
-    return _kokoro_pipeline
+    return kokoro_pipeline
 
 
 def synthesize_kokoro(text: str, voice: str, sample_rate: int) -> np.ndarray:
@@ -184,7 +185,7 @@ def synthesize_kokoro(text: str, voice: str, sample_rate: int) -> np.ndarray:
     Returns a float32 numpy array at *sample_rate* Hz.
     The model is loaded once and cached for the process lifetime.
     """
-    pipeline = _get_kokoro_pipeline()
+    pipeline = getkokoro_pipeline()
 
     chunks = []
     for _, _, audio_chunk in pipeline(text, voice=voice, speed=1.0):
@@ -209,7 +210,6 @@ def synthesize_kokoro(text: str, voice: str, sample_rate: int) -> np.ndarray:
 
 def audio_to_wav_bytes(audio: np.ndarray, sample_rate: int) -> bytes:
     """Encode a float32 numpy array as PCM-16 WAV and return the raw bytes."""
-    import io
     import soundfile as sf  # type: ignore
     buf = io.BytesIO()
     sf.write(buf, audio, sample_rate, subtype="PCM_16", format="WAV")
@@ -217,11 +217,126 @@ def audio_to_wav_bytes(audio: np.ndarray, sample_rate: int) -> bytes:
 
 
 # ---------------------------------------------------------------------------
+# Robot audio helpers  (kokoro_pepper / elevenlabs_pepper backends)
+# ---------------------------------------------------------------------------
+
+ROBOT_RATE = 48_000
+ROBOT_CHUNK_FRAMES = 16_384  # driver hard cap
+
+
+def prepare_stream_audio(
+    wav_bytes: bytes,
+    stream_volume: float = 1.0,
+) -> Iterator[Tuple[List[int], float]]:
+    """
+    Decode WAV bytes, resample to ROBOT_RATE stereo int16, and yield
+    ``(audio_list, wait_time)`` pairs ready for send_audio_buffer.
+
+    ``audio_list`` is a ``List[int]`` of raw bytes (as unsigned ints).
+    ``wait_time``  is how long to sleep before sending the next chunk.
+    """
+    import soundfile as sf  # type: ignore
+    from scipy.signal import resample_poly
+
+    audio, src_rate = sf.read(io.BytesIO(wav_bytes), dtype="float32")
+    if audio.ndim > 1:
+        audio = audio[:, 0]
+
+    if src_rate != ROBOT_RATE:
+        _g = math.gcd(src_rate, ROBOT_RATE)
+        audio = resample_poly(audio, ROBOT_RATE // _g, src_rate // _g).astype(np.float32)
+
+    stereo = (
+        np.column_stack([audio, audio]).flatten() * 32767 * stream_volume
+    ).clip(-32768, 32767).astype(np.int16)
+
+    max_chunk = ROBOT_CHUNK_FRAMES * 2          # stereo int16 samples per send
+    bytes_per_second = ROBOT_RATE * 2 * 2       # 48 kHz × 2 ch × 2 B
+
+    offset = 0
+    while offset < len(stereo):
+        chunk = stereo[offset : offset + max_chunk]
+        wait_time = max(0.01, chunk.nbytes / bytes_per_second - 0.01)
+        yield list(chunk.tobytes()), wait_time
+        offset += max_chunk
+
+
+def iter_robot_chunks(
+    gen,
+    api_rate: int,
+    stream_volume: float = 1.0,
+) -> Iterator[Tuple[List[int], float]]:
+    """
+    Accumulate streaming float32 chunks (at *api_rate*), resample to
+    ROBOT_RATE stereo int16 on aligned ROBOT_CHUNK_FRAMES boundaries, and
+    yield ``(audio_list, wait_time)`` pairs ready for send_audio_buffer.
+
+    Resampling on aligned boundaries avoids click artifacts that occur when
+    each tiny API chunk is resampled independently.
+    """
+    from scipy.signal import resample_poly
+
+    _g = math.gcd(api_rate, ROBOT_RATE)
+    src_frames_per_chunk = ROBOT_CHUNK_FRAMES * api_rate // ROBOT_RATE
+    up, down = ROBOT_RATE // _g, api_rate // _g
+
+    def _flush(src_buf: np.ndarray) -> Tuple[List[int], float]:
+        resampled = resample_poly(src_buf, up, down).astype(np.float32)
+        stereo = (
+            np.column_stack([resampled, resampled]).flatten() * 32767 * stream_volume
+        ).clip(-32768, 32767).astype(np.int16)
+        duration = len(stereo) // 2 / ROBOT_RATE
+        return list(stereo.tobytes()), max(0.01, duration - 0.01)
+
+    buf = np.zeros(0, dtype=np.float32)
+    for chunk in gen:
+        buf = np.concatenate([buf, chunk])
+        while len(buf) >= src_frames_per_chunk:
+            yield _flush(buf[:src_frames_per_chunk])
+            buf = buf[src_frames_per_chunk:]
+
+    if len(buf) > 0:
+        yield _flush(buf)
+
+
+def collect_and_resample(gen, src_rate: int, target_rate: int) -> np.ndarray:
+    """Drain *gen*, concatenate chunks, and resample to *target_rate*."""
+    from scipy.signal import resample_poly
+
+    chunks = list(gen)
+    if not chunks:
+        return np.zeros(0, dtype=np.float32)
+
+    audio = np.concatenate(chunks)
+    if src_rate != target_rate:
+        _g = math.gcd(src_rate, target_rate)
+        audio = resample_poly(
+            audio, target_rate // _g, src_rate // _g
+        ).astype(np.float32)
+
+    return audio
+
+
+def resample_chunks(gen, src_rate: int, target_rate: int) -> Generator[np.ndarray, None, None]:
+    """Yield resampled float32 chunks from *gen* (no-op if rates match)."""
+    if src_rate == target_rate:
+        yield from gen
+        return
+
+    from scipy.signal import resample_poly
+
+    _g = math.gcd(src_rate, target_rate)
+    _up, _down = target_rate // _g, src_rate // _g
+    for chunk in gen:
+        yield resample_poly(chunk, _up, _down).astype(np.float32)
+
+
+# ---------------------------------------------------------------------------
 # ElevenLabs synthesis  (streaming + batch)
 # ---------------------------------------------------------------------------
 
 # Supported PCM output rates by ElevenLabs API
-_ELEVENLABS_PCM_RATES = {16000, 22050, 24000, 44100}
+ELEVENLABS_PCM_RATES = {16000, 22050, 24000, 44100}
 
 
 def _elevenlabs_client(api_key: str):
@@ -259,6 +374,7 @@ def stream_elevenlabs(
     """
     from elevenlabs import VoiceSettings
     api_rate = min(_ELEVENLABS_PCM_RATES, key=lambda r: abs(r - sample_rate))
+    api_rate = min(ELEVENLABS_PCM_RATES, key=lambda r: abs(r - sample_rate))
 
     def _gen():
         client = _elevenlabs_client(api_key)

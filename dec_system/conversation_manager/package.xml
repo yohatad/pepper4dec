@@ -4,6 +4,7 @@
   <name>conversation_manager</name>
   <version>0.0.0</version>
   <description>Conversation Manager a RAG system server wrapper for LLM</description>
+  <maintainer email="yohatad123@gmail.com">Yohannes Haile</maintainer>
   <maintainer email="mahadanso79@gmail.com">Muhammed Danso</maintainer>
   <license>Apache-2.0</license>
 
