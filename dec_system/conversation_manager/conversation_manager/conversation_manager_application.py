@@ -24,6 +24,11 @@ Actions:
     prompt (dec_interfaces/action/ConversationManager): Answer questions using RAG
         Feedback: status – "searching" | "generating"
         Result:   success, response
+
+Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: February 28, 2026
+Version: v1.0
 """
 
 import rclpy

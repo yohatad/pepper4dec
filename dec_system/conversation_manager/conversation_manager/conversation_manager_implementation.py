@@ -11,6 +11,12 @@ Configuration File (config/converation_manager_configuration.yaml):
     conversation: max_history_turns, context_turns
     data:         default_path (knowledge base JSON file)
     debug:        verbose
+
+Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: February 28, 2026
+Version: v1.0
+
 """
 
 import os
