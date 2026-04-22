@@ -1,23 +1,21 @@
 <div align="center">
-<h1> Face and Mutual Gaze Detection and Localization</h1>
+<h1>Face and Mutual Gaze Detection and Localization</h1>
 </div>
 
 <div align="center">
   <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
-The **Face and Mutual Gaze Detection and Localization** package is a **ROS2** package designed to detect multiple faces and evaluate their **mutual gaze** in real-time by subscribing to image topics. It publishes an array of detected faces and their mutual gaze status to the **/faceDetection/data** topic. Each entry in the published data includes the **label ID** of the detected face, the **centroid** coordinates representing the center point of each face, and a boolean value indicating **mutual gaze** status as either **True** or **False**, the **width** and **height** of the bounding box.
+The **Face and Mutual Gaze Detection and Localization** package detects multiple faces and evaluates their mutual gaze in real-time by subscribing to image topics. It publishes an array of detected faces and their mutual gaze status to the `/faceDetection/data` topic. Each entry includes the label ID, centroid coordinates, bounding box dimensions, and mutual gaze status.
 
 ## Key Features
 - **ROS2 Native**: Built for ROS2 Humble
 - **SixDrepNet Algorithm**: State-of-the-art face detection and head pose estimation
-- **Object Detection Integration**: Uses YOLO-based person detection to locate faces within person bounding boxes
+- **Person Detection Integration**: Uses YOLO-based person detection to locate faces
+- **Mutual Gaze Detection**: Evaluates engagement based on head pose angles
 - **Real-time Processing**: Processes synchronized RGB-D camera streams
-- **Configurable**: Configuration via YAML file
 - **Multi-camera Support**: RealSense and Pepper camera support
 - **ROS2 Bag Compatible**: Optional camera launch for use with recorded data
-
-# 🛠️ Installation 
 
 ## Prerequisites
 - **ROS2 Humble** or newer
@@ -25,9 +23,10 @@ The **Face and Mutual Gaze Detection and Localization** package is a **ROS2** pa
 - **CUDA-capable GPU** (recommended for optimal performance)
 - **Intel RealSense camera** (if using RealSense) with USB 3.0 connection
 
-## Package Installation
+## Installation
 
-1. **Clone and Build the Workspace**
+### Package Installation
+
 ```bash
 # Clone the repository (if not already done)
 cd ~/ros2_ws/src
@@ -39,52 +38,31 @@ colcon build --packages-select face_detection object_detection
 source install/setup.bash
 ```
 
-2. **Set Up Python Virtual Environment**
-```bash
-# Create virtual environment
-python3.10 -m venv ~/face_detection_env
+### Python Dependencies
 
-# Activate the virtual environment
-source ~/face_detection_env/bin/activate
-
-# Upgrade pip
-pip install --upgrade pip
-```
-
-3. **Install Python Dependencies**
 ```bash
 # Install PyTorch with CUDA support (recommended)
-pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
 # Install package requirements
 pip install -r ~/ros2_ws/src/pepper4dec/dec_system/face_detection/requirements.txt
 ```
 
-4. **Download Model Files**
-Ensure the required ONNX model files are in the `models/` directory:
-- `face_detection_goldYOLO.onnx` - Face detection model
-- `face_detection_sixdrepnet360.onnx` - Head pose estimation model
+## Configuration
 
-# 🔧 Configuration Parameters
-The configuration is managed via `config/face_detection_configuration.yaml`:
+Configuration is managed via `config/face_detection_configuration.yaml`:
 
-| Parameter                   | Description                                                      | Range/Values            | Default Value |
-|-----------------------------|------------------------------------------------------------------|-------------------------|---------------|
-| `algorithm`                 | Algorithm selected for face detection                            | `sixdrep`               | `sixdrep`     |
-| `useCompressed`             | Use compressed ROS image topics                                  | `True`, `False`         | `False`       |
-| `camera`                    | Camera type to use                                               | `realsense`, `pepper`   | `realsense`   |
-| `sixdrepnetConfidence`      | Confidence threshold for face detection (SixDRepNet)             | `[0.0 - 1.0]`           | `0.80`        |
-| `sixdrepnetHeadposeAngle`   | Head pose angle threshold in degrees (SixDRepNet)                | Positive integer        | `10`          |
-| `imageTimeout`              | Timeout (seconds) for shutting down the node after video ends    | Float (seconds)         | `2.0`         |
-| `verboseMode`               | Enable visualization using OpenCV windows and detailed logging   | `True`, `False`         | `True`        |
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `algorithm` | Algorithm selected for face detection | `sixdrep` |
+| `useCompressed` | Use compressed ROS image topics | `False` |
+| `camera` | Camera type to use | `realsense` |
+| `sixdrepnetConfidence` | Confidence threshold for face detection | `0.80` |
+| `sixdrepnetHeadposeAngle` | Head pose angle threshold in degrees | `10` |
+| `imageTimeout` | Timeout for shutting down after video ends (s) | `2.0` |
+| `verboseMode` | Enable visualization and detailed logging | `True` |
 
-> **Note:**  
-> Enabling **`verboseMode`** (`True`) will activate real-time visualization via OpenCV windows. 
-
-# 🚀 Running the Node
-
-## Launch All Components
-The launch file starts the camera driver, object detection node, and face detection node:
+## Running the Node
 
 ```bash
 # Source the workspace
@@ -92,100 +70,115 @@ source ~/ros2_ws/install/setup.bash
 
 # Launch with default configuration (RealSense camera)
 ros2 launch face_detection face_detection_launch_robot.launch.py
-```
 
-## Launch Arguments
-The launch file supports the following arguments:
-
-| Argument        | Description                                      | Default | Example                    |
-|-----------------|--------------------------------------------------|---------|----------------------------|
-| `launch_camera` | Whether to launch the camera driver              | `true`  | `launch_camera:=false`     |
-
-### Example: Using ROS2 Bag Data
-When using pre-recorded ROS2 bag data, disable the camera launch:
-
-```bash
+# Using ROS2 bag data (disable camera launch)
 ros2 launch face_detection face_detection_launch_robot.launch.py launch_camera:=false
 ```
 
-## Manual Node Execution
-You can also run nodes individually:
+### Manual Node Execution
 
-1. **Start Camera Driver** (if not using bags):
 ```bash
+# Start Camera Driver (if not using bags)
 ros2 run realsense2_camera realsense2_camera_node \
   --ros-args \
   -p rgb_camera.color_profile:=640x480x15 \
   -p depth_module.depth_profile:=640x480x15 \
   -p align_depth.enable:=true \
   -p enable_sync:=true
-```
 
-2. **Start Object Detection Node**:
-```bash
-# Activate Python environment first
+# Start Object Detection Node
 source ~/face_detection_env/bin/activate
-
-# Run object detection
 ros2 run object_detection object_detection
-```
 
-3. **Start Face Detection Node**:
-```bash
-# Activate Python environment
+# Start Face Detection Node
 source ~/face_detection_env/bin/activate
-
-# Run face detection
 ros2 run face_detection face_detection
 ```
 
-# 🖥️ Output
-The node publishes detected faces and their corresponding data to the `/faceDetection/data` topic. When running in verbose mode, it displays OpenCV-annotated color and depth images for visualization.
+## ROS Interface
 
-## Topic Structure
-- **Published Topic**: `/faceDetection/data` (`dec_interfaces/msg/FaceDetection`)
-  - `face_label_id[]`: Array of face IDs (strings)
-  - `centroids[]`: Array of centroid coordinates (geometry_msgs/Point)
-  - `width[]`: Array of bounding box widths (float)
-  - `height[]`: Array of bounding box heights (float)
-  - `mutual_gaze[]`: Array of mutual gaze status (boolean)
+### Subscribed Topics
 
-- **Subscribed Topics**:
-  - Color image topic (depends on camera configuration)
-  - Depth image topic (depends on camera configuration)
-  - `/objectDetection/data`: Object detection results for person localization
+| Topic | Type | Description |
+|-------|------|-------------|
+| `/camera/color/image_raw` | `sensor_msgs/Image` | Color image from camera |
+| `/camera/aligned_depth_to_color/image_raw` | `sensor_msgs/Image` | Depth image |
+| `/objectDetection/data` | `dec_interfaces/msg/ObjectDetection` | Object detection results for person localization |
 
-## Verification
-To verify the node is publishing data:
+### Published Topics
 
-```bash
-# Monitor face detection output
-ros2 topic echo /faceDetection/data
+| Topic | Type | Description |
+|-------|------|-------------|
+| `/faceDetection/data` | `dec_interfaces/msg/FaceDetection` | Detected faces with mutual gaze status |
 
-# Check node status
-ros2 node list
-ros2 topic list
+## Message Structure
+
+### `/faceDetection/data` (`dec_interfaces/msg/FaceDetection`)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `face_label_id[]` | string[] | Array of face IDs |
+| `centroids[]` | `geometry_msgs/Point[]` | Array of centroid coordinates |
+| `width[]` | float[] | Array of bounding box widths |
+| `height[]` | float[] | Array of bounding box heights |
+| `mutual_gaze[]` | bool[] | Array of mutual gaze status |
+
+## Package Structure
+
+```
+face_detection/
+├── config/
+│   └── face_detection_configuration.yaml
+├── data/
+│   └── pepper_topics.yaml
+├── models/
+│   ├── face_detection_goldYOLO.onnx
+│   └── face_detection_sixdrepnet360.onnx
+├── resource/
+│   └── face_detection
+├── face_detection/
+│   ├── __init__.py
+│   ├── face_detection_application.py
+│   └── face_detection_implementation.py
+├── package.xml
+├── setup.py
+├── setup.cfg
+├── requirements.txt
+└── README.md
 ```
 
-# 🏗️ Architecture
+## Architecture
+
 The face detection system consists of three main components:
 
 1. **Camera Driver**: Provides synchronized RGB-D image streams
 2. **Object Detection Node**: Detects persons in the scene using YOLO
-3. **Face Detection Node**: 
+3. **Face Detection Node**:
    - Receives person detections from object detection
    - Performs face detection within person bounding boxes
    - Estimates head pose using SixDrepNet
    - Determines mutual gaze based on head pose angles
    - Publishes face detection results
 
-# 💡 Support
+## Testing
+
+```bash
+# Check node is running
+ros2 node list
+
+# Monitor face detection output
+ros2 topic echo /faceDetection/data
+
+# Verify topics
+ros2 topic list
+```
+
+## Support
 
 For issues or questions:
-- Create an issue on GitHub
-- Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a><br>
-<!-- - Visit: <a href="http://www.dec4africa.org">www.dec4africa.org</a> -->
+- Create an issue on the [pepper4dec GitHub repository](https://github.com/yohatad/pepper4dec/issues)
+- Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a>
 
-# 📜 License
+## License
 Copyright (C) 2026 Upanzi Network
 Licensed under the BSD-3-Clause License. See individual package licenses for details.

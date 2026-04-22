@@ -220,8 +220,27 @@ ros2 topic echo /tts/input
 # 💡 Support
 
 For issues or questions:
-- Create an issue on GitHub
+- Create an issue on the [pepper4dec GitHub repository](https://github.com/yohatad/pepper4dec/issues)
 - Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a>, <a href="mailto:mahadanso79@gmail.com">mahadanso79@gmail.com</a>
+
+## Package Structure
+
+```
+conversation_manager/
+├── config/
+│   └── conversation_manager_configuration.yaml
+├── data/
+│   └── upanzi_data.json
+├── conversation_manager/
+│   ├── __init__.py
+│   ├── conversation_manager_application.py
+│   └── conversation_manager_implementation.py
+├── package.xml
+├── setup.py
+├── setup.cfg
+├── requirements.txt
+└── README.md
+```
 
 # 📜 License
 Copyright (C) 2026 Upanzi Network  

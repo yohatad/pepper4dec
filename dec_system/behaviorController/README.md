@@ -163,10 +163,47 @@ XML files are in the `data/` folder. The active scenario is set via `scenario_sp
 | `dec_Tour.xml` | Guided tour of the DEC environment |
 | `asr_cm_tts_pipeline.xml` | Intent-routed ASR → ConversationManager → TTS pipeline |
 
-# 💡 Support
+## Package Structure
+
+```
+behaviorController/
+├── config/
+│   └── behaviorControllerConfiguration.yaml
+├── data/
+│   ├── lab_tour.xml
+│   ├── dec_Tour.xml
+│   ├── asr_cm_tts_pipeline.xml
+│   ├── cultureKnowledgeBase.yaml
+│   └── labEnvironmentKnowledgeBase.yaml
+├── behaviorController/
+│   ├── __init__.py
+│   ├── behaviorController_application.py
+│   ├── behaviorController_implementation.py
+│   ├── configManager.py
+│   └── knowledgeManager.py
+├── package.xml
+├── setup.py
+├── setup.cfg
+└── README.md
+```
+
+## Testing
+
+```bash
+# Check node is running
+ros2 node list
+
+# Verify BT is ticking
+ros2 topic list
+
+# Monitor BT state (Groot2)
+ros2 run groot2_gui groot2_gui
+```
+
+## Support
 
 For issues or questions:
-- Create an issue on GitHub
+- Create an issue on the [pepper4dec GitHub repository](https://github.com/yohatad/pepper4dec/issues)
 - Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a>
 
 # 📜 License
