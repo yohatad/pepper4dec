@@ -19,7 +19,7 @@ setup(
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='Yohannes Haile',
-    maintainer_email='yohatad000@gmail.com',
+    maintainer_email='yohatad123@gmail.com',
     description='Navigation package for Pepper robot',
     license='Apache License 2.0',
     tests_require=['pytest'],

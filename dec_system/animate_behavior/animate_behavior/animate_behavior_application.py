@@ -5,7 +5,7 @@ animate_behavior_application.py
 ROS2 Node entry point for the Animate Behavior action server.
 
 Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
-Email: yohatad000@gmail.com
+Email: yohatad123@gmail.com
 """
 
 import rclpy

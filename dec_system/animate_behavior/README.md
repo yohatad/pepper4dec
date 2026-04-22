@@ -211,7 +211,7 @@ animate_behavior/
 
 For issues or questions:
 - Create an issue on the dec_ros2 GitHub repository
-- Contact: <a href="mailto:yohatad000@gmail.com">yohatad000@gmail.com</a><br>
+- Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a><br>
 <!-- - Visit: <a href="http://www.dec4africa.org">www.dec4africa.org</a> -->
 
 # 📜 License
