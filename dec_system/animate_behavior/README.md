@@ -52,7 +52,7 @@ The animation system uses several hardcoded parameters optimized for natural hum
 |-----------|-------|-------------|
 | `update_rate` | 30.0 Hz | Animation loop frequency for smooth motion updates |
 | `feedback_rate` | 2.0 Hz | Feedback publishing frequency |
-| `gesture_interval` | 2.5-4.5 sec | Randomized time between new gesture targets |
+| `gesture_interval` | 2.5-4.0 sec | Randomized time between new gesture targets |
 | `rotation_interval` | 5.0 sec | Time between base rotation changes |
 | `smoothing_factor` | 0.15 | Exponential smoothing coefficient (0.1-0.2 range) |
 | `motion_speed` | 0.08 | ALMotion speed parameter for joint commands |
@@ -211,7 +211,7 @@ animate_behavior/
 
 For issues or questions:
 - Create an issue on the dec_ros2 GitHub repository
-- Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a><br>
+- Contact: <a href="mailto:yohatad000@gmail.com">yohatad000@gmail.com</a><br>
 <!-- - Visit: <a href="http://www.dec4africa.org">www.dec4africa.org</a> -->
 
 # 📜 License

@@ -276,7 +276,7 @@ class AnimateBehaviorServer(Node):
         return self.goal_result
     
     def animation_update(self):
-        """Main animation loop - 10Hz"""
+        """Main animation loop - 30Hz"""
         if not self.active:
             return
         

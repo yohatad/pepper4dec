@@ -1,16 +1,11 @@
 #!/usr/bin/env python3
 
 """
-gesture_execution_application.py
-ROS2 Node for Gesture Execution.
-
-Implements gesture execution logic.
-Configuration is loaded from gesture_execution_configuration.yaml.
+animate_behavior_application.py
+ROS2 Node entry point for the Animate Behavior action server.
 
 Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
-Email: yohatad123@gmail.com
-Date: April 18, 2025
-Version: v1.0
+Email: yohatad000@gmail.com
 """
 
 import rclpy

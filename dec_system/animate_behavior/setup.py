@@ -16,7 +16,6 @@ setup(
     entry_points={
         "console_scripts": [
             "animate_behavior = animate_behavior.animate_behavior_application:main",
-            "animate_diagnostic = animate_behavior.animate_behavior_diagnosis:main",
         ],
     },
     data_files=[
