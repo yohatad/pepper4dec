@@ -1,3 +1,20 @@
-# gestureDescriptors: gestureDescriptors.dat
-# robotTopics: pepperTopics.dat
-# verboseMode: false
+# General Configuration
+verbose_mode: true
+
+# LED Animation Configuration
+led_animation:
+  enabled: true
+  white_step: 0.06      # delay between layers rising white (bottom → top)
+  dark_step: 0.04       # delay between layers going dark  (top → bottom)
+  fade_duration: 0.10   # fade duration per layer
+  white_hold: 2.0       # seconds to hold all-white
+  dark_pause: 0.2       # dark pause before next wave
+
+# Gesture Animation Configuration
+gesture_animation:
+  update_rate: 30.0       # Hz - animation loop frequency
+  smoothing_factor: 0.15 # exponential smoothing factor
+  motion_speed: 0.08      # speed parameter for ALMotion
+  gesture_interval_min: 2.5  # min seconds between gestures
+  gesture_interval_max: 4.5  # max seconds between gestures
+  rotation_interval: 5.0      # seconds between rotations

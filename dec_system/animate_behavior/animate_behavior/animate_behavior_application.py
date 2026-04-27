@@ -10,13 +10,13 @@ Email: yohatad123@gmail.com
 
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
-from .animate_behavior_implementation import AnimateBehaviorServer
+from .animate_behavior_implementation import AnimateBehaviorNode
 
 
 def main(args=None):
     rclpy.init(args=args)
     
-    node = AnimateBehaviorServer()
+    node = AnimateBehaviorNode()
     
     executor = MultiThreadedExecutor(num_threads=4)
     executor.add_node(node)
