@@ -1,0 +1,13 @@
+robot_localization:
+  ros__parameters:
+    # Initial position (meters and radians)
+    initial_x: 0.0
+    initial_y: 0.0
+    initial_theta: 0.0  # radians (0.0 = facing forward)
+    
+    # Topics
+    odom_topic: "/odom"
+    pose_topic: "/robotLocalization/pose"
+    
+    # Publish rate (Hz)
+    publish_rate: 10.0
