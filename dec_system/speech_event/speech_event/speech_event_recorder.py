@@ -22,6 +22,7 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 from naoqi_bridge_msgs.msg import AudioBuffer
+from ament_index_python.packages import get_package_share_directory
 
 CHANNEL_LABELS = {
     AudioBuffer.CHANNEL_FRONT_LEFT:         "front_left",
@@ -47,9 +48,17 @@ class AudioRecorderNode(Node):
         self.declare_parameter('split_channels', False)
 
         self.mic_topic = self.get_parameter('mic_topic').get_parameter_value().string_value
-        self.output_base = self.get_parameter('output_base').get_parameter_value().string_value
+        raw_output_base = self.get_parameter('output_base').get_parameter_value().string_value
         self.max_seconds = int(self.get_parameter('max_seconds').get_parameter_value().integer_value)
         self.split_channels = bool(self.get_parameter('split_channels').get_parameter_value().bool_value)
+
+        # Resolve relative output_base against the package data directory
+        if os.path.isabs(raw_output_base):
+            self.output_base = raw_output_base
+        else:
+            self.output_base = os.path.join(
+                get_package_share_directory('speech_event'), raw_output_base
+            )
 
         # State
         self.wave_main = None           # wave.Wave_write handle (multi-channel)

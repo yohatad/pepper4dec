@@ -29,6 +29,7 @@ from std_srvs.srv import SetBool
 from naoqi_bridge_msgs.msg import AudioBuffer
 from faster_whisper import WhisperModel
 from scipy.signal import resample_poly
+from .speech_event_audio_cleaner import AudioCleaner
 
 class OnnxWrapper():
     def __init__(self, path, force_onnx_cpu=False, logger=None):
@@ -154,6 +155,10 @@ class SpeechRecognitionNode(Node):
         self.declare_parameter("action_server", True)
         self.declare_parameter("vad_always_active", False)
 
+        self.declare_parameter("noise_cleaning_enabled", True)
+        self.declare_parameter("noise_profile_path", "")   # path to .npy recorded at 16 kHz
+        self.declare_parameter("noise_alpha", 0.5)         # Wiener aggressiveness: lower = less suppression
+
         self.sample_rate = int(self.get_parameter("sample_rate").value)
         self.input_sample_rate = int(self.get_parameter("input_sample_rate").value)
         self.device = self.get_parameter("device").value
@@ -173,6 +178,17 @@ class SpeechRecognitionNode(Node):
         self.microphone_topic = self.get_parameter("microphone_topic").value
         self.action_server_enabled = bool(self.get_parameter("action_server").value)
         self.vad_always_active = bool(self.get_parameter("vad_always_active").value)
+
+        self.noise_cleaning_enabled = bool(self.get_parameter("noise_cleaning_enabled").value)
+        noise_alpha = float(self.get_parameter("noise_alpha").value)
+        raw_profile_path = self.get_parameter("noise_profile_path").value
+        if raw_profile_path:
+            noise_profile_path = (
+                raw_profile_path if os.path.isabs(raw_profile_path)
+                else os.path.join(get_package_share_directory('speech_event'), raw_profile_path)
+            )
+        else:
+            noise_profile_path = None
 
         # =====================================================
         # Validate parameters
@@ -250,6 +266,20 @@ class SpeechRecognitionNode(Node):
 
         # Warmup Whisper to avoid first-inference latency
         self.warmup_whisper()
+
+        # ── Audio cleaner (post-VAD, pre-ASR) ──────────────────────────────
+        # Noise profile must be recorded at sample_rate (16 kHz); the 48 kHz
+        # fan_noise_profile.npy from the standalone script is NOT compatible.
+        self.cleaner = AudioCleaner(
+            noise_profile_path=noise_profile_path,
+            sr=self.sample_rate,
+            alpha=noise_alpha,
+            logger=self.get_logger(),
+        )
+        self.get_logger().info(
+            f"AudioCleaner: enabled={self.noise_cleaning_enabled}  "
+            f"alpha={noise_alpha}  profile={noise_profile_path or 'none (online only)'}"
+        )
 
         # =====================================================
         # Proper chunk-aligned VAD processing
@@ -780,6 +810,13 @@ class SpeechRecognitionNode(Node):
 
     def do_transcribe(self, audio: np.ndarray, duration_s: float) -> str:
         """Run Whisper on a speech segment and return the transcript."""
+        if self.noise_cleaning_enabled:
+            audio = self.cleaner.clean(audio)
+            self.get_logger().debug(
+                f"AudioCleaner: cleaned {duration_s:.2f}s  "
+                f"RMS={np.sqrt(np.mean(audio**2)):.4f}  peak={np.max(np.abs(audio)):.4f}"
+            )
+
         self.get_logger().info(f"Running Whisper on {duration_s:.2f}s segment...")
         start_time = time.time()
 

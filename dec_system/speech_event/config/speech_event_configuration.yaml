@@ -70,6 +70,27 @@ speech_recognition:
     # -------------------------------------------------------------------------
     vad_always_active: true
 
+    # -------------------------------------------------------------------------
+    # Audio Cleaning (post-VAD, pre-ASR)
+    # Applied to each speech segment after VAD and before Whisper transcription.
+    # Pipeline: bandpass (80–7500 Hz) → notch filters (fan hum harmonics)
+    #           → Wiener filter with online noise estimation → RMS normalisation.
+    #
+    # noise_profile_path: path to a .npy mean-magnitude-spectrum file recorded
+    #   at sample_rate (16 kHz). Enables the static noise floor and automatic
+    #   notch filter placement for fan hum.
+    #   Leave empty ("") to use online estimation only (no file required).
+    #   NOTE: the 48 kHz fan_noise_profile.npy from the test scripts is NOT
+    #   compatible — record a new one at 16 kHz if you want to use a profile.
+    #
+    # noise_alpha: Wiener filter aggressiveness (0.0–1.0).
+    #   Higher = more noise suppression but more speech distortion.
+    #   Lower toward 0.3 if Whisper misses words; raise toward 0.8 for louder fans.
+    # -------------------------------------------------------------------------
+    noise_cleaning_enabled: true
+    noise_profile_path: "data/noise_profile.npy"  # relative to package share dir, or absolute path; "" for online-only
+    noise_alpha: 0.5               # Wiener aggressiveness — start here, tune if needed
+
 # =============================================================================
 # speech_event_localization (sound_localization node)
 # =============================================================================
@@ -126,7 +147,7 @@ audio_recorder:
     # -------------------------------------------------------------------------
     # Output
     # -------------------------------------------------------------------------
-    output_base: "./pepper_audio"  # File path prefix (without extension).
-                                   # Output: <output_base>_<Hz>_<N>ch.wav
+    output_base: "data/pepper_audio"  # Relative to package share dir, or absolute path.
+                                     # Output: <output_base>_<Hz>_<N>ch.wav
     max_seconds: 0               # Stop after N seconds (0 = run until Ctrl-C)
     split_channels: false        # Also write one mono WAV per channel if true
