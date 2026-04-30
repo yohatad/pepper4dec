@@ -6,14 +6,14 @@
   <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
-The **Speech Event Recognition and Localization** package provides real-time speech recognition using Whisper ASR, voice activity detection (VAD) with Silero VAD (ONNX), and optional sound-source localization. It processes the robot's microphone audio (48 kHz, `naoqi_bridge_msgs/AudioBuffer`), detects speech segments, transcribes them with a low-latency Whisper model, and publishes the recognized text. The module can also estimate the direction-of-arrival of a sound using SRP-PHAT beamforming on Pepper's 4-microphone array.
+The **Speech Event Recognition and Localization** package provides real-time speech recognition using Whisper ASR, voice activity detection (VAD) with Silero VAD (ONNX), and optional sound-source localization. It processes the robot's microphone audio (48 kHz, `naoqi_bridge_msgs/AudioBuffer`), detects speech segments, applies a noise reduction pipeline post-VAD and pre-ASR, transcribes them with a low-latency Whisper model, and publishes the recognized text. The module can also estimate the direction-of-arrival of a sound using SRP-PHAT beamforming on Pepper's 4-microphone array.
 
 ## Key Features
 - **ROS2 Native**: Built for ROS2 Humble
 - **Whisper ASR**: State-of-the-art speech recognition with low latency
 - **Silero VAD**: Voice activity detection with two-threshold hysteresis
+- **Noise Reduction**: Post-VAD, pre-ASR pipeline combining bandpass filtering, harmonic notch filters for fan hum, and a Wiener filter with online noise estimation
 - **Sound Localization**: SRP-PHAT beamforming for azimuth estimation
-- **Streaming Support**: Audio processing with configurable modes
 - **Action Server Interface**: Synchronous transcription requests with feedback
 - **Multi-microphone Array**: 4-channel audio processing for localization
 
@@ -63,6 +63,9 @@ Configuration is managed via `config/speech_event_configuration.yaml`:
 | `min_silence_duration_ms` | Minimum silence duration to end speech (ms) | `300` |
 | `max_speech_duration_s` | Maximum speech segment duration (s) | `10.0` |
 | `action_server` | Enable action server mode | `true` |
+| `noise_cleaning_enabled` | Enable post-VAD noise reduction before ASR | `true` |
+| `noise_profile_path` | Path to a `.npy` mean-magnitude-spectrum file recorded at 16 kHz; leave empty for online-only estimation | `"data/noise_profile.npy"` |
+| `noise_alpha` | Wiener filter aggressiveness (0.0–1.0); higher = more suppression, more distortion risk | `0.5` |
 
 ## Running the Node
 
@@ -174,6 +177,7 @@ speech_event/
 ├── speech_event/
 │   ├── __init__.py
 │   ├── speech_event_application.py
+│   ├── speech_event_denoiser.py
 │   ├── speech_event_implementation.py
 │   ├── speech_event_localization.py
 │   └── speech_event_recorder.py
@@ -188,9 +192,15 @@ speech_event/
 
 1. **Audio Input**: Receives multi-channel audio from robot microphone
 2. **VAD Processing**: Silero VAD detects speech segments with hysteresis
-3. **Transcription**: Whisper ASR transcribes detected speech segments
-4. **Feedback**: Streams status updates during processing
-5. **Result**: Returns transcription text as action result
+3. **Noise Reduction**: `SpeechDenoiser` applies a post-VAD, pre-ASR cleaning pipeline:
+   - Bandpass filter (80 Hz – 7500 Hz)
+   - Harmonic IIR notch filters targeting fan hum fundamental and harmonics
+   - Wiener filter with online minimum-statistics noise estimation
+   - Spectral floor and median smoothing to suppress musical noise
+   - RMS normalisation to preserve Whisper's internal level thresholds
+4. **Transcription**: Whisper ASR transcribes the cleaned speech segments
+5. **Feedback**: Streams status updates during processing
+6. **Result**: Returns transcription text as action result
 
 ## Testing
 
