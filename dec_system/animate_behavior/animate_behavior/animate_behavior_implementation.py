@@ -388,25 +388,3 @@ class AnimateBehaviorNode(Node):
         for names, _ in self.CASCADE_LAYERS:
             for n in names:
                 self.send_off(target=n)
-
-
-def main(args=None):
-    """Main entry point for the animate_behavior node."""
-    rclpy.init(args=args)
-    
-    node = AnimateBehaviorNode()
-    
-    executor = MultiThreadedExecutor()
-    executor.add_node(node)
-    
-    try:
-        executor.spin()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
-
-
-if __name__ == '__main__':
-    main()
