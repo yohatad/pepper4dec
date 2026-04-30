@@ -29,7 +29,7 @@ from std_srvs.srv import SetBool
 from naoqi_bridge_msgs.msg import AudioBuffer
 from faster_whisper import WhisperModel
 from scipy.signal import resample_poly
-from .speech_event_audio_cleaner import AudioCleaner
+from .speech_event_denoiser import SpeechDenoiser
 
 class OnnxWrapper():
     def __init__(self, path, force_onnx_cpu=False, logger=None):
@@ -270,14 +270,14 @@ class SpeechRecognitionNode(Node):
         # ── Audio cleaner (post-VAD, pre-ASR) ──────────────────────────────
         # Noise profile must be recorded at sample_rate (16 kHz); the 48 kHz
         # fan_noise_profile.npy from the standalone script is NOT compatible.
-        self.cleaner = AudioCleaner(
+        self.cleaner = SpeechDenoiser(
             noise_profile_path=noise_profile_path,
             sr=self.sample_rate,
             alpha=noise_alpha,
             logger=self.get_logger(),
         )
         self.get_logger().info(
-            f"AudioCleaner: enabled={self.noise_cleaning_enabled}  "
+            f"SpeechDenoiser: enabled={self.noise_cleaning_enabled}  "
             f"alpha={noise_alpha}  profile={noise_profile_path or 'none (online only)'}"
         )
 
@@ -813,7 +813,7 @@ class SpeechRecognitionNode(Node):
         if self.noise_cleaning_enabled:
             audio = self.cleaner.clean(audio)
             self.get_logger().debug(
-                f"AudioCleaner: cleaned {duration_s:.2f}s  "
+                f"SpeechDenoiser: cleaned {duration_s:.2f}s  "
                 f"RMS={np.sqrt(np.mean(audio**2)):.4f}  peak={np.max(np.abs(audio)):.4f}"
             )
 

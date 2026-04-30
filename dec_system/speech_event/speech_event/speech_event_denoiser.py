@@ -1,5 +1,5 @@
 """
-speech_event_audio_cleaner.py
+speech_event_denoiser.py
 Post-VAD, pre-ASR noise reduction for speech segments.
 
 Applies a pipeline of bandpass filtering, harmonic notch filters for fan hum,
@@ -31,7 +31,7 @@ def apply_bandpass(data, fs, lowcut=80, highcut=7500):
     return lfilter(b, a, data)
 
 
-class AudioCleaner:
+class SpeechDenoiser:
     """
     Noise reduction for VAD-extracted speech segments at a fixed sample rate.
 
@@ -83,11 +83,10 @@ class AudioCleaner:
             self.load_profile(noise_profile_path)
 
     # ── Initialisation helpers ────────────────────────────────────────────────
-
     def load_profile(self, path):
         if not os.path.exists(path):
             self.log(
-                f"AudioCleaner: noise profile not found at '{path}' — "
+                f"SpeechDenoiser: noise profile not found at '{path}' — "
                 "using online estimation only"
             )
             return
@@ -97,7 +96,7 @@ class AudioCleaner:
 
         if profile.shape[0] != expected_bins:
             self.log(
-                f"AudioCleaner: profile has {profile.shape[0]} bins but "
+                f"SpeechDenoiser: profile has {profile.shape[0]} bins but "
                 f"n_fft={self.n_fft} expects {expected_bins} — skipping static "
                 f"profile (record one at {self.sr} Hz with n_fft={self.n_fft})"
             )
@@ -106,7 +105,7 @@ class AudioCleaner:
         self.static_noise_profile = profile
         self.fundamental_hz = self.detect_fundamental(profile)
         self.log(
-            f"AudioCleaner: loaded profile from '{path}' | "
+            f"SpeechDenoiser: loaded profile from '{path}' | "
             f"fan fundamental={self.fundamental_hz:.1f} Hz | sr={self.sr} Hz"
         )
 
