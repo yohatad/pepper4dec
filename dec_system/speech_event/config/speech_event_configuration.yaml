@@ -21,7 +21,7 @@ speech_recognition:
     # -------------------------------------------------------------------------
     # Audio Input
     # -------------------------------------------------------------------------
-    microphone_topic: "/audio"   # ROS topic publishing naoqi_bridge_msgs/AudioBuffer
+    microphone_topic: "/naoqi_driver/audio"   # ROS topic publishing naoqi_bridge_msgs/AudioBuffer
     input_sample_rate: 48000     # Robot's native microphone sample rate (Hz)
     sample_rate: 16000           # Target sample rate for VAD and Whisper (Hz)
 
@@ -60,7 +60,7 @@ speech_recognition:
     # action_server: false -> Continuous processing; transcript published to
     #                         /speech_event/text topic (standalone mode).
     # -------------------------------------------------------------------------
-    action_server: true
+    action_server: false
 
     # -------------------------------------------------------------------------
     # VAD Always Active
@@ -100,7 +100,7 @@ sound_localization:
     # -------------------------------------------------------------------------
     # Audio Input
     # -------------------------------------------------------------------------
-    microphone_topic: "/audio"   # ROS topic publishing naoqi_bridge_msgs/AudioBuffer
+    microphone_topic: "/naoqi_driver/audio"   # ROS topic publishing naoqi_bridge_msgs/AudioBuffer
     sample_rate: 48000           # Audio sample rate — must match robot output (Hz)
 
     # -------------------------------------------------------------------------
@@ -142,7 +142,7 @@ audio_recorder:
     # -------------------------------------------------------------------------
     # Audio Input
     # -------------------------------------------------------------------------
-    mic_topic: "/audio"          # ROS topic publishing naoqi_bridge_msgs/AudioBuffer
+    mic_topic: "/naoqi_driver/audio"          # ROS topic publishing naoqi_bridge_msgs/AudioBuffer
 
     # -------------------------------------------------------------------------
     # Output
