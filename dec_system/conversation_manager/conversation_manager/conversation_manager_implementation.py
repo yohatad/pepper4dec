@@ -20,6 +20,7 @@ Version: v1.0
 """
 
 import os
+import re
 import json
 import openai
 import chromadb
@@ -760,11 +761,18 @@ def parse_json_string_value(s: str) -> Tuple[str, bool]:
     while i < len(s):
         c = s[i]
         if c == '\\':
-            if i + 1 < len(s):
-                result.append(escape_map.get(s[i + 1], s[i + 1]))
-                i += 2
-            else:
+            if i + 1 >= len(s):
                 break  # Incomplete escape at buffer boundary
+            next_c = s[i + 1]
+            if next_c == 'u':
+                if i + 5 < len(s):
+                    result.append(chr(int(s[i + 2:i + 6], 16)))
+                    i += 6
+                else:
+                    break  # Incomplete \uXXXX at buffer boundary
+            else:
+                result.append(escape_map.get(next_c, next_c))
+                i += 2
         elif c == '"':
             return ''.join(result), True
         else:
@@ -906,8 +914,7 @@ def generate_response_stream(
 
             # ---- Locate the "answer" value start ----
             if answer_open_idx < 0:
-                import re as _re
-                m = _re.search(r'"answer"\s*:\s*"', post_think)
+                m = re.search(r'"answer"\s*:\s*"', post_think)
                 if m:
                     answer_open_idx = m.end()
 
@@ -927,9 +934,8 @@ def generate_response_stream(
                 pending = ""
             else:
                 # Yield all complete sentences (ended by .!? followed by space)
-                import re as _re
                 while True:
-                    m2 = _re.search(r'[.!?](?:\s|$)', pending)
+                    m2 = re.search(r'[.!?](?:\s|$)', pending)
                     if not m2:
                         break
                     cut = m2.end()
@@ -955,49 +961,6 @@ def generate_response_stream(
 
     finally:
         raw_response_out.append(raw_buffer)
-
-def safe_float(value: Any, default: float, name: str) -> Tuple[float, Optional[str]]:
-    """Safely convert value to float"""
-    if value is None:
-        return default, None
-    try:
-        return float(value), None
-    except (ValueError, TypeError):
-        return default, f"Invalid value for {name}: '{value}' (using default: {default})"
-
-def safe_int(value: Any, default: int, name: str) -> Tuple[int, Optional[str]]:
-    """Safely convert value to int"""
-    if value is None:
-        return default, None
-    try:
-        return int(value), None
-    except (ValueError, TypeError):
-        return default, f"Invalid value for {name}: '{value}' (using default: {default})"
-
-def safe_str(value: Any, default: str, name: str) -> Tuple[str, Optional[str]]:
-    """Safely convert value to string"""
-    if value is None:
-        return default, None
-    try:
-        return str(value), None
-    except Exception:
-        return default, f"Invalid value for {name}: '{value}' (using default: {default})"
-
-def safe_bool(value: Any, default: bool, name: str) -> Tuple[bool, Optional[str]]:
-    """Safely convert value to boolean"""
-    if value is None:
-        return default, None
-    if isinstance(value, bool):
-        return value, None
-    if isinstance(value, str):
-        if value.lower() in ('true', 'yes', '1', 'on'):
-            return True, None
-        if value.lower() in ('false', 'no', '0', 'off'):
-            return False, None
-    try:
-        return bool(value), None
-    except Exception:
-        return default, f"Invalid value for {name}: '{value}' (using default: {default})"
 
 def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
     """

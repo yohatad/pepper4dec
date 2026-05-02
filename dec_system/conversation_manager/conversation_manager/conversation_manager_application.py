@@ -54,7 +54,7 @@ from .conversation_manager_implementation import (
 
 PACKAGE_PATH = Path(get_package_share_directory('conversation_manager'))
 
-class conversationManager(Node):
+class ConversationManagerNode(Node):
     
     def __init__(self):
         super().__init__('conversation_manager')
@@ -279,7 +279,7 @@ def main(args=None):
     node = None
     try:
         rclpy.init(args=args)
-        node = conversationManager()
+        node = ConversationManagerNode()
         rclpy.spin(node)
     except KeyboardInterrupt:
         print("\nShutdown requested (Ctrl+C)...")
