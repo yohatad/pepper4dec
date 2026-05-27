@@ -6,7 +6,7 @@
   <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
-The **Animate Behavior** package is a ROS2 action server that provides natural, lifelike animation for the Pepper humanoid robot during idle periods or social interactions. It generates smooth, randomized gestural movements across various body parts (arms, hands, legs, and base rotation) to enhance the robot's expressiveness and engagement during human-robot interaction. The module uses high-frequency motion updates (30Hz) with exponential smoothing to achieve natural, fluid movements that avoid mechanical or jerky appearance.
+The **Animate Behavior** package is a ROS2 action server that provides natural, lifelike animation for the Pepper humanoid robot during idle periods or social interactions. It generates smooth, randomized gestural movements across various body parts (arms, hands, legs, and base rotation) to enhance the robot's expressiveness and engagement during human-robot interaction. The module uses high-frequency motion updates (30Hz) with exponential smoothing to achieve natural, fluid movements that avoid mechanical or jerky appearance. A synchronized LED cascade wave on the face LEDs runs in parallel with body animation to further enhance expressiveness.
 
 ## Key Features
 - **ROS2 Native**: Built for ROS2 Humble
@@ -15,6 +15,7 @@ The **Animate Behavior** package is a ROS2 action server that provides natural, 
 - **Exponential Smoothing**: Natural, fluid movements with configurable smoothing factor
 - **BehaviorTree Integration**: Action-based stop via `home` behavior type
 - **Real-time Feedback**: Continuous feedback on animated limb, gestures completed, and elapsed time
+- **LED Cascade Animation**: Synchronized face LED wave effect driven via the `naoqi_driver` `/naoqi_driver/run_led` action server
 
 ## Prerequisites
 - **ROS2 Humble** or newer
@@ -50,6 +51,12 @@ Configuration is managed via `config/animate_behavior_configuration.yaml`:
 | `rotation_interval` | Time between base rotation changes (sec) | `5.0` |
 | `smoothing_factor` | Exponential smoothing coefficient | `0.15` |
 | `motion_speed` | ALMotion speed parameter | `0.08` |
+| `led_enabled` | Enable/disable LED cascade animation | `true` |
+| `led_white_step` | Delay between each LED layer fading white (sec) | `0.06` |
+| `led_dark_step` | Delay between each LED layer fading dark (sec) | `0.04` |
+| `led_fade_duration` | Duration of each RGB fade transition (sec) | `0.10` |
+| `led_white_hold` | Time all LEDs hold white before fading out (sec) | `2.0` |
+| `led_dark_pause` | Pause between cascade wave cycles (sec) | `0.2` |
 
 ## 🎭 Behavior Types
 
@@ -64,7 +71,7 @@ The node supports multiple animation modes for different interaction scenarios:
 | `rotation` | Base only | Base rotation without limb movement |
 | `home` | All limbs | Returns all limbs to neutral home position (immediate stop) |
 
-> **Note:** The `home` behavior type provides an action-based stop mechanism, immediately returning all limbs to their neutral positions and canceling any ongoing animation. This is useful for stopping animations from behavior tree controllers.
+> **Note:** The `home` behavior type provides an action-based stop mechanism, immediately returning all limbs to their neutral positions, canceling any ongoing animation, and turning off all face LEDs.
 
 ## Joint Movement Ranges
 
@@ -108,6 +115,12 @@ ros2 run animate_behavior animate_behavior
 | Action | Type | Description |
 |--------|------|-------------|
 | `/animate_behavior` | `dec_interfaces/action/AnimateBehavior` | Main animation control interface |
+
+### Action Clients
+
+| Action | Type | Description |
+|--------|------|-------------|
+| `/naoqi_driver/run_led` | `naoqi_bridge_msgs/action/RunLed` | LED commands sent to the naoqi_driver for cascade wave animation |
 
 ### Services
 
@@ -188,12 +201,39 @@ ros2 action send_goal /animate_behavior dec_interfaces/action/AnimateBehavior \
         duration_seconds="0"/>
 ```
 
+## LED Animation
+
+When `led_enabled` is `true` and the `/naoqi_driver/run_led` action server is available, the node runs a continuous **cascade wave** on Pepper's face LEDs in parallel with body animation.
+
+### Cascade Wave Pattern
+
+The 10 individual face LED actuators are grouped into 5 layers radiating outward from the center of each eye. On each cycle:
+
+1. **Fade in** — layers light up white one at a time from the outermost ring inward, with `led_white_step` seconds between layers.
+2. **Hold** — all LEDs stay white for `led_white_hold` seconds.
+3. **Fade out** — layers fade to dark from the innermost ring outward, with `led_dark_step` seconds between layers.
+4. **Pause** — `led_dark_pause` seconds before the next cycle starts.
+
+| Layer | Left actuators | Right actuators |
+|-------|---------------|-----------------|
+| 0 (outermost) | `FaceLedLeft5` | `FaceLedRight5` |
+| 1 | `FaceLedLeft6`, `FaceLedLeft4` | `FaceLedRight6`, `FaceLedRight4` |
+| 2 | `FaceLedLeft7`, `FaceLedLeft3` | `FaceLedRight7`, `FaceLedRight3` |
+| 3 | `FaceLedLeft0`, `FaceLedLeft2` | `FaceLedRight0`, `FaceLedRight2` |
+| 4 (innermost) | `FaceLedLeft1` | `FaceLedRight1` |
+
+Each fade uses `MODE_RGB_FADE` with a `led_fade_duration` second transition. LEDs are turned off automatically when animation stops.
+
+### Dependency
+
+The LED animation requires the `naoqi_driver` node to be running with the `/naoqi_driver/run_led` action server available. If the server is not found within 10 seconds at startup, LED animation is automatically disabled and body animation continues normally.
+
 ## Package Structure
 
 ```
 animate_behavior/
 ├── config/
-│   └── animate_behavior_configuration.yaml
+│   └── animate_behavior_configuration.yaml   # all ROS2 parameters
 ├── data/
 │   └── pepper_topics.yaml
 ├── resource/
@@ -217,6 +257,7 @@ The animation system uses high-frequency motion updates (30Hz) with exponential 
 3. **Exponential Smoothing**: Interpolates between current and target positions
 4. **Feedback Thread**: Publishes status updates at 2Hz
 5. **Action Server**: Handles goal requests and cancellation
+6. **LED Cascade**: ROS timer-based scheduler fires `MODE_RGB_FADE` goals against `/naoqi_driver/run_led` in a looping wave pattern; cancelled and turned off when animation stops
 
 ## Testing
 
