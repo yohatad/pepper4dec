@@ -23,7 +23,7 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from dec_interfaces.action import SpeechRecognition
 
 from ament_index_python.packages import get_package_share_directory
-from rclpy.node import Node
+from rclpy.lifecycle import LifecycleNode, TransitionCallbackReturn
 from std_msgs.msg import Float32, String
 from std_srvs.srv import SetBool
 from naoqi_bridge_msgs.msg import AudioBuffer
@@ -130,18 +130,29 @@ class OnnxWrapper():
             # Return speech probability as scalar
             return float(out.squeeze())
 
-class SpeechRecognitionNode(Node):
+class SpeechRecognitionNode(LifecycleNode):
+    """
+    Lifecycle node for Whisper ASR + Silero VAD.
+
+    Lifecycle:
+      configure  → declare+read params, load Silero VAD, load Whisper,
+                   init SpeechDenoiser + buffers, create publishers + service
+                   + optional action server
+      activate   → create audio subscription
+      deactivate → destroy audio subscription
+      cleanup    → destroy publishers
+    """
+
     def __init__(self):
         super().__init__("speech_recognition")
 
-        # Parameters
+        # Declare parameters in __init__ so they are settable from launch/CLI before configure
         self.declare_parameter("sample_rate", 16000)
-        self.declare_parameter("input_sample_rate", 48000)  # Pepper's native rate
+        self.declare_parameter("input_sample_rate", 48000)
         self.declare_parameter("device", "cuda")
         self.declare_parameter("compute_type", "float16")
         self.declare_parameter("language", "en")
         self.declare_parameter("whisper_model_id", "deepdml/faster-whisper-large-v3-turbo-ct2")
-
         self.declare_parameter("speech_threshold", 0.7)
         self.declare_parameter("neg_threshold", 0.35)
         self.declare_parameter("min_silence_duration_ms", 300)
@@ -149,39 +160,39 @@ class SpeechRecognitionNode(Node):
         self.declare_parameter("min_speech_duration", 0.3)
         self.declare_parameter("pre_speech_buffer_ms", 200)
         self.declare_parameter("intensity_threshold", 0.001)
-
         self.declare_parameter("transcription_timeout_s", 5.0)
         self.declare_parameter("microphone_topic", "/naoqi_driver/audio")
         self.declare_parameter("action_server", True)
         self.declare_parameter("vad_always_active", False)
-
         self.declare_parameter("noise_cleaning_enabled", True)
-        self.declare_parameter("noise_profile_path", "")   # path to .npy recorded at 16 kHz
-        self.declare_parameter("noise_alpha", 0.5)         # Wiener aggressiveness: lower = less suppression
+        self.declare_parameter("noise_profile_path", "")
+        self.declare_parameter("noise_alpha", 0.5)
 
-        self.sample_rate = int(self.get_parameter("sample_rate").value)
-        self.input_sample_rate = int(self.get_parameter("input_sample_rate").value)
-        self.device = self.get_parameter("device").value
-        self.compute_type = self.get_parameter("compute_type").value
-        self.language = self.get_parameter("language").value
-        self.whisper_model_id = self.get_parameter("whisper_model_id").value
+    # ── Lifecycle callbacks ─────────────────────────────────────────────────────
 
-        self.speech_threshold = float(self.get_parameter("speech_threshold").value)
-        self.neg_threshold = float(self.get_parameter("neg_threshold").value)
+    def on_configure(self, _state) -> TransitionCallbackReturn:
+        """Read parameters, validate, load Silero + Whisper, init buffers + ROS interfaces."""
+        # ── Read parameters ──────────────────────────────────────────────────
+        self.sample_rate           = int(self.get_parameter("sample_rate").value)
+        self.input_sample_rate     = int(self.get_parameter("input_sample_rate").value)
+        self.device                = self.get_parameter("device").value
+        self.compute_type          = self.get_parameter("compute_type").value
+        self.language              = self.get_parameter("language").value
+        self.whisper_model_id      = self.get_parameter("whisper_model_id").value
+        self.speech_threshold      = float(self.get_parameter("speech_threshold").value)
+        self.neg_threshold         = float(self.get_parameter("neg_threshold").value)
         self.min_silence_duration_ms = int(self.get_parameter("min_silence_duration_ms").value)
         self.max_speech_duration_s = float(self.get_parameter("max_speech_duration_s").value)
-        self.min_speech_duration = float(self.get_parameter("min_speech_duration").value)
-        self.pre_speech_buffer_ms = int(self.get_parameter("pre_speech_buffer_ms").value)
-        self.intensity_threshold = float(self.get_parameter("intensity_threshold").value)
-
+        self.min_speech_duration   = float(self.get_parameter("min_speech_duration").value)
+        self.pre_speech_buffer_ms  = int(self.get_parameter("pre_speech_buffer_ms").value)
+        self.intensity_threshold   = float(self.get_parameter("intensity_threshold").value)
         self.transcription_timeout_s = float(self.get_parameter("transcription_timeout_s").value)
-        self.microphone_topic = self.get_parameter("microphone_topic").value
+        self.microphone_topic      = self.get_parameter("microphone_topic").value
         self.action_server_enabled = bool(self.get_parameter("action_server").value)
-        self.vad_always_active = bool(self.get_parameter("vad_always_active").value)
-
+        self.vad_always_active     = bool(self.get_parameter("vad_always_active").value)
         self.noise_cleaning_enabled = bool(self.get_parameter("noise_cleaning_enabled").value)
-        noise_alpha = float(self.get_parameter("noise_alpha").value)
-        raw_profile_path = self.get_parameter("noise_profile_path").value
+        noise_alpha                = float(self.get_parameter("noise_alpha").value)
+        raw_profile_path           = self.get_parameter("noise_profile_path").value
         if raw_profile_path:
             noise_profile_path = (
                 raw_profile_path if os.path.isabs(raw_profile_path)
@@ -190,86 +201,56 @@ class SpeechRecognitionNode(Node):
         else:
             noise_profile_path = None
 
-        # =====================================================
-        # Validate parameters
-        # =====================================================
-        if self.sample_rate <= 0:
-            self.get_logger().error(f"Invalid sample_rate: {self.sample_rate}")
-            raise ValueError("sample_rate must be positive")
-
-        if self.input_sample_rate <= 0:
-            self.get_logger().error(f"Invalid input_sample_rate: {self.input_sample_rate}")
-            raise ValueError("input_sample_rate must be positive")
-
-        if not (0.0 <= self.speech_threshold <= 1.0):
-            self.get_logger().error(f"Invalid speech_threshold: {self.speech_threshold}")
-            raise ValueError("speech_threshold must be between 0.0 and 1.0")
-
-        if not (0.0 <= self.neg_threshold <= 1.0):
-            self.get_logger().error(f"Invalid neg_threshold: {self.neg_threshold}")
-            raise ValueError("neg_threshold must be between 0.0 and 1.0")
-
-        if self.min_silence_duration_ms < 0:
-            self.get_logger().error(f"Invalid min_silence_duration_ms: {self.min_silence_duration_ms}")
-            raise ValueError("min_silence_duration_ms must be non-negative")
-
-        if self.max_speech_duration_s <= 0:
-            self.get_logger().error(f"Invalid max_speech_duration_s: {self.max_speech_duration_s}")
-            raise ValueError("max_speech_duration_s must be positive")
-
-        if self.min_speech_duration < 0:
-            self.get_logger().error(f"Invalid min_speech_duration: {self.min_speech_duration}")
-            raise ValueError("min_speech_duration must be non-negative")
-
-        if self.pre_speech_buffer_ms < 0:
-            self.get_logger().error(f"Invalid pre_speech_buffer_ms: {self.pre_speech_buffer_ms}")
-            raise ValueError("pre_speech_buffer_ms must be non-negative")
-
-        if self.intensity_threshold < 0:
-            self.get_logger().error(f"Invalid intensity_threshold: {self.intensity_threshold}")
-            raise ValueError("intensity_threshold must be non-negative")
-
-        if self.transcription_timeout_s <= 0:
-            self.get_logger().error(f"Invalid transcription_timeout_s: {self.transcription_timeout_s}")
-            raise ValueError("transcription_timeout_s must be positive")
-
+        # ── Validate ─────────────────────────────────────────────────────────
+        errors = []
+        if self.sample_rate <= 0:             errors.append(f"sample_rate={self.sample_rate} must be > 0")
+        if self.input_sample_rate <= 0:       errors.append(f"input_sample_rate={self.input_sample_rate} must be > 0")
+        if not (0.0 <= self.speech_threshold <= 1.0): errors.append("speech_threshold out of [0,1]")
+        if not (0.0 <= self.neg_threshold <= 1.0):    errors.append("neg_threshold out of [0,1]")
+        if self.min_silence_duration_ms < 0:  errors.append("min_silence_duration_ms must be >= 0")
+        if self.max_speech_duration_s <= 0:   errors.append("max_speech_duration_s must be > 0")
+        if self.min_speech_duration < 0:      errors.append("min_speech_duration must be >= 0")
+        if self.pre_speech_buffer_ms < 0:     errors.append("pre_speech_buffer_ms must be >= 0")
+        if self.intensity_threshold < 0:      errors.append("intensity_threshold must be >= 0")
+        if self.transcription_timeout_s <= 0: errors.append("transcription_timeout_s must be > 0")
+        if errors:
+            for e in errors:
+                self.get_logger().error(f'Parameter error: {e}')
+            return TransitionCallbackReturn.FAILURE
         self.get_logger().info("All parameters validated successfully")
 
-        package_path = get_package_share_directory('speech_event')
-        silero_path = os.path.join(package_path, 'models', 'silero_vad.onnx')
+        # ── Load Silero VAD ───────────────────────────────────────────────────
+        try:
+            package_path = get_package_share_directory('speech_event')
+            silero_path  = os.path.join(package_path, 'models', 'silero_vad.onnx')
+            self.silero_model = OnnxWrapper(silero_path, logger=self.get_logger())
+            self.get_logger().info(f"Silero VAD loaded for {self.sample_rate}Hz")
+        except Exception as e:
+            self.get_logger().error(f"Failed to load Silero VAD: {e}")
+            return TransitionCallbackReturn.FAILURE
 
-        # Load Silero VAD with logger
-        self.silero_model = OnnxWrapper(silero_path, logger=self.get_logger())
-        self.get_logger().info(f"Silero VAD loaded for {self.sample_rate}Hz")
+        # ── Load Whisper ──────────────────────────────────────────────────────
+        try:
+            self.get_logger().info(f"Loading Whisper model on device: {self.device}...")
+            self.whisper = WhisperModel(
+                self.whisper_model_id,
+                device=self.device,
+                compute_type=self.compute_type,
+                num_workers=1,
+                cpu_threads=4,
+            )
+            if self.device == "cuda":
+                if torch.cuda.is_available():
+                    self.get_logger().info(f"Whisper GPU: {torch.cuda.get_device_name(0)}")
+                else:
+                    self.get_logger().warning("CUDA requested but not available — using CPU")
+            self.get_logger().info("Whisper model loaded.")
+            self.warmup_whisper()
+        except Exception as e:
+            self.get_logger().error(f"Failed to load Whisper: {e}")
+            return TransitionCallbackReturn.FAILURE
 
-        # Load Whisper with optimizations
-        self.get_logger().info(f"Loading Whisper model on device: {self.device}...")
-        self.whisper = WhisperModel(
-            self.whisper_model_id,
-            device=self.device,
-            compute_type=self.compute_type,
-            num_workers=1,  # Reduce overhead for short segments
-            cpu_threads=4   # For CPU fallback
-        )
-
-        # Check if Whisper is actually using GPU
-        if self.device == "cuda":
-            if torch.cuda.is_available():
-                self.get_logger().info(f"Whisper using GPU: {torch.cuda.get_device_name(0)}")
-                self.get_logger().info(f"CUDA version: {torch.version.cuda}")
-            else:
-                self.get_logger().warning("CUDA requested but not available! Whisper will use CPU")
-        else:
-            self.get_logger().info(f"Whisper using CPU (device parameter: {self.device})")
-
-        self.get_logger().info("Whisper model loaded.")
-
-        # Warmup Whisper to avoid first-inference latency
-        self.warmup_whisper()
-
-        # ── Audio cleaner (post-VAD, pre-ASR) ──────────────────────────────
-        # Noise profile must be recorded at sample_rate (16 kHz); the 48 kHz
-        # fan_noise_profile.npy from the standalone script is NOT compatible.
+        # ── SpeechDenoiser ────────────────────────────────────────────────────
         self.cleaner = SpeechDenoiser(
             noise_profile_path=noise_profile_path,
             sr=self.sample_rate,
@@ -281,88 +262,85 @@ class SpeechRecognitionNode(Node):
             f"alpha={noise_alpha}  profile={noise_profile_path or 'none (online only)'}"
         )
 
-        # =====================================================
-        # Proper chunk-aligned VAD processing
-        # =====================================================
-        # Input: 4096 samples @ 48kHz -> 1365 samples @ 16kHz (after resampling)
-        # VAD needs: 512 samples per chunk
-        # We'll accumulate resampled audio and process in 512-sample chunks
+        # ── VAD / speech buffers ──────────────────────────────────────────────
+        self.vad_chunk_size      = 512
+        self.vad_pending_buffer  = np.zeros(0, dtype=np.float32)
+        self.pre_speech_samples  = int((self.pre_speech_buffer_ms / 1000.0) * self.sample_rate)
+        self.pre_speech_ring     = deque(maxlen=self.pre_speech_samples)
+        self.speech_buffer       = []
+        self.speech_active       = False
+        self.speech_start_time   = None
+        self.silence_chunks      = 0
+        self.min_silence_chunks  = int(
+            (self.min_silence_duration_ms / 1000.0) * self.sample_rate / self.vad_chunk_size
+        )
+        self.max_speech_chunks   = int(self.max_speech_duration_s * self.sample_rate / self.vad_chunk_size)
+        self.speech_chunk_count  = 0
 
-        self.vad_chunk_size = 512  # Silero VAD requirement
-        self.vad_pending_buffer = np.zeros(0, dtype=np.float32)  # Accumulates until we have 512 samples
-
-        # =====================================================
-        # Pre-speech lookback buffer (ring buffer)
-        # =====================================================
-        # Keep last N ms of audio to prepend when speech starts
-        self.pre_speech_samples = int((self.pre_speech_buffer_ms / 1000.0) * self.sample_rate)
-        self.pre_speech_ring = deque(maxlen=self.pre_speech_samples)
-
-        # =====================================================
-        # Speech collection buffers
-        # =====================================================
-        self.speech_buffer = []
-        self.speech_active = False
-        self.speech_start_time = None
-
-        # Silence tracking (chunk-based)
-        self.silence_chunks = 0
-        self.min_silence_chunks = int((self.min_silence_duration_ms / 1000.0) * self.sample_rate / self.vad_chunk_size)
-
-        # Max speech duration in chunks (set from max_speech_duration_s parameter)
-        self.max_speech_chunks = int(self.max_speech_duration_s * self.sample_rate / self.vad_chunk_size)
-        self.speech_chunk_count = 0
-
-        # =====================================================
-        # Transcription thread pool
-        # =====================================================
+        # ── Transcription thread pool ─────────────────────────────────────────
         self.transcription_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="whisper")
-        self.transcription_lock = threading.Lock()
-        self.is_transcribing = False
-        self.transcribed_text = ""
+        self.transcription_lock     = threading.Lock()
+        self.is_transcribing        = False
+        self.transcribed_text       = ""
 
-        # =====================================================
-        # Action server state (all guarded by action_server_lock)
-        # =====================================================
-        self.action_server_lock = threading.Lock()
-        # action_started: True while a goal is active; gates audio_callback and
-        # concurrent goal rejection.  Always read/written under action_server_lock.
-        self.action_started = False
-        self.action_goal_complete = threading.Event()
+        # ── Action server state ───────────────────────────────────────────────
+        self.action_server_lock    = threading.Lock()
+        self.action_started        = False
+        self.action_goal_complete  = threading.Event()
         self.speech_detected_event = threading.Event()
-        self._current_goal_handle = None
-        self.asr_action_server = None
-
-        # Separate callback groups so the blocking action callback and the
-        # audio subscription can run concurrently under MultiThreadedExecutor.
-        self._action_cb_group = MutuallyExclusiveCallbackGroup()
-        self._audio_cb_group = MutuallyExclusiveCallbackGroup()
+        self._current_goal_handle  = None
+        self.asr_action_server     = None
+        self._action_cb_group      = MutuallyExclusiveCallbackGroup()
+        self._audio_cb_group       = MutuallyExclusiveCallbackGroup()
 
         if self.action_server_enabled:
             self.initialize_action_server()
 
-        # Pause/resume gate — mute mic during TTS (works in both modes).
-        # Plain bool is safe without a lock: CPython GIL makes bool reads atomic.
+        # ── Service (always available after configure) ────────────────────────
         self.listening_enabled = True
         self.create_service(SetBool, '/speech_event/set_enabled', self._set_enabled_callback)
 
-        # Publishers
-        self.vad_prob_pub = self.create_publisher(Float32, "/speech_event/vad_speech_prob", 10)
-        self.asr_pub = self.create_publisher(String, "/speech_event/text", 10)
+        # ── Managed publishers ────────────────────────────────────────────────
+        self.vad_prob_pub = self.create_lifecycle_publisher(Float32, "/speech_event/vad_speech_prob", 10)
+        self.asr_pub      = self.create_lifecycle_publisher(String,  "/speech_event/text", 10)
 
-        # Subscriber
+        self.get_logger().info(
+            f"SpeechRecognitionNode configured — "
+            f"VAD: speech_thresh={self.speech_threshold}, neg_thresh={self.neg_threshold}, "
+            f"min_silence={self.min_silence_duration_ms}ms | "
+            f"action_server={'enabled' if self.action_server_enabled else 'disabled'}"
+        )
+        return TransitionCallbackReturn.SUCCESS
+
+    def on_activate(self, _state) -> TransitionCallbackReturn:
+        """Activate publishers, then subscribe to the microphone topic."""
+        super().on_activate(_state)
+
         self.audio_sub = self.create_subscription(
             AudioBuffer, self.microphone_topic, self.audio_callback, 10,
             callback_group=self._audio_cb_group,
         )
+        self.get_logger().info(
+            f"SpeechRecognitionNode activated — listening on {self.microphone_topic}"
+        )
+        return TransitionCallbackReturn.SUCCESS
 
-        self.get_logger().info("speech_recognition ready.")
-        self.get_logger().info(f"VAD config: speech_thresh={self.speech_threshold}, neg_thresh={self.neg_threshold}, "
-                              f"min_silence={self.min_silence_duration_ms}ms ({self.min_silence_chunks} chunks), "
-                              f"min_speech={self.min_speech_duration}s, max_speech={self.max_speech_duration_s}s")
-        self.get_logger().info(f"Pre-speech buffer: {self.pre_speech_buffer_ms}ms ({self.pre_speech_samples} samples)")
-        self.get_logger().info(f"Action server: {'enabled' if self.action_server_enabled else 'disabled'}")
-        self.get_logger().info(f"VAD always active: {'yes (barge-in monitoring enabled)' if self.vad_always_active else 'no'}")
+    def on_deactivate(self, _state) -> TransitionCallbackReturn:
+        """Stop receiving audio, then deactivate publishers."""
+        self.destroy_subscription(self.audio_sub)
+        super().on_deactivate(_state)
+        self.get_logger().info("SpeechRecognitionNode deactivated")
+        return TransitionCallbackReturn.SUCCESS
+
+    def on_cleanup(self, _state) -> TransitionCallbackReturn:
+        self.destroy_lifecycle_publisher(self.vad_prob_pub)
+        self.destroy_lifecycle_publisher(self.asr_pub)
+        self.get_logger().info("SpeechRecognitionNode cleaned up")
+        return TransitionCallbackReturn.SUCCESS
+
+    def on_shutdown(self, _state) -> TransitionCallbackReturn:
+        self.get_logger().info("SpeechRecognitionNode shutting down")
+        return TransitionCallbackReturn.SUCCESS
 
     def _set_enabled_callback(self, request, response):
         """Enable or disable audio processing (e.g. mute mic during TTS)."""

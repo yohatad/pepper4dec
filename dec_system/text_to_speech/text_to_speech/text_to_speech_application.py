@@ -58,7 +58,7 @@ import rclpy
 from rclpy.action import ActionServer, ActionClient
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
-from rclpy.node import Node
+from rclpy.lifecycle import LifecycleNode, TransitionCallbackReturn
 
 from std_msgs.msg import Bool, Float32, String
 from std_srvs.srv import SetBool
@@ -88,119 +88,132 @@ SOFTWARE_VERSION = "v1.0"
 # ROS2 Node
 # ---------------------------------------------------------------------------
 
-class TextToSpeechNode(Node):
+class TextToSpeechNode(LifecycleNode):
     """
-    ROS2 node that drives Pepper's voice.
+    Lifecycle node that drives Pepper's voice.
 
-    Sentences arrive either via:
-      (a) /tts/input  — streaming from LLM
-      (b) /tts action goal                       — programmatic calls
-
-    Both routes enqueue sentences into a thread-safe queue that is drained by
-    a single background playback thread, ensuring strict ordering and clean
-    barge-in handling.
+    Lifecycle:
+      configure  → init TTS backend (Kokoro warmup, AudioPlayer), create publishers
+                   + service clients + action server
+      activate   → start background playback thread, create /tts/input + VAD subscriptions
+      deactivate → stop playback thread, destroy subscriptions
+      cleanup    → destroy publishers
     """
 
     def __init__(self, config: dict):
         super().__init__("text_to_speech")
-
-        self.config = config
+        # Store config — heavy initialisation deferred to on_configure
+        self.config    = config
         self.node_name = self.get_name()
-        self.engine = config["engine"]
+        self.engine    = config["engine"]
 
+    # ── Lifecycle callbacks ─────────────────────────────────────────────────────
+
+    def on_configure(self, _state) -> TransitionCallbackReturn:
+        """Init TTS backend, create publishers, service clients, and action server."""
         self.get_logger().info(
-            f"{self.node_name}: starting — engine={self.engine}, "
-            f"barge_in_threshold={config['barge_in_threshold']}"
+            f"{self.node_name}: configuring — engine={self.engine}, "
+            f"barge_in_threshold={self.config['barge_in_threshold']}"
         )
 
-        # ── Internal state ────────────────────────────────────────────────────
+        # Internal state
         self.sentence_queue: queue.Queue = queue.Queue()
-        self.is_speaking = False
-        self.barge_in_counter = 0
+        self.is_speaking        = False
+        self.barge_in_counter   = 0
         self.barge_in_triggered = False
-        self.state_lock = threading.Lock()
-        self.shutdown = False
+        self.state_lock         = threading.Lock()
+        self.shutdown           = False
+        self.audio_player       = None
+        self.play_goal_handle   = None
+        self.play_done_event    = threading.Event()
 
-        # ── Per-backend initialisation ────────────────────────────────────────
-        self.audio_player = None
-        self.play_goal_handle = None
-        self.play_done_event = threading.Event()
-
+        # Per-backend initialisation
         if self.engine in ("kokoro_local", "kokoro_pepper"):
             self.warmup_kokoro()
 
         if self.engine in ("kokoro_local", "elevenlabs_local"):
             self.audio_player = AudioPlayer(
-                sample_rate=config["sample_rate"],
-                output_device=config["output_device"],
+                sample_rate=self.config["sample_rate"],
+                output_device=self.config["output_device"],
             )
 
-        # ── Publishers ────────────────────────────────────────────────────────
-        self.speaking_pub = self.create_publisher(Bool, "/text_to_speech/speaking", 10)
+        # Managed publishers
+        self.speaking_pub = self.create_lifecycle_publisher(Bool, "/text_to_speech/speaking", 10)
 
         if self.engine == "naoqi_ros":
-            self.naoqi_pub = self.create_publisher(
-                String, config["naoqi_speech_topic"], 10
+            self.naoqi_pub = self.create_lifecycle_publisher(
+                String, self.config["naoqi_speech_topic"], 10
             )
             self.get_logger().info(
                 f"{self.node_name}: naoqi_ros backend — "
-                f"publishing to '{config['naoqi_speech_topic']}'"
+                f"publishing to '{self.config['naoqi_speech_topic']}'"
             )
 
-        # ── Service clients ───────────────────────────────────────────────────
+        # Service clients
         self.mic_client = self.create_client(SetBool, "/speech_event/set_enabled")
 
         if self.engine in ("kokoro_pepper", "elevenlabs_pepper"):
-            self.load_client = self.create_client(
-                LoadAudioFile, "/naoqi_driver/load_audio_file"
-            )
-            self.unload_client = self.create_client(
-                UnloadAudioFile, "/naoqi_driver/unload_audio_file"
-            )
-            self._play_client = ActionClient(
-                self, PlayAudio, "/naoqi_driver/play_audio"
-            )
-            # Streaming service (for playback_method="stream")
-            self._send_buffer_client = self.create_client(
-                SendAudioBuffer, "/naoqi_driver/send_audio_buffer"
-            )
+            self.load_client   = self.create_client(LoadAudioFile, "/naoqi_driver/load_audio_file")
+            self.unload_client = self.create_client(UnloadAudioFile, "/naoqi_driver/unload_audio_file")
+            self._play_client  = ActionClient(self, PlayAudio, "/naoqi_driver/play_audio")
+            self._send_buffer_client = self.create_client(SendAudioBuffer, "/naoqi_driver/send_audio_buffer")
 
-        # ── Subscriptions ─────────────────────────────────────────────────────
-        stream_cb_group = MutuallyExclusiveCallbackGroup()
-        vad_cb_group    = MutuallyExclusiveCallbackGroup()
+        # Action server — callback groups for concurrent operation
+        self._stream_cb_group = MutuallyExclusiveCallbackGroup()
+        self._vad_cb_group    = MutuallyExclusiveCallbackGroup()
+        self._action_cb_group = MutuallyExclusiveCallbackGroup()
 
-        self.create_subscription(
-            String,
-            "/tts/input",
-            self.stream_sentence_callback,
-            10,
-            callback_group=stream_cb_group,
-        )
-        self.create_subscription(
-            Float32,
-            "/speech_event/vad_speech_prob",
-            self.vad_prob_callback,
-            10,
-            callback_group=vad_cb_group,
-        )
-
-        # ── TTS action server ─────────────────────────────────────────────────
-        action_cb_group = MutuallyExclusiveCallbackGroup()
         self._tts_action = ActionServer(
-            self,
-            TTS,
-            "/tts",
-            self.execute_tts_action,
-            callback_group=action_cb_group,
+            self, TTS, "/tts", self.execute_tts_action,
+            callback_group=self._action_cb_group,
         )
 
-        # ── Background playback thread ─────────────────────────────────────────
+        self.get_logger().info(f"{self.node_name}: configured")
+        return TransitionCallbackReturn.SUCCESS
+
+    def on_activate(self, _state) -> TransitionCallbackReturn:
+        """Activate publishers, create subscriptions, start playback thread."""
+        super().on_activate(_state)
+
+        self._sub_tts_input = self.create_subscription(
+            String, "/tts/input", self.stream_sentence_callback, 10,
+            callback_group=self._stream_cb_group,
+        )
+        self._sub_vad = self.create_subscription(
+            Float32, "/speech_event/vad_speech_prob", self.vad_prob_callback, 10,
+            callback_group=self._vad_cb_group,
+        )
+
+        self.shutdown = False
         self._playback_thread = threading.Thread(
             target=self.playback_loop, name="tts_playback", daemon=True
         )
         self._playback_thread.start()
 
-        self.get_logger().info(f"{self.node_name}: ready.")
+        self.get_logger().info(f"{self.node_name}: activated — ready to speak")
+        return TransitionCallbackReturn.SUCCESS
+
+    def on_deactivate(self, _state) -> TransitionCallbackReturn:
+        """Stop playback thread, destroy subscriptions, deactivate publishers."""
+        self.cleanup()   # stops thread, drains queue
+
+        self.destroy_subscription(self._sub_tts_input)
+        self.destroy_subscription(self._sub_vad)
+
+        super().on_deactivate(_state)
+        self.get_logger().info(f"{self.node_name}: deactivated")
+        return TransitionCallbackReturn.SUCCESS
+
+    def on_cleanup(self, _state) -> TransitionCallbackReturn:
+        self.destroy_lifecycle_publisher(self.speaking_pub)
+        if self.engine == "naoqi_ros" and hasattr(self, "naoqi_pub"):
+            self.destroy_lifecycle_publisher(self.naoqi_pub)
+        self.get_logger().info(f"{self.node_name}: cleaned up")
+        return TransitionCallbackReturn.SUCCESS
+
+    def on_shutdown(self, _state) -> TransitionCallbackReturn:
+        self.get_logger().info(f"{self.node_name}: shutting down")
+        return TransitionCallbackReturn.SUCCESS
 
     # ── Kokoro warm-up ──────────────────────────────────────────────────────────
 
@@ -767,7 +780,6 @@ def main(args=None):
             print(f"[text_to_speech] Unhandled exception: {e}", file=sys.stderr)
     finally:
         if node is not None:
-            node.cleanup()
             node.destroy_node()
         if rclpy_inited:
             try:

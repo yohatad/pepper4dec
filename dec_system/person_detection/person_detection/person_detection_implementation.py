@@ -24,7 +24,7 @@ import threading
 import supervision as sv
 from ament_index_python.packages import get_package_share_directory
 from rclpy.qos import qos_profile_sensor_data
-from rclpy.node import Node
+from rclpy.lifecycle import LifecycleNode, TransitionCallbackReturn
 from sensor_msgs.msg import Image, CompressedImage
 from cv_bridge import CvBridge
 from message_filters import ApproximateTimeSynchronizer, Subscriber
@@ -122,51 +122,76 @@ def get_class_indices(target_classes: List, class_names: List[str] = COCO_CLASSE
                 print(f"Warning: Class name '{cls}' not found in COCO classes")
     
     return indices
-class PersonDetectionNode(Node):
+class PersonDetectionNode(LifecycleNode):
+    """
+    Base lifecycle node for person detection.
+
+    Lifecycle:
+      configure  → create publishers, init state
+      activate   → start visualization + status timers
+      deactivate → cancel timers, deactivate publishers
+      cleanup    → destroy publishers
+    """
+
     def __init__(self, config: Dict, node_name: str = 'personDetection'):
         super().__init__(node_name)
-        
         self.config = config
-        self.pub_objects = self.create_publisher(PersonDetection, "/personDetection/data", 10)
-        self.debug_pub = self.create_publisher(Image, "/personDetection/debug", 1)
-        self.depth_debug_pub = self.create_publisher(Image, "/personDetection/depth_debug", 1)
 
-        self.bridge = CvBridge()
+    # ── Base lifecycle callbacks ──────────────────────────────────────────────
+
+    def on_configure(self, _state) -> TransitionCallbackReturn:
+        self.pub_objects     = self.create_lifecycle_publisher(PersonDetection, '/personDetection/data', 10)
+        self.debug_pub       = self.create_lifecycle_publisher(Image, '/personDetection/debug', 1)
+        self.depth_debug_pub = self.create_lifecycle_publisher(Image, '/personDetection/depth_debug', 1)
+
+        self.bridge      = CvBridge()
         self.depth_image: Optional[np.ndarray] = None
         self.color_image: Optional[np.ndarray] = None
-        
-        # Configuration values
-        self.use_compressed = config['useCompressed']
-        self.camera_type = config['camera']
-        self.verbose_mode = config['verboseMode']
-        self.image_timeout = config['imageTimeout']
-        
-        # Target classes to track
-        self.target_class_indices = get_class_indices(config.get('targetClasses', ['person']))
-        
+
+        self.use_compressed        = self.config['useCompressed']
+        self.camera_type           = self.config['camera']
+        self.verbose_mode          = self.config['verboseMode']
+        self.image_timeout         = self.config['imageTimeout']
+        self.target_class_indices  = get_class_indices(self.config.get('targetClasses', ['person']))
+
         if self.verbose_mode:
             target_names = [COCO_CLASSES[i] for i in self.target_class_indices]
-            self.get_logger().info(f"Tracking classes: {target_names}")
-        
-        self.node_name = self.get_name()
-        self.timer_start = self.get_clock().now()
-        self.last_image_time = None  # timestamp of the last received image
+            self.get_logger().info(f'Tracking classes: {target_names}')
 
-        # Thread safety for visualization
-        self.frame_lock = threading.Lock()
+        self.node_name       = self.get_name()
+        self.timer_start     = self.get_clock().now()
+        self.last_image_time = None
+
+        self.frame_lock   = threading.Lock()
         self.latest_frame: Optional[np.ndarray] = None
 
-        # Color tracking for object IDs
         self.object_colors: Dict[int, Tuple[int, int, int]] = {}
-        
-        # Store class_id mapping for tracked objects
         self.track_class_map: Dict[int, int] = {}
+        return TransitionCallbackReturn.SUCCESS
 
-        # Start visualization timer (30 Hz)
-        self.vis_timer = self.create_timer(1.0 / 30.0, self.visualization_callback)
-
-        # Status logging timer (10 seconds)
+    def on_activate(self, _state) -> TransitionCallbackReturn:
+        super().on_activate(_state)
+        self.vis_timer    = self.create_timer(1.0 / 30.0, self.visualization_callback)
         self.status_timer = self.create_timer(10.0, self.status_callback)
+        return TransitionCallbackReturn.SUCCESS
+
+    def on_deactivate(self, _state) -> TransitionCallbackReturn:
+        self.vis_timer.cancel()
+        self.destroy_timer(self.vis_timer)
+        self.status_timer.cancel()
+        self.destroy_timer(self.status_timer)
+        super().on_deactivate(_state)
+        return TransitionCallbackReturn.SUCCESS
+
+    def on_cleanup(self, _state) -> TransitionCallbackReturn:
+        self.destroy_lifecycle_publisher(self.pub_objects)
+        self.destroy_lifecycle_publisher(self.debug_pub)
+        self.destroy_lifecycle_publisher(self.depth_debug_pub)
+        return TransitionCallbackReturn.SUCCESS
+
+    def on_shutdown(self, _state) -> TransitionCallbackReturn:
+        self.get_logger().info(f'{self.get_name()} shutting down')
+        return TransitionCallbackReturn.SUCCESS
 
     def status_callback(self):
         """Log status every 10 seconds."""
@@ -592,43 +617,109 @@ class PersonDetectionNode(Node):
             self.get_logger().error(f"Error during cleanup: {e}")
 
 class YOLOv11(PersonDetectionNode):
+    """
+    Lifecycle subclass that loads YOLOv11 + ByteTrack on configure
+    and creates camera subscriptions on activate.
+
+    Lifecycle:
+      configure  → super().on_configure() → load ONNX model + tracker
+      activate   → super().on_activate()  → create camera subscribers + timeout monitor
+      deactivate → destroy camera subscribers → super().on_deactivate()
+      cleanup    → release model → super().on_cleanup()
+    """
+
     def __init__(self, config: Dict):
-        """
-        Initializes the ROS2 node, loads configuration, and subscribes to necessary topics.
-        """
         super().__init__(config)
-        
-        # Get YOLOv11 specific configuration values with defaults
+
+    # ── Lifecycle ────────────────────────────────────────────────────────────────
+
+    def on_configure(self, _state) -> TransitionCallbackReturn:
+        ret = super().on_configure(_state)
+        if ret != TransitionCallbackReturn.SUCCESS:
+            return ret
+
         self.confidence_threshold = self.config.get('confidenceThreshold', 0.5)
-        
-        # ByteTrack parameters
         self.track_thresh = self.config.get('trackThreshold', 0.45)
         self.track_buffer = self.config.get('trackBuffer', 30)
         self.match_thresh = self.config.get('matchThreshold', 0.8)
-        self.frame_rate = self.config.get('frameRate', 30)
+        self.frame_rate   = self.config.get('frameRate', 30)
 
-        # Initialize model
         if not self.init_model():
-            self.get_logger().error("Failed to initialize ONNX model")
-            rclpy.shutdown()
-            return
+            self.get_logger().error(f'{self.node_name}: failed to load ONNX model')
+            return TransitionCallbackReturn.FAILURE
 
-        # Initialize ByteTrack tracker
         if not self.init_tracker():
-            self.get_logger().error("Failed to initialize ByteTrack tracker")
-            rclpy.shutdown()
-            return
+            self.get_logger().error(f'{self.node_name}: failed to init ByteTrack')
+            return TransitionCallbackReturn.FAILURE
 
-        if self.verbose_mode:
-            self.get_logger().info(f"{self.node_name}: Person Detection YOLOv11 node initialized with ByteTrack")
-        
-        # Subscribe to topics
-        if not self.subscribe_topics():
-            self.get_logger().error("Failed to subscribe to topics")
-            return
+        self.get_logger().info(f'{self.node_name}: configured — YOLOv11 + ByteTrack ready')
+        return TransitionCallbackReturn.SUCCESS
 
-        # Start timeout monitor
+    def on_activate(self, _state) -> TransitionCallbackReturn:
+        ret = super().on_activate(_state)
+        if ret != TransitionCallbackReturn.SUCCESS:
+            return ret
+
+        if not self._create_camera_subscriptions():
+            self.get_logger().error(f'{self.node_name}: failed to set up camera subscriptions')
+            return TransitionCallbackReturn.FAILURE
+
         self.start_timeout_monitor()
+        self.get_logger().info(f'{self.node_name}: activated — processing frames')
+        return TransitionCallbackReturn.SUCCESS
+
+    def on_deactivate(self, _state) -> TransitionCallbackReturn:
+        if hasattr(self, 'ats'):
+            if hasattr(self, 'color_sub'):
+                self.destroy_subscription(self.color_sub.sub)
+            if hasattr(self, 'depth_sub'):
+                self.destroy_subscription(self.depth_sub.sub)
+        return super().on_deactivate(_state)
+
+    def on_cleanup(self, _state) -> TransitionCallbackReturn:
+        if hasattr(self, 'session'):
+            del self.session
+        return super().on_cleanup(_state)
+
+    # ── Non-blocking camera subscription helper ───────────────────────────────
+
+    def _create_camera_subscriptions(self) -> bool:
+        try:
+            rgb_topic, depth_topic = self.get_topic_names()
+
+            if self.use_compressed and self.camera_type == 'realsense':
+                color_topic     = rgb_topic   + '/compressed'
+                depth_topic_sub = depth_topic + '/compressedDepth'
+                color_msg_type  = CompressedImage
+                depth_msg_type  = CompressedImage
+            elif self.use_compressed and self.camera_type == 'pepper':
+                self.get_logger().warn('Compressed images not available for Pepper cameras')
+                color_topic     = rgb_topic
+                depth_topic_sub = depth_topic
+                color_msg_type  = Image
+                depth_msg_type  = Image
+            else:
+                color_topic     = rgb_topic
+                depth_topic_sub = depth_topic
+                color_msg_type  = Image
+                depth_msg_type  = Image
+
+            self.color_sub = Subscriber(self, color_msg_type, color_topic,     qos_profile=qos_profile_sensor_data)
+            self.depth_sub = Subscriber(self, depth_msg_type, depth_topic_sub, qos_profile=qos_profile_sensor_data)
+
+            slop     = 5.0 if self.camera_type == 'pepper' else 0.1
+            self.ats = ApproximateTimeSynchronizer(
+                [self.color_sub, self.depth_sub], queue_size=10, slop=slop
+            )
+            self.ats.registerCallback(self.synchronized_callback)
+
+            self.get_logger().info(
+                f'{self.node_name}: subscribed to {color_topic}, {depth_topic_sub}'
+            )
+            return True
+        except Exception as e:
+            self.get_logger().error(f'{self.node_name}: camera subscription failed: {e}')
+            return False
 
     def init_tracker(self) -> bool:
         try:
