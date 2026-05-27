@@ -21,7 +21,7 @@ import supervision as sv
 
 from ament_index_python.packages import get_package_share_directory
 from rclpy.qos import qos_profile_sensor_data
-from rclpy.node import Node
+from rclpy.lifecycle import LifecycleNode, TransitionCallbackReturn
 from sensor_msgs.msg import Image, CompressedImage
 from cv_bridge import CvBridge
 from message_filters import ApproximateTimeSynchronizer, Subscriber
@@ -70,66 +70,107 @@ def load_configuration() -> Dict:
         
     return config
 
-class FaceDetectionNode(Node):
+class FaceDetectionNode(LifecycleNode):
+    """
+    Base lifecycle node for face detection.
+
+    Lifecycle:
+      configure  → create publishers, init state
+      activate   → create person_detection subscription (if needed), start vis timer
+      deactivate → cancel vis timer, destroy person_detection subscription
+      cleanup    → destroy publishers
+    """
+
     def __init__(self, config: Dict, node_name: str = 'faceDetection'):
         super().__init__(node_name)
-        
+        # Store config dict only — heavy work deferred to on_configure
         self.config = config
-        self.pub_gaze = self.create_publisher(FaceDetection, "/faceDetection/data", 10)
-        self.debug_pub = self.create_publisher(Image, "/faceDetection/debug", 1)
-        self.depth_debug_pub = self.create_publisher(Image, "/faceDetection/depth_debug", 1)
 
-        self.bridge = CvBridge()
+    # ── Base lifecycle callbacks (SixDrepNet calls super() to chain them) ────────
+
+    def on_configure(self, _state) -> TransitionCallbackReturn:
+        """Create publishers and initialise all state variables."""
+        # Managed publishers — silent while INACTIVE
+        self.pub_gaze        = self.create_lifecycle_publisher(FaceDetection, '/faceDetection/data', 10)
+        self.debug_pub       = self.create_lifecycle_publisher(Image, '/faceDetection/debug', 1)
+        self.depth_debug_pub = self.create_lifecycle_publisher(Image, '/faceDetection/depth_debug', 1)
+
+        self.bridge      = CvBridge()
         self.depth_image: Optional[np.ndarray] = None
         self.color_image: Optional[np.ndarray] = None
-        
-        # Configuration values
-        self.use_compressed = config['useCompressed']
-        self.camera_type = config['camera']
-        self.verbose_mode = config['verboseMode']
-        self.image_timeout = config['imageTimeout']
-        self.require_person_detection = config.get('requirePersonDetection', True)
-        self.person_detection_timeout = config.get('personDetectionTimeout', 0.5)
-        self.prioritize_face_depth = config.get('prioritizeFaceDepth', True)
-        
-        self.node_name = self.get_name()
-        self.timer_start = self.get_clock().now()
-        self.last_image_time = None   # timestamp of the last received image
 
-        # Thread safety for visualization (protects latest_frame and latest_depth)
-        self.frame_lock = threading.Lock()
+        self.use_compressed           = self.config['useCompressed']
+        self.camera_type              = self.config['camera']
+        self.verbose_mode             = self.config['verboseMode']
+        self.image_timeout            = self.config['imageTimeout']
+        self.require_person_detection = self.config.get('requirePersonDetection', True)
+        self.person_detection_timeout = self.config.get('personDetectionTimeout', 0.5)
+        self.prioritize_face_depth    = self.config.get('prioritizeFaceDepth', True)
+
+        self.node_name       = self.get_name()
+        self.timer_start     = self.get_clock().now()
+        self.last_image_time = None
+
+        self.frame_lock   = threading.Lock()
         self.latest_frame: Optional[np.ndarray] = None
         self.latest_depth: Optional[np.ndarray] = None
 
-        # Person detection related attributes
-        self.latest_person_detections = None
+        self.latest_person_detections           = None
         self.latest_person_detections_timestamp = None
-        self.person_detections_lock = threading.Lock()
+        self.person_detections_lock             = threading.Lock()
 
-        # Face colors keyed by person tracking ID (from person detection)
         self.face_colors: Dict[str, Tuple[int, int, int]] = {}
-        
-        # ByteTrack tracker for standalone mode face tracking
+
         self.face_tracker = sv.ByteTrack(
             track_activation_threshold=0.5,
             lost_track_buffer=30,
             minimum_matching_threshold=0.3,
-            frame_rate=15
+            frame_rate=15,
         )
-        
-        # Only subscribe to person detection if required
-        if self.require_person_detection:
-            self.person_detection_sub = self.create_subscription(PersonDetection, '/personDetection/data', self.person_detection_callback, 10)
+        return TransitionCallbackReturn.SUCCESS
 
+    def on_activate(self, _state) -> TransitionCallbackReturn:
+        """Activate publishers, subscribe to person detection if required, start vis timer."""
+        super().on_activate(_state)
+
+        if self.require_person_detection:
+            self.person_detection_sub = self.create_subscription(
+                PersonDetection, '/personDetection/data', self.person_detection_callback, 10
+            )
             if self.verbose_mode:
-                self.get_logger().info(f"{self.node_name}: Person detection ENABLED - subscribed to /personDetection/data")
-                self.get_logger().info(f"{self.node_name}: Using person detection tracking IDs for face identification")
+                self.get_logger().info(
+                    f'{self.node_name}: person detection ENABLED — '
+                    'subscribed to /personDetection/data'
+                )
         else:
             if self.verbose_mode:
-                self.get_logger().info(f"{self.node_name}: Person detection DISABLED - running standalone face detection")
+                self.get_logger().info(
+                    f'{self.node_name}: person detection DISABLED — standalone mode'
+                )
 
-        # Start visualization timer (30 Hz)
         self.vis_timer = self.create_timer(1.0 / 30.0, self.visualization_callback)
+        return TransitionCallbackReturn.SUCCESS
+
+    def on_deactivate(self, _state) -> TransitionCallbackReturn:
+        """Cancel vis timer, destroy person_detection subscription, deactivate publishers."""
+        self.vis_timer.cancel()
+        self.destroy_timer(self.vis_timer)
+
+        if self.require_person_detection and hasattr(self, 'person_detection_sub'):
+            self.destroy_subscription(self.person_detection_sub)
+
+        super().on_deactivate(_state)
+        return TransitionCallbackReturn.SUCCESS
+
+    def on_cleanup(self, _state) -> TransitionCallbackReturn:
+        self.destroy_lifecycle_publisher(self.pub_gaze)
+        self.destroy_lifecycle_publisher(self.debug_pub)
+        self.destroy_lifecycle_publisher(self.depth_debug_pub)
+        return TransitionCallbackReturn.SUCCESS
+
+    def on_shutdown(self, _state) -> TransitionCallbackReturn:
+        self.get_logger().info(f'{self.get_name()} shutting down')
+        return TransitionCallbackReturn.SUCCESS
 
     def update_latest_frame(self, frame: np.ndarray):
         """Update the latest frame and depth safely for visualization."""
@@ -526,36 +567,49 @@ class YOLOONNX:
         return np.array(result_boxes), np.array(result_scores)
 
 class SixDrepNet(FaceDetectionNode):
+    """
+    Lifecycle subclass that loads YOLO + SixDrepNet models on configure
+    and creates camera subscriptions on activate.
+
+    Lifecycle:
+      configure  → super().on_configure() → load ONNX models
+      activate   → super().on_activate()  → create camera subscribers + timeout monitor
+      deactivate → destroy camera subscribers → super().on_deactivate()
+      cleanup    → super().on_cleanup()
+    """
+
     def __init__(self, config: Dict):
         super().__init__(config)
-        
-        # Get SixDrepNet specific configuration values with defaults
-        sixdrepnet_confidence = self.config.get('sixdrepnetConfidence', 0.65)
-        self.sixdrep_angle = self.config.get('sixdrepnetHeadposeAngle', 10)
-        
-        if self.verbose_mode:
-            self.get_logger().info(f"{self.node_name}: Initializing SixDrepNet ...")
 
-        # Set up model paths
+    # ── Lifecycle ────────────────────────────────────────────────────────────────
+
+    def on_configure(self, _state) -> TransitionCallbackReturn:
+        """Init base state (super), then load YOLO + SixDrepNet ONNX models."""
+        ret = super().on_configure(_state)
+        if ret != TransitionCallbackReturn.SUCCESS:
+            return ret
+
+        sixdrepnet_confidence = self.config.get('sixdrepnetConfidence', 0.65)
+        self.sixdrep_angle    = self.config.get('sixdrepnetHeadposeAngle', 10)
+
+        self.get_logger().info(f'{self.node_name}: loading ONNX models…')
+
         try:
-            package_path = get_package_share_directory('face_detection')
-            yolo_model_path = os.path.join(package_path, 'models/face_detection_goldYOLO.onnx')
+            package_path          = get_package_share_directory('face_detection')
+            yolo_model_path       = os.path.join(package_path, 'models/face_detection_goldYOLO.onnx')
             sixdrepnet_model_path = os.path.join(package_path, 'models/face_detection_sixdrepnet360.onnx')
         except Exception as e:
-            self.get_logger().error(f"{self.node_name}: Failed to get package path: {e}")
-            return
+            self.get_logger().error(f'{self.node_name}: failed to locate model files: {e}')
+            return TransitionCallbackReturn.FAILURE
 
-        # Initialize YOLOONNX model for face detection
         try:
             self.yolo_model = YOLOONNX(model_path=yolo_model_path, class_score_th=sixdrepnet_confidence)
             if self.verbose_mode:
-                self.get_logger().info(f"{self.node_name}: YOLOONNX model initialized successfully.")
+                self.get_logger().info(f'{self.node_name}: YOLOONNX loaded successfully')
         except Exception as e:
-            self.yolo_model = None
-            self.get_logger().error(f"{self.node_name}: Failed to initialize YOLOONNX model: {e}")
-            return
+            self.get_logger().error(f'{self.node_name}: YOLOONNX init failed: {e}')
+            return TransitionCallbackReturn.FAILURE
 
-        # Initialize SixDrepNet ONNX session
         try:
             session_option = onnxruntime.SessionOptions()
             session_option.log_severity_level = 3
@@ -564,39 +618,105 @@ class SixDrepNet(FaceDetectionNode):
             self.sixdrepnet_session = onnxruntime.InferenceSession(
                 sixdrepnet_model_path,
                 sess_options=session_option,
-                providers=['CUDAExecutionProvider', 'CPUExecutionProvider']
+                providers=['CUDAExecutionProvider', 'CPUExecutionProvider'],
             )
-
-            # Warmup run to load SixDrepNet weights into memory
-            dummy_sixdrep = np.zeros((1, 3, 224, 224), dtype=np.float32)
-            self.sixdrepnet_session.run(None, {'input': dummy_sixdrep})
+            # Warmup
+            dummy = np.zeros((1, 3, 224, 224), dtype=np.float32)
+            self.sixdrepnet_session.run(None, {'input': dummy})
 
             active_providers = self.sixdrepnet_session.get_providers()
             if self.verbose_mode:
-                self.get_logger().info(f"{self.node_name}: Active providers: {active_providers}")
-            if "CUDAExecutionProvider" not in active_providers:
-                if self.verbose_mode:
-                    self.get_logger().warn(f"{self.node_name}: CUDAExecutionProvider is not available. Running on CPU may slow down inference.")
-            else:
-                if self.verbose_mode:
-                    self.get_logger().info(f"{self.node_name}: CUDAExecutionProvider is active. Running on GPU for faster inference.")
+                gpu_active = 'CUDAExecutionProvider' in active_providers
+                self.get_logger().info(
+                    f'{self.node_name}: SixDrepNet loaded — '
+                    f"{'GPU (CUDA)' if gpu_active else 'CPU'}"
+                )
         except Exception as e:
-            self.get_logger().error(f"{self.node_name}: Failed to initialize SixDrepNet ONNX session: {e}")
-            return
+            self.get_logger().error(f'{self.node_name}: SixDrepNet ONNX init failed: {e}')
+            return TransitionCallbackReturn.FAILURE
 
-        # Set up remaining attributes
         self.mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-        self.std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+        self.std  = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+        self.get_logger().info(f'{self.node_name}: configured — models ready')
+        return TransitionCallbackReturn.SUCCESS
 
-        if self.verbose_mode:
-            self.get_logger().info(f"{self.node_name} SixDrepNet initialization complete.")
+    def on_activate(self, _state) -> TransitionCallbackReturn:
+        """Activate base (publishers + person_detection sub), then subscribe camera topics."""
+        ret = super().on_activate(_state)
+        if ret != TransitionCallbackReturn.SUCCESS:
+            return ret
 
-        # Subscribe to topics
-        if not self.subscribe_topics():
-            self.get_logger().error(f"{self.node_name}: Failed to subscribe to required topics. Shutting down.")
-            return
+        # Create camera subscribers directly — no blocking wait; topics appear
+        # when the camera/nav2 lifecycle manager activates upstream nodes.
+        if not self._create_camera_subscriptions():
+            self.get_logger().error(f'{self.node_name}: failed to set up camera subscriptions')
+            return TransitionCallbackReturn.FAILURE
 
         self.start_timeout_monitor()
+        self.get_logger().info(f'{self.node_name}: activated — processing frames')
+        return TransitionCallbackReturn.SUCCESS
+
+    def on_deactivate(self, _state) -> TransitionCallbackReturn:
+        """Tear down camera subscribers, then deactivate base."""
+        if hasattr(self, 'ats'):
+            # ApproximateTimeSynchronizer holds references to the subscribers;
+            # destroy the individual Subscriber objects to stop receiving images.
+            if hasattr(self, 'color_sub'):
+                self.destroy_subscription(self.color_sub.sub)
+            if hasattr(self, 'depth_sub'):
+                self.destroy_subscription(self.depth_sub.sub)
+        return super().on_deactivate(_state)
+
+    def on_cleanup(self, _state) -> TransitionCallbackReturn:
+        if hasattr(self, 'yolo_model'):
+            del self.yolo_model
+        if hasattr(self, 'sixdrepnet_session'):
+            del self.sixdrepnet_session
+        return super().on_cleanup(_state)
+
+    # ── Non-blocking camera subscription helper ───────────────────────────────
+
+    def _create_camera_subscriptions(self) -> bool:
+        """Create camera subscribers without blocking the lifecycle callback."""
+        try:
+            rgb_topic, depth_topic = self.get_topic_names()
+
+            if self.use_compressed and self.camera_type == 'realsense':
+                color_topic     = rgb_topic   + '/compressed'
+                depth_topic_sub = depth_topic + '/compressedDepth'
+                color_msg_type  = CompressedImage
+                depth_msg_type  = CompressedImage
+            elif self.use_compressed and self.camera_type == 'pepper':
+                self.get_logger().warn('Compressed images not available for Pepper cameras')
+                color_topic     = rgb_topic
+                depth_topic_sub = depth_topic
+                color_msg_type  = Image
+                depth_msg_type  = Image
+            else:
+                color_topic     = rgb_topic
+                depth_topic_sub = depth_topic
+                color_msg_type  = Image
+                depth_msg_type  = Image
+
+            self.color_sub = Subscriber(self, color_msg_type, color_topic,     qos_profile=qos_profile_sensor_data)
+            self.depth_sub = Subscriber(self, depth_msg_type, depth_topic_sub, qos_profile=qos_profile_sensor_data)
+
+            slop     = 5.0 if self.camera_type == 'pepper' else 0.1
+            self.ats = ApproximateTimeSynchronizer(
+                [self.color_sub, self.depth_sub], queue_size=10, slop=slop
+            )
+            self.ats.registerCallback(self.synchronized_callback)
+
+            person_det = '/personDetection/data' if self.require_person_detection else None
+            self.get_logger().info(
+                f'{self.node_name}: subscribed to {color_topic}, {depth_topic_sub}'
+                + (f', {person_det}' if person_det else '')
+            )
+            return True
+
+        except Exception as e:
+            self.get_logger().error(f'{self.node_name}: camera subscription failed: {e}')
+            return False
     
     def draw_axis(self, img, yaw, pitch, roll, tdx=None, tdy=None, size=100):
         pitch = pitch * pi / 180

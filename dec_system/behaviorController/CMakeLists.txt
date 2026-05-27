@@ -14,6 +14,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
+find_package(rclcpp_lifecycle REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(dec_interfaces REQUIRED)
@@ -37,6 +38,7 @@ target_include_directories(${PROJECT_NAME}_lib PUBLIC
 ament_target_dependencies(${PROJECT_NAME}_lib
   rclcpp
   rclcpp_action
+  rclcpp_lifecycle
   std_msgs
   std_srvs
   geometry_msgs
@@ -73,6 +75,7 @@ ament_export_libraries(${PROJECT_NAME}_lib)
 ament_export_dependencies(
   rclcpp
   rclcpp_action
+  rclcpp_lifecycle
   std_msgs
   std_srvs
   geometry_msgs
