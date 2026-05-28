@@ -555,11 +555,12 @@ BT::NodeStatus ConversationManagerNode::onFailure(BT::ActionNodeErrorCode error)
 BT::PortsList SpeechWithFeedbackNode::providedPorts()
 {
     return {
-        BT::InputPort<std::string> ("action_name", "/naoqi_driver/speech_with_feedback", "Action server name"),
-        BT::InputPort<std::string> ("say",          "",    "Text to speak (supports \\mrk=N\\ bookmarks)"),
-        BT::OutputPort<bool>       ("started",             "Feedback: true once speech begins"),
-        BT::OutputPort<int>        ("bookmark",            "Feedback: current bookmark ID (-1 if none)"),
-        BT::OutputPort<std::string>("current_word",        "Feedback: word currently being spoken"),
+        BT::InputPort<std::string> ("action_name",        "/naoqi_driver/naoqi_driver/speech_with_feedback", "Action server name"),
+        BT::InputPort<std::string> ("say",                "",             "Text to speak (supports \\mrk=N\\ bookmarks)"),
+        BT::InputPort<std::string> ("body_language_mode", "contextual",   "contextual | random | disabled"),
+        BT::OutputPort<bool>       ("started",                            "Feedback: true once speech begins"),
+        BT::OutputPort<int>        ("bookmark",                           "Feedback: current bookmark ID (-1 if none)"),
+        BT::OutputPort<std::string>("current_word",                       "Feedback: word currently being spoken"),
     };
 }
 
@@ -575,9 +576,13 @@ bool SpeechWithFeedbackNode::setGoal(Goal& goal)
 
     goal.say = say.value();
 
+    auto mode = getInput<std::string>("body_language_mode");
+    goal.body_language_mode = (mode && !mode.value().empty()) ? mode.value() : "contextual";
+
     if (ConfigManager::instance().isVerbose()) {
         RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
-                    "[SpeechWithFeedbackNode] Goal → say=\"%s\"", goal.say.c_str());
+                    "[SpeechWithFeedbackNode] Goal → say=\"%s\" body_language_mode=\"%s\"",
+                    goal.say.c_str(), goal.body_language_mode.c_str());
     }
     return true;
 }

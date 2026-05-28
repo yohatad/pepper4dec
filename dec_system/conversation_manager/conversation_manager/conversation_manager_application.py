@@ -37,7 +37,6 @@ from typing import List, Dict
 from rclpy.node import Node
 from rclpy.action import ActionServer
 from ament_index_python.packages import get_package_share_directory
-from std_msgs.msg import String
 from dec_interfaces.action import ConversationManager
 from .conversation_manager_implementation import (
     get_config,
@@ -49,6 +48,7 @@ from .conversation_manager_implementation import (
     generate_response_stream,
     extract_answer_from_raw,
     extract_intent_from_raw,
+    apply_speech_tags,
     apply_config_file,
 )
 
@@ -100,10 +100,6 @@ class ConversationManagerNode(Node):
         collection_name = self.get_parameter('collection_name').get_parameter_value().string_value
         self.initialize_collection(collection_name)
         
-        # Publisher: individual answer sentences streamed as they arrive from the LLM.
-        # text_to_speech subscribes here to start speaking before generation is complete.
-        self.stream_pub = self.create_publisher(String, '/tts/input', 10)
-
         # Action server
         self._action_server = ActionServer(self, ConversationManager, 'conversation_manager', self.execute_callback)
 
@@ -175,14 +171,13 @@ class ConversationManagerNode(Node):
             self.get_logger().info(f"[VERBOSE] {message}")
     
     def execute_callback(self, goal_handle):
-        """Handle RAG query as an action, streaming sentences to TTS as they arrive.
+        """Handle RAG query as an action.
 
         Flow:
           1. Vector search (fast, ~50-200ms)
-          2. Streaming LLM call — each complete answer sentence is published to
-             /tts/input so text_to_speech can begin
-             speaking before the full response is ready.
-          3. Action result carries the full answer text for any other consumer.
+          2. Streaming LLM call — sentences are accumulated into the full response.
+          3. Action result carries the full answer text; the BT TTS node is the
+             sole consumer responsible for playback.
         """
         self.log_verbose(f"Action goal received: prompt=\"{goal_handle.request.prompt}\"")
 
@@ -217,8 +212,7 @@ class ConversationManagerNode(Node):
             search_results = search(self.collection, query)
 
             # Stage 2: streaming LLM generation
-            # Sentences are published to /tts/input
-            # as they arrive, allowing TTS to start speaking immediately.
+            # Sentences are accumulated; the BT TTS node speaks the full response.
             feedback_msg.status = 'generating'
             goal_handle.publish_feedback(feedback_msg)
             self.log_verbose("Streaming response...")
@@ -230,10 +224,7 @@ class ConversationManagerNode(Node):
                 query, search_results, self.conversation_history, raw_out
             ):
                 yielded_sentences.append(sentence)
-                msg = String()
-                msg.data = sentence
-                self.stream_pub.publish(msg)
-                self.log_verbose(f"Streamed: '{sentence}'")
+                self.log_verbose(f"Accumulated: '{sentence}'")
 
             # Derive the canonical answer text, intent, and confidence
             # from the full raw LLM buffer captured during streaming.
@@ -245,6 +236,11 @@ class ConversationManagerNode(Node):
 
             intent, confidence = extract_intent_from_raw(raw) if raw else ("UNKNOWN", 0.0)
             self.log_verbose(f"Intent: {intent} (confidence={confidence:.2f})")
+
+            # Apply sentence-level speed tag based on intent (e.g. \rspd=85\ for
+            # technical answers). Word-level tags (*pau=N*) are already converted
+            # inside extract_answer_from_raw().
+            response_text = apply_speech_tags(response_text, intent)
 
             # Update conversation history
             self.conversation_history.append({'query': query, 'response': response_text})

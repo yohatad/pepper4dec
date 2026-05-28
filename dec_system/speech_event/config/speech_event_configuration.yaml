@@ -41,7 +41,7 @@ speech_recognition:
     # -------------------------------------------------------------------------
     speech_threshold: 0.7        # Probability above which speech is considered started (0.0–1.0)
     neg_threshold: 0.35          # Probability below which silence is accumulated (0.0–1.0)
-    min_silence_duration_ms: 400  # Minimum continuous silence to end a speech segment (ms)
+    min_silence_duration_ms: 800  # Minimum continuous silence to end a speech segment (ms)
     min_speech_duration: 0.3     # Minimum segment duration to submit for transcription (seconds)
     max_speech_duration_s: 10.0  # Hard limit on speech segment length (seconds)
     pre_speech_buffer_ms: 200    # Lookback audio prepended before speech onset (ms)
@@ -60,7 +60,7 @@ speech_recognition:
     # action_server: false -> Continuous processing; transcript published to
     #                         /speech_event/text topic (standalone mode).
     # -------------------------------------------------------------------------
-    action_server: false
+    action_server: true
 
     # -------------------------------------------------------------------------
     # VAD Always Active
@@ -87,7 +87,7 @@ speech_recognition:
     #   Higher = more noise suppression but more speech distortion.
     #   Lower toward 0.3 if Whisper misses words; raise toward 0.8 for louder fans.
     # -------------------------------------------------------------------------
-    noise_cleaning_enabled: true
+    noise_cleaning_enabled: false
     noise_profile_path: "data/noise_profile.npy"  # relative to package share dir, or absolute path; "" for online-only
     noise_alpha: 0.5               # Wiener aggressiveness — start here, tune if needed
 

@@ -785,13 +785,30 @@ def _parse_llm_json(raw: str) -> dict:
     """
     Parse the JSON object from a raw LLM response, stripping any
     <think>…</think> chain-of-thought prefix first.
-    Returns an empty dict if parsing fails.
+
+    NAOqi prosody tags (e.g. \\vct=108\\, \\rspd=82\\, \\pau=200\\) contain
+    backslashes that are not valid JSON escape sequences.  If the first parse
+    attempt fails we escape those lone backslashes and retry.
+
+    Returns an empty dict if both attempts fail.
     """
     cleaned = raw.strip()
     if "</think>" in cleaned:
         cleaned = cleaned.split("</think>", 1)[1].strip()
+
+    # First attempt — try as-is (handles correctly-escaped JSON)
     try:
         return json.loads(cleaned)
+    except (json.JSONDecodeError, AttributeError, ValueError):
+        pass
+
+    # Second attempt — escape lone backslashes from NAOqi tags so JSON can parse.
+    # Only preserve \" \\ \/ and \uXXXX as valid JSON escapes.
+    # \r \n \b \f \t are intentionally NOT preserved because the LLM uses \r
+    # as the start of \rspd= tags, not as a carriage-return escape.
+    try:
+        escaped = re.sub(r'\\(?!["\\/u])', r'\\\\', cleaned)
+        return json.loads(escaped)
     except (json.JSONDecodeError, AttributeError, ValueError):
         return {}
 
@@ -804,15 +821,61 @@ def extract_answer_from_raw(raw: str) -> str:
       - Thinking-capable models:  <think>...</think>{"answer": "..."}
       - JSON structured response: {"intent": "...", "answer": "..."}
       - Plain-text fallback:      raw text returned as-is
+
+    Post-processing:
+      - Strips surrounding curly/smart quotes the LLM sometimes adds.
+      - Converts *tag=N* placeholders → \\tag=N\\ NAOqi control sequences.
+
+    Note: sentence-level speed tags are applied separately in apply_speech_tags().
     """
     parsed = _parse_llm_json(raw)
     if parsed:
-        return parsed.get("answer", raw)
-    # Plain-text fallback
-    cleaned = raw.strip()
-    if "</think>" in cleaned:
-        cleaned = cleaned.split("</think>", 1)[1].strip()
-    return cleaned
+        answer = parsed.get("answer", raw)
+    else:
+        # Plain-text fallback
+        answer = raw.strip()
+        if "</think>" in answer:
+            answer = answer.split("</think>", 1)[1].strip()
+
+    # Strip surrounding smart/curly quotes e.g. "..." or "..."
+    answer = answer.strip('""''"\'')
+
+    # Convert *tag=N* placeholders → \tag=N\ NAOqi control sequences.
+    # The LLM uses * to avoid JSON backslash escape conflicts.
+    answer = re.sub(r'\*([a-z]+=\d+)\*', r'\\\1\\', answer)
+
+    return answer.strip()
+
+
+# Intents that benefit from slightly slower speech for clarity
+_SLOW_INTENTS = {"ASK_EXHIBIT_QUESTION", "ASK_TOUR_META"}
+
+def apply_speech_tags(answer: str, intent: str) -> str:
+    """
+    Prepend a sentence-level NAOqi speed tag based on intent.
+
+    Word-level tags (*pau=N*, etc.) are already embedded in the answer by the
+    LLM and converted by extract_answer_from_raw(). This function only adds
+    the sentence-level \\rspd=N\\ prefix so the LLM never has to generate it.
+
+    Args:
+        answer: cleaned answer text (may already contain \\pau=N\\ tags)
+        intent: LLM-classified intent string
+
+    Returns:
+        answer with \\rspd=N\\ prepended for slow intents, unchanged otherwise.
+    """
+    if not answer:
+        return answer
+
+    # No speed tag for short fixed responses
+    if answer.strip().lower() in ("yes", "no"):
+        return answer
+
+    if intent in _SLOW_INTENTS:
+        return "\\rspd=85\\" + answer
+
+    return answer
 
 
 def extract_intent_from_raw(raw: str) -> Tuple[str, float]:

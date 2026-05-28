@@ -1,13 +1,23 @@
 <?xml version="1.0"?>
 <!--
   asr_cm_tts_pipeline.xml
-  ASR → Conversation Manager → TTS  (testing pipeline)
+  ASR → Conversation Manager → SpeechWithFeedback  (testing pipeline)
 
   A minimal 3-step loop for validating the full speech pipeline end-to-end:
-    1. SpeechRecognition  – listen for up to 7 s
-    2. ConversationManager – RAG + LLM; streams sentences to /tts/input;
-                             writes {intent} and {confidence} to the blackboard
-    3. TTS                – calls /tts action server; blocks until playback done
+    1. SpeechRecognition    – listen for up to 20 s
+    2. ConversationManager  – RAG + LLM; writes {llm_response}, {intent},
+                              and {confidence} to the blackboard.
+                              The LLM embeds NAOqi ALTextToSpeech prosody tags
+                              (e.g. \pau=\, \rspd=\, \vct=\) in the response
+                              for natural-sounding speech.
+    3. SpeechWithFeedback   – calls /naoqi_driver/speech_with_feedback action;
+                              ALAnimatedSpeech interprets the prosody tags AND
+                              drives body-language gestures automatically
+                              (body_language_mode = "contextual")
+
+  NOTE: SpeechWithFeedback (ALAnimatedSpeech / ALTextToSpeech) is used here
+        so that NAOqi prosody tags embedded by the LLM are interpreted correctly.
+        ElevenLabs (TTS node) would read them as literal text.
 
   Intent routing belongs in scenario-specific trees (e.g. lab_tour.xml).
   Here, {intent} and {confidence} are captured but not acted on — useful
@@ -25,10 +35,10 @@
         <!-- ── Step 2: Listen → Think → Speak ───────────────────────────── -->
         <Fallback>
 
-          <!-- Happy path: speech heard → LLM responds → TTS speaks -->
+          <!-- Happy path: speech heard → LLM responds → robot speaks + gestures -->
           <Sequence>
             <SpeechRecognition
-              wait="7.0"
+              wait="20.0"
               transcription="{user_speech}"
               status="{asr_status}"/>
 
@@ -39,17 +49,18 @@
               confidence="{confidence}"
               status="{cm_status}"/>
 
-            <TTS
-              text="{llm_response}"
-              status="{tts_status}"
-              message="{tts_message}"/>
+            <!-- SpeechWithFeedback passes the response (with embedded prosody tags)
+                 to ALAnimatedSpeech, which interprets \pau=\, \rspd=\, \vct=\ etc.
+                 and adds contextual body-language gestures automatically. -->
+            <SpeechWithFeedback
+              say="{llm_response}"
+              body_language_mode="contextual"/>
           </Sequence>
 
           <!-- Fallback: no speech heard → prompt and retry -->
-          <TTS
-            text="I didn't catch that. Could you please repeat?"
-            status="{tts_status}"
-            message="{tts_message}"/>
+          <SpeechWithFeedback
+            say="Any questions?"
+            body_language_mode="contextual"/>
 
         </Fallback>
       </Sequence>
