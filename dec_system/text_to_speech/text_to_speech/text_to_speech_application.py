@@ -152,7 +152,7 @@ class TextToSpeechNode(Node):
 
         if self.engine in ("kokoro_pepper", "elevenlabs_pepper"):
             self.load_client = self.create_client(
-                LoadAudioFile, "/naoqi_driver/naoqi_driver/load_audio_file"
+                LoadAudioFile, "/naoqi_driver/load_audio_file"
             )
             self.unload_client = self.create_client(
                 UnloadAudioFile, "/naoqi_driver/unload_audio_file"

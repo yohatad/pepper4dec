@@ -6,13 +6,13 @@
 #   "kokoro_pepper"      - Kokoro-82M synthesised locally, Pepper's speakers
 #   "elevenlabs_local"   - ElevenLabs API synthesised, laptop speakers
 #   "elevenlabs_pepper"  - ElevenLabs API synthesised, Pepper's speakers
-engine: "naoqi_ros"
+engine: "elevenlabs_pepper"
 
 # Playback method for *_pepper backends:
 #   "file"   - naoqi_driver SCPs WAV to robot, plays via ALAudioPlayer (full feedback)
 #              Requires passwordless SSH key access from driver machine to robot.
 #   "stream" - Raw PCM chunks via send_audio_buffer / ALAudioDevice (no SCP needed)
-playback_method: "stream"
+playback_method: "file"
 
 # naoqi_ros backend settings
 naoqi_speech_topic: "/speech"
@@ -26,7 +26,7 @@ output_device: -1
 
 # ElevenLabs backend settings
 elevenlabs_api_key: ""  # Set via: export ELEVENLABS_API_KEY="sk_..."
-elevenlabs_voice_id: "v411uyEKbaj63pTJHHbK"   # Rachel (default)
+elevenlabs_voice_id: "D9xwB6HNBJ9h4YvQFWuE"   # Rachel (default)
 elevenlabs_model: "eleven_turbo_v2_5"           # fastest model; eleven_multilingual_v2 for more languages
 
 # ElevenLabs voice settings (all 0.0–1.0; speed 0.7–1.2)
