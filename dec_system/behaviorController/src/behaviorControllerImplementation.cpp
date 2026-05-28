@@ -468,10 +468,12 @@ BT::NodeStatus SpeechRecognitionNode::onFailure(BT::ActionNodeErrorCode error)
 BT::PortsList ConversationManagerNode::providedPorts()
 {
     return {
-        BT::InputPort<std::string> ("action_name", "/prompt", "Action server name"),
-        BT::InputPort<std::string> ("prompt",   "", "Natural-language prompt to send"),
-        BT::OutputPort<std::string>("response",     "Reply from the conversation manager"),
-        BT::OutputPort<std::string>("status",       "Feedback: searching | generating"),
+        BT::InputPort<std::string> ("action_name", "/conversation_manager", "Action server name"),
+        BT::InputPort<std::string> ("prompt",      "",    "Natural-language prompt to send"),
+        BT::OutputPort<std::string>("response",           "Full answer text from the LLM"),
+        BT::OutputPort<std::string>("intent",             "Classified intent (ASK_EXHIBIT_QUESTION | NAVIGATION_REQUEST | STOP | …)"),
+        BT::OutputPort<double>     ("confidence",         "LLM confidence in the intent (0.0 – 1.0)"),
+        BT::OutputPort<std::string>("status",             "Feedback: searching | generating"),
     };
 }
 
@@ -507,7 +509,9 @@ BT::NodeStatus ConversationManagerNode::onFeedback(const std::shared_ptr<const F
 
 BT::NodeStatus ConversationManagerNode::onResultReceived(const WrappedResult& result)
 {
-    setOutput("response", result.result->response);
+    setOutput("response",   result.result->response);
+    setOutput("intent",     result.result->intent);
+    setOutput("confidence", static_cast<double>(result.result->confidence));
 
     if (!result.result->success) {
         RCLCPP_WARN(rclcpp::get_logger("behavior_controller"),
@@ -517,7 +521,10 @@ BT::NodeStatus ConversationManagerNode::onResultReceived(const WrappedResult& re
 
     if (ConfigManager::instance().isVerbose()) {
         RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
-                    "[ConversationManagerNode] Response → \"%s\"", result.result->response.c_str());
+                    "[ConversationManagerNode] Response=\"%s\" intent=%s confidence=%.2f",
+                    result.result->response.c_str(),
+                    result.result->intent.c_str(),
+                    result.result->confidence);
     }
     return BT::NodeStatus::SUCCESS;
 }
@@ -548,7 +555,7 @@ BT::NodeStatus ConversationManagerNode::onFailure(BT::ActionNodeErrorCode error)
 BT::PortsList SpeechWithFeedbackNode::providedPorts()
 {
     return {
-        BT::InputPort<std::string> ("action_name", "/speech_with_feedback", "Action server name"),
+        BT::InputPort<std::string> ("action_name", "/naoqi_driver/speech_with_feedback", "Action server name"),
         BT::InputPort<std::string> ("say",          "",    "Text to speak (supports \\mrk=N\\ bookmarks)"),
         BT::OutputPort<bool>       ("started",             "Feedback: true once speech begins"),
         BT::OutputPort<int>        ("bookmark",            "Feedback: current bookmark ID (-1 if none)"),
@@ -610,6 +617,85 @@ BT::NodeStatus SpeechWithFeedbackNode::onFailure(BT::ActionNodeErrorCode error)
 {
     RCLCPP_ERROR(rclcpp::get_logger("behavior_controller"),
                  "[SpeechWithFeedbackNode] Action error: %s", toStr(error));
+    return BT::NodeStatus::FAILURE;
+}
+
+//=============================================================================
+// TTSNode
+// Action: dec_interfaces::action::TTS
+//
+// Goal fields:
+//   string text    – text to synthesise and speak
+//
+// Result fields:
+//   bool   success
+//   string message – "OK" on success, error description otherwise
+//
+// Feedback fields:
+//   string status  – "queuing" | "speaking"
+//=============================================================================
+
+BT::PortsList TTSNode::providedPorts()
+{
+    return {
+        BT::InputPort<std::string> ("action_name", "/tts", "TTS action server name"),
+        BT::InputPort<std::string> ("text",         "",    "Text to synthesise and speak"),
+        BT::OutputPort<std::string>("status",               "Feedback: queuing | speaking"),
+        BT::OutputPort<std::string>("message",              "Result message from TTS server"),
+    };
+}
+
+bool TTSNode::setGoal(Goal& goal)
+{
+    auto text = getInput<std::string>("text");
+
+    if (!text || text.value().empty()) {
+        RCLCPP_ERROR(rclcpp::get_logger("behavior_controller"),
+                     "[TTSNode] Missing or empty 'text' input port");
+        return false;
+    }
+
+    goal.text = text.value();
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[TTSNode] Goal → text=\"%s\"", goal.text.c_str());
+    }
+    return true;
+}
+
+BT::NodeStatus TTSNode::onFeedback(const std::shared_ptr<const Feedback> feedback)
+{
+    setOutput("status", feedback->status);
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[TTSNode] Feedback: %s", feedback->status.c_str());
+    }
+    return BT::NodeStatus::RUNNING;
+}
+
+BT::NodeStatus TTSNode::onResultReceived(const WrappedResult& result)
+{
+    setOutput("message", result.result->message);
+
+    if (!result.result->success) {
+        RCLCPP_WARN(rclcpp::get_logger("behavior_controller"),
+                    "[TTSNode] TTS action failed: %s", result.result->message.c_str());
+        return BT::NodeStatus::FAILURE;
+    }
+
+    if (ConfigManager::instance().isVerbose()) {
+        RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
+                    "[TTSNode] Speech complete");
+    }
+    return BT::NodeStatus::SUCCESS;
+}
+
+BT::NodeStatus TTSNode::onFailure(BT::ActionNodeErrorCode error)
+{
+    RCLCPP_ERROR(rclcpp::get_logger("behavior_controller"),
+                 "[TTSNode] Action error: %s", toStr(error));
     return BT::NodeStatus::FAILURE;
 }
 
@@ -1540,6 +1626,7 @@ BT::Tree initializeTree(const std::string& scenario,
     factory.registerNodeType<SpeechRecognitionNode>    ("SpeechRecognition",    params);
     factory.registerNodeType<ConversationManagerNode>  ("ConversationManager",  params);
     factory.registerNodeType<SpeechWithFeedbackNode>   ("SpeechWithFeedback",   params);
+    factory.registerNodeType<TTSNode>                  ("TTS",                  params);
 
     // Nodes that require the node handle at construction time
     factory.registerBuilder<CheckFaceDetected>(
@@ -1573,7 +1660,7 @@ BT::Tree initializeTree(const std::string& scenario,
         });
 
     if (ConfigManager::instance().isVerbose()) {
-        RCLCPP_INFO(logger, "[initializeTree] Registered nodes: AnimateBehavior, StopAnimateBehavior, SetOvertAttention, SetSpeechListening, Gesture, Navigate, SpeechRecognition, ConversationManager, SpeechWithFeedback, CheckFaceDetected, ListenForSpeech");
+        RCLCPP_INFO(logger, "[initializeTree] Registered nodes: AnimateBehavior, StopAnimateBehavior, SetOvertAttention, SetSpeechListening, Gesture, Navigate, SpeechRecognition, ConversationManager, SpeechWithFeedback, TTS, CheckFaceDetected, ListenForSpeech");
         RCLCPP_INFO(logger, "[initializeTree] Loading tree: %s", xmlPath.c_str());
     }
 

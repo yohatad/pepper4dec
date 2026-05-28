@@ -34,8 +34,7 @@ import os
 import queue
 import re
 import threading
-import time
-from typing import Optional, Dict
+from typing import Generator, Iterator, List, Optional, Tuple
 
 import numpy as np
 import rclpy
@@ -105,13 +104,26 @@ def load_configuration() -> dict:
         'output_device': -1,          # kokoro_local only; -1 = system default
 
         # kokoro_pepper playback method: "file" or "stream"
-        #   "file"   - load_audio_file + play_audio action (default, supports long audio)
-        #   "stream" - send_audio_buffer service (low-latency, max ~170ms per call)
-        'playback_method': 'file',
+        #   "file"   - naoqi_driver SCPs WAV to robot, plays via ALAudioPlayer (full feedback)
+        #   "stream" - send_audio_buffer / ALAudioDevice (no SCP needed)
+        'playback_method': 'stream',
+
+        # Stream volume multiplier (kokoro_pepper / elevenlabs_pepper, stream mode)
+        # 1.0 = unity gain; 2.0 = double amplitude (clips at ±32767)
+        'stream_volume': 1.0,
 
         # Barge-in detection (all backends)
         'barge_in_threshold': 0.85,
         'barge_in_chunks': 3,
+
+        # ElevenLabs backend
+        'elevenlabs_api_key': '',
+        'elevenlabs_voice_id': '21m00Tcm4TlvDq8ikWAM',  # Rachel
+        'elevenlabs_model': 'eleven_turbo_v2_5',
+        'elevenlabs_stability': 0.5,
+        'elevenlabs_similarity_boost': 0.75,
+        'elevenlabs_style': 0.0,
+        'elevenlabs_speed': 1.0,
     }
 
     try:
@@ -130,6 +142,11 @@ def load_configuration() -> dict:
             )
     except Exception as e:
         logger.error(f"Error reading configuration: {e} — using defaults")
+
+    # Allow overriding the ElevenLabs key via environment variable
+    env_key = os.environ.get("ELEVENLABS_API_KEY", "")
+    if env_key:
+        config["elevenlabs_api_key"] = env_key
 
     return config
 
@@ -157,9 +174,20 @@ def getkokoro_pipeline():
                     "  pip install kokoro soundfile sounddevice\n"
                     "  sudo apt-get install espeak-ng"
                 ) from exc
-            logger.info("Loading Kokoro-82M model (first call only)…")
-            kokoro_pipeline = KPipeline(lang_code="a")
-            logger.info("Kokoro-82M loaded.")
+            import torch
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            logger.info(f"Loading Kokoro-82M model on {device} (first call only)…")
+            try:
+                kokoro_pipeline = KPipeline(lang_code="a", device=device)
+            except Exception as exc:
+                if device == "cuda" and (
+                    "cuda" in str(exc).lower() or "cudnn" in str(exc).lower()
+                ):
+                    logger.warn(f"CUDA failed ({exc}); falling back to CPU.")
+                    kokoro_pipeline = KPipeline(lang_code="a", device="cpu")
+                else:
+                    raise
+            logger.info(f"Kokoro-82M loaded on {device}.")
     return kokoro_pipeline
 
 
@@ -173,8 +201,9 @@ def synthesize_kokoro(text: str, voice: str, sample_rate: int) -> np.ndarray:
     pipeline = getkokoro_pipeline()
 
     chunks = []
-    for audio_chunk, _, _ in pipeline(text, voice=voice, speed=1.0):
-        chunks.append(np.asarray(audio_chunk, dtype=np.float32))
+    for _, _, audio_chunk in pipeline(text, voice=voice, speed=1.0):
+        if audio_chunk is not None:
+            chunks.append(np.asarray(audio_chunk, dtype=np.float32))
 
     if not chunks:
         return np.zeros(0, dtype=np.float32)
@@ -194,11 +223,228 @@ def synthesize_kokoro(text: str, voice: str, sample_rate: int) -> np.ndarray:
 
 def audio_to_wav_bytes(audio: np.ndarray, sample_rate: int) -> bytes:
     """Encode a float32 numpy array as PCM-16 WAV and return the raw bytes."""
-    import io
     import soundfile as sf  # type: ignore
     buf = io.BytesIO()
     sf.write(buf, audio, sample_rate, subtype="PCM_16", format="WAV")
     return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Robot audio helpers  (kokoro_pepper / elevenlabs_pepper backends)
+# ---------------------------------------------------------------------------
+
+ROBOT_RATE = 48_000
+ROBOT_CHUNK_FRAMES = 16_384  # driver hard cap
+
+
+def prepare_stream_audio(
+    wav_bytes: bytes,
+    stream_volume: float = 1.0,
+) -> Iterator[Tuple[List[int], float]]:
+    """
+    Decode WAV bytes, resample to ROBOT_RATE stereo int16, and yield
+    ``(audio_list, wait_time)`` pairs ready for send_audio_buffer.
+
+    ``audio_list`` is a ``List[int]`` of raw bytes (as unsigned ints).
+    ``wait_time``  is how long to sleep before sending the next chunk.
+    """
+    import soundfile as sf  # type: ignore
+    from scipy.signal import resample_poly
+
+    audio, src_rate = sf.read(io.BytesIO(wav_bytes), dtype="float32")
+    if audio.ndim > 1:
+        audio = audio[:, 0]
+
+    if src_rate != ROBOT_RATE:
+        _g = math.gcd(src_rate, ROBOT_RATE)
+        audio = resample_poly(audio, ROBOT_RATE // _g, src_rate // _g).astype(np.float32)
+
+    stereo = (
+        np.column_stack([audio, audio]).flatten() * 32767 * stream_volume
+    ).clip(-32768, 32767).astype(np.int16)
+
+    max_chunk = ROBOT_CHUNK_FRAMES * 2          # stereo int16 samples per send
+    bytes_per_second = ROBOT_RATE * 2 * 2       # 48 kHz × 2 ch × 2 B
+
+    offset = 0
+    while offset < len(stereo):
+        chunk = stereo[offset : offset + max_chunk]
+        wait_time = max(0.01, chunk.nbytes / bytes_per_second - 0.01)
+        yield list(chunk.tobytes()), wait_time
+        offset += max_chunk
+
+
+def iter_robot_chunks(
+    gen,
+    api_rate: int,
+    stream_volume: float = 1.0,
+) -> Iterator[Tuple[List[int], float]]:
+    """
+    Accumulate streaming float32 chunks (at *api_rate*), resample to
+    ROBOT_RATE stereo int16 on aligned ROBOT_CHUNK_FRAMES boundaries, and
+    yield ``(audio_list, wait_time)`` pairs ready for send_audio_buffer.
+
+    Resampling on aligned boundaries avoids click artifacts that occur when
+    each tiny API chunk is resampled independently.
+    """
+    from scipy.signal import resample_poly
+
+    _g = math.gcd(api_rate, ROBOT_RATE)
+    src_frames_per_chunk = ROBOT_CHUNK_FRAMES * api_rate // ROBOT_RATE
+    up, down = ROBOT_RATE // _g, api_rate // _g
+
+    def _flush(src_buf: np.ndarray) -> Tuple[List[int], float]:
+        resampled = resample_poly(src_buf, up, down).astype(np.float32)
+        stereo = (
+            np.column_stack([resampled, resampled]).flatten() * 32767 * stream_volume
+        ).clip(-32768, 32767).astype(np.int16)
+        duration = len(stereo) // 2 / ROBOT_RATE
+        return list(stereo.tobytes()), max(0.01, duration - 0.01)
+
+    buf = np.zeros(0, dtype=np.float32)
+    for chunk in gen:
+        buf = np.concatenate([buf, chunk])
+        while len(buf) >= src_frames_per_chunk:
+            yield _flush(buf[:src_frames_per_chunk])
+            buf = buf[src_frames_per_chunk:]
+
+    if len(buf) > 0:
+        yield _flush(buf)
+
+
+def collect_and_resample(gen, src_rate: int, target_rate: int) -> np.ndarray:
+    """Drain *gen*, concatenate chunks, and resample to *target_rate*."""
+    from scipy.signal import resample_poly
+
+    chunks = list(gen)
+    if not chunks:
+        return np.zeros(0, dtype=np.float32)
+
+    audio = np.concatenate(chunks)
+    if src_rate != target_rate:
+        _g = math.gcd(src_rate, target_rate)
+        audio = resample_poly(
+            audio, target_rate // _g, src_rate // _g
+        ).astype(np.float32)
+
+    return audio
+
+
+def resample_chunks(gen, src_rate: int, target_rate: int) -> Generator[np.ndarray, None, None]:
+    """Yield resampled float32 chunks from *gen* (no-op if rates match)."""
+    if src_rate == target_rate:
+        yield from gen
+        return
+
+    from scipy.signal import resample_poly
+
+    _g = math.gcd(src_rate, target_rate)
+    _up, _down = target_rate // _g, src_rate // _g
+    for chunk in gen:
+        yield resample_poly(chunk, _up, _down).astype(np.float32)
+
+
+# ---------------------------------------------------------------------------
+# ElevenLabs synthesis  (streaming + batch)
+# ---------------------------------------------------------------------------
+
+# Supported PCM output rates by ElevenLabs API
+ELEVENLABS_PCM_RATES = {16000, 22050, 24000, 44100}
+
+
+def elevenlabs_client(api_key: str):
+    try:
+        from elevenlabs.client import ElevenLabs  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "ElevenLabs SDK is not installed.\n"
+            "  pip install elevenlabs"
+        ) from exc
+    return ElevenLabs(api_key=api_key)
+
+
+def stream_elevenlabs(
+    text: str,
+    voice_id: str,
+    api_key: str,
+    model_id: str = "eleven_turbo_v2_5",
+    sample_rate: int = 24000,
+    stability: float = 0.5,
+    similarity_boost: float = 0.75,
+    style: float = 0.0,
+    speed: float = 1.0,
+):
+    """
+    Stream audio from ElevenLabs as an iterator of float32 numpy chunks.
+
+    Returns ``(generator, api_rate)``.  Each yielded chunk is a float32 array
+    at *api_rate* Hz (the nearest PCM rate the API supports to *sample_rate*).
+    The caller is responsible for resampling if api_rate ≠ the target rate.
+
+    Audio starts arriving within ~200 ms (TTFA = first API chunk).
+
+    Requires:  pip install elevenlabs
+    """
+    from elevenlabs import VoiceSettings
+    api_rate = min(ELEVENLABS_PCM_RATES, key=lambda r: abs(r - sample_rate))
+    api_rate = min(ELEVENLABS_PCM_RATES, key=lambda r: abs(r - sample_rate))
+
+    def _gen():
+        client = elevenlabs_client(api_key)
+        logger.info(
+            f"ElevenLabs stream: voice={voice_id}, model={model_id}, "
+            f"format=pcm_{api_rate}, speed={speed}, stability={stability}"
+        )
+        for raw in client.text_to_speech.convert(
+            voice_id=voice_id,
+            text=text,
+            model_id=model_id,
+            output_format=f"pcm_{api_rate}",
+            voice_settings=VoiceSettings(
+                stability=stability,
+                similarity_boost=similarity_boost,
+                style=style,
+                speed=speed,
+            ),
+        ):
+            if raw:
+                yield np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+
+    return _gen(), api_rate
+
+
+def synthesize_elevenlabs(
+    text: str,
+    voice_id: str,
+    api_key: str,
+    sample_rate: int,
+    model_id: str = "eleven_turbo_v2_5",
+) -> np.ndarray:
+    """
+    Batch-synthesise *text* via the ElevenLabs API (collects full audio).
+
+    Returns a float32 numpy array at *sample_rate* Hz.
+    For lower latency use stream_elevenlabs() instead.
+
+    Requires:  pip install elevenlabs
+    """
+    gen, api_rate = stream_elevenlabs(
+        text, voice_id, api_key, model_id=model_id, sample_rate=sample_rate
+    )
+    chunks = list(gen)
+    if not chunks:
+        return np.zeros(0, dtype=np.float32)
+
+    audio = np.concatenate(chunks)
+
+    if api_rate != sample_rate:
+        from scipy.signal import resample_poly
+        g = math.gcd(api_rate, sample_rate)
+        audio = resample_poly(
+            audio, sample_rate // g, api_rate // g
+        ).astype(np.float32)
+
+    return audio
 
 
 # ---------------------------------------------------------------------------
@@ -256,6 +502,41 @@ class AudioPlayer:
                     pos += chunk_size
         except Exception as exc:
             logger.error(f"AudioPlayer error: {exc}")
+            return False
+
+        return True
+
+    def play_chunks(self, chunks) -> bool:
+        """
+        Stream an iterable of float32 arrays through one OutputStream.
+
+        Audio starts playing as soon as the first chunk arrives.
+        Returns True on natural completion, False if interrupted by stop().
+        """
+        self._stop_event.clear()
+
+        try:
+            import sounddevice as sd  # type: ignore
+        except ImportError as exc:
+            raise RuntimeError(
+                "sounddevice is not installed.  Run:  pip install sounddevice"
+            ) from exc
+
+        device_kw = {} if self.output_device is None else {"device": self.output_device}
+        try:
+            with sd.OutputStream(
+                samplerate=self.sample_rate,
+                channels=1,
+                dtype="float32",
+                **device_kw,
+            ) as stream:
+                for chunk in chunks:
+                    if self._stop_event.is_set():
+                        return False
+                    if len(chunk) > 0:
+                        stream.write(chunk.reshape(-1, 1))
+        except Exception as exc:
+            logger.error(f"AudioPlayer.play_chunks error: {exc}")
             return False
 
         return True

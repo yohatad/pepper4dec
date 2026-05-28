@@ -1,17 +1,24 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>dec_interfaces</name>
-  <version>0.0.1</version>
-  <description>Messages, services and actions for DEC</description>
+  <version>1.0.0</version>
+  <description>
+    Custom ROS2 messages, services, and actions for the DEC (Digital Experience Center)
+    system running on the Pepper robot at Carnegie Mellon University Africa.
 
-  <maintainer email="you@example.com">Your Name</maintainer>
+    Actions:  ConversationManager, TTS, SpeechRecognition, Gesture, AnimateBehavior
+    Services: ConversationManagerPrompt
+    Messages: FaceDetection, ObjectDetection, PersonDetection
+  </description>
+
+  <maintainer email="yohatad123@gmail.com">Yohannes Tadesse Haile</maintainer>
   <license>Apache-2.0</license>
 
   <!-- Build tools -->
   <buildtool_depend>ament_cmake</buildtool_depend>
   <buildtool_depend>rosidl_default_generators</buildtool_depend>
 
-  <!-- Message deps if referenced by your .msg/.srv -->
+  <!-- Message dependencies referenced by .msg/.srv/.action files -->
   <depend>builtin_interfaces</depend>
   <depend>std_msgs</depend>
   <depend>geometry_msgs</depend>

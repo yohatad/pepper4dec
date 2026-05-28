@@ -1,11 +1,33 @@
-# goal
+# TTS.action
+#
+# Action server: /tts  (text_to_speech node)
+#
+# Synthesises the given text and plays it through the configured backend
+# (naoqi_ros, kokoro_local, kokoro_pepper, elevenlabs_local, or
+# elevenlabs_pepper). The action blocks until playback is fully complete,
+# making it safe to sequence in a BehaviorTree after ConversationManager.
+#
+# The text is split into sentences internally; each sentence is queued and
+# played in order. Barge-in (VAD-based interruption) is still honoured —
+# if the user speaks during playback the remaining sentences are dropped and
+# the action returns success=true.
+
+# ── Goal ──────────────────────────────────────────────────────────────────────
+# Text to synthesise and speak. May contain multiple sentences.
 string text
 
 ---
-# result
+
+# ── Result ────────────────────────────────────────────────────────────────────
+# True if playback completed (or was cleanly interrupted by barge-in)
 bool success
+# "OK" on success; human-readable error description otherwise
 string message
 
 ---
-# feedback
+
+# ── Feedback ──────────────────────────────────────────────────────────────────
+# Current playback stage
+# "queuing"  – sentences are being added to the playback queue
+# "speaking" – audio is actively playing
 string status

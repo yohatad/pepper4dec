@@ -1,25 +1,21 @@
 <div align="center">
-<h1> Gesture Execution for Pepper Robot </h1>
+<h1>Gesture Execution for Pepper Robot</h1>
 </div>
 
 <div align="center">
   <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
-The **Gesture Execution** package is a **ROS2** package designed to execute various types of gestures on the Pepper humanoid robot. It provides an **Action Server** interface for executing deictic (pointing), iconic (predefined arm motions), bowing, and nodding gestures with smooth Bézier interpolation for natural motion. The system includes real-time feedback on gesture execution progress and comprehensive visualization support for debugging.
+The **Gesture Execution** package is a ROS2 action server that executes various types of gestures on the Pepper humanoid robot. It provides an action server interface for executing deictic (pointing), iconic (predefined arm motions), bowing, and nodding gestures with smooth Bézier interpolation for natural motion. The system includes real-time feedback on gesture execution progress and comprehensive visualization support for debugging.
 
 ## Key Features
-- **ROS2 Action Server**: Built for ROS2 Humble with action-based interface for long-running gestures with feedback
-- **Multiple Gesture Types**: Supports deictic (pointing), iconic, bowing, and nodding gestures
-- **Smooth Motion**: Uses Bézier interpolation for natural, fluid movements
+- **ROS2 Native**: Built for ROS2 Humble with action-based interface
+- **Multiple Gesture Types**: Supports deictic, iconic, bowing, and nodding gestures
+- **Bézier Interpolation**: Smooth motion with continuous velocity and acceleration profiles
 - **Inverse Kinematics**: Calculates joint angles for pointing to specific 3D locations
-- **Configurable**: YAML-based configuration and gesture definitions
-- **Real-time Feedback**: Provides elapsed time feedback during gesture execution
-- **Real-time Adaptation**: Adapts pointing gestures based on robot's current pose
 - **Joint Limit Safety**: Validates all motions against robot joint limits
-- **RViz2 Visualization**: Publishes markers for visualizing pointing gestures in RViz2
-
-# 🛠️ Installation 
+- **RViz2 Visualization**: Publishes markers for visualizing pointing gestures
+- **Real-time Feedback**: Provides elapsed time feedback during gesture execution
 
 ## Prerequisites
 - **ROS2 Humble** or newer
@@ -27,9 +23,10 @@ The **Gesture Execution** package is a **ROS2** package designed to execute vari
 - **Pepper Robot** or simulator with NAOqi bridge
 - **dec_interfaces** package for action definitions
 
-## Package Installation
+## Installation
 
-1. **Clone and Build the Workspace**
+### Package Installation
+
 ```bash
 # Clone the repository (if not already done)
 cd ~/ros2_ws/src
@@ -41,22 +38,24 @@ colcon build --packages-select gesture_execution dec_interfaces
 source install/setup.bash
 ```
 
-2. **Install Python Dependencies**
+### Python Dependencies
+
 ```bash
-# Install required Python packages
 pip install PyYAML
 ```
 
-# 🔧 Configuration Parameters
-The configuration is managed via `config/gesture_execution_configuration.yaml`:
+## Configuration
 
-| Parameter | Description | Values | Default |
-|-----------|-------------|---------|---------|
-| `gestureDescriptors` | Path to gesture descriptor file | string | `gesture.yaml` |
-| `robotTopics` | Path to robot topic mapping file | string | `pepper_topics.yaml` |
-| `verboseMode` | Enable detailed logging and debugging | `true`, `false` | `true` |
+Configuration is managed via `config/gesture_execution_configuration.yaml`:
 
-## Gesture Definitions
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `gestureDescriptors` | Path to gesture descriptor file | `gesture.yaml` |
+| `robotTopics` | Path to robot topic mapping file | `pepper_topics.yaml` |
+| `verboseMode` | Enable detailed logging and debugging | `true` |
+
+### Gesture Definitions
+
 Gestures are defined in `data/gesture.yaml` with the following structure:
 ```yaml
 gestures:
@@ -71,7 +70,8 @@ gestures:
       RArm: [1.0, 2.0]  # Timing for each waypoint
 ```
 
-## Topic Mappings
+### Topic Mappings
+
 Robot topics are configured in `data/pepper_topics.yaml`:
 ```yaml
 topics:
@@ -81,119 +81,136 @@ topics:
   RobotPose: "/robotLocalization/pose"
 ```
 
-# 🚀 Running the Node
+## Running the Node
 
-## Building the Package
 ```bash
-# Build the gesture_execution package
-cd ~/ros2_ws
-colcon build --packages-select gesture_execution
-source install/setup.bash
-```
+# Source the workspace
+source ~/ros2_ws/install/setup.bash
 
-## Starting the Node
-```bash
 # Run the gesture execution node (Action Server)
 ros2 run gesture_execution gesture_execution
 ```
 
-## Running Visualization Test
-```bash
-# Run the visualization test to verify RViz2 markers
-ros2 run gesture_execution test_visualization
-```
+## ROS Interface
 
-## Verification
-To verify the node is running and actions are available:
-```bash
-# Check node status
-ros2 node list
+### Subscribed Topics
 
-# Check available actions
-ros2 action list
+| Topic | Type | Description |
+|-------|------|-------------|
+| `/joint_states` | `sensor_msgs/JointState` | Current joint positions |
+| `/robotLocalization/pose` | `geometry_msgs/PoseStamped` | Robot pose for IK |
 
-# Expected output:
-# /gesture_execution/execute
-```
+### Published Topics
 
-# 🖥️ Action Interface
-The node provides a single action server `/gesture_execution/execute` with the following goal structure:
+| Topic | Type | Description |
+|-------|------|-------------|
+| `/joint_angles` | `naoqi_bridge_msgs/JointAnglesWithSpeed` | Joint angle commands |
+| `/gesture_execution/visualization` | `visualization_msgs/MarkerArray` | RViz2 visualization markers |
 
-## Action Goal (`dec_interfaces/action/Gesture`)
+### Action Servers
 
-| Parameter | Type | Description | Constraints |
-|-----------|------|-------------|-------------|
-| `gesture_type` | string | Type of gesture to execute | `"deictic"`, `"iconic"`, `"bow"`, `"nod"` |
-| `gesture_id` | int32 | ID of predefined gesture (for iconic gestures) | Positive integer |
-| `gesture_duration` | int32 | Duration of gesture in milliseconds | 1000-5000 ms |
-| `bow_nod_angle` | int32 | Angle for bowing/nodding in degrees | 5-45° for bow, 5-30° for nod |
-| `location_x` | float32 | X coordinate for pointing (meters) | Any real number |
-| `location_y` | float32 | Y coordinate for pointing (meters) | Any real number |
-| `location_z` | float32 | Z coordinate for pointing (meters) | Any real number |
+| Action | Type | Description |
+|--------|------|-------------|
+| `/gesture_execution/execute` | `dec_interfaces/action/Gesture` | Main gesture execution interface |
 
-## Action Feedback
-- `elapsed_seconds`: Real-time feedback of elapsed time during gesture execution
+## Action Interface
 
-## Action Result
-- `success`: Boolean indicating gesture completion status
-- `actual_duration_seconds`: Actual duration of gesture execution
-- `message`: Status message
+**Action Type:** `dec_interfaces/action/Gesture`
 
-# 📋 Gesture Types
+### Goal
 
-## 1. Deictic Gestures (Pointing)
-Points to a specific 3D location in the environment. The robot uses inverse kinematics to calculate the appropriate joint angles. The robot's head will also track the pointing target for natural interaction.
+| Field | Type | Description |
+|-------|------|-------------|
+| `gesture_type` | string | "deictic", "iconic", "bow", "nod" |
+| `gesture_id` | int32 | ID of predefined gesture (for iconic gestures) |
+| `gesture_duration` | int32 | Duration in milliseconds (1000-5000) |
+| `bow_nod_angle` | int32 | Angle for bowing/nodding in degrees |
+| `location_x` | float32 | X coordinate for pointing (meters) |
+| `location_y` | float32 | Y coordinate for pointing (meters) |
+| `location_z` | float32 | Z coordinate for pointing (meters) |
 
-**Example Action Goal:**
+### Result
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | bool | Whether execution succeeded |
+| `actual_duration_seconds` | float32 | Actual duration of gesture execution |
+| `message` | string | Status message |
+
+### Feedback
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `elapsed_seconds` | float32 | Elapsed time during gesture execution |
+
+## Gesture Types
+
+### 1. Deictic Gestures (Pointing)
+Points to a specific 3D location in the environment using inverse kinematics.
+
 ```bash
 ros2 action send_goal /gesture_execution/execute dec_interfaces/action/Gesture \
   "{gesture_type: 'deictic', gesture_id: 0, gesture_duration: 2000, bow_nod_angle: 0, \
     location_x: 2.0, location_y: 1.5, location_z: 0.8}"
 ```
 
-## 2. Iconic Gestures (Predefined Arm Motions)
-Executes predefined arm motions from the gesture.yaml file. Currently supported gestures:
+### 2. Iconic Gestures (Predefined Arm Motions)
+Executes predefined arm motions from gesture.yaml:
 - `id: 1` - Welcome gesture (both arms)
 - `id: 2` - Wave gesture (right arm)
 - `id: 3` - Handshake gesture (both arms)
 
-**Example Action Goal:**
 ```bash
 ros2 action send_goal /gesture_execution/execute dec_interfaces/action/Gesture \
   "{gesture_type: 'iconic', gesture_id: 2, gesture_duration: 3000, bow_nod_angle: 0, \
     location_x: 0.0, location_y: 0.0, location_z: 0.0}"
 ```
 
-## 3. Bowing Gestures
-Bows the robot forward at a specified angle.
+### 3. Bowing Gestures
+Bows the robot forward at a specified angle (5-45°).
 
-**Example Action Goal:**
 ```bash
 ros2 action send_goal /gesture_execution/execute dec_interfaces/action/Gesture \
   "{gesture_type: 'bow', gesture_id: 0, gesture_duration: 2500, bow_nod_angle: 30, \
     location_x: 0.0, location_y: 0.0, location_z: 0.0}"
 ```
 
-## 4. Nodding Gestures
-Nods the robot's head at a specified angle.
+### 4. Nodding Gestures
+Nods the robot's head at a specified angle (5-30°).
 
-**Example Action Goal:**
 ```bash
 ros2 action send_goal /gesture_execution/execute dec_interfaces/action/Gesture \
   "{gesture_type: 'nod', gesture_id: 0, gesture_duration: 1500, bow_nod_angle: 15, \
     location_x: 0.0, location_y: 0.0, location_z: 0.0}"
 ```
 
-# 🏗️ Architecture
+## Package Structure
 
-## Core Components
-1. **GestureExecutionSystem**: Main ROS2 Action Server managing gesture execution with feedback
-2. **GestureDescriptorManager**: Loads and manages gesture definitions from YAML files
-3. **ConfigManager**: Handles configuration and topic mappings
-4. **PepperKinematicsUtilities**: Provides inverse kinematics for pointing gestures
-5. **VisualizationTestNode**: Test utility for verifying RViz2 marker visualization
+```
+gesture_execution/
+├── gesture_execution/
+│   ├── __init__.py
+│   ├── gesture_execution_application.py
+│   ├── gesture_execution_implementation.py
+│   ├── gesture_test_visualization.py
+│   └── pepper_kinematics_utilities.py
+├── config/
+│   └── gesture_execution_configuration.yaml
+├── data/
+│   ├── gesture.yaml
+│   └── pepper_topics.yaml
+├── resource/
+│   └── gesture_execution
+├── package.xml
+├── setup.py
+├── setup.cfg
+└── README.md
+```
 
-## Motion Execution Pipeline
+## Architecture
+
+The gesture execution system uses Bézier interpolation for smooth motion:
+
 1. **Action Goal**: Receive gesture parameters via ROS2 Action Server
 2. **Gesture Validation**: Validate parameters against constraints and joint limits
 3. **Trajectory Generation**: Calculate joint trajectories using Bézier interpolation
@@ -202,29 +219,14 @@ ros2 action send_goal /gesture_execution/execute dec_interfaces/action/Gesture \
 6. **Visualization**: Publish RViz2 markers for deictic gestures (optional)
 7. **Result**: Return success/failure status with actual duration
 
-## Bézier Interpolation
-The system uses cubic Bézier curves for smooth motion between waypoints, providing:
-- Continuous velocity and acceleration profiles
-- Natural-looking movements
-- Reduced stress on robot joints
-- Precise timing control
-
-# ⚙️ Technical Details
-
-## Joint Coordinate System
-The system uses the following joint order for each arm:
+### Joint Coordinate System
 1. ShoulderPitch
-2. ShoulderRoll  
+2. ShoulderRoll
 3. ElbowYaw
 4. ElbowRoll
 5. WristYaw
 
-## Kinematic Parameters
-- Upper arm length: 150 mm
-- Shoulder offsets: X=-57.0mm, Y=±149.74mm, Z=86.82mm
-- Torso height: 0.0mm (adjustable based on robot configuration)
-
-## Safety Limits
+### Safety Limits
 - **Shoulder Pitch**: ±2.0857 rad (±119.5°)
 - **Shoulder Roll**: Right: -1.5621 to -0.0087 rad, Left: 0.0087 to 1.5621 rad
 - **Head Yaw**: ±2.0857 rad (±119.5°)
@@ -233,16 +235,25 @@ The system uses the following joint order for each arm:
 - **Nodding Angle**: 5-30 degrees
 - **Gesture Duration**: 1000-5000 milliseconds
 
-# 🎯 Visualization
+## Testing
 
-## RViz2 Markers
-The system publishes visualization markers to `/gesture_execution/visualization` for deictic gestures:
-- **Red Sphere**: Target pointing location
-- **Blue Sphere**: Robot shoulder position
-- **Blue Arrow**: Pointing line from shoulder to target
-- **White Text**: Coordinate labels
+```bash
+# Check node is running
+ros2 node list
 
-## Testing Visualization
+# Verify action server is available
+ros2 action list
+
+# Send a test gesture
+ros2 action send_goal /gesture_execution/execute dec_interfaces/action/Gesture \
+  "{gesture_type: 'iconic', gesture_id: 2, gesture_duration: 3000, bow_nod_angle: 0, \
+    location_x: 0.0, location_y: 0.0, location_z: 0.0}"
+
+# Monitor joint commands
+ros2 topic echo /joint_angles
+```
+
+### RViz2 Visualization
 ```bash
 # Run the visualization test
 ros2 run gesture_execution test_visualization
@@ -255,55 +266,12 @@ ros2 run rviz2 rviz2
 2. Set topic to: `/gesture_execution/visualization`
 3. Ensure "Global Options" → "Fixed Frame" is set to `base_link`
 
-# 🐛 Debugging and Troubleshooting
-
-## Enabling Verbose Mode
-Set `verboseMode: true` in `config/gesture_execution_configuration.yaml` to enable detailed logging.
-
-## Common Issues
-1. **Action Not Found**: Ensure the node is running and the workspace is sourced
-2. **Joint Limit Errors**: Check that pointing locations are within reachable workspace
-3. **Configuration Errors**: Verify YAML file syntax and file paths
-4. **Motion Execution Failures**: Check robot connection and joint state topics
-5. **Visualization Not Appearing**: Verify RViz2 configuration and marker topic
-
-## Logging
-The node provides different log levels:
-- **INFO**: General operation messages
-- **WARNING**: Parameter validation issues
-- **ERROR**: Execution failures
-- **DEBUG**: Detailed trajectory information (with verbose mode)
-
-# 📦 Package Structure
-```
-gesture_execution/
-├── gesture_execution/
-│   ├── __init__.py
-│   ├── gesture_execution_application.py     # Main entry point
-│   ├── gesture_execution_implementation.py  # Action server implementation
-│   ├── gesture_test_visualization.py        # RViz2 visualization test
-│   └── pepper_kinematics_utilities.py       # Inverse kinematics utilities
-├── config/
-│   └── gesture_execution_configuration.yaml # Configuration file
-├── data/
-│   ├── gesture.yaml                         # Gesture definitions
-│   └── pepper_topics.yaml                   # Topic mappings
-├── launch/                                  # Launch files (if any)
-├── resource/
-│   └── gesture_execution                    # Package resource file
-├── setup.py                                 # Python setup
-├── setup.cfg                                # Configuration
-├── package.xml                              # ROS2 package definition
-└── README.md                                # This file
-```
-
-# 💡 Support
+## Support
 
 For issues or questions:
-- Create an issue on GitHub
-- Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a><br>
-<!-- - Visit: <a href="http://www.dec4africa.org">www.dec4africa.org</a> -->
+- Create an issue on the [pepper4dec GitHub repository](https://github.com/yohatad/pepper4dec/issues)
+- Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a>
 
-# 📜 License
+## License
 Copyright (C) 2026 Upanzi Network
 Licensed under the BSD-3-Clause License. See individual package licenses for details.

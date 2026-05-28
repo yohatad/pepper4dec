@@ -31,7 +31,7 @@ class SoundLocalizationNode(Node):
         # Parameters
         # =====================================================
         self.declare_parameter("sample_rate", 48000)
-        self.declare_parameter("microphone_topic", "/audio")
+        self.declare_parameter("microphone_topic", "/naoqi_driver/audio")
         self.declare_parameter("speed_of_sound", 343.0)
         self.declare_parameter("nfft", 1024)
         self.declare_parameter("angular_resolution", 36)

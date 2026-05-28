@@ -6,6 +6,11 @@ Includes:
     - print_*: verbose-mode debug printers (each requires an explicit verbose: bool)
     - safe_*: type-coercion helpers used when reading YAML configuration
     - read_yaml_config: YAML file reader
+
+Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: February 28, 2026
+Version: v1.0
 """
 
 import yaml

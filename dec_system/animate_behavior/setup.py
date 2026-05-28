@@ -10,13 +10,12 @@ setup(
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="Yohannes",
-    maintainer_email="yohatad000@gmail.com",
+    maintainer_email="yohatad123@gmail.com",
     description="Animate behavior node",
     license="",
     entry_points={
         "console_scripts": [
             "animate_behavior = animate_behavior.animate_behavior_application:main",
-            "animate_diagnostic = animate_behavior.animate_behavior_diagnosis:main",
         ],
     },
     data_files=[

@@ -1,12 +1,12 @@
 <div align="center">
-<h1> Person Detection and Tracking </h1>
+<h1>Person Detection and Tracking</h1>
 </div>
 
 <div align="center">
   <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
-The **Person Detection and Tracking** package is a **ROS2** package designed to detect and track multiple persons in real-time by subscribing to image topics. It publishes an array of detected persons with their bounding boxes, labels, and tracking IDs to the **/personDetection/data** topic. Each entry in the published data includes the **label** of the detected person, the **centroid** coordinates, the **width** and **height** of the bounding box, and a unique **track_id** for tracking over time.
+The **Person Detection and Tracking** package is a ROS2 package designed to detect and track multiple persons in real-time by subscribing to image topics. It publishes an array of detected persons with their bounding boxes, labels, and tracking IDs to the `/personDetection/data` topic. Each entry includes the label, centroid coordinates, bounding box dimensions, and a unique tracking ID for maintaining identity across frames.
 
 ## Key Features
 - **ROS2 Native**: Built for ROS2 Humble
@@ -17,17 +17,16 @@ The **Person Detection and Tracking** package is a **ROS2** package designed to 
 - **Multi-camera Support**: RealSense and Pepper camera support
 - **ROS2 Bag Compatible**: Optional camera launch for use with recorded data
 
-# 🛠️ Installation
-
 ## Prerequisites
 - **ROS2 Humble** or newer
 - **Python 3.10** or compatible version
 - **CUDA-capable GPU** (recommended for optimal performance)
 - **Intel RealSense camera** (if using RealSense) with USB 3.0 connection
 
-## Package Installation
+## Installation
 
-1. **Clone and Build the Workspace**
+### Package Installation
+
 ```bash
 # Clone the repository (if not already done)
 cd ~/ros2_ws/src
@@ -39,54 +38,41 @@ colcon build --packages-select person_detection
 source install/setup.bash
 ```
 
-2. **Set Up Python Virtual Environment**
-```bash
-# Create virtual environment
-python3.10 -m venv ~/person_detection_env
+### Python Dependencies
 
-# Activate the virtual environment
-source ~/person_detection_env/bin/activate
-
-# Upgrade pip
-pip install --upgrade pip
-```
-
-3. **Install Python Dependencies**
 ```bash
 # Install PyTorch with CUDA support (recommended)
-pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
 # Install package requirements
-pip install -r ~/ros2_ws/src/dec4africa/dec_system/person_detection/requirements.txt
+pip install -r ~/ros2_ws/src/pepper4dec/dec_system/person_detection/requirements.txt
 ```
 
-4. **Download Model Files**
-Ensure the required ONNX model files are in the `models/` directory:
+### Model Files
+
+Download the required ONNX model files to the `models/` directory:
 - `yolov8n.onnx` - YOLOv8 detection model (or other YOLO variant)
 
-# 🔧 Configuration Parameters
-The configuration is managed via `config/person_detection_configuration.yaml`:
+## Configuration
 
-| Parameter                   | Description                                                      | Range/Values            | Default Value |
-|-----------------------------|------------------------------------------------------------------|-------------------------|---------------|
-| `camera`                    | Camera type to use                                               | `realsense`, `pepper`   | `realsense`   |
-| `useCompressed`             | Use compressed ROS image topics                                  | `True`, `False`         | `False`       |
-| `confidenceThreshold`       | Confidence threshold for person detection                        | `[0.0 - 1.0]`           | `0.7`         |
-| `targetClasses`             | List of target classes to detect (or `all`)                      | List of class names     | `all`         |
-| `trackThreshold`            | Confidence threshold for tracking (ByteTrack)                    | `[0.0 - 1.0]`           | `0.45`        |
-| `trackBuffer`               | Number of frames to keep lost tracks before removing             | Positive integer        | `30`          |
-| `matchThreshold`            | IoU threshold for matching detections to tracks                  | `[0.0 - 1.0]`           | `0.8`         |
-| `frameRate`                 | Expected frame rate of the video stream (fps)                    | Positive integer        | `30`          |
-| `imageTimeout`              | Timeout (seconds) for shutting down the node after video ends    | Float (seconds)         | `2.0`         |
-| `verboseMode`               | Enable visualization using OpenCV windows and detailed logging   | `True`, `False`         | `False`       |
+Configuration is managed via `config/person_detection_configuration.yaml`:
 
-> **Note:**
-> Enabling **`verboseMode`** (`True`) will activate real-time visualization via OpenCV windows.
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `camera` | Camera type to use | `realsense` |
+| `useCompressed` | Use compressed ROS image topics | `False` |
+| `confidenceThreshold` | Confidence threshold for person detection | `0.7` |
+| `targetClasses` | List of target classes to detect (or `all`) | `all` |
+| `trackThreshold` | Confidence threshold for tracking (ByteTrack) | `0.45` |
+| `trackBuffer` | Number of frames to keep lost tracks before removing | `30` |
+| `matchThreshold` | IoU threshold for matching detections to tracks | `0.8` |
+| `frameRate` | Expected frame rate of the video stream (fps) | `30` |
+| `imageTimeout` | Timeout for shutting down after video ends (s) | `2.0` |
+| `verboseMode` | Enable visualization and detailed logging | `False` |
 
-# 🚀 Running the Node
+> **Note:** Enabling `verboseMode` (`True`) activates real-time visualization via OpenCV windows.
 
-## Launch All Components
-The launch file starts the camera driver and person detection node:
+## Running the Node
 
 ```bash
 # Source the workspace
@@ -94,72 +80,79 @@ source ~/ros2_ws/install/setup.bash
 
 # Launch with default configuration (RealSense camera)
 ros2 launch person_detection person_detection_launch_robot.launch.py
-```
 
-## Launch Arguments
-The launch file supports the following arguments:
-
-| Argument        | Description                                      | Default | Example                    |
-|-----------------|--------------------------------------------------|---------|----------------------------|
-| `launch_camera` | Whether to launch the camera driver              | `true`  | `launch_camera:=false`     |
-
-### Example: Using ROS2 Bag Data
-When using pre-recorded ROS2 bag data, disable the camera launch:
-
-```bash
+# Using ROS2 bag data (disable camera launch)
 ros2 launch person_detection person_detection_launch_robot.launch.py launch_camera:=false
 ```
 
-## Manual Node Execution
-You can also run nodes individually:
+### Manual Node Execution
 
-1. **Start Camera Driver** (if not using bags):
 ```bash
+# Start Camera Driver (if not using bags)
 ros2 run realsense2_camera realsense2_camera_node \
   --ros-args \
   -p rgb_camera.color_profile:=640x480x15 \
   -p depth_module.depth_profile:=640x480x15 \
   -p align_depth.enable:=true \
   -p enable_sync:=true
-```
 
-2. **Start Person Detection Node**:
-```bash
-# Activate Python environment first
+# Start Person Detection Node
 source ~/person_detection_env/bin/activate
-
-# Run person detection
 ros2 run person_detection person_detection
 ```
 
-# 🖥️ Output
-The node publishes detected persons and their corresponding data to the `/personDetection/data` topic. When running in verbose mode, it displays OpenCV-annotated color and depth images for visualization.
+## ROS Interface
 
-## Topic Structure
-- **Published Topic**: `/personDetection/data` (`dec_interfaces/msg/PersonDetection`)
-  - `label[]`: Array of person labels (strings)
-  - `centroids[]`: Array of centroid coordinates (geometry_msgs/Point)
-  - `width[]`: Array of bounding box widths (float)
-  - `height[]`: Array of bounding box heights (float)
-  - `track_id[]`: Array of tracking IDs (integer)
+### Subscribed Topics
 
-- **Subscribed Topics**:
-  - Color image topic (depends on camera configuration)
-  - Depth image topic (depends on camera configuration)
+| Topic | Type | Description |
+|-------|------|-------------|
+| `/camera/color/image_raw` | `sensor_msgs/Image` | Color image from camera |
+| `/camera/aligned_depth_to_color/image_raw` | `sensor_msgs/Image` | Depth image |
 
-## Verification
-To verify the node is publishing data:
+### Published Topics
 
-```bash
-# Monitor person detection output
-ros2 topic echo /personDetection/data
+| Topic | Type | Description |
+|-------|------|-------------|
+| `/personDetection/data` | `dec_interfaces/msg/PersonDetection` | Detected persons with tracking IDs |
 
-# Check node status
-ros2 node list
-ros2 topic list
+## Message Structure
+
+### `/personDetection/data` (`dec_interfaces/msg/PersonDetection`)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `label[]` | string[] | Array of person labels |
+| `centroids[]` | `geometry_msgs/Point[]` | Array of centroid coordinates |
+| `width[]` | float[] | Array of bounding box widths |
+| `height[]` | float[] | Array of bounding box heights |
+| `track_id[]` | int32[] | Array of tracking IDs |
+
+## Package Structure
+
+```
+person_detection/
+├── config/
+│   └── person_detection_configuration.yaml
+├── data/
+│   └── pepper_topics.yaml
+├── models/
+│   └── yolov8n.onnx
+├── resource/
+│   └── person_detection
+├── person_detection/
+│   ├── __init__.py
+│   ├── person_detection_application.py
+│   └── person_detection_implementation.py
+├── package.xml
+├── setup.py
+├── setup.cfg
+├── requirements.txt
+└── README.md
 ```
 
-# 🏗️ Architecture
+## Architecture
+
 The person detection system consists of two main components:
 
 1. **Camera Driver**: Provides synchronized RGB-D image streams
@@ -169,13 +162,25 @@ The person detection system consists of two main components:
    - Tracks persons across frames using ByteTrack algorithm
    - Publishes person detection results
 
-# 💡 Support
+## Testing
+
+```bash
+# Check node is running
+ros2 node list
+
+# Monitor person detection output
+ros2 topic echo /personDetection/data
+
+# Verify topics
+ros2 topic list
+```
+
+## Support
 
 For issues or questions:
-- Create an issue on GitHub
-- Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a><br>
-<!-- - Visit: <a href="http://www.dec4africa.org">www.dec4africa.org</a> -->
+- Create an issue on the [pepper4dec GitHub repository](https://github.com/yohatad/pepper4dec/issues)
+- Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a>
 
-# 📜 License
+## License
 Copyright (C) 2026 Upanzi Network
 Licensed under the BSD-3-Clause License. See individual package licenses for details.

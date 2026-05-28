@@ -11,9 +11,16 @@ Configuration File (config/converation_manager_configuration.yaml):
     conversation: max_history_turns, context_turns
     data:         default_path (knowledge base JSON file)
     debug:        verbose
+
+Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: February 28, 2026
+Version: v1.0
+
 """
 
 import os
+import re
 import json
 import openai
 import chromadb
@@ -56,9 +63,9 @@ DEFAULT_LLM_MODEL = "HuggingFaceTB/SmolLM3-3B"
 DEFAULT_CHROMA_PATH = str(PACKAGE_PATH / 'data')
 DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 DEFAULT_SIMILARITY_THRESHOLD = 0.15
-DEFAULT_TOP_K = 5
-DEFAULT_MAX_HISTORY_TURNS = 5
-DEFAULT_CONTEXT_TURNS = 3
+DEFAULT_TOP_K = 10
+DEFAULT_MAX_HISTORY_TURNS = 15
+DEFAULT_CONTEXT_TURNS = 10
 DEFAULT_MAX_RESPONSE_SENTENCES = 3
 DEFAULT_DATA_PATH = str(PACKAGE_PATH / 'data' / 'upanzi_data.json')
 DEFAULT_SYSTEM_PROMPT_PATH = str(PACKAGE_PATH / 'data' / 'system_prompt.txt')
@@ -740,7 +747,7 @@ def handle_query(
 # Streaming Response Generation
 # =============================================================================
 
-def _parse_json_string_value(s: str) -> Tuple[str, bool]:
+def parse_json_string_value(s: str) -> Tuple[str, bool]:
     """
     Parse characters of a JSON string value after the opening quote.
 
@@ -754,17 +761,39 @@ def _parse_json_string_value(s: str) -> Tuple[str, bool]:
     while i < len(s):
         c = s[i]
         if c == '\\':
-            if i + 1 < len(s):
-                result.append(escape_map.get(s[i + 1], s[i + 1]))
-                i += 2
-            else:
+            if i + 1 >= len(s):
                 break  # Incomplete escape at buffer boundary
+            next_c = s[i + 1]
+            if next_c == 'u':
+                if i + 5 < len(s):
+                    result.append(chr(int(s[i + 2:i + 6], 16)))
+                    i += 6
+                else:
+                    break  # Incomplete \uXXXX at buffer boundary
+            else:
+                result.append(escape_map.get(next_c, next_c))
+                i += 2
         elif c == '"':
             return ''.join(result), True
         else:
             result.append(c)
             i += 1
     return ''.join(result), False
+
+
+def _parse_llm_json(raw: str) -> dict:
+    """
+    Parse the JSON object from a raw LLM response, stripping any
+    <think>…</think> chain-of-thought prefix first.
+    Returns an empty dict if parsing fails.
+    """
+    cleaned = raw.strip()
+    if "</think>" in cleaned:
+        cleaned = cleaned.split("</think>", 1)[1].strip()
+    try:
+        return json.loads(cleaned)
+    except (json.JSONDecodeError, AttributeError, ValueError):
+        return {}
 
 
 def extract_answer_from_raw(raw: str) -> str:
@@ -776,14 +805,36 @@ def extract_answer_from_raw(raw: str) -> str:
       - JSON structured response: {"intent": "...", "answer": "..."}
       - Plain-text fallback:      raw text returned as-is
     """
-    cleaned = raw
+    parsed = _parse_llm_json(raw)
+    if parsed:
+        return parsed.get("answer", raw)
+    # Plain-text fallback
+    cleaned = raw.strip()
     if "</think>" in cleaned:
         cleaned = cleaned.split("</think>", 1)[1].strip()
+    return cleaned
+
+
+def extract_intent_from_raw(raw: str) -> Tuple[str, float]:
+    """
+    Extract the intent label and confidence score from a raw LLM response.
+
+    Returns ``(intent, confidence)`` where intent is one of:
+      ASK_EXHIBIT_QUESTION | ASK_TOUR_META | NAVIGATION_REQUEST |
+      SOCIAL_SMALL_TALK | OFF_TOPIC | STOP | AFFIRMATIVE | NEGATIVE
+    and confidence is in [0.0, 1.0].
+
+    Falls back to ("UNKNOWN", 0.0) if the JSON cannot be parsed or the
+    fields are missing.
+    """
+    parsed = _parse_llm_json(raw)
+    intent     = parsed.get("intent",     "UNKNOWN") if parsed else "UNKNOWN"
+    confidence = parsed.get("confidence", 0.0)       if parsed else 0.0
     try:
-        parsed = json.loads(cleaned)
-        return parsed.get("answer", cleaned)
-    except (json.JSONDecodeError, AttributeError, ValueError):
-        return cleaned
+        confidence = float(confidence)
+    except (TypeError, ValueError):
+        confidence = 0.0
+    return str(intent), confidence
 
 
 def generate_response_stream(
@@ -863,8 +914,7 @@ def generate_response_stream(
 
             # ---- Locate the "answer" value start ----
             if answer_open_idx < 0:
-                import re as _re
-                m = _re.search(r'"answer"\s*:\s*"', post_think)
+                m = re.search(r'"answer"\s*:\s*"', post_think)
                 if m:
                     answer_open_idx = m.end()
 
@@ -872,7 +922,7 @@ def generate_response_stream(
                 continue  # Haven't reached the answer field yet
 
             # ---- Parse new characters from the answer value ----
-            new_text, complete = _parse_json_string_value(post_think[answer_open_idx:])
+            new_text, complete = parse_json_string_value(post_think[answer_open_idx:])
             new_chars = new_text[len(answer_chars):]
             answer_chars = new_text
             pending += new_chars
@@ -884,9 +934,8 @@ def generate_response_stream(
                 pending = ""
             else:
                 # Yield all complete sentences (ended by .!? followed by space)
-                import re as _re
                 while True:
-                    m2 = _re.search(r'[.!?](?:\s|$)', pending)
+                    m2 = re.search(r'[.!?](?:\s|$)', pending)
                     if not m2:
                         break
                     cut = m2.end()
@@ -912,50 +961,6 @@ def generate_response_stream(
 
     finally:
         raw_response_out.append(raw_buffer)
-
-
-def safe_float(value: Any, default: float, name: str) -> Tuple[float, Optional[str]]:
-    """Safely convert value to float"""
-    if value is None:
-        return default, None
-    try:
-        return float(value), None
-    except (ValueError, TypeError):
-        return default, f"Invalid value for {name}: '{value}' (using default: {default})"
-
-def safe_int(value: Any, default: int, name: str) -> Tuple[int, Optional[str]]:
-    """Safely convert value to int"""
-    if value is None:
-        return default, None
-    try:
-        return int(value), None
-    except (ValueError, TypeError):
-        return default, f"Invalid value for {name}: '{value}' (using default: {default})"
-
-def safe_str(value: Any, default: str, name: str) -> Tuple[str, Optional[str]]:
-    """Safely convert value to string"""
-    if value is None:
-        return default, None
-    try:
-        return str(value), None
-    except Exception:
-        return default, f"Invalid value for {name}: '{value}' (using default: {default})"
-
-def safe_bool(value: Any, default: bool, name: str) -> Tuple[bool, Optional[str]]:
-    """Safely convert value to boolean"""
-    if value is None:
-        return default, None
-    if isinstance(value, bool):
-        return value, None
-    if isinstance(value, str):
-        if value.lower() in ('true', 'yes', '1', 'on'):
-            return True, None
-        if value.lower() in ('false', 'no', '0', 'off'):
-            return False, None
-    try:
-        return bool(value), None
-    except Exception:
-        return default, f"Invalid value for {name}: '{value}' (using default: {default})"
 
 def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
     """

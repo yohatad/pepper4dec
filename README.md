@@ -27,7 +27,7 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 - **`animate_behavior`** - Manages animated behavior sequences for expressive robot performance
 - **`conversation_manager`** - Manages dialogue flow and visitor interaction sequences
 - **`gesture_execution`** - Controls Pepper's arm and body movements for expressive gesturing
-- **`speech_event`** - Handles speech recognition and processing
+- **`speech_event`** - Handles speech recognition with post-VAD noise reduction and optional sound-source localization
 - **`text_to_speech`** - Converts text to speech with language adaptation
 
 ### **Perception & Attention Packages**
@@ -36,7 +36,7 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 - **`overt_attention`** - Controls robot's attention mechanism based on visitor presence
 
 ### **Navigation & Localization**
-- **`pepper_navigation`** - For navigation, RTAB-Map for SLAM and Nav2 for Navigation.
+- **`pepper_navmap`** - For navigation, RTAB-Map for SLAM and Nav2 for Navigation.
 
 ### **Infrastructure & Utilities**
 - **`dec_launch`** - System launch files and startup configurations
@@ -77,7 +77,7 @@ python3.10 -m venv ~/dec_virtual_envs
 source ~/dec_virtual_envs/bin/activate
 
 # Install Python dependencies
-pip install -r ros2_ws/src/pepper4dec/dec_system/face_detection/requirements.txt
+pip install -r ~/ros2_ws/src/pepper4dec/dec_system/face_detection/requirements.txt
 ```
 
 3. **Download Model Files**
@@ -115,7 +115,7 @@ ros2 launch dec_launch slam_toolbox.launch.py
 
 ### Configuration
 Each package contains configuration files in their `config/` directories:
-- `behaviorController/config/behaviorControllerConfiguration.ini` - Mission parameters
+- `behaviorController/config/behaviorControllerConfiguration.yaml` - Mission parameters
 - `face_detection/config/face_detection_configuration.yaml` - Perception settings
 - Navigation and gesture parameters in respective package configs
 

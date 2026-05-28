@@ -1,5 +1,25 @@
+# SpeechRecognition.action
+#
+# Action server: /speech_recognition_action  (speech_event node)
+#
+# Listens for user speech for up to `wait` seconds. Returns the recognised
+# transcription on success, or FAILURE if the timeout expires without speech.
+
+# ── Goal ──────────────────────────────────────────────────────────────────────
+# Maximum seconds to wait for a speech utterance
 float32 wait
+
 ---
+
+# ── Result ────────────────────────────────────────────────────────────────────
+# Recognised speech text; empty string signals no speech was detected
 string transcription
+
 ---
+
+# ── Feedback ──────────────────────────────────────────────────────────────────
+# Current recognition stage
+# "waiting"      – listening for speech onset
+# "speech"       – speech detected, recording
+# "transcribing" – audio captured, running ASR
 string status

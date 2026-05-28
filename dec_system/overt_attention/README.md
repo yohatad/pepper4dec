@@ -1,37 +1,33 @@
 <div align="center">
-<h1> Overt Visual Attention System </h1>
+<h1>Overt Visual Attention System</h1>
 </div>
 
 <div align="center">
   <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
-The **Overt Visual Attention System** package is a **ROS2** package designed to implement a unified visual attention controller for robot heads. It integrates multiple attention cues including **face detection with engagement awareness**, **bottom-up visual saliency**, and optional **audio localization** to generate natural, human-like head movements. The system prioritizes engaged faces, then detected faces, and finally saliency peaks with inhibition of return (IOR) to prevent repetitive scanning of the same locations.
+The **Overt Visual Attention System** package implements a unified visual attention controller for robot heads. It integrates multiple attention cues including face detection with engagement awareness, bottom-up visual saliency, and optional audio localization to generate natural, human-like head movements. The system prioritizes engaged faces, then detected faces, and finally saliency peaks with inhibition of return (IOR) to prevent repetitive scanning.
 
 ## Key Features
 - **ROS2 Native**: Built for ROS2 Humble
 - **Multi-modal Attention**: Integrates face detection, visual saliency, and audio cues
 - **Engagement Awareness**: Prioritizes faces with mutual gaze (engaged attention)
-- **Boolean Map Saliency (BMS)**: Computes bottom-up visual attention using state-of-the-art saliency detection
+- **Boolean Map Saliency (BMS)**: Computes bottom-up visual attention
 - **Inhibition of Return (IOR)**: Prevents repetitive scanning of the same locations
 - **Real-time Processing**: Processes multiple attention cues simultaneously
-- **Configurable**: Extensive parameter tuning via YAML configuration
-- **Visualization**: Real-time visualization of attention targets, faces, and saliency peaks
-- **Robot Agnostic**: Works with any robot with head pan-tilt capabilities (Pepper, NAO, etc.)
-
-# 🛠️ Installation 
+- **Visualization**: Real-time visualization of attention targets and saliency peaks
 
 ## Prerequisites
 - **ROS2 Humble** or newer
 - **Python 3.10** or compatible version
 - **OpenCV** and **NumPy** for image processing
-- **Face Detection Node**: Requires the `face_detection` package for face input
+- **Face Detection Node**: Requires the `face_detection` package
 - **Camera System**: RGB camera (RealSense, Pepper camera, or similar)
-- **Robot Head Control**: NAOqi bridge or similar head control interface
 
-## Package Installation
+## Installation
 
-1. **Clone and Build the Workspace**
+### Package Installation
+
 ```bash
 # Clone the repository (if not already done)
 cd ~/ros2_ws/src
@@ -43,70 +39,33 @@ colcon build --packages-select overt_attention dec_interfaces
 source install/setup.bash
 ```
 
-2. **Install Python Dependencies**
+### Python Dependencies
+
 ```bash
-# Install required Python packages
 pip install opencv-python numpy scipy
 ```
 
-3. **Ensure Required Packages are Built**
-The attention system depends on:
-- `dec_interfaces`: Custom message definitions
-- `face_detection`: For face detection input (optional but recommended)
-- `naoqi_bridge_msgs`: For Pepper/NAO robot control (if using Pepper)
+## Configuration
 
-```bash
-# Build all required packages
-cd ~/ros2_ws
-colcon build --packages-select dec_interfaces overt_attention
-source install/setup.bash
-```
+Configuration is managed via `config/overt_attention_configuration.yaml`:
 
-# 🔧 Configuration Parameters
-The configuration is managed via `config/overt_attention_configuration.yaml`. The file contains parameters for three main nodes:
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `use_compressed` | Use compressed ROS image topics | `False` |
+| `image_topic_base` | Base topic for RGB images | `/camera/color/image_raw` |
+| `publish_map` | Publish saliency map visualization | `True` |
+| `face_topic` | Topic for face detection messages | `/faceDetection/data` |
+| `saliency_topic` | Topic for saliency peak messages | `/attn/saliency_peak` |
+| `head_command_topic` | Topic for head joint commands | `/joint_angles` |
+| `engaged_priority_bonus` | Priority multiplier for engaged faces | `2.0` |
+| `face_timeout` | Time after losing faces before switching to saliency (s) | `2.0` |
+| `enable_ior` | Enable Inhibition of Return | `True` |
+| `ior_half_life` | Half-life for IOR decay (seconds) | `3.0` |
+| `yaw_lim` | Head yaw joint limit (radians) | `1.8` |
+| `pitch_up` | Head pitch up limit (radians) | `0.4` |
+| `pitch_dn` | Head pitch down limit (radians) | `-0.7` |
 
-## Shared Parameters
-| Parameter                   | Description                                                      | Range/Values            | Default Value |
-|-----------------------------|------------------------------------------------------------------|-------------------------|---------------|
-| `use_compressed`            | Use compressed ROS image topics                                  | `True`, `False`         | `False`       |
-
-## Saliency Node Parameters
-| Parameter                   | Description                                                      | Range/Values            | Default Value |
-|-----------------------------|------------------------------------------------------------------|-------------------------|---------------|
-| `image_topic_base`          | Base topic for RGB images                                        | String                  | `/camera/color/image_raw` |
-| `publish_map`               | Publish saliency map visualization                               | `True`, `False`         | `True`        |
-| `down_w`, `down_h`          | Downsampled image dimensions for processing                      | Integers                | `160`, `120`  |
-| `min_peak`                  | Minimum saliency score to consider as a peak                     | `[0.0 - 1.0]`           | `0.5`         |
-| `num_peaks`                 | Maximum number of saliency peaks to publish                      | Integer                 | `5`           |
-| `peak_min_distance_px`      | Minimum distance between peaks (in downsampled pixels)           | Integer                 | `100`         |
-
-## Unified Attention Node Parameters
-| Parameter                   | Description                                                      | Range/Values            | Default Value |
-|-----------------------------|------------------------------------------------------------------|-------------------------|---------------|
-| `face_topic`                | Topic for face detection messages                                | String                  | `/faceDetection/data` |
-| `saliency_topic`            | Topic for saliency peak messages                                 | String                  | `/attn/saliency_peak` |
-| `camera_info_topic`         | Topic for camera intrinsics                                      | String                  | `/camera/color/camera_info` |
-| `head_command_topic`        | Topic for head joint commands                                    | String                  | `/joint_angles` |
-| `engaged_priority_bonus`    | Priority multiplier for engaged faces                            | Float                   | `2.0`         |
-| `face_timeout`              | Time after losing faces before switching to saliency (seconds)   | Float                   | `2.0`         |
-| `saliency_min_score`        | Minimum saliency score to consider                               | `[0.0 - 1.0]`           | `0.30`        |
-| `enable_ior`                | Enable Inhibition of Return                                      | `True`, `False`         | `True`        |
-| `ior_half_life`             | Half-life for IOR decay (seconds)                                | Float                   | `3.0`         |
-| `ior_radius_deg`            | Angular radius for IOR suppression (degrees)                     | Float                   | `15.0`        |
-| `yaw_lim`                   | Head yaw joint limit (radians)                                   | Float                   | `1.8`         |
-| `pitch_up`, `pitch_dn`      | Head pitch up/down limits (radians)                              | Float                   | `0.4`, `-0.7` |
-
-## Visualization Node Parameters
-| Parameter                   | Description                                                      | Range/Values            | Default Value |
-|-----------------------------|------------------------------------------------------------------|-------------------------|---------------|
-| `publish_overlay`           | Publish visualization overlay image                              | `True`, `False`         | `True`        |
-| `publish_markers`           | Publish ROS markers for visualization                            | `True`, `False`         | `True`        |
-| `show_metrics`              | Show performance metrics on visualization                        | `True`, `False`         | `True`        |
-
-# 🚀 Running the Node
-
-## Launch All Components
-The launch file starts all three attention system nodes:
+## Running the Node
 
 ```bash
 # Source the workspace
@@ -114,171 +73,124 @@ source ~/ros2_ws/install/setup.bash
 
 # Launch the complete attention system
 ros2 launch overt_attention attention_system.launch.py
-```
 
-## Launch Arguments
-The launch file supports the following arguments:
-
-| Argument        | Description                                      | Default | Example                    |
-|-----------------|--------------------------------------------------|---------|----------------------------|
-| `params_file`   | Path to parameters YAML file                     | Auto-detected | `params_file:=/path/to/custom.yaml` |
-| `enable_viz`    | Enable visualization node                        | `true`  | `enable_viz:=false`        |
-
-### Example: Custom Configuration
-```bash
+# Custom configuration
 ros2 launch overt_attention attention_system.launch.py \
   params_file:=/path/to/custom_config.yaml \
   enable_viz:=true
 ```
 
-## Manual Node Execution
-You can also run nodes individually:
+### Manual Node Execution
 
-1. **Start Saliency Node**:
 ```bash
+# Start Saliency Node
 ros2 run overt_attention saliency_node \
   --ros-args \
   -p use_compressed:=false \
   -p image_topic_base:="/camera/color/image_raw"
-```
 
-2. **Start Unified Attention Controller**:
-```bash
+# Start Unified Attention Controller
 ros2 run overt_attention unified_attention_node \
   --ros-args \
   -p face_topic:="/faceDetection/data" \
   -p saliency_topic:="/attn/saliency_peak" \
   -p head_command_topic:="/joint_angles"
-```
 
-3. **Start Visualization Node**:
-```bash
+# Start Visualization Node
 ros2 run overt_attention visualization_node \
   --ros-args \
   -p publish_overlay:=true \
   -p show_metrics:=true
 ```
 
-## Required Input Topics
-The attention system requires the following input topics:
-- **Face Detection**: `/faceDetection/data` (`dec_interfaces/msg/FaceDetection`)
-- **Camera Images**: `/camera/color/image_raw` (`sensor_msgs/msg/Image`)
-- **Camera Info**: `/camera/color/camera_info` (`sensor_msgs/msg/CameraInfo`)
-- **Joint States**: `/joint_states` (`sensor_msgs/msg/JointState`) - for current head position
+## ROS Interface
 
-## Optional Input Topics
-- **Audio Azimuth**: `/audio/azimuth_rad` (`std_msgs/msg/Float32`) - for audio-driven attention
-- **Depth Images**: `/camera/aligned_depth_to_color/image_raw` - for depth-based filtering
+### Subscribed Topics
 
-# 🖥️ Output
-The system publishes attention commands and visualization data to multiple topics.
+| Topic | Type | Description |
+|-------|------|-------------|
+| `/faceDetection/data` | `dec_interfaces/msg/FaceDetection` | Face detection messages |
+| `/camera/color/image_raw` | `sensor_msgs/Image` | RGB image from camera |
+| `/camera/color/camera_info` | `sensor_msgs/CameraInfo` | Camera intrinsics |
+| `/joint_states` | `sensor_msgs/JointState` | Current head position |
 
-## Output Topics
-- **Head Commands**: `/joint_angles` (`naoqi_bridge_msgs/msg/JointAnglesWithSpeed`) - Head joint commands
-- **Attention Targets**: `/attn/target_angles` (`geometry_msgs/msg/Vector3`) - Current attention target (yaw, pitch, score)
-- **Saliency Peaks**: `/attn/saliency_peak` (`std_msgs/msg/Float32MultiArray`) - Detected saliency peaks [u1, v1, score1, u2, v2, score2, ...]
-- **Visualization**: `/attn/visualization` (`sensor_msgs/msg/Image`) - Annotated visualization overlay
-- **Saliency Map**: `/attn/saliency_map/compressed` (`sensor_msgs/msg/CompressedImage`) - Saliency heatmap visualization
+### Published Topics
 
-## Service
-- **Enable/Disable**: `/attn/set_enabled` (`std_srvs/SetBool`) - Service to enable/disable the attention system
+| Topic | Type | Description |
+|-------|------|-------------|
+| `/joint_angles` | `naoqi_bridge_msgs/msg/JointAnglesWithSpeed` | Head joint commands |
+| `/attn/target_angles` | `geometry_msgs/msg/Vector3` | Current attention target (yaw, pitch, score) |
+| `/attn/saliency_peak` | `std_msgs/msg/Float32MultiArray` | Detected saliency peaks |
+| `/attn/visualization` | `sensor_msgs/Image` | Annotated visualization overlay |
 
-## Verification
-To verify the system is working:
+### Services
+
+| Service | Type | Description |
+|---------|------|-------------|
+| `/attn/set_enabled` | `std_srvs/SetBool` | Enable/disable the attention system |
+
+## Attention Prioritization Logic
+
+1. **Engaged Faces**: Faces with mutual gaze receive highest priority (2x bonus)
+2. **Detected Faces**: Other faces scored by distance from center, depth, and continuity
+3. **Saliency Peaks**: When no recent faces, switches to saliency with IOR cooldown
+4. **Inhibition of Return**: Recently visited locations are suppressed to encourage exploration
+
+## Package Structure
+
+```
+overt_attention/
+├── config/
+│   └── overt_attention_configuration.yaml
+├── data/
+│   └── pepper_topics.yaml
+├── resource/
+│   └── overt_attention
+├── overt_attention/
+│   ├── __init__.py
+│   ├── overt_attention_application.py
+│   ├── overt_attention_implementation.py
+│   ├── saliency_node.py
+│   ├── unified_attention_node.py
+│   └── visualization_node.py
+├── package.xml
+├── setup.py
+├── setup.cfg
+├── requirements.txt
+└── README.md
+```
+
+## Architecture
+
+The overt attention system consists of three main nodes:
+
+1. **Saliency Node**: Computes bottom-up visual attention using Boolean Map Saliency (BMS)
+2. **Unified Attention Controller**: Priority-based attention selection with IOR
+3. **Visualization Node**: Creates real-time visualization overlay
+
+## Testing
 
 ```bash
+# Check node is running
+ros2 node list
+
 # Monitor attention targets
 ros2 topic echo /attn/target_angles
 
 # Monitor head commands
 ros2 topic echo /joint_angles
 
-# Check all nodes are running
-ros2 node list
-
-# Check all topics
-ros2 topic list | grep attn
-
 # Enable/disable attention system
 ros2 service call /attn/set_enabled std_srvs/SetBool "{data: false}"
 ros2 service call /attn/set_enabled std_srvs/SetBool "{data: true}"
 ```
 
-# 🏗️ Architecture
-The overt attention system consists of three main nodes:
-
-1. **Saliency Node**: 
-   - Computes bottom-up visual attention using Boolean Map Saliency (BMS)
-   - Publishes multiple saliency peaks with scores
-   - Optional depth-based weighting for proximity bias
-   - Configurable downsampling for performance
-
-2. **Unified Attention Controller**:
-   - **Priority 1**: Engaged faces (mutual gaze) with bonus scoring
-   - **Priority 2**: Detected faces with depth and center bias
-   - **Priority 3**: Saliency peaks with cooldown and Inhibition of Return (IOR)
-   - Implements face switching hysteresis to prevent rapid target changes
-   - Applies joint limits and smooth motion constraints
-   - Supports enable/disable service with default position return
-
-3. **Visualization Node**:
-   - Creates real-time visualization overlay showing:
-     - Face bounding boxes with tracking IDs and engagement status
-     - Saliency peaks with scores
-     - Current attention target
-     - Performance metrics
-   - Publishes annotated image for monitoring
-
-## Attention Prioritization Logic
-1. **Engaged Faces**: Faces with mutual gaze receive highest priority (2x bonus)
-2. **Detected Faces**: Other faces scored by distance from center, depth, and continuity
-3. **Saliency Peaks**: When no recent faces, switches to saliency with IOR cooldown
-4. **Inhibition of Return**: Recently visited locations are suppressed to encourage exploration
-
-# 💡 Usage Examples
-
-## Basic Usage with Pepper Robot
-```bash
-# Start face detection system
-ros2 launch face_detection face_detection_launch_robot.launch.py
-
-# Start attention system
-ros2 launch overt_attention attention_system.launch.py
-
-# Enable attention system (if not auto-started)
-ros2 service call /attn/set_enabled std_srvs/SetBool "{data: true}"
-```
-
-## Testing with Recorded Data
-```bash
-# Play ROS bag with camera data
-ros2 bag play recorded_data.db3
-
-# Launch attention system without camera
-ros2 launch overt_attention attention_system.launch.py
-
-# Monitor visualization
-ros2 run rqt_image_view rqt_image_view /attn/visualization
-```
-
-## Custom Configuration for Different Robots
-Create a custom YAML configuration file:
-```yaml
-unified_attention_node:
-  ros__parameters:
-    yaw_lim: 2.0  # Increased yaw limit
-    pitch_up: 0.5
-    pitch_dn: -0.5
-    head_command_topic: "/custom_head_commands"
-```
-
-# 💡 Support
+## Support
 
 For issues or questions:
-- Create an issue on GitHub
-- Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a><br>
-<!-- - Visit: <a href="http://www.dec4africa.org">www.dec4africa.org</a> -->
+- Create an issue on the [pepper4dec GitHub repository](https://github.com/yohatad/pepper4dec/issues)
+- Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a>
 
-# 📜 License
+## License
 Copyright (C) 2026 Upanzi Network
 Licensed under the BSD-3-Clause License. See individual package licenses for details.

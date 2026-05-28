@@ -6,10 +6,11 @@ package_name = 'conversation_manager'
 setup(
     name=package_name,
     version='1.0.0',
+    packages=find_packages(),
     install_requires=['setuptools', 'openai', 'chromadb', 'sentence-transformers'],
     zip_safe=True,
     maintainer='Muhammed Danso and Yohannes Haile',
-    maintainer_email='mahadanso79@gmail.com and yohatad000@gmail.com',
+    maintainer_email='mahadanso79@gmail.com and yohatad123@gmail.com',
     description='RAG system server wrapper for large language model',
     license='Apache-2.0',
     entry_points={
