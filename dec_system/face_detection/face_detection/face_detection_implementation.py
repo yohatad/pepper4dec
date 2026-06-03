@@ -202,9 +202,9 @@ class FaceDetectionNode(Node):
 
         return None
 
-    def wait_for_topics(self, color_topic: str, depth_topic: str, person_detection_topic: Optional[str] = None, timeout: float = 30.0) -> bool:
+    def wait_for_topics(self, color_topic: str, depth_topic: Optional[str], person_detection_topic: Optional[str] = None, timeout: float = 30.0) -> bool:
         """Wait for topics to have active publishers."""
-        topics_to_wait = [color_topic, depth_topic]
+        topics_to_wait = [t for t in [color_topic, depth_topic] if t is not None]
         if person_detection_topic and self.require_person_detection:
             topics_to_wait.append(person_detection_topic)
             
@@ -246,8 +246,8 @@ class FaceDetectionNode(Node):
         """Set up image subscribers based on camera configuration."""
         try:
             rgb_topic, depth_topic = self.get_topic_names()
-            
-            # Determine final topic names based on compression
+
+            # Determine final topic names and message types
             if self.use_compressed and self.camera_type == "realsense":
                 color_topic = rgb_topic + "/compressed"
                 depth_topic = depth_topic + "/compressedDepth"
@@ -256,21 +256,30 @@ class FaceDetectionNode(Node):
             elif self.use_compressed and self.camera_type == "pepper":
                 self.get_logger().warn("Compressed images not available for Pepper cameras")
                 color_topic = rgb_topic
-                depth_topic = depth_topic
                 color_msg_type = Image
-                depth_msg_type = Image
             else:
                 color_topic = rgb_topic
-                depth_topic = depth_topic
                 color_msg_type = Image
                 depth_msg_type = Image
 
-            # Wait for topics (conditionally wait for person detection)
             person_detection_topic = "/personDetection/data" if self.require_person_detection else None
+
+            # Pepper: RGB-only subscription — depth is too unreliable to be useful
+            if self.camera_type == "pepper":
+                if not self.wait_for_topics(color_topic, None, person_detection_topic):
+                    return False
+                self.color_sub = self.create_subscription(
+                    color_msg_type, color_topic, self.rgb_only_callback, qos_profile_sensor_data
+                )
+                self.get_logger().info(f"Subscribed to {color_topic} (depth disabled for Pepper)")
+                if self.require_person_detection:
+                    self.get_logger().info(f"Subscribed to {person_detection_topic}")
+                return True
+
+            # All other cameras: synchronized RGB + depth
             if not self.wait_for_topics(color_topic, depth_topic, person_detection_topic):
                 return False
 
-            # Create subscribers
             self.color_sub = Subscriber(self, color_msg_type, color_topic, qos_profile=qos_profile_sensor_data)
             self.depth_sub = Subscriber(self, depth_msg_type, depth_topic, qos_profile=qos_profile_sensor_data)
 
@@ -279,13 +288,11 @@ class FaceDetectionNode(Node):
             if self.require_person_detection:
                 self.get_logger().info(f"Subscribed to {person_detection_topic}")
 
-            # Set up synchronizer
-            slop = 5.0 if self.camera_type == "pepper" else 0.1
-            self.ats = ApproximateTimeSynchronizer([self.color_sub, self.depth_sub], queue_size=10, slop=slop)
+            self.ats = ApproximateTimeSynchronizer([self.color_sub, self.depth_sub], queue_size=10, slop=0.1)
             self.ats.registerCallback(self.synchronized_callback)
-            
+
             return True
-            
+
         except Exception as e:
             self.get_logger().error(f"Failed to setup subscribers: {e}")
             return False
@@ -293,7 +300,7 @@ class FaceDetectionNode(Node):
     def synchronized_callback(self, color_data, depth_data):
         """Process synchronized color and depth images."""
         self.last_image_time = self.get_clock().now().nanoseconds / 1e9
-        
+
         try:
             # Process color image
             if isinstance(color_data, CompressedImage):
@@ -310,16 +317,37 @@ class FaceDetectionNode(Node):
                 return
 
             # Check resolution match on the current frame
-            if self.camera_type != "pepper" and not self.check_camera_resolution(self.color_image, self.depth_image):
+            if not self.check_camera_resolution(self.color_image, self.depth_image):
                 self.get_logger().error(f"{self.node_name}: Color camera and depth camera have different resolutions.")
                 rclpy.shutdown()
                 return
 
             # Process the images
             self.process_images()
-            
+
         except Exception as e:
             self.get_logger().error(f"Error in synchronized_callback: {e}")
+
+    def rgb_only_callback(self, color_data):
+        """Process RGB image only — used for Pepper where depth is unreliable."""
+        self.last_image_time = self.get_clock().now().nanoseconds / 1e9
+
+        try:
+            if isinstance(color_data, CompressedImage):
+                np_arr = np.frombuffer(color_data.data, np.uint8)
+                self.color_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            else:
+                self.color_image = self.bridge.imgmsg_to_cv2(color_data, desired_encoding="bgr8")
+
+            if self.color_image is None:
+                self.get_logger().warn("Failed to decode color image")
+                return
+
+            self.depth_image = None  # depth intentionally unused for Pepper
+            self.process_images()
+
+        except Exception as e:
+            self.get_logger().error(f"Error in rgb_only_callback: {e}")
 
     def process_depth_image(self, depth_data) -> Optional[np.ndarray]:
         """Process depth image data."""
@@ -783,8 +811,9 @@ class SixDrepNet(FaceDetectionNode):
                 return 0.0
 
     def process_images(self):
-        """Process synchronized RGB + depth images for SixDrepNet."""
-        if self.color_image is None or self.depth_image is None:
+        """Process RGB (and optionally depth) images for SixDrepNet."""
+        depth_required = self.camera_type != "pepper"
+        if self.color_image is None or (depth_required and self.depth_image is None):
             return
 
         if self.require_person_detection:

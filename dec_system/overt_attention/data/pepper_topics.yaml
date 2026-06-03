@@ -1,6 +1,6 @@
 topics:
   image:
-    base: "/camera/color/image_raw_custom"
+    base: "/camera/front/image_raw"
     use_compressed: false
   depth:
     base: "/camera/aligned_depth_to_color/image_raw_custom"
@@ -10,7 +10,7 @@ topics:
     map: "/attn/saliency_map/compressed"
   face: "/faceDetection/data"
   audio: "/audio/azimuth_rad"
-  camera_info: "/camera/color/camera_info"
+  camera_info: "/camera/front/camera_info"
   target_angles: "/attn/target_angles"
   joint_state: "/head_cmd/joint_states"
   joint_angles: "/joint_angles"

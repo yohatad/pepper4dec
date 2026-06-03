@@ -247,41 +247,42 @@ class PersonDetectionNode(Node):
 
         return None
 
-    def wait_for_topics(self, color_topic: str, depth_topic: str) -> bool:
+    def wait_for_topics(self, color_topic: str, depth_topic: Optional[str]) -> bool:
         """Wait indefinitely for topics to become available."""
-        self.get_logger().info(f"Waiting for topics: {color_topic}, {depth_topic}")
-        
+        required = [t for t in [color_topic, depth_topic] if t is not None]
+        self.get_logger().info(f"Waiting for topics: {required}")
+
         start_time = self.get_clock().now()
         warning_interval = 5.0
         last_warning_time = start_time
-        
+
         while rclpy.ok():
             # Check if topics are available
             topic_names_and_types = self.get_topic_names_and_types()
             published_topics = [name for name, _ in topic_names_and_types]
-            
-            if color_topic in published_topics and depth_topic in published_topics:
+
+            if all(t in published_topics for t in required):
                 if self.verbose_mode:
-                    self.get_logger().info("Both topics are available!")
+                    self.get_logger().info("All required topics are available!")
                 return True
-            
+
             # Periodic warnings
             elapsed = (self.get_clock().now() - start_time).nanoseconds / 1e9
             if (self.get_clock().now() - last_warning_time).nanoseconds / 1e9 >= warning_interval:
-                missing = [t for t in [color_topic, depth_topic] if t not in published_topics]
+                missing = [t for t in required if t not in published_topics]
                 self.get_logger().warn(f"Still waiting for topics after {int(elapsed)}s: {missing}")
                 last_warning_time = self.get_clock().now()
-                
+
             rclpy.spin_once(self, timeout_sec=1.0)
-        
+
         return False
 
     def subscribe_topics(self) -> bool:
         """Set up image subscribers based on camera configuration."""
         try:
             rgb_topic, depth_topic = self.get_topic_names()
-            
-            # Determine final topic names based on compression
+
+            # Determine final topic names and message types
             if self.use_compressed and self.camera_type == "realsense":
                 color_topic = rgb_topic + "/compressed"
                 depth_topic = depth_topic + "/compressedDepth"
@@ -290,37 +291,41 @@ class PersonDetectionNode(Node):
             elif self.use_compressed and self.camera_type == "pepper":
                 self.get_logger().warn("Compressed images not available for Pepper cameras")
                 color_topic = rgb_topic
-                depth_topic = depth_topic
                 color_msg_type = Image
-                depth_msg_type = Image
             else:
                 color_topic = rgb_topic
-                depth_topic = depth_topic
                 color_msg_type = Image
                 depth_msg_type = Image
 
-            # Wait for topics
+            # Pepper: RGB-only subscription — depth is too unreliable to be useful
+            if self.camera_type == "pepper":
+                if not self.wait_for_topics(color_topic, None):
+                    return False
+                self.color_sub = self.create_subscription(
+                    color_msg_type, color_topic, self.rgb_only_callback, qos_profile_sensor_data
+                )
+                self.get_logger().info(f"Subscribed to {color_topic} (depth disabled for Pepper)")
+                return True
+
+            # All other cameras: synchronized RGB + depth
             if not self.wait_for_topics(color_topic, depth_topic):
                 return False
 
-            # In your subscribe_topics() method, replace the subscriber creation with:
             self.color_sub = Subscriber(self, color_msg_type, color_topic, qos_profile=qos_profile_sensor_data)
             self.depth_sub = Subscriber(self, depth_msg_type, depth_topic, qos_profile=qos_profile_sensor_data)
-            
+
             self.get_logger().info(f"Subscribed to {color_topic}")
             self.get_logger().info(f"Subscribed to {depth_topic}")
 
-            # Set up synchronizer
-            slop = 5.0 if self.camera_type == "pepper" else 0.1
             self.ats = ApproximateTimeSynchronizer(
-                [self.color_sub, self.depth_sub], 
-                queue_size=10, 
-                slop=slop
+                [self.color_sub, self.depth_sub],
+                queue_size=10,
+                slop=0.1
             )
             self.ats.registerCallback(self.synchronized_callback)
-            
+
             return True
-            
+
         except Exception as e:
             self.get_logger().error(f"Failed to setup subscribers: {e}")
             return False
@@ -328,15 +333,15 @@ class PersonDetectionNode(Node):
     def synchronized_callback(self, color_data, depth_data):
         """Process synchronized color and depth images."""
         self.last_image_time = self.get_clock().now().nanoseconds / 1e9
-        
+
         try:
             # Check camera resolution if both images are available
             if self.depth_image is not None and self.color_image is not None:
-                if not self.check_camera_resolution(self.color_image, self.depth_image) and self.camera_type != "pepper":
+                if not self.check_camera_resolution(self.color_image, self.depth_image):
                     self.get_logger().error(f"{self.node_name}: Color camera and depth camera have different resolutions.")
                     rclpy.shutdown()
                     return
-                    
+
             # Process color image
             if isinstance(color_data, CompressedImage):
                 np_arr = np.frombuffer(color_data.data, np.uint8)
@@ -353,9 +358,30 @@ class PersonDetectionNode(Node):
 
             # Process the images
             self.process_images()
-            
+
         except Exception as e:
             self.get_logger().error(f"Error in synchronized_callback: {e}")
+
+    def rgb_only_callback(self, color_data):
+        """Process RGB image only — used for Pepper where depth is unreliable."""
+        self.last_image_time = self.get_clock().now().nanoseconds / 1e9
+
+        try:
+            if isinstance(color_data, CompressedImage):
+                np_arr = np.frombuffer(color_data.data, np.uint8)
+                self.color_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            else:
+                self.color_image = self.bridge.imgmsg_to_cv2(color_data, desired_encoding="bgr8")
+
+            if self.color_image is None:
+                self.get_logger().warn("Failed to decode color image")
+                return
+
+            self.depth_image = None  # depth intentionally unused for Pepper
+            self.process_images()
+
+        except Exception as e:
+            self.get_logger().error(f"Error in rgb_only_callback: {e}")
 
     def process_depth_image(self, depth_data) -> Optional[np.ndarray]:
         """Process depth image data."""
@@ -467,10 +493,11 @@ class PersonDetectionNode(Node):
                 return color
 
     def process_images(self):
-        """Process both color and depth images when available."""
-        if self.color_image is not None and self.depth_image is not None:
-            # Check if resolution matches
-            if self.check_camera_resolution(self.color_image, self.depth_image) or self.camera_type == "pepper":
+        """Process color (and optionally depth) images."""
+        depth_required = self.camera_type != "pepper"
+        if self.color_image is not None and (self.depth_image is not None or not depth_required):
+            # Resolution check only when depth is present
+            if self.depth_image is None or self.check_camera_resolution(self.color_image, self.depth_image):
                 # Process the image with the object detection algorithm
                 frame = self.color_image.copy()
                 boxes, scores, class_ids = self.detect_object(frame) if hasattr(self, 'detect_object') else ([], [], [])
