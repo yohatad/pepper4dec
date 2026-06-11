@@ -258,6 +258,7 @@ class GestureExecutionSystem(LifecycleNode):
     def on_cleanup(self, _state) -> TransitionCallbackReturn:
         self.destroy_lifecycle_publisher(self.joint_traj_pub)
         self.destroy_lifecycle_publisher(self.marker_pub)
+        self._action_server.destroy()
         self.get_logger().info('GestureExecutionSystem cleaned up')
         return TransitionCallbackReturn.SUCCESS
 

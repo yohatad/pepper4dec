@@ -209,6 +209,19 @@ class TextToSpeechNode(LifecycleNode):
         self.destroy_lifecycle_publisher(self.speaking_pub)
         if self.engine == "naoqi_ros" and hasattr(self, "naoqi_pub"):
             self.destroy_lifecycle_publisher(self.naoqi_pub)
+
+        self._tts_action.destroy()
+        self.destroy_client(self.mic_client)
+
+        if self.engine in ("kokoro_pepper", "elevenlabs_pepper"):
+            self.destroy_client(self.load_client)
+            self.destroy_client(self.unload_client)
+            self.destroy_client(self._send_buffer_client)
+            self._play_client.destroy()
+
+        if self.audio_player is not None:
+            self.audio_player = None
+
         self.get_logger().info(f"{self.node_name}: cleaned up")
         return TransitionCallbackReturn.SUCCESS
 

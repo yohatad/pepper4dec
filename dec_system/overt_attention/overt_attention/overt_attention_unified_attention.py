@@ -194,6 +194,7 @@ class OvertAttention(LifecycleNode):
     def on_cleanup(self, _state) -> TransitionCallbackReturn:
         self.destroy_lifecycle_publisher(self.pub_head)
         self.destroy_lifecycle_publisher(self.pub_target)
+        self.destroy_service(self.srv_enable)
         self.get_logger().info('Attention controller cleaned up')
         return TransitionCallbackReturn.SUCCESS
 

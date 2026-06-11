@@ -298,7 +298,7 @@ class SpeechRecognitionNode(LifecycleNode):
 
         # ── Service (always available after configure) ────────────────────────
         self.listening_enabled = True
-        self.create_service(SetBool, '/speech_event/set_enabled', self._set_enabled_callback)
+        self.set_enabled_service = self.create_service(SetBool, '/speech_event/set_enabled', self._set_enabled_callback)
 
         # ── Managed publishers ────────────────────────────────────────────────
         self.vad_prob_pub = self.create_lifecycle_publisher(Float32, "/speech_event/vad_speech_prob", 10)
@@ -335,6 +335,12 @@ class SpeechRecognitionNode(LifecycleNode):
     def on_cleanup(self, _state) -> TransitionCallbackReturn:
         self.destroy_lifecycle_publisher(self.vad_prob_pub)
         self.destroy_lifecycle_publisher(self.asr_pub)
+        self.destroy_service(self.set_enabled_service)
+        if self.asr_action_server is not None:
+            self.asr_action_server.destroy()
+        del self.whisper
+        del self.silero_model
+        del self.cleaner
         self.get_logger().info("SpeechRecognitionNode cleaned up")
         return TransitionCallbackReturn.SUCCESS
 

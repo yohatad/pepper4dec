@@ -220,6 +220,9 @@ class AnimateBehaviorNode(LifecycleNode):
     def on_cleanup(self, state) -> TransitionCallbackReturn:
         self.destroy_lifecycle_publisher(self.joint_pub)
         self.destroy_lifecycle_publisher(self.vel_pub)
+        self.action_server.destroy()
+        self.destroy_service(self.stop_service)
+        self.led_client.destroy()
         self.get_logger().info(f'{self.get_name()}: cleaned up')
         return TransitionCallbackReturn.SUCCESS
 

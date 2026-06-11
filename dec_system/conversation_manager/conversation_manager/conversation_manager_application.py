@@ -148,8 +148,9 @@ class ConversationManagerNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_cleanup(self, _state) -> TransitionCallbackReturn:
-        """Destroy publisher and clear in-memory state."""
+        """Destroy publisher, action server, and clear in-memory state."""
         self.destroy_lifecycle_publisher(self.stream_pub)
+        self._action_server.destroy()
         self.collection = None
         self.conversation_history = []
         self.get_logger().info("conversation_manager: cleaned up")
