@@ -7,16 +7,16 @@ from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
     config = os.path.join(
-        get_package_share_directory('text_to_speech'),
+        get_package_share_directory('gesture_execution'),
         'config',
-        'text_to_speech_configuration.yaml'
+        'gesture_execution_configuration.yaml'
     )
 
     return LaunchDescription([
         Node(
-            package='text_to_speech',
-            executable='text_to_speech',
-            name='text_to_speech',
+            package='gesture_execution',
+            executable='gesture_execution',
+            name='gesture_action_server',
             parameters=[config],
             output='screen',
         ),

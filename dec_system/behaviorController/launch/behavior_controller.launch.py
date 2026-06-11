@@ -7,16 +7,16 @@ from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
     config = os.path.join(
-        get_package_share_directory('text_to_speech'),
+        get_package_share_directory('behavior_controller'),
         'config',
-        'text_to_speech_configuration.yaml'
+        'behaviorControllerConfiguration.yaml'
     )
 
     return LaunchDescription([
         Node(
-            package='text_to_speech',
-            executable='text_to_speech',
-            name='text_to_speech',
+            package='behavior_controller',
+            executable='behaviorController',
+            name='behavior_controller',
             parameters=[config],
             output='screen',
         ),
