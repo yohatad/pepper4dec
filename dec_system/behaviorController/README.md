@@ -159,9 +159,11 @@ XML files are in the `data/` folder. The active scenario is set via `scenario_sp
 
 | File | Description |
 |------|-------------|
-| `lab_tour.xml` | Guided tour of the lab environment |
 | `dec_Tour.xml` | Guided tour of the DEC environment |
 | `asr_cm_tts_pipeline.xml` | Intent-routed ASR → ConversationManager → TTS pipeline |
+| `listen_cm_tts_pipeline.xml` | Standalone ASR → ConversationManager → TTS pipeline |
+| `dec_DeicticTest.xml` | Test tree for the exhibit-loop / deictic gesture nodes |
+| `dec_GestureNavTest.xml` | Test tree for gesture and navigation nodes |
 
 ## Package Structure
 
@@ -170,20 +172,24 @@ behaviorController/
 ├── config/
 │   └── behaviorControllerConfiguration.yaml
 ├── data/
-│   ├── lab_tour.xml
 │   ├── dec_Tour.xml
 │   ├── asr_cm_tts_pipeline.xml
+│   ├── listen_cm_tts_pipeline.xml
+│   ├── dec_DeicticTest.xml
+│   ├── dec_GestureNavTest.xml
 │   ├── cultureKnowledgeBase.yaml
+│   ├── decEnvironmentKnowledgeBase.yaml
+│   ├── decEnvironmentKnowledgeBase_short.yaml
 │   └── labEnvironmentKnowledgeBase.yaml
-├── behaviorController/
-│   ├── __init__.py
-│   ├── behaviorController_application.py
-│   ├── behaviorController_implementation.py
-│   ├── configManager.py
-│   └── knowledgeManager.py
+├── include/
+│   └── behaviorController/
+│       └── behaviorControllerInterface.h
+├── src/
+│   ├── behaviorControllerApplication.cpp
+│   ├── behaviorControllerImplementation.cpp
+│   └── behaviorControllerUtilities.cpp
+├── CMakeLists.txt
 ├── package.xml
-├── setup.py
-├── setup.cfg
 └── README.md
 ```
 

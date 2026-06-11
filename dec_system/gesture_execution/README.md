@@ -51,7 +51,7 @@ Configuration is managed via `config/gesture_execution_configuration.yaml`:
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `gestureDescriptors` | Path to gesture descriptor file | `gesture.yaml` |
-| `robotTopics` | Path to robot topic mapping file | `pepper_topics.yaml` |
+| `robotTopics` | Path to robot topic mapping file | `pepperTopics.yaml` |
 | `verboseMode` | Enable detailed logging and debugging | `true` |
 
 ### Gesture Definitions
@@ -60,7 +60,6 @@ Gestures are defined in `data/gesture.yaml` with the following structure:
 ```yaml
 gestures:
   wave:
-    id: 2
     joints: ["RArm"]
     joint_angles:
       RArm:
@@ -98,14 +97,14 @@ ros2 run gesture_execution gesture_execution
 | Topic | Type | Description |
 |-------|------|-------------|
 | `/joint_states` | `sensor_msgs/JointState` | Current joint positions |
-| `/robot_localization/pose` | `geometry_msgs/PoseStamped` | Robot pose for IK |
+| `/robot_localization/pose` | `geometry_msgs/Pose2D` | Robot pose for IK |
 
 ### Published Topics
 
 | Topic | Type | Description |
 |-------|------|-------------|
-| `/joint_angles` | `naoqi_bridge_msgs/JointAnglesWithSpeed` | Joint angle commands |
-| `/gesture_execution/visualization` | `visualization_msgs/MarkerArray` | RViz2 visualization markers |
+| `/joint_angles_trajectory` | `naoqi_bridge_msgs/JointAnglesTrajectory` | Joint angle trajectory commands |
+| `/gesture_execution/visualization` | `visualization_msgs/Marker` | RViz2 visualization markers |
 
 ### Action Servers
 
@@ -122,20 +121,20 @@ ros2 run gesture_execution gesture_execution
 | Field | Type | Description |
 |-------|------|-------------|
 | `gesture_type` | string | "deictic", "iconic", "bow", "nod" |
-| `gesture_id` | int32 | ID of predefined gesture (for iconic gestures) |
-| `gesture_duration` | int32 | Duration in milliseconds (1000-5000) |
-| `bow_nod_angle` | int32 | Angle for bowing/nodding in degrees |
-| `location_x` | float32 | X coordinate for pointing (meters) |
-| `location_y` | float32 | Y coordinate for pointing (meters) |
-| `location_z` | float32 | Z coordinate for pointing (meters) |
+| `gesture_name` | string | Name of predefined gesture (for iconic gestures) |
+| `gesture_duration` | int64 | Duration in milliseconds (1000-5000) |
+| `bow_nod_angle` | int64 | Angle for bowing/nodding in degrees |
+| `location_x` | float64 | X coordinate for pointing (meters) |
+| `location_y` | float64 | Y coordinate for pointing (meters) |
+| `location_z` | float64 | Z coordinate for pointing (meters) |
 
 ### Result
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `success` | bool | Whether execution succeeded |
-| `actual_duration_seconds` | float32 | Actual duration of gesture execution |
 | `message` | string | Status message |
+| `actual_duration_seconds` | float32 | Actual duration of gesture execution |
 
 ### Feedback
 
@@ -150,19 +149,19 @@ Points to a specific 3D location in the environment using inverse kinematics.
 
 ```bash
 ros2 action send_goal /gesture_execution dec_interfaces/action/Gesture \
-  "{gesture_type: 'deictic', gesture_id: 0, gesture_duration: 2000, bow_nod_angle: 0, \
+  "{gesture_type: 'deictic', gesture_name: '', gesture_duration: 2000, bow_nod_angle: 0, \
     location_x: 2.0, location_y: 1.5, location_z: 0.8}"
 ```
 
 ### 2. Iconic Gestures (Predefined Arm Motions)
 Executes predefined arm motions from gesture.yaml:
-- `id: 1` - Welcome gesture (both arms)
-- `id: 2` - Wave gesture (right arm)
-- `id: 3` - Handshake gesture (both arms)
+- `welcome` - Welcome gesture (both arms + leg)
+- `wave` - Wave gesture (right arm)
+- `shake` - Handshake gesture (right arm)
 
 ```bash
 ros2 action send_goal /gesture_execution dec_interfaces/action/Gesture \
-  "{gesture_type: 'iconic', gesture_id: 2, gesture_duration: 3000, bow_nod_angle: 0, \
+  "{gesture_type: 'iconic', gesture_name: 'wave', gesture_duration: 3000, bow_nod_angle: 0, \
     location_x: 0.0, location_y: 0.0, location_z: 0.0}"
 ```
 
@@ -171,7 +170,7 @@ Bows the robot forward at a specified angle (5-45°).
 
 ```bash
 ros2 action send_goal /gesture_execution dec_interfaces/action/Gesture \
-  "{gesture_type: 'bow', gesture_id: 0, gesture_duration: 2500, bow_nod_angle: 30, \
+  "{gesture_type: 'bow', gesture_name: '', gesture_duration: 2500, bow_nod_angle: 30, \
     location_x: 0.0, location_y: 0.0, location_z: 0.0}"
 ```
 
@@ -180,7 +179,7 @@ Nods the robot's head at a specified angle (5-30°).
 
 ```bash
 ros2 action send_goal /gesture_execution dec_interfaces/action/Gesture \
-  "{gesture_type: 'nod', gesture_id: 0, gesture_duration: 1500, bow_nod_angle: 15, \
+  "{gesture_type: 'nod', gesture_name: '', gesture_duration: 1500, bow_nod_angle: 15, \
     location_x: 0.0, location_y: 0.0, location_z: 0.0}"
 ```
 
@@ -246,11 +245,11 @@ ros2 action list
 
 # Send a test gesture
 ros2 action send_goal /gesture_execution dec_interfaces/action/Gesture \
-  "{gesture_type: 'iconic', gesture_id: 2, gesture_duration: 3000, bow_nod_angle: 0, \
+  "{gesture_type: 'iconic', gesture_name: 'wave', gesture_duration: 3000, bow_nod_angle: 0, \
     location_x: 0.0, location_y: 0.0, location_z: 0.0}"
 
 # Monitor joint commands
-ros2 topic echo /joint_angles
+ros2 topic echo /joint_angles_trajectory
 ```
 
 ### RViz2 Visualization

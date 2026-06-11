@@ -46,18 +46,18 @@ pip install -r ~/ros2_ws/src/pepper4dec/dec_system/conversation_manager/requirem
 ```
 
 # 🔧 Configuration Parameters
-The configuration is managed via `config/conversation_manager_configuration.yaml`. The file must be present for the node to start.
+The configuration is managed via `config/converation_manager_configuration.yaml`. The file must be present for the node to start.
 
-| Parameter                        | Description                                                      | Range/Values     | Default Value                 |
-|----------------------------------|------------------------------------------------------------------|------------------|-------------------------------|
-| `llm.base_url`                   | LLM API endpoint URL                                             | String (URL)     | `https://api.deepseek.com/v1` |
-| `llm.api_key`                    | API key for LLM service                                          | String           | (from `LLM_API_KEY` env var)  |
-| `llm.model`                      | LLM model name                                                   | String           | `deepseek-chat`               |
+| Parameter                        | Description                                                      | Range/Values     | Default Value                       |
+|----------------------------------|------------------------------------------------------------------|------------------|--------------------------------------|
+| `llm.base_url`                   | LLM API endpoint URL                                             | String (URL)     | `http://localhost:8080/v1`          |
+| `llm.api_key`                    | API key for LLM service                                          | String           | (from `LLM_API_KEY` env var)        |
+| `llm.model`                      | LLM model name                                                   | String           | `HuggingFaceTB/SmolLM3-3B`          |
 | `embedding.model`                | Sentence transformer model for embeddings                        | String           | `all-MiniLM-L6-v2`           |
 | `search.similarity_threshold`    | Similarity threshold for document retrieval                      | `[0.0 – 1.0]`   | `0.15`                        |
 | `search.top_k`                   | Number of documents to retrieve for context                      | Positive integer | `10`                           |
 | `conversation.max_history_turns` | Number of past turns kept in conversation memory               | Positive integer | `15`                           |
-| `conversation.context_turns`     | Number of recent turns included in each LLM request             | Positive integer | `3`                            |
+| `conversation.context_turns`     | Number of recent turns included in each LLM request             | Positive integer | `10`                           |
 | `data.default_path`              | Path to JSON knowledge base (relative to package share dir)      | String (path)    | `./data/upanzi_data.json`     |
 | `debug.verbose`                  | Enable verbose logging                                           | Boolean          | `false`                       |
 
@@ -66,7 +66,7 @@ The configuration is managed via `config/conversation_manager_configuration.yaml
 > - ChromaDB storage is automatically configured in the package data folder.
 > - The configuration file is required for node startup.
 
-## Example Configuration File (`config/conversation_manager_configuration.yaml`)
+## Example Configuration File (`config/converation_manager_configuration.yaml`)
 ```yaml
 llm:
   base_url: https://api.deepseek.com/v1
@@ -77,11 +77,11 @@ embedding:
 
 search:
   similarity_threshold: 0.15
-  top_k: 10
+  top_k: 5
 
 conversation:
   max_history_turns: 15
-  context_turns: 3
+  context_turns: 10
 
 data:
   default_path: ./data/upanzi_data.json
@@ -148,7 +148,7 @@ SpeechRecognition → ConversationManager → TTS
 ```
 
 ## Knowledge Base Initialization
-The knowledge base is automatically initialized at node startup using `config/conversation_manager_configuration.yaml`. The `data.default_path` parameter specifies the JSON data file to load. The collection name is set via the `collection_name` ROS parameter (default: `'upanzi_knowledge'`).
+The knowledge base is automatically initialized at node startup using `config/converation_manager_configuration.yaml`. The `data.default_path` parameter specifies the JSON data file to load. The collection name is set via the `collection_name` ROS parameter (default: `'upanzi_knowledge'`).
 
 If the collection does not exist it will be created and populated from the data file automatically. If it already exists the existing collection is reused.
 
@@ -228,13 +228,16 @@ For issues or questions:
 ```
 conversation_manager/
 ├── config/
-│   └── conversation_manager_configuration.yaml
+│   └── converation_manager_configuration.yaml
 ├── data/
-│   └── upanzi_data.json
+│   ├── upanzi_data.json
+│   └── system_prompt.txt
+├── launch/
 ├── conversation_manager/
 │   ├── __init__.py
 │   ├── conversation_manager_application.py
-│   └── conversation_manager_implementation.py
+│   ├── conversation_manager_implementation.py
+│   └── conversation_manager_utilities.py
 ├── package.xml
 ├── setup.py
 ├── setup.cfg

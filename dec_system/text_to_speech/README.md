@@ -87,7 +87,7 @@ Configuration is managed via `config/text_to_speech_configuration.yaml`.
 | `output_device` | sounddevice output device index (-1 = system default) | `-1` |
 | `stream_volume` | PCM amplitude multiplier for stream mode | `1.0` |
 | `elevenlabs_api_key` | ElevenLabs API key | `""` |
-| `elevenlabs_voice_id` | ElevenLabs voice ID | `Rachel` |
+| `elevenlabs_voice_id` | ElevenLabs voice ID | `21m00Tcm4TlvDq8ikWAM` (Rachel) |
 | `elevenlabs_model` | ElevenLabs model ID | `eleven_turbo_v2_5` |
 | `barge_in_threshold` | VAD probability to trigger barge-in | `0.85` |
 | `barge_in_chunks` | Consecutive VAD chunks above threshold required | `3` |
@@ -225,6 +225,9 @@ text_to_speech/
 │   └── text_to_speech_configuration.yaml
 ├── data/
 │   └── pepper_topics.yaml
+├── launch/
+│   └── text_to_speech_launch_robot.launch.py
+├── models/
 ├── resource/
 │   └── text_to_speech
 ├── tests/
@@ -237,6 +240,7 @@ text_to_speech/
 ├── setup.py
 ├── setup.cfg
 ├── requirements.txt
+├── text_to_speech_requirements_x86.txt
 └── README.md
 ```
 

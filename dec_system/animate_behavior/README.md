@@ -44,13 +44,12 @@ Configuration is managed via `config/animate_behavior_configuration.yaml`:
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `update_rate` | Animation loop frequency (Hz) | `30.0` |
-| `feedback_rate` | Feedback publishing frequency (Hz) | `2.0` |
+| `gesture_update_rate` | Animation loop frequency (Hz) | `30.0` |
 | `gesture_interval_min` | Minimum time between gesture targets (sec) | `2.5` |
-| `gesture_interval_max` | Maximum time between gesture targets (sec) | `4.0` |
-| `rotation_interval` | Time between base rotation changes (sec) | `5.0` |
-| `smoothing_factor` | Exponential smoothing coefficient | `0.15` |
-| `motion_speed` | ALMotion speed parameter | `0.08` |
+| `gesture_interval_max` | Maximum time between gesture targets (sec) | `4.5` |
+| `gesture_rotation_interval` | Time between base rotation changes (sec) | `5.0` |
+| `gesture_smoothing_factor` | Exponential smoothing coefficient | `0.15` |
+| `gesture_motion_speed` | ALMotion speed parameter | `0.08` |
 | `led_enabled` | Enable/disable LED cascade animation | `true` |
 | `led_white_step` | Delay between each LED layer fading white (sec) | `0.06` |
 | `led_dark_step` | Delay between each LED layer fading dark (sec) | `0.04` |
