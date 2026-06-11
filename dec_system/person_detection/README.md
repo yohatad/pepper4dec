@@ -6,7 +6,7 @@
   <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
-The **Person Detection and Tracking** package is a ROS2 package designed to detect and track multiple persons in real-time by subscribing to image topics. It publishes an array of detected persons with their bounding boxes, labels, and tracking IDs to the `/personDetection/data` topic. Each entry includes the label, centroid coordinates, bounding box dimensions, and a unique tracking ID for maintaining identity across frames.
+The **Person Detection and Tracking** package is a ROS2 package designed to detect and track multiple persons in real-time by subscribing to image topics. It publishes an array of detected persons with their bounding boxes, labels, and tracking IDs to the `/person_detection/data` topic. Each entry includes the label, centroid coordinates, bounding box dimensions, and a unique tracking ID for maintaining identity across frames.
 
 ## Key Features
 - **ROS2 Native**: Built for ROS2 Humble
@@ -114,11 +114,11 @@ ros2 run person_detection person_detection
 
 | Topic | Type | Description |
 |-------|------|-------------|
-| `/personDetection/data` | `dec_interfaces/msg/PersonDetection` | Detected persons with tracking IDs |
+| `/person_detection/data` | `dec_interfaces/msg/PersonDetection` | Detected persons with tracking IDs |
 
 ## Message Structure
 
-### `/personDetection/data` (`dec_interfaces/msg/PersonDetection`)
+### `/person_detection/data` (`dec_interfaces/msg/PersonDetection`)
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -169,7 +169,7 @@ The person detection system consists of two main components:
 ros2 node list
 
 # Monitor person detection output
-ros2 topic echo /personDetection/data
+ros2 topic echo /person_detection/data
 
 # Verify topics
 ros2 topic list

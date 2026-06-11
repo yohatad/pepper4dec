@@ -78,7 +78,7 @@ topics:
   JointAngles: "/joint_angles"
   Wheels: "/cmd_vel"
   JointStates: "/joint_states"
-  RobotPose: "/robotLocalization/pose"
+  RobotPose: "/robot_localization/pose"
 ```
 
 ## Running the Node
@@ -98,7 +98,7 @@ ros2 run gesture_execution gesture_execution
 | Topic | Type | Description |
 |-------|------|-------------|
 | `/joint_states` | `sensor_msgs/JointState` | Current joint positions |
-| `/robotLocalization/pose` | `geometry_msgs/PoseStamped` | Robot pose for IK |
+| `/robot_localization/pose` | `geometry_msgs/PoseStamped` | Robot pose for IK |
 
 ### Published Topics
 
@@ -111,7 +111,7 @@ ros2 run gesture_execution gesture_execution
 
 | Action | Type | Description |
 |--------|------|-------------|
-| `/gesture_execution/execute` | `dec_interfaces/action/Gesture` | Main gesture execution interface |
+| `/gesture_execution` | `dec_interfaces/action/Gesture` | Main gesture execution interface |
 
 ## Action Interface
 
@@ -149,7 +149,7 @@ ros2 run gesture_execution gesture_execution
 Points to a specific 3D location in the environment using inverse kinematics.
 
 ```bash
-ros2 action send_goal /gesture_execution/execute dec_interfaces/action/Gesture \
+ros2 action send_goal /gesture_execution dec_interfaces/action/Gesture \
   "{gesture_type: 'deictic', gesture_id: 0, gesture_duration: 2000, bow_nod_angle: 0, \
     location_x: 2.0, location_y: 1.5, location_z: 0.8}"
 ```
@@ -161,7 +161,7 @@ Executes predefined arm motions from gesture.yaml:
 - `id: 3` - Handshake gesture (both arms)
 
 ```bash
-ros2 action send_goal /gesture_execution/execute dec_interfaces/action/Gesture \
+ros2 action send_goal /gesture_execution dec_interfaces/action/Gesture \
   "{gesture_type: 'iconic', gesture_id: 2, gesture_duration: 3000, bow_nod_angle: 0, \
     location_x: 0.0, location_y: 0.0, location_z: 0.0}"
 ```
@@ -170,7 +170,7 @@ ros2 action send_goal /gesture_execution/execute dec_interfaces/action/Gesture \
 Bows the robot forward at a specified angle (5-45°).
 
 ```bash
-ros2 action send_goal /gesture_execution/execute dec_interfaces/action/Gesture \
+ros2 action send_goal /gesture_execution dec_interfaces/action/Gesture \
   "{gesture_type: 'bow', gesture_id: 0, gesture_duration: 2500, bow_nod_angle: 30, \
     location_x: 0.0, location_y: 0.0, location_z: 0.0}"
 ```
@@ -179,7 +179,7 @@ ros2 action send_goal /gesture_execution/execute dec_interfaces/action/Gesture \
 Nods the robot's head at a specified angle (5-30°).
 
 ```bash
-ros2 action send_goal /gesture_execution/execute dec_interfaces/action/Gesture \
+ros2 action send_goal /gesture_execution dec_interfaces/action/Gesture \
   "{gesture_type: 'nod', gesture_id: 0, gesture_duration: 1500, bow_nod_angle: 15, \
     location_x: 0.0, location_y: 0.0, location_z: 0.0}"
 ```
@@ -245,7 +245,7 @@ ros2 node list
 ros2 action list
 
 # Send a test gesture
-ros2 action send_goal /gesture_execution/execute dec_interfaces/action/Gesture \
+ros2 action send_goal /gesture_execution dec_interfaces/action/Gesture \
   "{gesture_type: 'iconic', gesture_id: 2, gesture_duration: 3000, bow_nod_angle: 0, \
     location_x: 0.0, location_y: 0.0, location_z: 0.0}"
 

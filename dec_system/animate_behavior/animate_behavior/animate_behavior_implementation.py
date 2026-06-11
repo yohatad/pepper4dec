@@ -139,7 +139,7 @@ class AnimateBehaviorNode(LifecycleNode):
 
         # Action server — created once; goal_callback guards against inactive state
         self.action_server = ActionServer(
-            self, AnimateBehavior, 'animate_behavior',
+            self, AnimateBehavior, '/animate_behavior',
             execute_callback=self.execute_callback,
             goal_callback=self.goal_callback,
             cancel_callback=self.cancel_callback,
@@ -148,7 +148,7 @@ class AnimateBehaviorNode(LifecycleNode):
 
         # Stop service — always available after configure
         self.stop_service = self.create_service(
-            Trigger, 'animate_behavior/stop',
+            Trigger, '/animate_behavior/stop',
             self.stop_service_callback,
             callback_group=self.callback_group,
         )

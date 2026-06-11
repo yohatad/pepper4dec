@@ -4,7 +4,7 @@
 text_to_speech_application.py
 ROS2 node for Text-to-Speech synthesis and playback on the Pepper robot.
 
-Receives sentences from /tts/input and speaks them
+Receives sentences from /text_to_speech/input and speaks them
 as they arrive — enabling Pepper to start talking before the LLM has finished
 generating the full response.
 
@@ -24,10 +24,10 @@ Features:
   - Sentence queue with a background playback thread.
   - Barge-in detection: user speech during playback stops Pepper immediately.
   - Microphone muting during playback (naoqi_ros / kokoro_local backends).
-  - /tts action server for programmatic TTS calls.
+  - /text_to_speech action server for programmatic TTS calls.
 
 ROS Subscriptions:
-  /tts/input (std_msgs/String)
+  /text_to_speech/input (std_msgs/String)
   /speech_event/vad_speech_prob         (std_msgs/Float32)
 
 ROS Service clients:
@@ -39,7 +39,7 @@ ROS Action clients:
   /naoqi_driver/play_audio              (naoqi_bridge_msgs/action/PlayAudio)
 
 ROS Action server:
-  /tts                                  (dec_interfaces/action/TTS)
+  /text_to_speech                                  (dec_interfaces/action/TTS)
 
 ROS Publishers:
   /text_to_speech/speaking              (std_msgs/Bool)
@@ -96,7 +96,7 @@ class TextToSpeechNode(LifecycleNode):
     Lifecycle:
       configure  → init TTS backend (Kokoro warmup, AudioPlayer), create publishers
                    + service clients + action server
-      activate   → start background playback thread, create /tts/input + VAD subscriptions
+      activate   → start background playback thread, create /text_to_speech/input + VAD subscriptions
       deactivate → stop playback thread, destroy subscriptions
       cleanup    → destroy publishers
     """
@@ -165,7 +165,7 @@ class TextToSpeechNode(LifecycleNode):
         self._action_cb_group = MutuallyExclusiveCallbackGroup()
 
         self._tts_action = ActionServer(
-            self, TTS, "/tts", self.execute_tts_action,
+            self, TTS, "/text_to_speech", self.execute_tts_action,
             callback_group=self._action_cb_group,
         )
 
@@ -177,7 +177,7 @@ class TextToSpeechNode(LifecycleNode):
         super().on_activate(_state)
 
         self._sub_tts_input = self.create_subscription(
-            String, "/tts/input", self.stream_sentence_callback, 10,
+            String, "/text_to_speech/input", self.stream_sentence_callback, 10,
             callback_group=self._stream_cb_group,
         )
         self._sub_vad = self.create_subscription(
@@ -317,7 +317,7 @@ class TextToSpeechNode(LifecycleNode):
 
         Queue items are either:
           str       — sentence to speak
-          callable  — sentinel signalling that a /tts action goal is done
+          callable  — sentinel signalling that a /text_to_speech action goal is done
         """
         while not self.shutdown:
             try:

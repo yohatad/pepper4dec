@@ -13,7 +13,7 @@ The **Conversation Manager Package** implements a **Retrieval-Augmented Generati
 - **Retrieval-Augmented Generation**: Combines vector search with large language models for accurate, context-aware responses
 - **ChromaDB Integration**: Local vector database for privacy-preserving knowledge storage
 - **Configurable LLM Support**: Compatible with any OpenAI-compatible API (DeepSeek, Groq, etc.)
-- **Streaming TTS Output**: Publishes answer sentences to `/tts/input` as they arrive from the LLM, enabling Pepper to start speaking before the full response is ready
+- **Streaming TTS Output**: Publishes answer sentences to `/text_to_speech/input` as they arrive from the LLM, enabling Pepper to start speaking before the full response is ready
 - **Conversation Memory**: Maintains context from previous interactions (configurable number of turns)
 - **Multi-format Data Support**: Handles structured JSON knowledge bases and flat document lists
 - **ROS2 Action Interface**: Action-based architecture for integration with other ROS2 nodes and the BehaviorTree controller, with feedback during processing
@@ -112,7 +112,7 @@ ros2 run conversation_manager conversation_manager \
 
 ### `/conversation_manager` (`dec_interfaces/action/ConversationManager`)
 Receives a natural-language prompt, performs a RAG query, and returns the generated answer.
-Sentences are streamed to `/tts/input` while the LLM is generating so that the TTS node can start speaking before the full response is ready.
+Sentences are streamed to `/text_to_speech/input` while the LLM is generating so that the TTS node can start speaking before the full response is ready.
 
 **Goal Fields:**
 | Field    | Type   | Description                       |
@@ -134,7 +134,7 @@ Sentences are streamed to `/tts/input` while the LLM is generating so that the T
 
 ## Publisher
 
-### `/tts/input` (`std_msgs/String`)
+### `/text_to_speech/input` (`std_msgs/String`)
 Individual answer sentences published one at a time as they arrive from the LLM stream.
 The `text_to_speech` node subscribes here to begin playback before the action completes.
 
@@ -161,7 +161,7 @@ The RAG system has three main components:
 3. **Conversation Manager Node**:
    - Receives prompts via the `/conversation_manager` action server
    - Performs semantic search on the vector database (`searching` feedback)
-   - Streams LLM-generated sentences to `/tts/input` as they arrive (`generating` feedback)
+   - Streams LLM-generated sentences to `/text_to_speech/input` as they arrive (`generating` feedback)
    - Returns the full answer text as the action result for any other consumer
    - Maintains per-session conversation history for context-aware responses
 
@@ -177,7 +177,7 @@ User utterance
       │
       ├─► Stage 2: Streaming LLM generation    →  feedback: "generating"
       │         │
-      │         └─► sentences ──► /tts/input  (TTS starts speaking immediately)
+      │         └─► sentences ──► /text_to_speech/input  (TTS starts speaking immediately)
       │
       └─► Action result: full response text    →  TTSNode waits for playback to finish
 ```
@@ -214,7 +214,7 @@ ros2 action send_goal /conversation_manager dec_interfaces/action/ConversationMa
   "{prompt: 'Tell me about the Digital Experience Center.'}"
 
 # Monitor TTS streaming output
-ros2 topic echo /tts/input
+ros2 topic echo /text_to_speech/input
 ```
 
 # 💡 Support

@@ -120,11 +120,11 @@ class ConversationManagerNode(LifecycleNode):
             return TransitionCallbackReturn.FAILURE
 
         # Managed publisher — silenced while INACTIVE, active once activated
-        self.stream_pub = self.create_lifecycle_publisher(String, '/tts/input', 10)
+        self.stream_pub = self.create_lifecycle_publisher(String, '/text_to_speech/input', 10)
 
         # Action server
         self._action_server = ActionServer(
-            self, ConversationManager, 'conversation_manager', self.execute_callback
+            self, ConversationManager, '/conversation_manager', self.execute_callback
         )
 
         status = (
@@ -235,7 +235,7 @@ class ConversationManagerNode(LifecycleNode):
         Flow:
           1. Vector search (fast, ~50-200ms)
           2. Streaming LLM call — each complete answer sentence is published to
-             /tts/input so text_to_speech can begin
+             /text_to_speech/input so text_to_speech can begin
              speaking before the full response is ready.
           3. Action result carries the full answer text for any other consumer.
         """
@@ -272,7 +272,7 @@ class ConversationManagerNode(LifecycleNode):
             search_results = search(self.collection, query)
 
             # Stage 2: streaming LLM generation
-            # Sentences are published to /tts/input
+            # Sentences are published to /text_to_speech/input
             # as they arrive, allowing TTS to start speaking immediately.
             feedback_msg.status = 'generating'
             goal_handle.publish_feedback(feedback_msg)

@@ -140,9 +140,9 @@ class PersonDetectionNode(LifecycleNode):
     # ── Base lifecycle callbacks ──────────────────────────────────────────────
 
     def on_configure(self, _state) -> TransitionCallbackReturn:
-        self.pub_objects     = self.create_lifecycle_publisher(PersonDetection, '/personDetection/data', 10)
-        self.debug_pub       = self.create_lifecycle_publisher(Image, '/personDetection/debug', 1)
-        self.depth_debug_pub = self.create_lifecycle_publisher(Image, '/personDetection/depth_debug', 1)
+        self.pub_objects     = self.create_lifecycle_publisher(PersonDetection, '/person_detection/data', 10)
+        self.debug_pub       = self.create_lifecycle_publisher(Image, '/person_detection/debug', 1)
+        self.depth_debug_pub = self.create_lifecycle_publisher(Image, '/person_detection/depth_debug', 1)
 
         self.bridge      = CvBridge()
         self.depth_image: Optional[np.ndarray] = None

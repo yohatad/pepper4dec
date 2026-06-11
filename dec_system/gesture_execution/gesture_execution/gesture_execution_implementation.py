@@ -114,7 +114,7 @@ class ConfigManager:
             'JointAngles': '/joint_angles',
             'Wheels':      '/cmd_vel',
             'JointStates': '/joint_states',
-            'RobotPose':   '/robotLocalization/pose',
+            'RobotPose':   '/robot_localization/pose',
         }
         topics_path = self.package_path / 'data' / 'pepper_topics.yaml'
         try:
@@ -220,7 +220,7 @@ class GestureExecutionSystem(LifecycleNode):
         self._action_server = ActionServer(
             self,
             Gesture,
-            '/gesture_execution/execute',
+            '/gesture_execution',
             execute_callback=self.execute_callback,
             goal_callback=self.goal_callback,
             cancel_callback=self.cancel_callback,
@@ -243,7 +243,7 @@ class GestureExecutionSystem(LifecycleNode):
             Pose2D, topics['RobotPose'], self.robot_pose_callback, 10
         )
 
-        self.get_logger().info('GestureExecutionSystem activated — ready for goals on /gesture_execution/execute')
+        self.get_logger().info('GestureExecutionSystem activated — ready for goals on /gesture_execution')
         return TransitionCallbackReturn.SUCCESS
 
     def on_deactivate(self, _state) -> TransitionCallbackReturn:

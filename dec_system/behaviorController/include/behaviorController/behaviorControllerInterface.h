@@ -320,7 +320,7 @@ public:
 };
 
 // Wraps dec_interfaces::action::TTS
-// Sends text to the /tts action server (text_to_speech node), which synthesises
+// Sends text to the /text_to_speech action server (text_to_speech node), which synthesises
 // audio via Kokoro or ElevenLabs and plays it through the configured backend.
 // Blocks until playback is complete.
 class TTSNode
@@ -339,7 +339,7 @@ public:
     BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
 };
 
-// Calls animate_behavior/stop (std_srvs::srv::Trigger) to immediately stop animation.
+// Calls /animate_behavior/stop (std_srvs::srv::Trigger) to immediately stop animation.
 // Returns SUCCESS if the service reports success, FAILURE otherwise.
 class StopAnimateBehavior
     : public BT::RosServiceNode<std_srvs::srv::Trigger>
@@ -356,7 +356,7 @@ public:
     BT::NodeStatus onFailure(BT::ServiceNodeErrorCode error) override;
 };
 
-// Calls /attn/set_enabled (std_srvs::srv::SetBool) to enable or disable overt attention.
+// Calls /overt_attention/set_enabled (std_srvs::srv::SetBool) to enable or disable overt attention.
 // Input port 'enabled' (bool): true = enable, false = disable.
 // Returns SUCCESS if the service confirms the change, FAILURE otherwise.
 class SetOvertAttention
@@ -415,7 +415,7 @@ public:
     BT::NodeStatus onFailure(BT::ServiceNodeErrorCode error) override;
 };
 
-// Subscribes to /faceDetection/data and blocks (RUNNING) until face(s) are present,
+// Subscribes to /face_detection/data and blocks (RUNNING) until face(s) are present,
 // then returns SUCCESS. Never times out — runs indefinitely until condition is met.
 class CheckFaceDetected : public BT::StatefulActionNode
 {
@@ -438,7 +438,7 @@ private:
     std::mutex mutex_;
 };
 
-// Blocks (RUNNING) until at least one face appears on /faceDetection/data.
+// Blocks (RUNNING) until at least one face appears on /face_detection/data.
 // Returns FAILURE when the "timeout" port (seconds) expires without a face.
 class IsVisitorDiscovered : public BT::StatefulActionNode
 {
@@ -460,7 +460,7 @@ private:
     std::mutex mutex_;
 };
 
-// Blocks (RUNNING) until mutual gaze is detected on /faceDetection/data.
+// Blocks (RUNNING) until mutual gaze is detected on /face_detection/data.
 // Returns FAILURE when the "timeout" port (seconds) expires.
 class IsMutualGazeDiscovered : public BT::StatefulActionNode
 {

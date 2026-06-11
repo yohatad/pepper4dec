@@ -390,7 +390,7 @@ class SpeechRecognitionNode(LifecycleNode):
         self.asr_action_server = ActionServer(
             self,
             SpeechRecognition,
-            '/speech_recognition_action',
+            '/speech_recognition',
             self.execute_asr_action_callback,
             cancel_callback=self.cancel_callback,
             callback_group=self._action_cb_group,

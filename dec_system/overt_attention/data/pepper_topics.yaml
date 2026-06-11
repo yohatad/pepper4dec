@@ -6,12 +6,12 @@ topics:
     base: "/camera/aligned_depth_to_color/image_raw_custom"
     use_compressed: false
   saliency:
-    peak: "/attn/saliency_peak"
-    map: "/attn/saliency_map/compressed"
-  face: "/faceDetection/data"
+    peak: "/overt_attention/saliency_peak"
+    map: "/overt_attention/saliency_map/compressed"
+  face: "/face_detection/data"
   audio: "/audio/azimuth_rad"
   camera_info: "/camera/color/camera_info"
-  target_angles: "/attn/target_angles"
+  target_angles: "/overt_attention/target_angles"
   joint_state: "/head_cmd/joint_states"
   joint_angles: "/joint_angles"
   trajectory: "/head_controller/joint_trajectory"

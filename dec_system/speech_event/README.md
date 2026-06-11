@@ -109,7 +109,7 @@ ros2 run speech_event speech_event_localization
 
 | Action | Type | Description |
 |--------|------|-------------|
-| `/speech_recognition_action` | `dec_interfaces/action/SpeechRecognition` | Synchronous transcription requests |
+| `/speech_recognition` | `dec_interfaces/action/SpeechRecognition` | Synchronous transcription requests |
 
 ## Action Interface
 
@@ -212,7 +212,7 @@ ros2 node list
 ros2 action list
 
 # Send a test transcription request
-ros2 action send_goal /speech_recognition_action dec_interfaces/action/SpeechRecognition \
+ros2 action send_goal /speech_recognition dec_interfaces/action/SpeechRecognition \
   "{wait: 5.0}"
 
 # Monitor VAD probabilities

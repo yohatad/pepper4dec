@@ -7,7 +7,7 @@ robot_localization:
     
     # Topics
     odom_topic: "/odom"
-    pose_topic: "/robotLocalization/pose"
+    pose_topic: "/robot_localization/pose"
     
     # Publish rate (Hz)
     publish_rate: 10.0

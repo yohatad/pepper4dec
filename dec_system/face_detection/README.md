@@ -6,7 +6,7 @@
   <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
-The **Face and Mutual Gaze Detection and Localization** package detects multiple faces and evaluates their mutual gaze in real-time by subscribing to image topics. It publishes an array of detected faces and their mutual gaze status to the `/faceDetection/data` topic. Each entry includes the label ID, centroid coordinates, bounding box dimensions, and mutual gaze status.
+The **Face and Mutual Gaze Detection and Localization** package detects multiple faces and evaluates their mutual gaze in real-time by subscribing to image topics. It publishes an array of detected faces and their mutual gaze status to the `/face_detection/data` topic. Each entry includes the label ID, centroid coordinates, bounding box dimensions, and mutual gaze status.
 
 ## Key Features
 - **ROS2 Native**: Built for ROS2 Humble
@@ -109,11 +109,11 @@ ros2 run face_detection face_detection
 
 | Topic | Type | Description |
 |-------|------|-------------|
-| `/faceDetection/data` | `dec_interfaces/msg/FaceDetection` | Detected faces with mutual gaze status |
+| `/face_detection/data` | `dec_interfaces/msg/FaceDetection` | Detected faces with mutual gaze status |
 
 ## Message Structure
 
-### `/faceDetection/data` (`dec_interfaces/msg/FaceDetection`)
+### `/face_detection/data` (`dec_interfaces/msg/FaceDetection`)
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -167,7 +167,7 @@ The face detection system consists of three main components:
 ros2 node list
 
 # Monitor face detection output
-ros2 topic echo /faceDetection/data
+ros2 topic echo /face_detection/data
 
 # Verify topics
 ros2 topic list

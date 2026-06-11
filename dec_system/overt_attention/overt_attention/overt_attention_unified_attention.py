@@ -155,12 +155,12 @@ class OvertAttention(LifecycleNode):
         self.pub_target = self.create_lifecycle_publisher(Vector3, self.target_topic, 10)
 
         # Enable/disable service — available as long as node is configured
-        self.srv_enable = self.create_service(SetBool, '/attn/set_enabled', self.handle_set_enabled)
+        self.srv_enable = self.create_service(SetBool, '/overt_attention/set_enabled', self.handle_set_enabled)
 
         status       = 'ENABLED' if self.attention_enabled else 'DISABLED'
         default_mode = 'move to default' if self.move_to_default_on_disable else 'hold position'
         self.get_logger().info(f'Attention controller configured ({status})')
-        self.get_logger().info(f'Service: /attn/set_enabled | disable mode: {default_mode}')
+        self.get_logger().info(f'Service: /overt_attention/set_enabled | disable mode: {default_mode}')
         return TransitionCallbackReturn.SUCCESS
 
     def on_activate(self, _state) -> TransitionCallbackReturn:

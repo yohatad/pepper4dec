@@ -556,7 +556,7 @@ class TextToSpeechNode(Node):
 
     Sentences arrive either via:
       (a) /conversation_manager/response_stream  — streaming from LLM
-      (b) /tts action goal                       — programmatic calls
+      (b) /text_to_speech action goal                       — programmatic calls
 
     Both routes enqueue sentences into a thread-safe queue that is drained by
     a single background playback thread, ensuring strict ordering and clean
@@ -638,7 +638,7 @@ class TextToSpeechNode(Node):
 
         # ── TTS action server ─────────────────────────────────────────────────
         action_cb_group = MutuallyExclusiveCallbackGroup()
-        self._tts_action = ActionServer(self, TTS, "/tts", self.execute_tts_action,
+        self._tts_action = ActionServer(self, TTS, "/text_to_speech", self.execute_tts_action,
             callback_group=action_cb_group,)
 
         # ── Background playback thread ─────────────────────────────────────────
@@ -749,7 +749,7 @@ class TextToSpeechNode(Node):
 
         Queue items are either:
           str       — sentence to speak
-          callable  — sentinel signalling that a /tts action goal is done
+          callable  — sentinel signalling that a /text_to_speech action goal is done
         """
         while True:
             try:

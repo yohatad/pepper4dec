@@ -12,7 +12,7 @@ The **Behavior Controller** package orchestrates robot behavior on the Pepper ro
 - **ROS2 Native**: Built for ROS2 Humble
 - **BehaviorTree.CPP v4**: Mission logic expressed as composable XML behavior trees
 - **Intent-aware routing**: The `ConversationManager` BT node now exposes `intent` and `confidence` output ports; the `asr_cm_tts_pipeline.xml` tree branches on intent to drive speech, navigation, gesture, or stop behavior accordingly
-- **Streaming TTS**: Sentences stream to `/tts/input` while the LLM generates; the `TTS` BT node blocks until playback is complete
+- **Streaming TTS**: Sentences stream to `/text_to_speech/input` while the LLM generates; the `TTS` BT node blocks until playback is complete
 - **Multi-language Support**: Speech output in English and Kinyarwanda
 - **Configurable**: Configuration via YAML file; active scenario selectable at runtime
 - **Knowledge Base Driven**: Loads location data and cultural phrases from YAML knowledge bases
@@ -78,14 +78,14 @@ The following must be available before the behavior controller starts executing:
 
 | Interface | Type | Package |
 |-----------|------|---------|
-| `/tts` | `dec_interfaces::action::TTS` | `text_to_speech` |
+| `/text_to_speech` | `dec_interfaces::action::TTS` | `text_to_speech` |
 | `/conversation_manager` | `dec_interfaces::action::ConversationManager` | `conversation_manager` |
-| `/speech_recognition_action` | `dec_interfaces::action::SpeechRecognition` | `speech_event` |
+| `/speech_recognition` | `dec_interfaces::action::SpeechRecognition` | `speech_event` |
 | `/naoqi_driver/speech_with_feedback` | `naoqi_bridge_msgs::action::SpeechWithFeedback` | `naoqi_bridge` |
-| `animate_behavior` | `dec_interfaces::action::AnimateBehavior` | `animate_behavior` |
-| `/gesture` | `dec_interfaces::action::Gesture` | `gesture` |
+| `/animate_behavior` | `dec_interfaces::action::AnimateBehavior` | `animate_behavior` |
+| `/gesture_execution` | `dec_interfaces::action::Gesture` | `gesture_execution` |
 | `/navigate_to_pose` | `nav2_msgs::action::NavigateToPose` | `nav2` |
-| `/faceDetection/data` | `dec_interfaces::msg::FaceDetection` (topic) | `face_detection` |
+| `/face_detection/data` | `dec_interfaces::msg::FaceDetection` (topic) | `face_detection` |
 
 # 🖥️ BT Nodes Reference
 
@@ -93,19 +93,19 @@ All nodes registered in the factory:
 
 | BT Node | ROS2 Interface | Key Ports |
 |---------|---------------|-----------|
-| `TTS` | `dec_interfaces::action::TTS` (`/tts`) | `text` in; `status`, `message` out |
+| `TTS` | `dec_interfaces::action::TTS` (`/text_to_speech`) | `text` in; `status`, `message` out |
 | `ConversationManager` | `dec_interfaces::action::ConversationManager` (`/conversation_manager`) | `prompt` in; `response`, `intent`, `confidence`, `status` out |
 | `SpeechRecognition` | `dec_interfaces::action::SpeechRecognition` | `wait` in; `transcription`, `status` out |
 | `SpeechWithFeedback` | `naoqi_bridge_msgs::action::SpeechWithFeedback` | `say` in; `started`, `bookmark`, `current_word` out |
 | `AnimateBehavior` | `dec_interfaces::action::AnimateBehavior` | `behavior_type`, `selected_range`, `duration_seconds` in |
-| `StopAnimateBehavior` | `std_srvs::srv::Trigger` (`animate_behavior/stop`) | — |
+| `StopAnimateBehavior` | `std_srvs::srv::Trigger` (`/animate_behavior/stop`) | — |
 | `Gesture` | `dec_interfaces::action::Gesture` | `gesture_type`, `location_x/y/z` in |
 | `Navigate` | `nav2_msgs::action::NavigateToPose` (`/navigate_to_pose`) | `goal_x`, `goal_y`, `goal_theta` in |
-| `SetOvertAttention` | `std_srvs::srv::SetBool` (`/attn/set_enabled`) | `enabled` in |
+| `SetOvertAttention` | `std_srvs::srv::SetBool` (`/overt_attention/set_enabled`) | `enabled` in |
 | `SetSpeechListening` | `std_srvs::srv::SetBool` (`/speech_event/set_enabled`) | `enabled` in |
-| `CheckFaceDetected` | `/faceDetection/data` topic | `face_count`, `mutual_gaze` out |
-| `IsVisitorDiscovered` | `/faceDetection/data` topic | `timeout` in |
-| `IsMutualGazeDiscovered` | `/faceDetection/data` topic | `timeout` in |
+| `CheckFaceDetected` | `/face_detection/data` topic | `face_count`, `mutual_gaze` out |
+| `IsVisitorDiscovered` | `/face_detection/data` topic | `timeout` in |
+| `IsMutualGazeDiscovered` | `/face_detection/data` topic | `timeout` in |
 | `ListenForSpeech` | `/speech_event/text` topic | `transcription` out |
 | `GetVisitorResponse` | `/speech_event/text` topic | `timeout` in; `visitor_response` out |
 | `IsVisitorResponseYes` | `dec_interfaces::action::ConversationManager` | `visitor_response` in |

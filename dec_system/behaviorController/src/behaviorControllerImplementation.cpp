@@ -114,7 +114,7 @@ BT::NodeStatus AnimateBehaviorNode::onFailure(BT::ActionNodeErrorCode error)
 
 //=============================================================================
 // StopAnimateBehavior
-// Service: animate_behavior/stop  (std_srvs::srv::Trigger)
+// Service: /animate_behavior/stop  (std_srvs::srv::Trigger)
 //
 // Calls the stop service on the animate_behavior node to immediately halt any
 // ongoing animation. Returns SUCCESS if the service confirms the stop, FAILURE
@@ -133,7 +133,7 @@ bool StopAnimateBehavior::setRequest(Request::SharedPtr& /*request*/)
     // std_srvs::srv::Trigger has an empty request — nothing to set
     if (ConfigManager::instance().isVerbose()) {
         RCLCPP_INFO(rclcpp::get_logger("behavior_controller"),
-                    "[StopAnimateBehavior] Sending stop request to animate_behavior/stop");
+                    "[StopAnimateBehavior] Sending stop request to /animate_behavior/stop");
     }
     return true;
 }
@@ -388,7 +388,7 @@ BT::NodeStatus Navigate::onFailure(BT::ActionNodeErrorCode error)
 BT::PortsList SpeechRecognitionNode::providedPorts()
 {
     return {
-        BT::InputPort<std::string> ("action_name", "/speech_recognition_action", "Action server name"),
+        BT::InputPort<std::string> ("action_name", "/speech_recognition", "Action server name"),
         BT::InputPort<float>       ("wait",          2.0f, "Seconds to wait for speech input"),
         BT::OutputPort<std::string>("transcription",       "Recognised speech text"),
         BT::OutputPort<std::string>("status",              "Feedback update from action server (waiting/speech/transcribing)"),
@@ -638,7 +638,7 @@ BT::NodeStatus SpeechWithFeedbackNode::onFailure(BT::ActionNodeErrorCode error)
 BT::PortsList TTSNode::providedPorts()
 {
     return {
-        BT::InputPort<std::string> ("action_name", "/tts", "TTS action server name"),
+        BT::InputPort<std::string> ("action_name", "/text_to_speech", "TTS action server name"),
         BT::InputPort<std::string> ("text",         "",    "Text to synthesise and speak"),
         BT::OutputPort<std::string>("status",               "Feedback: queuing | speaking"),
         BT::OutputPort<std::string>("message",              "Result message from TTS server"),
@@ -701,7 +701,7 @@ BT::NodeStatus TTSNode::onFailure(BT::ActionNodeErrorCode error)
 
 //=============================================================================
 // SetOvertAttention
-// Service: /attn/set_enabled  (std_srvs::srv::SetBool)
+// Service: /overt_attention/set_enabled  (std_srvs::srv::SetBool)
 //
 // Enables or disables the overt attention system.
 //   enabled = true  → attention system starts tracking faces / saliency
@@ -762,7 +762,7 @@ BT::NodeStatus SetOvertAttention::onFailure(BT::ServiceNodeErrorCode error)
 
 //=============================================================================
 // CheckFaceDetected
-// Topic: /faceDetection/data  (dec_interfaces::msg::FaceDetection)
+// Topic: /face_detection/data  (dec_interfaces::msg::FaceDetection)
 //
 // Blocks (returns RUNNING) until the face-detection condition is met, then
 // returns SUCCESS. Runs indefinitely — never times out.
@@ -785,7 +785,7 @@ CheckFaceDetected::CheckFaceDetected(const std::string& name,
     : BT::StatefulActionNode(name, config), node_(node)
 {
     sub_ = node_->create_subscription<dec_interfaces::msg::FaceDetection>(
-        "/faceDetection/data", 10,
+        "/face_detection/data", 10,
         [this](const dec_interfaces::msg::FaceDetection::SharedPtr msg) {
             std::lock_guard<std::mutex> lock(mutex_);
             latestMsg_ = msg;
@@ -956,7 +956,7 @@ void ListenForSpeech::onHalted()
 
 //=============================================================================
 // IsVisitorDiscovered
-// Topic: /faceDetection/data  (dec_interfaces::msg::FaceDetection)
+// Topic: /face_detection/data  (dec_interfaces::msg::FaceDetection)
 //
 // Blocks (RUNNING) until at least one face appears. Returns FAILURE if the
 // "timeout" port (seconds) expires before any face is detected.
@@ -968,7 +968,7 @@ IsVisitorDiscovered::IsVisitorDiscovered(const std::string& name,
     : BT::StatefulActionNode(name, config), node_(node)
 {
     sub_ = node_->create_subscription<dec_interfaces::msg::FaceDetection>(
-        "/faceDetection/data", 10,
+        "/face_detection/data", 10,
         [this](const dec_interfaces::msg::FaceDetection::SharedPtr msg) {
             std::lock_guard<std::mutex> lock(mutex_);
             latestMsg_ = msg;
@@ -1030,7 +1030,7 @@ void IsVisitorDiscovered::onHalted()
 
 //=============================================================================
 // IsMutualGazeDiscovered
-// Topic: /faceDetection/data  (dec_interfaces::msg::FaceDetection)
+// Topic: /face_detection/data  (dec_interfaces::msg::FaceDetection)
 //
 // Blocks (RUNNING) until mutual gaze is detected. Returns FAILURE on timeout.
 //=============================================================================
@@ -1041,7 +1041,7 @@ IsMutualGazeDiscovered::IsMutualGazeDiscovered(const std::string& name,
     : BT::StatefulActionNode(name, config), node_(node)
 {
     sub_ = node_->create_subscription<dec_interfaces::msg::FaceDetection>(
-        "/faceDetection/data", 10,
+        "/face_detection/data", 10,
         [this](const dec_interfaces::msg::FaceDetection::SharedPtr msg) {
             std::lock_guard<std::mutex> lock(mutex_);
             latestMsg_ = msg;

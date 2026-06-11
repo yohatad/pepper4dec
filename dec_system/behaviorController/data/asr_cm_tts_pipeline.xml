@@ -5,9 +5,9 @@
 
   A minimal 3-step loop for validating the full speech pipeline end-to-end:
     1. SpeechRecognition  – listen for up to 7 s
-    2. ConversationManager – RAG + LLM; streams sentences to /tts/input;
+    2. ConversationManager – RAG + LLM; streams sentences to /text_to_speech/input;
                              writes {intent} and {confidence} to the blackboard
-    3. TTS                – calls /tts action server; blocks until playback done
+    3. TTS                – calls /text_to_speech action server; blocks until playback done
 
   Intent routing belongs in scenario-specific trees (e.g. lab_tour.xml).
   Here, {intent} and {confidence} are captured but not acted on — useful

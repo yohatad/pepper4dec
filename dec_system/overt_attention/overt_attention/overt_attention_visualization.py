@@ -114,7 +114,7 @@ class VisualizationNode(Node):
         self.create_subscription(CameraInfo, self.camera_info_topic, self.on_caminfo, qos)
         
         # Publisher
-        self.pub_overlay = self.create_publisher(Image, '/attn/visualization', 10)
+        self.pub_overlay = self.create_publisher(Image, '/overt_attention/visualization', 10)
         
         # State
         self.bridge = CvBridge()
@@ -304,7 +304,7 @@ class VisualizationNode(Node):
             
             # Log first publish
             if self.image_count == 1:
-                self.get_logger().info("First visualization published to /attn/visualization")
+                self.get_logger().info("First visualization published to /overt_attention/visualization")
                 
         except Exception as e:
             self.get_logger().error(f"Error publishing visualization: {e}")

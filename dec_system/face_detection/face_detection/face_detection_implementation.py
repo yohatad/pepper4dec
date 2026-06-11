@@ -91,9 +91,9 @@ class FaceDetectionNode(LifecycleNode):
     def on_configure(self, _state) -> TransitionCallbackReturn:
         """Create publishers and initialise all state variables."""
         # Managed publishers — silent while INACTIVE
-        self.pub_gaze        = self.create_lifecycle_publisher(FaceDetection, '/faceDetection/data', 10)
-        self.debug_pub       = self.create_lifecycle_publisher(Image, '/faceDetection/debug', 1)
-        self.depth_debug_pub = self.create_lifecycle_publisher(Image, '/faceDetection/depth_debug', 1)
+        self.pub_gaze        = self.create_lifecycle_publisher(FaceDetection, '/face_detection/data', 10)
+        self.debug_pub       = self.create_lifecycle_publisher(Image, '/face_detection/debug', 1)
+        self.depth_debug_pub = self.create_lifecycle_publisher(Image, '/face_detection/depth_debug', 1)
 
         self.bridge      = CvBridge()
         self.depth_image: Optional[np.ndarray] = None
@@ -135,12 +135,12 @@ class FaceDetectionNode(LifecycleNode):
 
         if self.require_person_detection:
             self.person_detection_sub = self.create_subscription(
-                PersonDetection, '/personDetection/data', self.person_detection_callback, 10
+                PersonDetection, '/person_detection/data', self.person_detection_callback, 10
             )
             if self.verbose_mode:
                 self.get_logger().info(
                     f'{self.node_name}: person detection ENABLED — '
-                    'subscribed to /personDetection/data'
+                    'subscribed to /person_detection/data'
                 )
         else:
             if self.verbose_mode:
@@ -307,7 +307,7 @@ class FaceDetectionNode(LifecycleNode):
                 depth_msg_type = Image
 
             # Wait for topics (conditionally wait for person detection)
-            person_detection_topic = "/personDetection/data" if self.require_person_detection else None
+            person_detection_topic = "/person_detection/data" if self.require_person_detection else None
             if not self.wait_for_topics(color_topic, depth_topic, person_detection_topic):
                 return False
 
@@ -707,7 +707,7 @@ class SixDrepNet(FaceDetectionNode):
             )
             self.ats.registerCallback(self.synchronized_callback)
 
-            person_det = '/personDetection/data' if self.require_person_detection else None
+            person_det = '/person_detection/data' if self.require_person_detection else None
             self.get_logger().info(
                 f'{self.node_name}: subscribed to {color_topic}, {depth_topic_sub}'
                 + (f', {person_det}' if person_det else '')
