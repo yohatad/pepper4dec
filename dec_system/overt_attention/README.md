@@ -52,18 +52,19 @@ Configuration is managed via `config/overt_attention_configuration.yaml`:
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `use_compressed` | Use compressed ROS image topics | `False` |
-| `image_topic_base` | Base topic for RGB images | `/camera/color/image_raw` |
 | `publish_map` | Publish saliency map visualization | `True` |
-| `face_topic` | Topic for face detection messages | `/faceDetection/data` |
-| `saliency_topic` | Topic for saliency peak messages | `/attn/saliency_peak` |
-| `head_command_topic` | Topic for head joint commands | `/joint_angles` |
 | `engaged_priority_bonus` | Priority multiplier for engaged faces | `2.0` |
 | `face_timeout` | Time after losing faces before switching to saliency (s) | `2.0` |
 | `enable_ior` | Enable Inhibition of Return | `True` |
 | `ior_half_life` | Half-life for IOR decay (seconds) | `3.0` |
-| `yaw_lim` | Head yaw joint limit (radians) | `1.8` |
-| `pitch_up` | Head pitch up limit (radians) | `0.4` |
-| `pitch_dn` | Head pitch down limit (radians) | `-0.7` |
+| `face_yaw_lim` | Head yaw joint limit for face tracking (radians) | `1.8` |
+| `face_pitch_up` | Head pitch up limit for face tracking (radians) | `0.4` |
+| `face_pitch_dn` | Head pitch down limit for face tracking (radians) | `-0.7` |
+| `saliency_yaw_lim` | Head yaw joint limit for saliency (radians) | `1.2` |
+| `saliency_pitch_up` | Head pitch up limit for saliency (radians) | `0.3` |
+| `saliency_pitch_dn` | Head pitch down limit for saliency (radians) | `-0.3` |
+
+Topic names (face detection, saliency, camera, joint angles, target angles) are configured separately via `data/pepper_topics.yaml`.
 
 ## Running the Node
 
@@ -84,20 +85,19 @@ ros2 launch overt_attention attention_system.launch.py \
 
 ```bash
 # Start Saliency Node
-ros2 run overt_attention saliency_node \
+ros2 run overt_attention overt_attention_saliency \
   --ros-args \
   -p use_compressed:=false \
-  -p image_topic_base:="/camera/color/image_raw"
+  -p publish_map:=true
 
 # Start Unified Attention Controller
-ros2 run overt_attention unified_attention_node \
+ros2 run overt_attention overt_attention_unified_attention \
   --ros-args \
-  -p face_topic:="/faceDetection/data" \
-  -p saliency_topic:="/attn/saliency_peak" \
-  -p head_command_topic:="/joint_angles"
+  -p engaged_priority_bonus:=2.0 \
+  -p face_timeout:=2.0
 
 # Start Visualization Node
-ros2 run overt_attention visualization_node \
+ros2 run overt_attention overt_attention_visualization \
   --ros-args \
   -p publish_overlay:=true \
   -p show_metrics:=true
@@ -109,8 +109,8 @@ ros2 run overt_attention visualization_node \
 
 | Topic | Type | Description |
 |-------|------|-------------|
-| `/faceDetection/data` | `dec_interfaces/msg/FaceDetection` | Face detection messages |
-| `/camera/color/image_raw` | `sensor_msgs/Image` | RGB image from camera |
+| `/face_detection/data` | `dec_interfaces/msg/FaceDetection` | Face detection messages |
+| `/camera/color/image_raw_custom` | `sensor_msgs/Image` | RGB image from camera |
 | `/camera/color/camera_info` | `sensor_msgs/CameraInfo` | Camera intrinsics |
 | `/joint_states` | `sensor_msgs/JointState` | Current head position |
 
@@ -119,15 +119,15 @@ ros2 run overt_attention visualization_node \
 | Topic | Type | Description |
 |-------|------|-------------|
 | `/joint_angles` | `naoqi_bridge_msgs/msg/JointAnglesWithSpeed` | Head joint commands |
-| `/attn/target_angles` | `geometry_msgs/msg/Vector3` | Current attention target (yaw, pitch, score) |
-| `/attn/saliency_peak` | `std_msgs/msg/Float32MultiArray` | Detected saliency peaks |
-| `/attn/visualization` | `sensor_msgs/Image` | Annotated visualization overlay |
+| `/overt_attention/target_angles` | `geometry_msgs/msg/Vector3` | Current attention target (yaw, pitch, score) |
+| `/overt_attention/saliency_peak` | `std_msgs/msg/Float32MultiArray` | Detected saliency peaks |
+| `/overt_attention/visualization` | `sensor_msgs/Image` | Annotated visualization overlay |
 
 ### Services
 
 | Service | Type | Description |
 |---------|------|-------------|
-| `/attn/set_enabled` | `std_srvs/SetBool` | Enable/disable the attention system |
+| `/overt_attention/set_enabled` | `std_srvs/SetBool` | Enable/disable the attention system |
 
 ## Attention Prioritization Logic
 
@@ -144,19 +144,19 @@ overt_attention/
 │   └── overt_attention_configuration.yaml
 ├── data/
 │   └── pepper_topics.yaml
-├── resource/
-│   └── overt_attention
-├── overt_attention/
-│   ├── __init__.py
-│   ├── overt_attention_application.py
-│   ├── overt_attention_implementation.py
-│   ├── saliency_node.py
-│   ├── unified_attention_node.py
-│   └── visualization_node.py
+├── launch/
+│   ├── attention_system.launch.py
+│   └── realsense_camera.launch.py
+├── include/
+│   └── overt_attention/
+│       └── overt_attention_interface.h
+├── src/
+│   ├── overt_attention_utilities.cpp
+│   ├── overt_attention_saliency.cpp
+│   ├── overt_attention_unified_attention.cpp
+│   └── overt_attention_visualization.cpp
+├── CMakeLists.txt
 ├── package.xml
-├── setup.py
-├── setup.cfg
-├── requirements.txt
 └── README.md
 ```
 
@@ -175,14 +175,14 @@ The overt attention system consists of three main nodes:
 ros2 node list
 
 # Monitor attention targets
-ros2 topic echo /attn/target_angles
+ros2 topic echo /overt_attention/target_angles
 
 # Monitor head commands
 ros2 topic echo /joint_angles
 
 # Enable/disable attention system
-ros2 service call /attn/set_enabled std_srvs/SetBool "{data: false}"
-ros2 service call /attn/set_enabled std_srvs/SetBool "{data: true}"
+ros2 service call /overt_attention/set_enabled std_srvs/SetBool "{data: false}"
+ros2 service call /overt_attention/set_enabled std_srvs/SetBool "{data: true}"
 ```
 
 ## Support

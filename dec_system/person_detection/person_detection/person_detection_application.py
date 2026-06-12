@@ -1,18 +1,54 @@
 #!/home/yoha/face_detection_env/bin/python3
 
-"""
-person_detection_application.py
-ROS2 Node for Person Detection and Localization.
+""" person_detection_application.py
 
-Implements person detection using YOLOv11 with ByteTrack tracking (bytetracker package).
-Configuration is loaded from person_detection_configuration.yaml.
+Entry point for the YOLOv11 person detection lifecycle node.
+Running this node detects and tracks people (or other configurable COCO
+classes) from a synchronized color/depth camera stream and publishes their
+positions and depth.
 
-Supports configurable object classes to track (e.g., person, car, bottle, etc.)
+This node loads its configuration from person_detection_configuration.yaml,
+then constructs a YOLOv11 lifecycle node and spins it until shutdown. On
+configure, the node loads the ONNX detection model and initializes the
+ByteTrack tracker. On activate, it subscribes to the color and depth image
+topics for the configured camera (RealSense, Pepper, or video), synchronizes
+them, runs detection and tracking on each frame, and publishes the results
+along with debug visualizations.
 
-Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
+Subscribers:
+    /camera/color/image_raw_custom (sensor_msgs/Image or CompressedImage)
+        Color image stream used for object detection (topic resolved from
+        pepper_topics.yaml based on the configured camera type).
+    /camera/aligned_depth_to_color/image_raw_custom (sensor_msgs/Image or CompressedImage)
+        Depth image stream used to estimate distance to detected objects
+        (topic resolved from pepper_topics.yaml based on the configured camera type).
+
+Publishers:
+    /person_detection/data (dec_interfaces/PersonDetection)
+        Tracked object detections: track IDs, class names/IDs, confidences,
+        centroids (with depth), widths, and heights.
+    /person_detection/debug (sensor_msgs/Image)
+        Annotated color image showing tracked bounding boxes, labels, and depth.
+    /person_detection/depth_debug (sensor_msgs/Image)
+        Colorized visualization of the raw depth image.
+
+Parameters (loaded from person_detection_configuration.yaml):
+    camera (str, default: "realsense")
+    useCompressed (bool, default: false)
+    imageTimeout (float, default: 2.0)
+    verboseMode (bool, default: false)
+    confidenceThreshold (float, default: 0.6)
+    targetClasses (list, default: ["person"])
+    trackThreshold (float, default: 0.45)
+    trackBuffer (int, default: 30)
+    matchThreshold (float, default: 0.8)
+    frameRate (int, default: 30)
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
 Email: yohatad123@gmail.com
 Date: December 07, 2025
-Version: v2.0
+Version: v1.0
 """
 
 import sys

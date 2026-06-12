@@ -6,7 +6,7 @@
   <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
-The **Face and Mutual Gaze Detection and Localization** package detects multiple faces and evaluates their mutual gaze in real-time by subscribing to image topics. It publishes an array of detected faces and their mutual gaze status to the `/faceDetection/data` topic. Each entry includes the label ID, centroid coordinates, bounding box dimensions, and mutual gaze status.
+The **Face and Mutual Gaze Detection and Localization** package detects multiple faces and evaluates their mutual gaze in real-time by subscribing to image topics. It publishes an array of detected faces and their mutual gaze status to the `/face_detection/data` topic. Each entry includes the label ID, centroid coordinates, bounding box dimensions, and mutual gaze status.
 
 ## Key Features
 - **ROS2 Native**: Built for ROS2 Humble
@@ -34,7 +34,7 @@ git clone https://github.com/yohatad/pepper4dec.git
 
 # Build the workspace
 cd ~/ros2_ws
-colcon build --packages-select face_detection object_detection
+colcon build --packages-select face_detection person_detection
 source install/setup.bash
 ```
 
@@ -54,13 +54,14 @@ Configuration is managed via `config/face_detection_configuration.yaml`:
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `algorithm` | Algorithm selected for face detection | `sixdrep` |
 | `useCompressed` | Use compressed ROS image topics | `False` |
 | `camera` | Camera type to use | `realsense` |
-| `sixdrepnetConfidence` | Confidence threshold for face detection | `0.80` |
+| `sixdrepnetConfidence` | Confidence threshold for face detection | `0.90` |
 | `sixdrepnetHeadposeAngle` | Head pose angle threshold in degrees | `10` |
 | `imageTimeout` | Timeout for shutting down after video ends (s) | `2.0` |
-| `verboseMode` | Enable visualization and detailed logging | `True` |
+| `verboseMode` | Enable visualization and detailed logging | `False` |
+| `requirePersonDetection` | Require person detection before running face detection | `True` |
+| `objectDetectionTimeout` | Timeout for person detection messages (s) | `0.5` |
 
 ## Running the Node
 
@@ -86,9 +87,9 @@ ros2 run realsense2_camera realsense2_camera_node \
   -p align_depth.enable:=true \
   -p enable_sync:=true
 
-# Start Object Detection Node
+# Start Person Detection Node
 source ~/face_detection_env/bin/activate
-ros2 run object_detection object_detection
+ros2 run person_detection person_detection
 
 # Start Face Detection Node
 source ~/face_detection_env/bin/activate
@@ -103,17 +104,19 @@ ros2 run face_detection face_detection
 |-------|------|-------------|
 | `/camera/color/image_raw` | `sensor_msgs/Image` | Color image from camera |
 | `/camera/aligned_depth_to_color/image_raw` | `sensor_msgs/Image` | Depth image |
-| `/objectDetection/data` | `dec_interfaces/msg/ObjectDetection` | Object detection results for person localization |
+| `/person_detection/data` | `dec_interfaces/msg/PersonDetection` | Person detection results for face localization |
 
 ### Published Topics
 
 | Topic | Type | Description |
 |-------|------|-------------|
-| `/faceDetection/data` | `dec_interfaces/msg/FaceDetection` | Detected faces with mutual gaze status |
+| `/face_detection/data` | `dec_interfaces/msg/FaceDetection` | Detected faces with mutual gaze status |
+| `/face_detection/debug` | `sensor_msgs/Image` | Debug RGB image with face detection overlays |
+| `/face_detection/depth_debug` | `sensor_msgs/Image` | Debug colorized depth image |
 
 ## Message Structure
 
-### `/faceDetection/data` (`dec_interfaces/msg/FaceDetection`)
+### `/face_detection/data` (`dec_interfaces/msg/FaceDetection`)
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -131,6 +134,8 @@ face_detection/
 │   └── face_detection_configuration.yaml
 ├── data/
 │   └── pepper_topics.yaml
+├── launch/
+│   └── face_detection_launch_robot.launch.py
 ├── models/
 │   ├── face_detection_goldYOLO.onnx
 │   └── face_detection_sixdrepnet360.onnx
@@ -138,6 +143,7 @@ face_detection/
 │   └── face_detection
 ├── face_detection/
 │   ├── __init__.py
+│   ├── age_gender_detection.py
 │   ├── face_detection_application.py
 │   └── face_detection_implementation.py
 ├── package.xml
@@ -152,9 +158,9 @@ face_detection/
 The face detection system consists of three main components:
 
 1. **Camera Driver**: Provides synchronized RGB-D image streams
-2. **Object Detection Node**: Detects persons in the scene using YOLO
+2. **Person Detection Node**: Detects persons in the scene using YOLO
 3. **Face Detection Node**:
-   - Receives person detections from object detection
+   - Receives person detections from person detection
    - Performs face detection within person bounding boxes
    - Estimates head pose using SixDrepNet
    - Determines mutual gaze based on head pose angles
@@ -167,7 +173,7 @@ The face detection system consists of three main components:
 ros2 node list
 
 # Monitor face detection output
-ros2 topic echo /faceDetection/data
+ros2 topic echo /face_detection/data
 
 # Verify topics
 ros2 topic list

@@ -1,11 +1,27 @@
-"""
-animate_behavior_implementation.py Implementation code for running the Animate Behavior ROS2 node.
+""" animate_behavior_implementation.py
+
+Implements AnimateBehaviorNode, a lifecycle node that runs random gesture, body rotation, and
+cascading face-LED animations for Pepper while an `/animate_behavior` action goal is active.
+
+Lifecycle:
+    configure  -> Read parameters, build per-limb joint definitions, create the
+                   joint-angle/velocity lifecycle publishers, the action server,
+                   the stop service, and the LED action client.
+    activate   -> Activate the lifecycle publishers, subscribe to /joint_states,
+                   start the animation and feedback timers, and kick off the
+                   face-LED cascade animation if enabled.
+    deactivate -> Stop any active animation, cancel and destroy the animation and
+                   feedback timers, destroy the joint-state subscription, and
+                   deactivate the lifecycle publishers.
+    cleanup    -> Destroy the lifecycle publishers, action server, stop service,
+                   and LED action client.
+    shutdown   -> Log the shutdown transition; no additional resources to release.
 
 Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
 Date: April 27, 2026
 Version: v1.0
-
-This program comes with ABSOLUTELY NO WARRANTY.
 """
 
 import rclpy
@@ -13,9 +29,8 @@ import time
 import random
 from typing import List, Dict
 from dataclasses import dataclass
-from rclpy.node import Node
+from rclpy.lifecycle import LifecycleNode, TransitionCallbackReturn
 from rclpy.action import ActionServer, ActionClient, CancelResponse, GoalResponse
-from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import ReentrantCallbackGroup
 
 from geometry_msgs.msg import Twist
@@ -36,7 +51,9 @@ class JointDef:
     factors: List[float]
 
 
-class AnimateBehaviorNode(Node):
+class AnimateBehaviorNode(LifecycleNode):
+    """Lifecycle node that drives Pepper's idle gesture, rotation, and face-LED animations."""
+
     CASCADE_LAYERS = [
         (['FaceLedRight1', 'FaceLedLeft1'], 0.00),
         (['FaceLedRight0', 'FaceLedRight2', 'FaceLedLeft0', 'FaceLedLeft2'], 0.09),
@@ -44,13 +61,11 @@ class AnimateBehaviorNode(Node):
         (['FaceLedRight6', 'FaceLedRight4', 'FaceLedLeft6', 'FaceLedLeft4'], 0.36),
         (['FaceLedRight5', 'FaceLedLeft5'], 0.54),
     ]
-    
+
     def __init__(self):
         super().__init__('animate_behavior')
-        
-        self.node_name = self.get_name()
-        
-        # Declare ROS2 parameters
+
+        # Declare parameters in __init__ so they are settable via launch before configure
         self.declare_parameter('verbose_mode', True)
         self.declare_parameter('led_enabled', True)
         self.declare_parameter('led_white_step', 0.06)
@@ -64,28 +79,35 @@ class AnimateBehaviorNode(Node):
         self.declare_parameter('gesture_interval_min', 2.5)
         self.declare_parameter('gesture_interval_max', 4.5)
         self.declare_parameter('gesture_rotation_interval', 5.0)
-        
-        # Get parameter values
-        self.verbose_mode = self.get_parameter('verbose_mode').get_parameter_value().bool_value
-        self.led_enabled = self.get_parameter('led_enabled').get_parameter_value().bool_value
-        self.led_white_step = self.get_parameter('led_white_step').get_parameter_value().double_value
-        self.led_dark_step = self.get_parameter('led_dark_step').get_parameter_value().double_value
-        self.led_fade_duration = self.get_parameter('led_fade_duration').get_parameter_value().double_value
-        self.led_white_hold = self.get_parameter('led_white_hold').get_parameter_value().double_value
-        self.led_dark_pause = self.get_parameter('led_dark_pause').get_parameter_value().double_value
-        self.gesture_interval_min = self.get_parameter('gesture_interval_min').get_parameter_value().double_value
-        self.gesture_interval_max = self.get_parameter('gesture_interval_max').get_parameter_value().double_value
-        self.rotation_interval = self.get_parameter('gesture_rotation_interval').get_parameter_value().double_value
-        self.update_rate = self.get_parameter('gesture_update_rate').get_parameter_value().double_value
-        self.smoothing_factor = self.get_parameter('gesture_smoothing_factor').get_parameter_value().double_value
-        self.motion_speed = self.get_parameter('gesture_motion_speed').get_parameter_value().double_value
-        
+
+        # Guard flag: set True in on_activate, False in on_deactivate
+        self._lifecycle_active = False
+
+    # ── Lifecycle callbacks ─────────────────────────────────────────────────────
+
+    def on_configure(self, _state) -> TransitionCallbackReturn:
+        """Read parameters, build joint definitions, create publishers/servers/timers."""
+        node_name = self.get_name()
+
+        self.verbose_mode       = self.get_parameter('verbose_mode').get_parameter_value().bool_value
+        self.led_enabled        = self.get_parameter('led_enabled').get_parameter_value().bool_value
+        self.led_white_step     = self.get_parameter('led_white_step').get_parameter_value().double_value
+        self.led_dark_step      = self.get_parameter('led_dark_step').get_parameter_value().double_value
+        self.led_fade_duration  = self.get_parameter('led_fade_duration').get_parameter_value().double_value
+        self.led_white_hold     = self.get_parameter('led_white_hold').get_parameter_value().double_value
+        self.led_dark_pause     = self.get_parameter('led_dark_pause').get_parameter_value().double_value
+        self.gesture_interval_min  = self.get_parameter('gesture_interval_min').get_parameter_value().double_value
+        self.gesture_interval_max  = self.get_parameter('gesture_interval_max').get_parameter_value().double_value
+        self.rotation_interval  = self.get_parameter('gesture_rotation_interval').get_parameter_value().double_value
+        self.update_rate        = self.get_parameter('gesture_update_rate').get_parameter_value().double_value
+        self.smoothing_factor   = self.get_parameter('gesture_smoothing_factor').get_parameter_value().double_value
+        self.motion_speed       = self.get_parameter('gesture_motion_speed').get_parameter_value().double_value
+
         if self.verbose_mode:
-            self.get_logger().info(f"{self.node_name}: ANIMATE BEHAVIOR NODE (NON-BLOCKING)")
-            self.get_logger().info(f"{self.node_name}: verbose_mode={self.verbose_mode}")
-        
+            self.get_logger().info(f'{node_name}: ANIMATE BEHAVIOR NODE (LIFECYCLE)')
+
         self.callback_group = ReentrantCallbackGroup()
-        
+
         self.joints = {
             'RArm': JointDef(
                 names=['RShoulderPitch', 'RShoulderRoll', 'RElbowYaw', 'RElbowRoll', 'RWristYaw'],
@@ -109,105 +131,172 @@ class AnimateBehaviorNode(Node):
                 max=[1.04, 0.51, 0.51],
                 home=[-0.10, -0.01, 0.03],
                 factors=[0.2, 0.2, 0.1]
-            )
+            ),
         }
-        
+
         # Animation state
-        self.active = False
-        self.behavior = ''
-        self.range = 0.2
-        self.limbs_to_animate = []
-        self.last_gesture = {}
-        self.last_rotation = 0.0
-        self.gesture_count = 0
-        self.current_goal_handle = None
-        self.start_time = 0.0
-        self.duration = 0.0
-        self.goal_complete_event = None
+        self.active                 = False
+        self.behavior               = ''
+        self.range                  = 0.2
+        self.limbs_to_animate       = []
+        self.last_gesture           = {}
+        self.last_rotation          = 0.0
+        self.gesture_count          = 0
+        self.current_goal_handle    = None
+        self.start_time             = 0.0
+        self.duration               = 0.0
+        self.goal_complete_event    = None
         self.current_positions: Dict[str, float] = {}
-        self.target_positions: Dict[str, float] = {}
-        self.joint_states_received = False
-        self.gesture_interval = random.uniform(self.gesture_interval_min, self.gesture_interval_max)
-        
-        # Publishers
-        self.joint_pub = self.create_publisher(JointAnglesWithSpeed, '/joint_angles', 10)
-        self.vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
-        self.joint_sub = self.create_subscription(JointState, '/joint_states', self.joint_states_callback, 10)
-        
-        # Action server
-        self.action_server = ActionServer(self, AnimateBehavior, 'animate_behavior',
-            execute_callback=self.execute_callback, goal_callback=self.goal_callback,
-            cancel_callback=self.cancel_callback, callback_group=self.callback_group)
-        
-        # Service for explicit stop control from BT
-        self.stop_service = self.create_service(Trigger, 'animate_behavior/stop',
-            self.stop_service_callback, callback_group=self.callback_group)
-        
-        # Main animation timer
-        self.animation_timer = self.create_timer(1.0 / self.update_rate, self.animation_update,
-            callback_group=self.callback_group)
-        self.feedback_timer = self.create_timer(0.5, self.feedback_update, callback_group=self.callback_group)
-        
-        # LED animation setup
-        self.led_client = ActionClient(self, RunLed, '/naoqi_driver/run_led')
-        self.led_active = False
-        self.led_scheduled_timers = []
-        
+        self.target_positions: Dict[str, float]  = {}
+        self.joint_states_received  = False
+        self.gesture_interval       = random.uniform(self.gesture_interval_min, self.gesture_interval_max)
+
+        # Managed publishers — silenced when node is INACTIVE
+        self.joint_pub = self.create_lifecycle_publisher(JointAnglesWithSpeed, '/joint_angles', 10)
+        self.vel_pub   = self.create_lifecycle_publisher(Twist, '/cmd_vel', 10)
+
+        # Action server — created once; goal_callback guards against inactive state
+        self.action_server = ActionServer(
+            self, AnimateBehavior, '/animate_behavior',
+            execute_callback=self.execute_callback,
+            goal_callback=self.goal_callback,
+            cancel_callback=self.cancel_callback,
+            callback_group=self.callback_group,
+        )
+
+        # Stop service — always available after configure
+        self.stop_service = self.create_service(
+            Trigger, '/animate_behavior/stop',
+            self.stop_service_callback,
+            callback_group=self.callback_group,
+        )
+
+        # LED action client
+        self.led_client    = ActionClient(self, RunLed, '/naoqi_driver/run_led')
+        self.led_active    = False
+        self.led_scheduled_timers: List = []
+
+        self.get_logger().info(f'{node_name}: configured')
+        return TransitionCallbackReturn.SUCCESS
+
+    def on_activate(self, state) -> TransitionCallbackReturn:
+        """Activate managed publishers, start subscription and animation timers."""
+        super().on_activate(state)
+        self._lifecycle_active = True
+
+        # Joint state subscription — only needed while active
+        self.joint_sub = self.create_subscription(
+            JointState, '/joint_states', self.joint_states_callback, 10
+        )
+
+        # Animation timers
+        self.animation_timer = self.create_timer(
+            1.0 / self.update_rate, self.animation_update,
+            callback_group=self.callback_group,
+        )
+        self.feedback_timer = self.create_timer(
+            0.5, self.feedback_update,
+            callback_group=self.callback_group,
+        )
+
+        # Start LED animation if the server is available
         if self.led_enabled:
-            if self.led_client.wait_for_server(timeout_sec=10.0):
+            if self.led_client.wait_for_server(timeout_sec=5.0):
                 self.led_active = True
                 self.cascade_wave()
                 if self.verbose_mode:
-                    self.get_logger().info(f"{self.node_name}: Connected to /naoqi_driver/run_led - LED animation enabled")
+                    self.get_logger().info(f'{self.get_name()}: LED animation enabled')
             else:
                 if self.verbose_mode:
-                    self.get_logger().warn(f"{self.node_name}: LED action server not available - LED animation disabled")
+                    self.get_logger().warn(f'{self.get_name()}: LED server not available — disabled')
         else:
             if self.verbose_mode:
-                self.get_logger().info(f"{self.node_name}: LED animation disabled in config")
-        
-        if self.verbose_mode:
-            self.get_logger().info(f"{self.node_name}: Node ready, animation at {self.update_rate}Hz, feedback at 2Hz")
-            self.get_logger().info(f"{self.node_name}: Waiting for goals on /animate_behavior")
-            self.get_logger().info(f"{self.node_name}: Stop service available at /animate_behavior/stop")
-    
+                self.get_logger().info(f'{self.get_name()}: LED animation disabled in config')
+
+        self.get_logger().info(
+            f'{self.get_name()}: activated — animation@{self.update_rate}Hz, '
+            f'feedback@2Hz | waiting for goals on /animate_behavior'
+        )
+        return TransitionCallbackReturn.SUCCESS
+
+    def on_deactivate(self, state) -> TransitionCallbackReturn:
+        """Stop animation, cancel timers, destroy subscription, deactivate publishers."""
+        self._lifecycle_active = False
+        self.stop()
+
+        self.animation_timer.cancel()
+        self.destroy_timer(self.animation_timer)
+        self.feedback_timer.cancel()
+        self.destroy_timer(self.feedback_timer)
+
+        self.destroy_subscription(self.joint_sub)
+
+        super().on_deactivate(state)
+        self.get_logger().info(f'{self.get_name()}: deactivated')
+        return TransitionCallbackReturn.SUCCESS
+
+    def on_cleanup(self, state) -> TransitionCallbackReturn:
+        """Destroy lifecycle publishers, the action server, the stop service, and the LED client."""
+        self.destroy_lifecycle_publisher(self.joint_pub)
+        self.destroy_lifecycle_publisher(self.vel_pub)
+        self.action_server.destroy()
+        self.destroy_service(self.stop_service)
+        self.led_client.destroy()
+        self.get_logger().info(f'{self.get_name()}: cleaned up')
+        return TransitionCallbackReturn.SUCCESS
+
+    def on_shutdown(self, state) -> TransitionCallbackReturn:
+        """Log the shutdown transition; no additional resources to release."""
+        self.get_logger().info(f'{self.get_name()}: shutting down')
+        return TransitionCallbackReturn.SUCCESS
+
+    # ── Subscription callback ────────────────────────────────────────────────────
+
     def joint_states_callback(self, msg: JointState):
-        """Callback for joint states subscription."""
         for i, name in enumerate(msg.name):
             if i < len(msg.position):
                 self.current_positions[name] = msg.position[i]
         if not self.joint_states_received:
             self.joint_states_received = True
             if self.verbose_mode:
-                self.get_logger().info(f"{self.node_name}: Joint states received: {len(self.current_positions)} joints")
-    
+                self.get_logger().info(
+                    f'{self.get_name()}: joint states received: {len(self.current_positions)} joints'
+                )
+
+    # ── Action server callbacks ──────────────────────────────────────────────────
+
     def goal_callback(self, goal_request):
-        """Callback for goal requests."""
+        if not self._lifecycle_active:
+            self.get_logger().warn(f'{self.get_name()}: rejecting goal — node is not active')
+            return GoalResponse.REJECT
         if self.verbose_mode:
-            self.get_logger().info(f"{self.node_name}: Goal: {goal_request.behavior_type}, range={goal_request.selected_range}, duration={goal_request.duration_seconds}s")
+            self.get_logger().info(
+                f'{self.get_name()}: goal: {goal_request.behavior_type}, '
+                f'range={goal_request.selected_range}, duration={goal_request.duration_seconds}s'
+            )
         valid_behaviors = ['All', 'body', 'head', 'arms', 'hands', 'idle']
         if goal_request.behavior_type not in valid_behaviors:
-            self.get_logger().error(f"{self.node_name}: Invalid behavior type: {goal_request.behavior_type}")
+            self.get_logger().error(f'{self.get_name()}: invalid behavior: {goal_request.behavior_type}')
             return GoalResponse.REJECT
         return GoalResponse.ACCEPT
-    
+
     def cancel_callback(self, goal_handle):
-        """Callback for cancel requests."""
         if self.verbose_mode:
-            self.get_logger().info(f"{self.node_name}: Cancel requested")
+            self.get_logger().info(f'{self.get_name()}: cancel requested')
         return CancelResponse.ACCEPT
-    
+
     def execute_callback(self, goal_handle):
-        """Execute the animation goal."""
         self.current_goal_handle = goal_handle
         self.start_time = self.get_clock().now()
-        self.duration = goal_handle.request.duration_seconds
-        self.behavior = goal_handle.request.behavior_type
-        self.range = goal_handle.request.selected_range
-        
+        self.duration   = goal_handle.request.duration_seconds
+        self.behavior   = goal_handle.request.behavior_type
+        self.range      = goal_handle.request.selected_range
+
         if self.verbose_mode:
-            self.get_logger().info(f"{self.node_name}: Starting behavior: {self.behavior}, range={self.range}")
-        
+            self.get_logger().info(
+                f'{self.get_name()}: starting behavior: {self.behavior}, range={self.range}'
+            )
+
         self.limbs_to_animate = []
         if self.behavior in ['All', 'body']:
             self.limbs_to_animate.extend(['RArm', 'LArm', 'RHand', 'LHand', 'Leg'])
@@ -219,171 +308,169 @@ class AnimateBehaviorNode(Node):
             self.limbs_to_animate.extend(['RHand', 'LHand'])
         if self.behavior == 'idle':
             self.limbs_to_animate = []
-        
-        self.active = True
-        self.gesture_count = 0
-        self.last_gesture = {}
-        self.last_rotation = 0.0
+
+        self.active           = True
+        self.gesture_count    = 0
+        self.last_gesture     = {}
+        self.last_rotation    = 0.0
         self.gesture_interval = random.uniform(self.gesture_interval_min, self.gesture_interval_max)
-        
+
         goal_handle.execute_async()
-    
+
     def stop_service_callback(self, request, response):
-        """Callback for stop service."""
         if self.verbose_mode:
-            self.get_logger().info(f"{self.node_name}: Stop service called")
+            self.get_logger().info(f'{self.get_name()}: stop service called')
         self.stop()
         response.success = True
         response.message = 'Animation stopped'
         return response
-    
+
     def stop(self):
-        """Stop all animations."""
         self.active = False
         msg = Twist()
         self.vel_pub.publish(msg)
         self.stop_leds()
         self.limbs_to_animate = []
-        self.last_gesture = {}
+        self.last_gesture     = {}
         self.target_positions.clear()
-    
+
+    # ── Timer callbacks ──────────────────────────────────────────────────────────
+
     def feedback_update(self):
-        """Timer callback for publishing feedback."""
         if self.current_goal_handle is None or not self.active:
             return
-        elapsed = (self.get_clock().now() - self.start_time).nanoseconds / 1e9
+        elapsed  = (self.get_clock().now() - self.start_time).nanoseconds / 1e9
         feedback = AnimateBehavior.Feedback()
         feedback.elapsed_seconds = elapsed
         self.current_goal_handle.publish_feedback(feedback)
-        
+
         if self.duration > 0 and elapsed >= self.duration:
             if self.verbose_mode:
-                self.get_logger().info(f"{self.node_name}: Duration reached: {self.duration}s")
+                self.get_logger().info(f'{self.get_name()}: duration reached: {self.duration}s')
             self.stop()
             result = AnimateBehavior.Result()
-            result.completed = True
+            result.completed             = True
             result.final_elapsed_seconds = elapsed
             self.current_goal_handle.set_succeeded(result)
             self.current_goal_handle = None
-    
+
     def animation_update(self):
-        """Timer callback for animation updates."""
         if not self.active or not self.joint_states_received:
             return
-        
+
         current_time = time.time()
-        
+
         if self.limbs_to_animate:
             if current_time - self.last_rotation >= self.rotation_interval:
                 self.apply_rotation()
                 self.last_rotation = current_time
-            
+
             if current_time - self.gesture_count >= self.gesture_interval:
                 self.apply_gesture()
-                self.gesture_count = current_time
+                self.gesture_count    = current_time
                 self.gesture_interval = random.uniform(self.gesture_interval_min, self.gesture_interval_max)
-        
+
         self.publish_joints()
-    
+
+    # ── Motion helpers ───────────────────────────────────────────────────────────
+
     def apply_rotation(self):
-        """Apply rotation to the robot."""
         twist = Twist()
         twist.angular.z = 0.3
         self.vel_pub.publish(twist)
-    
+
     def apply_gesture(self):
-        """Apply random gestures to limbs."""
         for limb in self.limbs_to_animate:
             if limb in self.joints:
                 self.random_gesture(limb)
-    
+
     def random_gesture(self, limb_name: str):
-        """Generate and apply a random gesture to a limb."""
         joint_def = self.joints[limb_name]
         for i, name in enumerate(joint_def.names):
-            factor = joint_def.factors[i]
-            rand_val = random.uniform(-1, 1) * self.range * factor
-            mid = (joint_def.max[i] + joint_def.min[i]) / 2
-            target = mid + rand_val
-            target = max(joint_def.min[i], min(joint_def.max[i], target))
+            factor    = joint_def.factors[i]
+            rand_val  = random.uniform(-1, 1) * self.range * factor
+            mid       = (joint_def.max[i] + joint_def.min[i]) / 2
+            target    = mid + rand_val
+            target    = max(joint_def.min[i], min(joint_def.max[i], target))
             self.target_positions[name] = target
         self.last_gesture[limb_name] = time.time()
-    
+
     def publish_joints(self):
-        """Publish joint angles with smoothing."""
         msg = JointAnglesWithSpeed()
         msg.header.stamp = self.get_clock().now().to_msg()
-        names = []
+        names  = []
         angles = []
         for name, target in self.target_positions.items():
-            current = self.current_positions.get(name, target)
+            current  = self.current_positions.get(name, target)
             smoothed = current + self.smoothing_factor * (target - current)
             self.current_positions[name] = smoothed
             names.append(name)
             angles.append(smoothed)
-        msg.joint_names = names
+        msg.joint_names  = names
         msg.joint_angles = angles
-        msg.speed = self.motion_speed
+        msg.speed        = self.motion_speed
         if names:
             self.joint_pub.publish(msg)
-    
-    # LED Animation Methods
+
+    # ── LED helpers ──────────────────────────────────────────────────────────────
+
     def make_color(self, r: float, g: float, b: float) -> ColorRGBA:
-        """Create a ColorRGBA message."""
         c = ColorRGBA()
         c.r = float(r)
         c.g = float(g)
         c.b = float(b)
         c.a = 1.0
         return c
-    
+
     def send_rgb_fade(self, r: float, g: float, b: float, duration: float, target: str):
-        """Send RGB fade command to LED."""
-        goal = RunLed.Goal()
-        goal.target = target
-        goal.mode = RunLed.Goal.MODE_RGB_FADE
-        goal.color = self.make_color(r, g, b)
+        goal          = RunLed.Goal()
+        goal.target   = target
+        goal.mode     = RunLed.Goal.MODE_RGB_FADE
+        goal.color    = self.make_color(r, g, b)
         goal.duration = float(duration)
         self.led_client.send_goal_async(goal)
-    
+
     def send_off(self, target: str):
-        """Send OFF command to LED."""
-        goal = RunLed.Goal()
+        goal        = RunLed.Goal()
         goal.target = target
-        goal.mode = RunLed.Goal.MODE_OFF
+        goal.mode   = RunLed.Goal.MODE_OFF
         self.led_client.send_goal_async(goal)
-    
+
     def schedule_led(self, delay_sec: float, callback):
-        """Schedule a delayed LED callback."""
         ref = [None]
         def fire():
             ref[0].cancel()
             if self.led_active:
                 callback()
         timer = self.create_timer(delay_sec, fire, callback_group=self.callback_group)
+        ref[0] = timer
         self.led_scheduled_timers.append(ref)
-    
+
     def cascade_wave(self):
-        """Start the cascade wave LED animation."""
-        n = len(self.CASCADE_LAYERS)
+        n          = len(self.CASCADE_LAYERS)
         reversed_l = list(reversed(self.CASCADE_LAYERS))
-        
+
         for i, (names, _) in enumerate(reversed_l):
             t = i * self.led_white_step
             for name in names:
-                self.schedule_led(t, lambda nm=name: self.send_rgb_fade(1.0, 1.0, 1.0, self.led_fade_duration, target=nm))
-        
+                self.schedule_led(
+                    t,
+                    lambda nm=name: self.send_rgb_fade(1.0, 1.0, 1.0, self.led_fade_duration, target=nm)
+                )
+
         t_hold_end = (n - 1) * self.led_white_step + self.led_fade_duration + self.led_white_hold
         for i, (names, _) in enumerate(self.CASCADE_LAYERS):
             t = t_hold_end + i * self.led_dark_step
             for name in names:
-                self.schedule_led(t, lambda nm=name: self.send_rgb_fade(0.0, 0.0, 0.0, self.led_fade_duration, target=nm))
-        
+                self.schedule_led(
+                    t,
+                    lambda nm=name: self.send_rgb_fade(0.0, 0.0, 0.0, self.led_fade_duration, target=nm)
+                )
+
         last_dark = t_hold_end + (n - 1) * self.led_dark_step
         self.schedule_led(last_dark + self.led_fade_duration + self.led_dark_pause, self.cascade_wave)
-    
+
     def stop_leds(self):
-        """Stop all LED animations."""
         self.led_active = False
         for names, _ in self.CASCADE_LAYERS:
             for n in names:

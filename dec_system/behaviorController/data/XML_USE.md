@@ -189,7 +189,7 @@ Sends text to the `/speech_with_feedback` action server (naoqi_bridge_msgs/Speec
 
 ### `SpeechRecognition` — Automatic Speech Recognition
 
-Sends a goal to the `/speech_recognition_action` action server. Returns FAILURE if the transcription is empty.
+Sends a goal to the `/speech_recognition` action server. Returns FAILURE if the transcription is empty.
 
 ```xml
 <Action ID="SpeechRecognition"
@@ -199,7 +199,7 @@ Sends a goal to the `/speech_recognition_action` action server. Returns FAILURE 
 
 | Port | Direction | Type | Default | Description |
 |------|-----------|------|---------|-------------|
-| `action_name` | input | string | `/speech_recognition_action` | Action server name |
+| `action_name` | input | string | `/speech_recognition` | Action server name |
 | `wait` | input | float | `2.0` | Seconds to wait for speech input |
 | `transcription` | output | string | — | Recognised speech text |
 | `status` | output | string | — | Feedback: `waiting` \| `speech` \| `transcribing` |
@@ -233,7 +233,7 @@ Sends a natural-language prompt to the `/prompt` action server and stores the re
 
 ### `SetOvertAttention` — Attention Enable/Disable
 
-Calls the `/attn/set_enabled` service (std_srvs/SetBool) to enable or disable the overt attention system.
+Calls the `/overt_attention/set_enabled` service (std_srvs/SetBool) to enable or disable the overt attention system.
 
 ```xml
 <!-- Enable attention (robot tracks faces/saliency) -->
@@ -273,7 +273,7 @@ Calls the `/speech_event/set_enabled` service (std_srvs/SetBool) to mute or unmu
 
 ### `CheckFaceDetected` — Face Detection
 
-Subscribes to `/faceDetection/data`. Returns RUNNING until the face condition is met, then SUCCESS. Never times out on its own — wrap in a timeout decorator if needed.
+Subscribes to `/face_detection/data`. Returns RUNNING until the face condition is met, then SUCCESS. Never times out on its own — wrap in a timeout decorator if needed.
 
 ```xml
 <!-- Succeed on any face detected -->
@@ -496,7 +496,7 @@ Declare all custom nodes in `<TreeNodesModel>` for Groot editor compatibility. P
   </Action>
 
   <Action ID="SpeechRecognition">
-    <input_port name="action_name" default="/speech_recognition_action">Action server name</input_port>
+    <input_port name="action_name" default="/speech_recognition">Action server name</input_port>
     <input_port name="wait" default="2.0">Seconds to wait for speech input</input_port>
     <output_port name="transcription">Recognised speech text</output_port>
     <output_port name="status">Feedback: waiting | speech | transcribing</output_port>

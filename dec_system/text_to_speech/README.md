@@ -6,7 +6,7 @@
   <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
-The **Text-to-Speech (TTS)** package is a ROS2 package designed to synthesize and play speech on the Pepper robot. It receives text sentences on `/tts/input` and speaks them as they arrive — enabling Pepper to start talking before the LLM has finished generating the full response. The package supports multiple synthesis backends including naoqi_ros, Kokoro-82M, and ElevenLabs with both streaming and file-based playback methods.
+The **Text-to-Speech (TTS)** package is a ROS2 package designed to synthesize and play speech on the Pepper robot. It receives text sentences on `/text_to_speech/input` and speaks them as they arrive — enabling Pepper to start talking before the LLM has finished generating the full response. The package supports multiple synthesis backends including naoqi_ros, Kokoro-82M, and ElevenLabs with both streaming and file-based playback methods.
 
 ## Key Features
 - **ROS2 Native**: Built for ROS2 Humble
@@ -16,7 +16,7 @@ The **Text-to-Speech (TTS)** package is a ROS2 package designed to synthesize an
 - **Sentence Queue**: Background playback thread ensures strict ordering
 - **Barge-in Detection**: User speech during playback stops Pepper immediately
 - **Microphone Muting**: Automatic mic control during playback
-- **ROS2 Action Server**: `/tts` action for programmatic TTS calls with completion feedback
+- **ROS2 Action Server**: `/text_to_speech` action for programmatic TTS calls with completion feedback
 
 ## Prerequisites
 - **ROS2 Humble** or newer
@@ -87,7 +87,7 @@ Configuration is managed via `config/text_to_speech_configuration.yaml`.
 | `output_device` | sounddevice output device index (-1 = system default) | `-1` |
 | `stream_volume` | PCM amplitude multiplier for stream mode | `1.0` |
 | `elevenlabs_api_key` | ElevenLabs API key | `""` |
-| `elevenlabs_voice_id` | ElevenLabs voice ID | `Rachel` |
+| `elevenlabs_voice_id` | ElevenLabs voice ID | `21m00Tcm4TlvDq8ikWAM` (Rachel) |
 | `elevenlabs_model` | ElevenLabs model ID | `eleven_turbo_v2_5` |
 | `barge_in_threshold` | VAD probability to trigger barge-in | `0.85` |
 | `barge_in_chunks` | Consecutive VAD chunks above threshold required | `3` |
@@ -106,10 +106,10 @@ ros2 run text_to_speech text_to_speech
 
 ```bash
 # Generic input topic (any source)
-ros2 topic pub --once /tts/input std_msgs/String 'data: "Hello, I am Pepper."'
+ros2 topic pub --once /text_to_speech/input std_msgs/String 'data: "Hello, I am Pepper."'
 
 # Programmatic call via action server (blocks until speech is complete)
-ros2 action send_goal /tts dec_interfaces/action/TTS "{text: 'Hello, how can I help you?'}"
+ros2 action send_goal /text_to_speech dec_interfaces/action/TTS "{text: 'Hello, how can I help you?'}"
 ```
 
 ## ROS Interface
@@ -118,7 +118,7 @@ ros2 action send_goal /tts dec_interfaces/action/TTS "{text: 'Hello, how can I h
 
 | Topic | Type | Description |
 |-------|------|-------------|
-| `/tts/input` | `std_msgs/String` | Text to speak — accepts sentences from any source |
+| `/text_to_speech/input` | `std_msgs/String` | Text to speak — accepts sentences from any source |
 | `/speech_event/vad_speech_prob` | `std_msgs/Float32` | VAD probability used for barge-in detection |
 
 ### Published Topics
@@ -132,7 +132,7 @@ ros2 action send_goal /tts dec_interfaces/action/TTS "{text: 'Hello, how can I h
 
 | Action | Type | Description |
 |--------|------|-------------|
-| `/tts` | `dec_interfaces/action/TTS` | Speak text and block until complete |
+| `/text_to_speech` | `dec_interfaces/action/TTS` | Speak text and block until complete |
 
 ### Service Clients
 
@@ -169,9 +169,9 @@ ros2 action send_goal /tts dec_interfaces/action/TTS "{text: 'Hello, how can I h
 ## Architecture
 
 ```
-/tts/input  ──┐
+/text_to_speech/input  ──┐
               ├──► Sentence Queue ──► speak_sentence()
-/tts action ──┘                          │
+/text_to_speech action ──┘                          │
                                         ├── naoqi_ros     → publish /speech
                                         ├── kokoro_local  → sounddevice
                                         ├── kokoro_pepper ─┐
@@ -180,7 +180,7 @@ ros2 action send_goal /tts dec_interfaces/action/TTS "{text: 'Hello, how can I h
                                                            └─ file   → SCP + play_audio → ALAudioPlayer
 ```
 
-1. **Input**: Text arrives via `/tts/input` topic or `/tts` action goal
+1. **Input**: Text arrives via `/text_to_speech/input` topic or `/text_to_speech` action goal
 2. **Queue**: Sentences are enqueued and drained in order by a background thread
 3. **Synthesis**: Kokoro-82M (local GPU/CPU) or ElevenLabs API
 4. **Playback**: Stream mode sends aligned PCM chunks directly to the robot; file mode SCPs a WAV file and plays via ALAudioPlayer
@@ -196,10 +196,10 @@ ros2 node list
 ros2 action list
 
 # Send a test message
-ros2 topic pub --once /tts/input std_msgs/String 'data: "Hello, I am Pepper."'
+ros2 topic pub --once /text_to_speech/input std_msgs/String 'data: "Hello, I am Pepper."'
 
 # Test via action server
-ros2 action send_goal /tts dec_interfaces/action/TTS "{text: 'Hello, how can I help you?'}"
+ros2 action send_goal /text_to_speech dec_interfaces/action/TTS "{text: 'Hello, how can I help you?'}"
 ```
 
 ### Testing Audio Playback Directly
@@ -225,6 +225,9 @@ text_to_speech/
 │   └── text_to_speech_configuration.yaml
 ├── data/
 │   └── pepper_topics.yaml
+├── launch/
+│   └── text_to_speech_launch_robot.launch.py
+├── models/
 ├── resource/
 │   └── text_to_speech
 ├── tests/
@@ -237,6 +240,7 @@ text_to_speech/
 ├── setup.py
 ├── setup.cfg
 ├── requirements.txt
+├── text_to_speech_requirements_x86.txt
 └── README.md
 ```
 

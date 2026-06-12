@@ -36,7 +36,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'pose_topic',
-            default_value='/robotLocalization/pose',
+            default_value='/robot_localization/pose',
             description='Output absolute pose topic'
         ),
         DeclareLaunchArgument(

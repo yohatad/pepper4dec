@@ -79,16 +79,6 @@ def launch_setup(context, *args, **kwargs):
         # Log that camera launch is skipped
         print("Camera launch is disabled (launch_camera=false). Assuming topics are available from ROS2 bag or other source.")
 
-    # Add person detection node
-    actions.append(
-        Node(
-            package="person_detection",
-            executable="person_detection",
-            name="person_detection",
-            output="screen",
-        )
-    )
-
     # Add face detection node
     actions.append(
         Node(

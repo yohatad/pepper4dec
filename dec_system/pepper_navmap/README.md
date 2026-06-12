@@ -121,8 +121,8 @@ ros2 launch pepper_navigation slam_toolbox.launch.py
 | `/scan` | `sensor_msgs/LaserScan` | 2D LiDAR scan |
 | `/odom` | `nav_msgs/Odometry` | Robot odometry |
 | `/tf` | `tf2_msgs/TFMessage` | Transform tree |
-| `/camera/color/image_raw` | `sensor_msgs/Image` | RGB image (RTAB-Map) |
-| `/camera/depth/image_raw` | `sensor_msgs/Image` | Depth image (RTAB-Map) |
+| `/camera/color/image_raw_custom` | `sensor_msgs/Image` | RGB image (RTAB-Map) |
+| `/camera/aligned_depth_to_color/image_raw_custom` | `sensor_msgs/Image` | Depth image (RTAB-Map) |
 
 ### Published Topics
 
@@ -169,10 +169,10 @@ ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
 
 | File | Description |
 |------|-------------|
-| `rtabmap_feb_15.yaml` | Map built with RTAB-Map (default for Nav2) |
+| `rtabmap_march_28.yaml` | Map built with RTAB-Map (default for Nav2) |
 | `map.yaml` | General-purpose map |
 | `my_map.yaml` | Alternative saved map |
-| `keepout_zones.yaml` | Keepout zone filter mask |
+| `keepout_zone.yaml` | Keepout zone filter mask |
 
 ### Saving a New Map (SLAM Toolbox)
 
@@ -186,18 +186,20 @@ ros2 run nav2_map_server map_saver_cli -f ~/ros2_ws/src/pepper4dec/dec_system/pe
 pepper_navmap/
 ├── config/
 │   ├── mapper_params_online_async.yaml
-│   └── nav2_params.yaml
+│   ├── nav2_params.yaml
+│   └── ekf_nav.yaml.yaml
 ├── launch/
 │   ├── pepper_navigation.launch.py
 │   ├── rtabmap_realsense.launch.py
 │   └── slam_toolbox.launch.py
 ├── map/
 │   ├── map.yaml
-│   ├── rtabmap_feb_15.yaml
-│   └── keepout_zones.yaml
+│   ├── rtabmap_march_28.yaml
+│   └── keepout_zone.yaml
 ├── pepper_navigation/
 │   ├── __init__.py
-│   └── send_goal.py
+│   ├── send_goal.py
+│   └── generate_keepout.py
 ├── package.xml
 ├── setup.py
 └── README.md

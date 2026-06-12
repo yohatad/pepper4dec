@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""
-pepper_kinematics_utilities.py
+""" pepper_kinematics_utilities.py
 
-Author: Yohannes Haile
+Pure Python forward and inverse kinematics helpers for Pepper's arms and head,
+used by gesture_execution_implementation.py to compute joint angles for
+deictic pointing gestures.
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
 Date: September 24, 2025
 Version: v1.0
-
-Pure Python implementation of Pepper robot kinematics utilities
 """
 
 import math
@@ -17,10 +20,7 @@ RIGHT_ARM = 0
 LEFT_ARM = 1
 
 class PepperKinematicsUtilities:
-    """
-    Utility class for Pepper robot kinematics calculations
-    Provides forward and inverse kinematics functions for Pepper's arms and head
-    """
+    """Static utility methods for forward and inverse kinematics of Pepper's arms and head."""
 
     # --------------------------------------------------
     #           CONVERSION FUNCTIONS 
