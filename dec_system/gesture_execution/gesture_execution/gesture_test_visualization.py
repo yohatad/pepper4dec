@@ -1,17 +1,25 @@
 #!/usr/bin/env python3
-"""
-Test script for gesture execution visualization in RViz2
+""" gesture_test_visualization.py
 
-This script tests the deictic gesture visualization by:
-1. Starting a ROS2 node that publishes marker messages
-2. Simulating a deictic gesture call
-3. Publishing visualization markers to RViz2
+Entry point for the VisualizationTestNode standalone test node.
+Running this node publishes a fixed set of example markers that simulate a
+deictic pointing gesture, for verifying gesture visualization in RViz2.
 
-Run this script and then run rviz2 to see the visualization:
-  ros2 run rviz2 rviz2
+This script publishes a target sphere, a shoulder-position sphere, a pointing
+arrow between them, and a text label with the target coordinates to the
+/gesture_execution/visualization topic. After publishing, run rviz2, add a
+Marker display, set the topic to /gesture_execution/visualization, and set the
+fixed frame to base_link to view the markers.
 
-In RViz2, add a Marker display and set the topic to:
-  /gesture_execution/visualization
+Publishers:
+    /gesture_execution/visualization (visualization_msgs/Marker)
+        Example deictic gesture markers (target, shoulder, pointing arrow, text label).
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: March 05, 2026
+Version: v1.0
 """
 
 import rclpy
@@ -24,7 +32,7 @@ from std_msgs.msg import ColorRGBA
 from builtin_interfaces.msg import Time
 
 class VisualizationTestNode(Node):
-    """Test node to verify gesture execution visualization in RViz2"""
+    """Publishes example deictic gesture markers for visualizing in RViz2."""
     
     def __init__(self):
         super().__init__('visualization_test')

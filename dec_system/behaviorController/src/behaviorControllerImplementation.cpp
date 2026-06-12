@@ -1,5 +1,19 @@
 /* behaviorControllerImplementation.cpp
+ *
+ * Implements the custom BehaviorTree.CPP node types used by the
+ * behavior_controller's tour-guide trees: ROS action/service wrappers
+ * (AnimateBehavior, Gesture, Navigate, SpeechRecognition,
+ * ConversationManager, SpeechWithFeedback, TTS, StopAnimateBehavior,
+ * SetOvertAttention, SetSpeechListening), stateful perception/speech
+ * conditions (ListenForSpeech, CheckFaceDetected, IsVisitorDiscovered,
+ * IsMutualGazeDiscovered, GetVisitorResponse, IsVisitorResponseYes), the
+ * exhibit-queue tour-loop nodes, and blackboard/logging utility nodes. Also
+ * defines initializeTree(), which registers all of these node types and
+ * loads the scenario's behavior tree XML.
+ *
  * Author: Yohannes Tadesse Haile
+ * Affiliation: Carnegie Mellon University Africa
+ * Email: yohatad123@gmail.com
  * Date: February 09, 2026
  * Version: v1.0
  */
@@ -36,6 +50,7 @@ using namespace BT;
 BT::PortsList AnimateBehaviorNode::providedPorts()
 {
     return {
+        BT::InputPort<std::string> ("action_name",  "/animate_behavior", "Action server name"),
         BT::InputPort<std::string> ("behavior_type",       "All", "all | body | hands | rotation"),
         BT::InputPort<float>       ("selected_range",       0.5f, "Movement range [0.0, 1.0]"),
         BT::InputPort<int>         ("duration_seconds",     0,    "Duration in seconds (0 = indefinite)"),
@@ -124,6 +139,7 @@ BT::NodeStatus AnimateBehaviorNode::onFailure(BT::ActionNodeErrorCode error)
 BT::PortsList StopAnimateBehavior::providedPorts()
 {
     return {
+        BT::InputPort<std::string> ("service_name", "/animate_behavior/stop", "Service name"),
         BT::OutputPort<std::string>("message", "Response message from the stop service"),
     };
 }
@@ -185,6 +201,7 @@ BT::NodeStatus StopAnimateBehavior::onFailure(BT::ServiceNodeErrorCode error)
 BT::PortsList GestureNode::providedPorts()
 {
     return {
+        BT::InputPort<std::string> ("action_name",     "/gesture_execution", "Action server name"),
         BT::InputPort<std::string> ("gesture_type",     "",  "Gesture type (e.g. iconic, deictic, bow, nod)"),
         BT::InputPort<std::string> ("gesture_name",     "",  "Gesture name (e.g. welcome, wave, shake)"),
         BT::InputPort<int64_t>     ("gesture_duration", 0,   "Duration in ms"),
@@ -286,6 +303,7 @@ BT::NodeStatus GestureNode::onFailure(BT::ActionNodeErrorCode error)
 BT::PortsList Navigate::providedPorts()
 {
     return {
+        BT::InputPort<std::string> ("action_name",      "/navigate_to_pose", "Action server name"),
         BT::InputPort<double>      ("goal_x",                  "Goal x position (metres)"),
         BT::InputPort<double>      ("goal_y",                  "Goal y position (metres)"),
         BT::InputPort<double>      ("goal_theta",        0.0,  "Goal heading (radians)"),
@@ -711,6 +729,7 @@ BT::NodeStatus TTSNode::onFailure(BT::ActionNodeErrorCode error)
 BT::PortsList SetOvertAttention::providedPorts()
 {
     return {
+        BT::InputPort<std::string> ("service_name", "/overt_attention/set_enabled", "Service name"),
         BT::InputPort<bool>        ("enabled", true, "true = enable attention, false = disable"),
         BT::OutputPort<std::string>("message",       "Response message from the service"),
     };
@@ -1224,6 +1243,7 @@ void GetVisitorResponse::onHalted()
 BT::PortsList SetSpeechListening::providedPorts()
 {
     return {
+        BT::InputPort<std::string> ("service_name", "/speech_event/set_enabled", "Service name"),
         BT::InputPort<bool>        ("enabled", true, "true = listen, false = mute"),
         BT::OutputPort<std::string>("message",       "Response message from the service"),
     };
@@ -1529,6 +1549,7 @@ BT::NodeStatus CheckBlackboard::tick()
 BT::PortsList IsVisitorResponseYes::providedPorts()
 {
     return {
+        BT::InputPort<std::string>("action_name", "/conversation_manager", "Action server name"),
         BT::InputPort<std::string>("visitor_response", "{visitor_response}",
                                    "Raw ASR utterance written by GetVisitorResponse"),
     };

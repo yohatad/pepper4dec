@@ -1,12 +1,56 @@
 #!/usr/bin/env python3
-"""
-robot_localization.py
+""" robot_localization.py
 
-Simple robot localization node that converts relative odometry to absolute position.
-Uses initial position and integrates odometry data to provide absolute pose.
+Entry point and lifecycle node implementation for absolute robot localization.
+Converts relative odometry readings into an absolute robot pose using a fixed
+initial position as the anchor.
 
-Author: Assistant
-Date: 2025
+On configure, the node reads the initial pose and topic/rate parameters and
+creates a managed pose publisher. On activate, it subscribes to odometry and
+starts a timer that periodically publishes the absolute pose. The first
+odometry reading received after activation is captured as the odom-frame
+anchor; subsequent readings are transformed (translated and rotated) into the
+global frame relative to that anchor and the configured initial pose.
+
+Subscribers:
+    <odom_topic> (nav_msgs/Odometry)
+        Relative odometry readings used to compute displacement and rotation
+        since the odom-frame anchor.
+
+Publishers:
+    <pose_topic> (geometry_msgs/Pose2D)
+        Absolute robot pose (x, y, theta) in the global frame, published at
+        a fixed rate.
+
+Parameters:
+    initial_x (double, default: 0.0)
+        Initial global x position of the robot.
+    initial_y (double, default: 0.0)
+        Initial global y position of the robot.
+    initial_theta (double, default: 0.0)
+        Initial global heading of the robot, in radians.
+    odom_topic (string, default: "/odom")
+        Topic to subscribe to for odometry messages.
+    pose_topic (string, default: "/robot_localization/pose")
+        Topic on which the absolute pose is published.
+    publish_rate (double, default: 10.0)
+        Rate, in Hz, at which the absolute pose is published.
+
+Lifecycle:
+    configure  -> read parameters, initialize the global pose/anchor state, and
+                  create the managed pose publisher.
+    activate   -> activate the pose publisher, subscribe to odometry, and start
+                  the periodic pose-publishing timer.
+    deactivate -> cancel and destroy the timer, destroy the odometry
+                  subscription, and deactivate the pose publisher.
+    cleanup    -> destroy the pose publisher and reset the odometry anchor
+                  state.
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: June 11, 2026
+Version: v1.0
 """
 
 import math
@@ -17,16 +61,7 @@ from geometry_msgs.msg import Pose2D
 
 
 class RobotLocalization(LifecycleNode):
-    """
-    Converts relative odometry to absolute robot pose.
-    Integrates odometry data with an initial position to provide global localization.
-
-    Lifecycle:
-      configure  → read parameters, create publisher
-      activate   → create subscription + timer
-      deactivate → cancel timer, destroy subscription
-      cleanup    → destroy publisher
-    """
+    """Lifecycle node that fuses odometry into an absolute robot pose estimate."""
 
     def __init__(self):
         super().__init__('robot_localization')
@@ -42,7 +77,7 @@ class RobotLocalization(LifecycleNode):
     # ── Lifecycle callbacks ─────────────────────────────────────────────────────
 
     def on_configure(self, state) -> TransitionCallbackReturn:
-        """Read parameters, initialise state, create publisher."""
+        """Read parameters and create the pose publisher."""
         initial_x     = self.get_parameter('initial_x').value
         initial_y     = self.get_parameter('initial_y').value
         initial_theta = self.get_parameter('initial_theta').value
@@ -109,6 +144,7 @@ class RobotLocalization(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_shutdown(self, state) -> TransitionCallbackReturn:
+        """Log shutdown of the node."""
         self.get_logger().info('RobotLocalization shutting down')
         return TransitionCallbackReturn.SUCCESS
 

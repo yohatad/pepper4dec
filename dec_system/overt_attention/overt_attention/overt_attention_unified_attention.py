@@ -1,13 +1,87 @@
 #!/usr/bin/env python3
-"""
-Improved Attention Controller for Robot Overt Attention — Lifecycle version.
-Priority 1: Engaged Faces | Priority 2: Detected Faces | Priority 3: Saliency (with cooldown + IOR)
+""" overt_attention_unified_attention.py
+
+Entry point and lifecycle node implementation for the unified attention controller.
+Fuses face detections and bottom-up saliency into a single gaze target and commands
+Pepper's head to look at it.
+
+This node arbitrates between three priority levels — engaged (mutual-gaze) faces,
+detected faces, and salient regions — to decide where the robot should look next.
+Face candidates are scored by engagement, centeredness, and proximity, with hysteresis
+and cooldowns to avoid rapid target switching. When no face has been seen recently,
+the node falls back to the highest-scoring saliency peak, applying inhibition-of-return
+(IOR) so recently-attended locations are temporarily suppressed. The resulting gaze
+direction is smoothed and published as a head joint command, along with the
+camera-relative target angles used by the visualization node.
+
+Subscribers:
+    /face_detection/data (dec_interfaces/FaceDetection)
+        Detected face centroids, tracking IDs, mutual-gaze flags, and depth.
+    /overt_attention/saliency_peak (std_msgs/Float32MultiArray)
+        Saliency peak candidates as flattened (u, v, score) triplets.
+    /camera/color/camera_info (sensor_msgs/CameraInfo)
+        Camera intrinsics used to convert pixel coordinates to angles.
+    /joint_states (sensor_msgs/JointState)
+        Current head joint positions (HeadYaw, HeadPitch).
+
+Publishers:
+    /joint_angles (naoqi_bridge_msgs/JointAnglesWithSpeed)
+        Commanded head joint angles and motion speed.
+    /overt_attention/target_angles (geometry_msgs/Vector3)
+        Camera-relative target yaw/pitch and the attention score of the current target.
+
+Services:
+    /overt_attention/set_enabled (std_srvs/SetBool)
+        Enable or disable the attention controller; optionally moves the head to its
+        default pose on disable.
+
+Parameters (loaded from overt_attention_configuration.yaml):
+    start_enabled (bool, default: true)
+    move_to_default_on_disable (bool, default: true)
+    default_yaw (float, default: 0.0)
+    default_pitch (float, default: -0.2)
+    default_move_speed (float, default: 0.1)
+    face_yaw_lim (float, default: 1.8)
+    face_pitch_up (float, default: 0.4)
+    face_pitch_dn (float, default: -0.7)
+    saliency_yaw_lim (float, default: 1.2)
+    saliency_pitch_up (float, default: 0.3)
+    saliency_pitch_dn (float, default: -0.3)
+    face_timeout (float, default: 2.0)
+    engaged_priority_bonus (float, default: 2.0)
+    face_switch_cooldown (float, default: 1.0)
+    same_face_threshold_deg (float, default: 8.0)
+    prefer_closer_faces (bool, default: true)
+    max_face_distance (float, default: 5.0)
+    min_angular_change_deg (float, default: 2.0)
+    target_smoothing_alpha (float, default: 0.4)
+    saliency_min_score (float, default: 0.30)
+    saliency_min_cooldown (float, default: 1.5)
+    saliency_max_dwell (float, default: 3.0)
+    switch_score_ratio (float, default: 1.4)
+    same_target_threshold_deg (float, default: 5.0)
+    enable_ior (bool, default: true)
+    ior_max_suppression (float, default: 0.9)
+    ior_half_life (float, default: 3.0)
+    ior_radius_deg (float, default: 15.0)
+    ior_cleanup_threshold (float, default: 0.05)
+    ior_max_locations (int, default: 20)
 
 Lifecycle:
-  configure  → load YAML, read parameters, init state, create publishers + service
-  activate   → create subscriptions (face, saliency, camera_info, joint_states)
-  deactivate → destroy subscriptions
-  cleanup    → destroy publishers
+    configure  -> load topics YAML, declare/read parameters, init internal state,
+                  and create the head/target lifecycle publishers and the
+                  set_enabled service.
+    activate   -> activate publishers and subscribe to face, saliency, camera_info,
+                  and joint_state topics.
+    deactivate -> destroy sensor subscriptions, clear tracking state, and
+                  deactivate publishers.
+    cleanup    -> destroy the lifecycle publishers and the set_enabled service.
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: June 11, 2026
+Version: v1.0
 """
 
 import math
@@ -52,13 +126,15 @@ def load_topics_config(package_name: str, relative_path: str) -> dict:
 
 
 class OvertAttention(LifecycleNode):
+    """Lifecycle node that fuses face and saliency input into head gaze commands."""
+
     def __init__(self):
         super().__init__('simple_attention')
 
     # ── Lifecycle callbacks ─────────────────────────────────────────────────────
 
     def on_configure(self, _state) -> TransitionCallbackReturn:
-        """Load YAML config, read parameters, init state, create publishers + service."""
+        """Load the topics config, declare/read parameters, init state, and create publishers and the enable service."""
         try:
             self.topics_config = load_topics_config('overt_attention', 'data/pepper_topics.yaml')
             self.get_logger().info('Loaded topics configuration from overt_attention package')
@@ -164,7 +240,7 @@ class OvertAttention(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_activate(self, _state) -> TransitionCallbackReturn:
-        """Activate publishers, then subscribe to sensor topics."""
+        """Activate the lifecycle publishers, then subscribe to face, saliency, camera_info, and joint_state topics."""
         super().on_activate(_state)
 
         qos_img = get_image_qos()
@@ -177,7 +253,7 @@ class OvertAttention(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_deactivate(self, _state) -> TransitionCallbackReturn:
-        """Destroy subscriptions, then deactivate publishers."""
+        """Destroy sensor subscriptions, clear tracking state, and deactivate the lifecycle publishers."""
         for sub in (self._sub_faces, self._sub_saliency, self._sub_caminfo, self._sub_joints):
             self.destroy_subscription(sub)
 
@@ -192,6 +268,7 @@ class OvertAttention(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_cleanup(self, _state) -> TransitionCallbackReturn:
+        """Destroy the head/target lifecycle publishers and the set_enabled service."""
         self.destroy_lifecycle_publisher(self.pub_head)
         self.destroy_lifecycle_publisher(self.pub_target)
         self.destroy_service(self.srv_enable)
@@ -199,6 +276,7 @@ class OvertAttention(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_shutdown(self, _state) -> TransitionCallbackReturn:
+        """Log shutdown of the attention controller."""
         self.get_logger().info('Attention controller shutting down')
         return TransitionCallbackReturn.SUCCESS
 

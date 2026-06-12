@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
-"""
-gesture_execution_implementation.py
+""" gesture_execution_implementation.py
 
-ROS2 Action Server for Pepper robot gesture execution system — Lifecycle version.
-Provides gesture execution with elapsed time feedback for synchronisation.
+LifecycleNode implementing Pepper's gesture execution action server, providing
+deictic, iconic, bowing, and nodding gestures with elapsed-time feedback.
 
 Lifecycle:
-  configure  → load YAML configs, init kinematics, create publishers + action server
-  activate   → create subscriptions (joint_states, robot_pose)
-  deactivate → destroy subscriptions
-  cleanup    → destroy publishers
+    configure  -> load YAML configs, initialize kinematics, create the lifecycle
+                  publishers (joint trajectory, visualization markers) and action server
+    activate   -> activate publishers and subscribe to joint_states and robot_pose
+    deactivate -> destroy the joint_states/robot_pose subscriptions and deactivate publishers
+    cleanup    -> destroy the lifecycle publishers and the action server
+    shutdown   -> log shutdown and return success
 
-Author: Yohannes Haile
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
 Date: October 11, 2025
 Version: v1.0
 """
@@ -176,7 +179,7 @@ class GestureDescriptorManager:
 # ── Main lifecycle node ─────────────────────────────────────────────────────────
 
 class GestureExecutionSystem(LifecycleNode):
-    """ROS2 Action Server for gesture execution with elapsed time feedback."""
+    """Lifecycle node that executes deictic, iconic, bowing, and nodding gestures via an action server."""
 
     def __init__(self):
         super().__init__('gesture_action_server')
@@ -184,7 +187,7 @@ class GestureExecutionSystem(LifecycleNode):
     # ── Lifecycle callbacks ───────────────────────────────────────────────────
 
     def on_configure(self, _state) -> TransitionCallbackReturn:
-        """Load configs, init kinematics, create publishers + action server."""
+        """Load configuration and gesture descriptors, init kinematics, and create publishers and the action server."""
         try:
             package_path = get_package_share_directory('gesture_execution')
             self.config_manager     = ConfigManager(package_path)
@@ -231,7 +234,7 @@ class GestureExecutionSystem(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_activate(self, _state) -> TransitionCallbackReturn:
-        """Activate publishers, then subscribe to joint_states and robot_pose."""
+        """Activate the lifecycle publishers and subscribe to joint_states and robot_pose."""
         super().on_activate(_state)
         self._lifecycle_active = True
 
@@ -247,7 +250,7 @@ class GestureExecutionSystem(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_deactivate(self, _state) -> TransitionCallbackReturn:
-        """Destroy subscriptions, then deactivate publishers."""
+        """Destroy the joint_states and robot_pose subscriptions and deactivate the publishers."""
         self._lifecycle_active = False
         self.destroy_subscription(self._joint_sub)
         self.destroy_subscription(self._pose_sub)
@@ -256,6 +259,7 @@ class GestureExecutionSystem(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_cleanup(self, _state) -> TransitionCallbackReturn:
+        """Destroy the lifecycle publishers and the action server."""
         self.destroy_lifecycle_publisher(self.joint_traj_pub)
         self.destroy_lifecycle_publisher(self.marker_pub)
         self._action_server.destroy()
@@ -263,6 +267,7 @@ class GestureExecutionSystem(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_shutdown(self, _state) -> TransitionCallbackReturn:
+        """Log the shutdown transition and return success."""
         self.get_logger().info('GestureExecutionSystem shutting down')
         return TransitionCallbackReturn.SUCCESS
 

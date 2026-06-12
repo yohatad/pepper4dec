@@ -1,22 +1,24 @@
-"""
-Conversation manager implementation for the Pepper robot, utilizing Retrieval-Augmented Generation (RAG) techniques.
+""" conversation_manager_implementation.py
 
-Environment Variables:
-    LLM_API_KEY: API key for LLM service (MUST be exported as environment variable)
+Core RAG (Retrieval-Augmented Generation) implementation for the conversation manager.
+Provides configuration loading, ChromaDB collection management, knowledge-base
+ingestion, vector search, and (streaming) LLM response generation used by
+ConversationManagerNode.
 
-Configuration File (config/converation_manager_configuration.yaml):
-    llm:          base_url, model
-    embedding:    model
-    search:       similarity_threshold, top_k
-    conversation: max_history_turns, context_turns
-    data:         default_path (knowledge base JSON file)
-    debug:        verbose
+Configuration is held in a module-level ConversationManagerConfig dataclass, loaded
+from config/converation_manager_configuration.yaml via apply_config_file().
+The LLM_API_KEY must be exported as an environment variable; all other settings
+(llm, embedding, search, conversation, data, debug) come from the YAML file with
+sensible defaults. Query handling (handle_query / generate_response_stream)
+performs a similarity search against the ChromaDB knowledge-base collection,
+builds a prompt with conversation history and retrieved context, and calls the
+LLM to produce an answer plus an intent/confidence classification.
 
-Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
 Email: yohatad123@gmail.com
 Date: February 28, 2026
 Version: v1.0
-
 """
 
 import os

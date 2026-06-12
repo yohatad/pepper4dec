@@ -1,11 +1,23 @@
-"""
-face_detection_implementation.py Implementation code for running the Face and Mutual Gaze Detection and Localization ROS2 node.
+""" face_detection_implementation.py
+
+Implements the face and mutual gaze detection lifecycle nodes: a base
+`FaceDetectionNode` that manages publishers, person-detection subscription,
+and debug visualization, and a `SixDrepNet` subclass that loads the YOLO and
+SixDrepNet ONNX models and runs head-pose/mutual-gaze inference on
+synchronized RGB-D camera frames.
+
+Lifecycle:
+    configure  -> create lifecycle publishers and initialize state (base); load YOLO + SixDrepNet ONNX models (SixDrepNet)
+    activate   -> subscribe to person detection (if enabled) and start the debug visualization timer (base); create camera subscriptions and start the image timeout monitor (SixDrepNet)
+    deactivate -> stop the visualization timer and destroy the person detection subscription (base); destroy camera subscriptions (SixDrepNet)
+    cleanup    -> destroy lifecycle publishers (base); release the loaded ONNX models (SixDrepNet)
+    shutdown   -> log shutdown (base)
 
 Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
 Date: April 18, 2025
 Version: v1.0
-
-This program comes with ABSOLUTELY NO WARRANTY.
 """
 
 import cv2
@@ -71,15 +83,7 @@ def load_configuration() -> Dict:
     return config
 
 class FaceDetectionNode(LifecycleNode):
-    """
-    Base lifecycle node for face detection.
-
-    Lifecycle:
-      configure  → create publishers, init state
-      activate   → create person_detection subscription (if needed), start vis timer
-      deactivate → cancel vis timer, destroy person_detection subscription
-      cleanup    → destroy publishers
-    """
+    """Base lifecycle node providing publishers, person-detection input, and debug visualization for face detection."""
 
     def __init__(self, config: Dict, node_name: str = 'faceDetection'):
         super().__init__(node_name)
@@ -163,12 +167,14 @@ class FaceDetectionNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_cleanup(self, _state) -> TransitionCallbackReturn:
+        """Destroy the face detection, debug, and depth debug publishers."""
         self.destroy_lifecycle_publisher(self.pub_gaze)
         self.destroy_lifecycle_publisher(self.debug_pub)
         self.destroy_lifecycle_publisher(self.depth_debug_pub)
         return TransitionCallbackReturn.SUCCESS
 
     def on_shutdown(self, _state) -> TransitionCallbackReturn:
+        """Log that the node is shutting down."""
         self.get_logger().info(f'{self.get_name()} shutting down')
         return TransitionCallbackReturn.SUCCESS
 
@@ -567,16 +573,7 @@ class YOLOONNX:
         return np.array(result_boxes), np.array(result_scores)
 
 class SixDrepNet(FaceDetectionNode):
-    """
-    Lifecycle subclass that loads YOLO + SixDrepNet models on configure
-    and creates camera subscriptions on activate.
-
-    Lifecycle:
-      configure  → super().on_configure() → load ONNX models
-      activate   → super().on_activate()  → create camera subscribers + timeout monitor
-      deactivate → destroy camera subscribers → super().on_deactivate()
-      cleanup    → super().on_cleanup()
-    """
+    """Lifecycle node that runs YOLO face detection and SixDrepNet head-pose estimation to detect mutual gaze."""
 
     def __init__(self, config: Dict):
         super().__init__(config)
@@ -668,6 +665,7 @@ class SixDrepNet(FaceDetectionNode):
         return super().on_deactivate(_state)
 
     def on_cleanup(self, _state) -> TransitionCallbackReturn:
+        """Release the loaded YOLO and SixDrepNet ONNX sessions, then clean up base resources."""
         if hasattr(self, 'yolo_model'):
             del self.yolo_model
         if hasattr(self, 'sixdrepnet_session'):

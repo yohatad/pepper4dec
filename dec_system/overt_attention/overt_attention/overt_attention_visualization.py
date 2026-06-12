@@ -1,7 +1,44 @@
 #!/usr/bin/env python3
-"""
-Improved Visualization for Overt Attention System
-Shows faces with tracking IDs, engagement status, depth, saliency peaks, and current head target
+""" overt_attention_visualization.py
+
+Entry point for the attention visualization node.
+Overlays face detections, saliency peaks, and the current gaze target onto the
+camera feed for debugging and monitoring.
+
+The node subscribes to the camera image, face detections, saliency peaks, and the
+unified attention controller's target angles. For each incoming frame it draws
+tracked face bounding boxes (with IDs, engagement status, and depth), saliency
+peak markers ranked by score, and a reticle showing the current head target —
+annotated with the targeted face ID when the target corresponds to a tracked face.
+An info panel and legend summarizing face/saliency counts and the current target
+are drawn on top, and the composited frame is republished as a raw image.
+
+Subscribers:
+    /camera/color/image_raw_custom[/compressed] (sensor_msgs/Image or CompressedImage)
+        Color camera frames to draw overlays on.
+    /face_detection/data (dec_interfaces/FaceDetection)
+        Detected face centroids, tracking IDs, engagement, and depth.
+    /overt_attention/saliency_peak (std_msgs/Float32MultiArray)
+        Saliency peak candidates as flattened (u, v, score) triplets.
+    /overt_attention/target_angles (geometry_msgs/Vector3)
+        Current attention target yaw/pitch and score from the unified attention controller.
+    /camera/color/camera_info (sensor_msgs/CameraInfo)
+        Camera intrinsics used to project target angles back to pixel coordinates.
+
+Publishers:
+    /overt_attention/visualization (sensor_msgs/Image)
+        Annotated camera frame with face, saliency, and target overlays.
+
+Parameters (loaded from overt_attention_configuration.yaml):
+    show_face_ids (bool, default: true)
+    show_depth (bool, default: true)
+    show_engagement (bool, default: true)
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: June 11, 2026
+Version: v1.0
 """
 
 import cv2
@@ -61,6 +98,8 @@ def generate_color_from_id(face_id: str) -> tuple:
 
 
 class VisualizationNode(Node):
+    """ROS2 node that overlays face, saliency, and attention-target annotations onto the camera feed."""
+
     def __init__(self):
         super().__init__('visualization_node')
         

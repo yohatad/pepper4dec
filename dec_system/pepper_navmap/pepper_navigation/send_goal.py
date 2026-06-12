@@ -1,3 +1,27 @@
+""" send_goal.py
+
+Entry point for a one-shot Nav2 navigation goal sender.
+Sets the robot's initial pose, waits for Nav2 to become active, and sends a
+single navigation goal using the Nav2 Simple Commander API.
+
+On startup, the script initializes a BasicNavigator, publishes an initial
+pose at the map origin, waits until Nav2 is fully active, then sends a fixed
+goal pose to the navigation stack via the NavigateToPose action. While the
+goal is in progress, it periodically prints the remaining distance to the
+goal until the task completes.
+
+Actions:
+    /navigate_to_pose (nav2_msgs/action/NavigateToPose)
+        Action used (via BasicNavigator.goToPose) to drive the robot to the
+        configured goal pose.
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: March 08, 2026
+Version: v1.0
+"""
+
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped

@@ -1,16 +1,23 @@
 #!/usr/bin/env python3
-"""
-MiVOLO ROS2 Node for Age and Gender Estimation
+""" age_gender_detection.py
 
-Supports both face-only (3 channel) and face+body (6 channel) models.
-Fully self-contained - no external MiVOLO dependencies required.
+ROS2 node and MiVOLO model wrapper for age and gender estimation from
+detected faces and persons. Supports both face-only (3 channel) and
+face+body (6 channel) MiVOLO models and is fully self-contained, requiring
+no external MiVOLO dependencies.
 
-Subscribes to:
-- persondetection/data (PersonDetection.msg) - person detections with track IDs
-- facedetection/data (FaceDetection.msg) - face detections with matching label IDs
-- camera image topic
+The node caches recent person and face detections together with the latest
+camera image, and whenever a tracked person exhibits mutual gaze within a
+configurable depth range, queues that person's track ID for age/gender
+inference. A single worker thread runs the MiVOLO model on the cached
+face (and body) crop, applies temporal smoothing across repeated estimates,
+and publishes the resulting per-person profile as JSON.
 
-Publishes age/gender estimates when new person track IDs are detected.
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: June 11, 2026
+Version: v1.0
 """
 
 import rclpy
@@ -222,7 +229,7 @@ class PersonProfile:
 # MiVOLO Inference
 # ============================================================================
 class MiVOLOInference:
-    """MiVOLO model wrapper supporting both face-only and face+body models."""
+    """Loads a MiVOLO TorchScript model and runs age/gender inference on face (and optional body) crops."""
     
     def __init__(self, model_path: str, device: str = "cuda", face_only: bool = False, logger=None):
         self.device = device
@@ -340,7 +347,7 @@ class MiVOLOInference:
 # ============================================================================
 
 class MiVOLONode(Node):
-    """ROS2 Node for MiVOLO age/gender estimation."""
+    """ROS2 node that triggers MiVOLO age/gender estimation for tracked persons exhibiting mutual gaze."""
     
     def __init__(self):
         super().__init__('mivolo_node')

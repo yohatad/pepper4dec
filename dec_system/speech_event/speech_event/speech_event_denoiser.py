@@ -1,16 +1,17 @@
-"""
-speech_event_denoiser.py
-Post-VAD, pre-ASR noise reduction for speech segments.
+""" speech_event_denoiser.py
 
-Applies a pipeline of bandpass filtering, harmonic notch filters for fan hum,
-and a Wiener filter with online noise estimation to clean speech segments
-collected by the VAD before they are passed to Whisper for transcription.
+Post-VAD, pre-ASR noise reduction utilities for speech segments.
+
+Provides SpeechDenoiser, which applies a pipeline of bandpass filtering,
+harmonic notch filters for fan hum, and a Wiener filter with online noise
+estimation to clean speech segments collected by the VAD before they are
+passed to Whisper for transcription.
 
 Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
 Date: April 2026
 Version: v1.0
-
-This program comes with ABSOLUTELY NO WARRANTY.
 """
 
 import os
@@ -32,39 +33,7 @@ def apply_bandpass(data, fs, lowcut=80, highcut=7500):
 
 
 class SpeechDenoiser:
-    """
-    Noise reduction for VAD-extracted speech segments at a fixed sample rate.
-
-    Instantiate once at node startup (loads the noise profile and detects the
-    fan hum fundamental).  Call clean() on each speech segment before Whisper.
-
-    Parameters
-    ----------
-    noise_profile_path : str or None
-        Path to a .npy file containing the mean magnitude spectrum of the noise
-        floor, recorded at `sr` Hz with n_fft bins.  If None or the file does
-        not exist, only the online (minimum-statistics) estimator is used.
-        NOTE: the profile must be recorded at `sr` (16 kHz for this pipeline) —
-        the 48 kHz fan_noise_profile.npy from the standalone test script is not
-        compatible.
-    sr : int
-        Sample rate of the audio that will be passed to clean() (default 16000).
-    n_fft : int
-        FFT size for STFT (default 512).
-    hop_length : int
-        STFT hop length (default 256).
-    alpha : float
-        Wiener filter aggressiveness.  Higher = more suppression.
-        Start at 0.5; lower toward 0.3 if speech is being over-suppressed.
-    spectral_floor_scale : float
-        Floor applied to each bin as a fraction of the noise estimate, to avoid
-        complete silence in noise-only bins (default 0.02).
-    smoothing_size : tuple
-        Kernel size for the median filter applied to the magnitude spectrogram
-        along the frequency axis (default (5, 1)).
-    logger : rclpy logger or None
-        If provided, info/warning messages are sent through ROS logging.
-    """
+    """Applies bandpass, notch, and Wiener filtering to denoise a speech segment before ASR."""
 
     def __init__(self, noise_profile_path=None, sr=16000, n_fft=512, hop_length=256,
                  alpha=0.5, spectral_floor_scale=0.02, smoothing_size=(5, 1), logger=None):

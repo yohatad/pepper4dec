@@ -1,11 +1,27 @@
-"""
-animate_behavior_implementation.py Implementation code for running the Animate Behavior ROS2 node.
+""" animate_behavior_implementation.py
+
+Implements AnimateBehaviorNode, a lifecycle node that runs random gesture, body rotation, and
+cascading face-LED animations for Pepper while an `/animate_behavior` action goal is active.
+
+Lifecycle:
+    configure  -> Read parameters, build per-limb joint definitions, create the
+                   joint-angle/velocity lifecycle publishers, the action server,
+                   the stop service, and the LED action client.
+    activate   -> Activate the lifecycle publishers, subscribe to /joint_states,
+                   start the animation and feedback timers, and kick off the
+                   face-LED cascade animation if enabled.
+    deactivate -> Stop any active animation, cancel and destroy the animation and
+                   feedback timers, destroy the joint-state subscription, and
+                   deactivate the lifecycle publishers.
+    cleanup    -> Destroy the lifecycle publishers, action server, stop service,
+                   and LED action client.
+    shutdown   -> Log the shutdown transition; no additional resources to release.
 
 Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
 Date: April 27, 2026
 Version: v1.0
-
-This program comes with ABSOLUTELY NO WARRANTY.
 """
 
 import rclpy
@@ -36,6 +52,8 @@ class JointDef:
 
 
 class AnimateBehaviorNode(LifecycleNode):
+    """Lifecycle node that drives Pepper's idle gesture, rotation, and face-LED animations."""
+
     CASCADE_LAYERS = [
         (['FaceLedRight1', 'FaceLedLeft1'], 0.00),
         (['FaceLedRight0', 'FaceLedRight2', 'FaceLedLeft0', 'FaceLedLeft2'], 0.09),
@@ -218,6 +236,7 @@ class AnimateBehaviorNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_cleanup(self, state) -> TransitionCallbackReturn:
+        """Destroy lifecycle publishers, the action server, the stop service, and the LED client."""
         self.destroy_lifecycle_publisher(self.joint_pub)
         self.destroy_lifecycle_publisher(self.vel_pub)
         self.action_server.destroy()
@@ -227,6 +246,7 @@ class AnimateBehaviorNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_shutdown(self, state) -> TransitionCallbackReturn:
+        """Log the shutdown transition; no additional resources to release."""
         self.get_logger().info(f'{self.get_name()}: shutting down')
         return TransitionCallbackReturn.SUCCESS
 

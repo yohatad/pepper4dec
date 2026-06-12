@@ -1,13 +1,53 @@
-"""
-sound_localization_node.py
-Dedicated sound source localization using pyroomacoustics SRP-PHAT
-2D azimuth-only localization for planar microphone arrays
+""" speech_event_localization.py
+
+Entry point for the sound_localization node.
+Running this module starts SoundLocalizationNode, which performs 2D
+azimuth-only sound source localization using SRP-PHAT beamforming over
+Pepper's 4-microphone array.
+
+The node accumulates audio from all four microphones, runs an SRP-PHAT DOA
+(direction-of-arrival) estimator over a configurable frequency band, and
+publishes the estimated azimuth, confidence, direction vector, pose, and an
+RViz visualization marker whenever a source is detected above the confidence
+threshold. Audio chunks below an RMS intensity threshold are skipped.
+
+Subscribers:
+    /naoqi_driver/audio (naoqi_bridge_msgs/AudioBuffer)
+        4-channel raw microphone audio (topic name set by the
+        `microphone_topic` parameter).
+
+Publishers:
+    /sound_localization/direction (geometry_msgs/Vector3Stamped)
+        Unit vector pointing toward the estimated sound source (Head frame).
+    /sound_localization/azimuth (std_msgs/Float32)
+        Estimated azimuth angle in degrees.
+    /sound_localization/confidence (std_msgs/Float32)
+        Confidence score of the localization estimate.
+    /sound_localization/source_pose (geometry_msgs/PoseStamped)
+        Pose of the estimated source at 1 meter along the direction vector.
+    /sound_localization/visualization (visualization_msgs/Marker)
+        RViz arrow marker showing the estimated sound direction.
+
+Parameters (loaded from speech_event_configuration.yaml):
+    microphone_topic (string, default: "/naoqi_driver/audio")
+    sample_rate (int, default: 48000)
+    speed_of_sound (double, default: 343.0)
+    nfft (int, default: 1024)
+    angular_resolution (int, default: 36)
+    freq_range_min (int, default: 500)
+    freq_range_max (int, default: 2500)
+    num_chunks_for_localization (int, default: 6)
+    update_rate_hz (double, default: 2.0)
+    confidence_threshold (double, default: 0.15)
+    intensity_threshold (double, default: 0.001)
+    enable_smoothing (bool, default: true)
+    smoothing_window (int, default: 5)
 
 Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
 Date: January 2026
-Version: v1.0 - Azimuth-only
-
-This program comes with ABSOLUTELY NO WARRANTY.
+Version: v1.0
 """
 
 import numpy as np
@@ -24,6 +64,8 @@ from visualization_msgs.msg import Marker
 from scipy import signal
 
 class SoundLocalizationNode(Node):
+    """Node that estimates sound source azimuth from 4-microphone audio using SRP-PHAT."""
+
     def __init__(self):
         super().__init__("sound_localization")
 

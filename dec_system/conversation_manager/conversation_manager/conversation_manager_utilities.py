@@ -1,13 +1,11 @@
-"""
-Utility helpers for the conversation manager.
+""" conversation_manager_utilities.py
 
-Includes:
-    - Colors: ANSI terminal colour codes
-    - print_*: verbose-mode debug printers (each requires an explicit verbose: bool)
-    - safe_*: type-coercion helpers used when reading YAML configuration
-    - read_yaml_config: YAML file reader
+Terminal-color helpers, verbose-mode debug print formatting, YAML config
+loading, and safe type-coercion utilities used by
+conversation_manager_implementation.py.
 
-Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
 Email: yohatad123@gmail.com
 Date: February 28, 2026
 Version: v1.0

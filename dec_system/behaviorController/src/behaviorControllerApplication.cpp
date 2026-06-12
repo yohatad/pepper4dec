@@ -1,27 +1,71 @@
-/*
- * behaviorControllerApplication.cpp
+/* behaviorControllerApplication.cpp
  *
- * Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
- * Email:  yohatad123@gmail.com
- * Date:   February 09, 2026
- * Version: v3.0 — ROS2 Lifecycle node
+ * Entry point for the behavior_controller lifecycle node.
+ * Loads the scenario configuration and knowledge base, builds the
+ * BehaviorTree.CPP tour-guide tree, and ticks it at 50 Hz once activated.
  *
- * Lifecycle state machine
- * ───────────────────────
- *   UNCONFIGURED → on_configure  : load YAML config + knowledge base, build BT
- *   INACTIVE     → on_activate   : start 50 Hz tick timer
- *   ACTIVE       → on_deactivate : cancel tick timer (tree stays built)
- *   INACTIVE     → on_cleanup    : halt + destroy BT tree
- *   any          → on_shutdown   : cancel timer, halt tree
+ * The custom BT node types ticked by this tree (ROS action/service wrappers,
+ * perception/speech conditions, tour-loop and blackboard utilities) are
+ * implemented in behaviorControllerImplementation.cpp; configuration and
+ * knowledge-base loading live in behaviorControllerUtilities.cpp.
  *
- * Architecture note
- * ─────────────────
- *   rclcpp_lifecycle::LifecycleNode does not inherit rclcpp::Node.
- *   BT::RosNodeParams requires std::shared_ptr<rclcpp::Node>, so this node
- *   owns a companion  bt_node_  (plain rclcpp::Node) for all BT machinery.
- *   Both nodes are added to a MultiThreadedExecutor in main():
- *     • lc_node   – lifecycle transitions, 50 Hz tick timer
- *     • bt_node_  – BT action/service clients, topic subscriptions
+ * Because rclcpp_lifecycle::LifecycleNode does not inherit rclcpp::Node, this
+ * node owns a companion plain rclcpp::Node (bt_node_) used for all BT
+ * action/service clients and topic subscriptions. Both nodes are added to a
+ * MultiThreadedExecutor in main(): lc_node handles lifecycle transitions and
+ * the 50 Hz tick timer, while bt_node_ handles BT action/service clients and
+ * topic subscriptions.
+ *
+ * Subscribers (via stateful BT condition nodes):
+ *   /face_detection/data (dec_interfaces/msg/FaceDetection)
+ *       Latest detected faces — used by CheckFaceDetected, IsVisitorDiscovered,
+ *       and IsMutualGazeDiscovered.
+ *   /speech_event/text (std_msgs/msg/String)
+ *       Latest speech transcription — used by ListenForSpeech and GetVisitorResponse.
+ *
+ * Actions (called by BT action nodes):
+ *   /animate_behavior (dec_interfaces/action/AnimateBehavior)
+ *       Run an idle/animation behavior (AnimateBehaviorNode).
+ *   /gesture_execution (dec_interfaces/action/Gesture)
+ *       Execute a deictic/social gesture (GestureNode).
+ *   /navigate_to_pose (nav2_msgs/action/NavigateToPose)
+ *       Drive to a goal pose via Nav2 (Navigate).
+ *   /speech_recognition (dec_interfaces/action/SpeechRecognition)
+ *       Run one speech-recognition turn (SpeechRecognitionNode).
+ *   /conversation_manager (dec_interfaces/action/ConversationManager)
+ *       Classify visitor intent and generate a dialogue response (ConversationManagerNode, IsVisitorResponseYes).
+ *   /text_to_speech (dec_interfaces/action/TTS)
+ *       Synthesize and play speech (TTSNode).
+ *   /naoqi_driver/speech_with_feedback (naoqi_bridge_msgs/action/SpeechWithFeedback)
+ *       Speak via NAOqi with completion feedback (SpeechWithFeedbackNode).
+ *
+ * Services (called by BT service nodes):
+ *   /animate_behavior/stop (std_srvs/srv/Trigger)
+ *       Stop the current animation (StopAnimateBehavior).
+ *   /overt_attention/set_enabled (std_srvs/srv/SetBool)
+ *       Enable or disable overt attention (SetOvertAttention).
+ *   /speech_event/set_enabled (std_srvs/srv/SetBool)
+ *       Mute or unmute speech recognition (SetSpeechListening).
+ *
+ * Parameters (loaded from behaviorControllerConfiguration.yaml):
+ *   scenario_specification (string, default: "lab_tour")
+ *   culture_knowledge_base (string, default: "cultureKnowledgeBase.yaml")
+ *   environment_knowledge_base (string, default: "labEnvironmentKnowledgeBase.yaml")
+ *   language (string, default: "English")
+ *   verbose_mode (bool, default: false)
+ *
+ * Lifecycle:
+ *   configure  -> load behaviorControllerConfiguration.yaml + knowledge base, build the BT tree
+ *   activate   -> start the 50 Hz tick timer
+ *   deactivate -> cancel the tick timer (tree stays built)
+ *   cleanup    -> halt and destroy the BT tree
+ *   shutdown   -> cancel the tick timer and halt the tree regardless of current state
+ *
+ * Author: Yohannes Tadesse Haile
+ * Affiliation: Carnegie Mellon University Africa
+ * Email: yohatad123@gmail.com
+ * Date: February 09, 2026
+ * Version: v1.0
  */
 
 #include "behaviorController/behaviorControllerInterface.h"
@@ -41,6 +85,7 @@ namespace behavior_controller {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BehaviorControllerLifecycleNode — constructor
+// Lifecycle node that builds and ticks Pepper's BehaviorTree.CPP tour-guide tree.
 // ─────────────────────────────────────────────────────────────────────────────
 
 BehaviorControllerLifecycleNode::BehaviorControllerLifecycleNode()

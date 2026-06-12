@@ -1,12 +1,30 @@
-"""
-speech_event_implementation.py
-Implementation of speech recognition with Whisper ASR.
+""" speech_event_implementation.py
+
+Implements SpeechRecognitionNode, a lifecycle node that runs Silero VAD over
+incoming microphone audio, detects speech segments, applies the
+SpeechDenoiser, and transcribes them with Whisper. Results are either
+published to a topic or returned through an ASR action server, depending on
+the `action_server` parameter.
+
+Lifecycle:
+    configure  -> read and validate parameters, load the Silero VAD and Whisper
+                  models, construct the SpeechDenoiser, initialize VAD/speech
+                  buffers and action-server state, create the set_enabled
+                  service, the optional action server, and the managed
+                  publishers
+    activate   -> activate the managed publishers and subscribe to the
+                  microphone topic
+    deactivate -> destroy the audio subscription and deactivate the managed
+                  publishers
+    cleanup    -> destroy the publishers, service, and action server, and
+                  release the Whisper, Silero, and denoiser instances
+    shutdown   -> log that the node is shutting down
 
 Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
 Date: November 8, 2025
 Version: v1.0
-
-This program comes with ABSOLUTELY NO WARRANTY.
 """
 
 import math
@@ -131,17 +149,7 @@ class OnnxWrapper():
             return float(out.squeeze())
 
 class SpeechRecognitionNode(LifecycleNode):
-    """
-    Lifecycle node for Whisper ASR + Silero VAD.
-
-    Lifecycle:
-      configure  → declare+read params, load Silero VAD, load Whisper,
-                   init SpeechDenoiser + buffers, create publishers + service
-                   + optional action server
-      activate   → create audio subscription
-      deactivate → destroy audio subscription
-      cleanup    → destroy publishers
-    """
+    """Lifecycle node that performs voice-activity detection and speech-to-text transcription."""
 
     def __init__(self):
         super().__init__("speech_recognition")
@@ -171,7 +179,7 @@ class SpeechRecognitionNode(LifecycleNode):
     # ── Lifecycle callbacks ─────────────────────────────────────────────────────
 
     def on_configure(self, _state) -> TransitionCallbackReturn:
-        """Read parameters, validate, load Silero + Whisper, init buffers + ROS interfaces."""
+        """Load the VAD/Whisper models and denoiser, and create publishers, services, and the action server."""
         # ── Read parameters ──────────────────────────────────────────────────
         self.sample_rate           = int(self.get_parameter("sample_rate").value)
         self.input_sample_rate     = int(self.get_parameter("input_sample_rate").value)
@@ -313,7 +321,7 @@ class SpeechRecognitionNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_activate(self, _state) -> TransitionCallbackReturn:
-        """Activate publishers, then subscribe to the microphone topic."""
+        """Activate the managed publishers and subscribe to the microphone topic."""
         super().on_activate(_state)
 
         self.audio_sub = self.create_subscription(
@@ -326,13 +334,14 @@ class SpeechRecognitionNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_deactivate(self, _state) -> TransitionCallbackReturn:
-        """Stop receiving audio, then deactivate publishers."""
+        """Unsubscribe from the microphone topic and deactivate the managed publishers."""
         self.destroy_subscription(self.audio_sub)
         super().on_deactivate(_state)
         self.get_logger().info("SpeechRecognitionNode deactivated")
         return TransitionCallbackReturn.SUCCESS
 
     def on_cleanup(self, _state) -> TransitionCallbackReturn:
+        """Destroy the publishers, service, and action server, and release the loaded models."""
         self.destroy_lifecycle_publisher(self.vad_prob_pub)
         self.destroy_lifecycle_publisher(self.asr_pub)
         self.destroy_service(self.set_enabled_service)
@@ -345,6 +354,7 @@ class SpeechRecognitionNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_shutdown(self, _state) -> TransitionCallbackReturn:
+        """Log that the node is shutting down."""
         self.get_logger().info("SpeechRecognitionNode shutting down")
         return TransitionCallbackReturn.SUCCESS
 

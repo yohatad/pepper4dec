@@ -1,50 +1,79 @@
 #!/home/yoha/tts_virtual_env/bin/python3
 
-"""
-text_to_speech_application.py
-ROS2 node for Text-to-Speech synthesis and playback on the Pepper robot.
+""" text_to_speech_application.py
 
-Receives sentences from /text_to_speech/input and speaks them
-as they arrive — enabling Pepper to start talking before the LLM has finished
-generating the full response.
+Entry point for the TextToSpeechNode lifecycle node.
+Running this node lets Pepper convert streamed text into spoken audio with
+low latency and barge-in support.
 
-Backends (set via config key 'engine'):
-  naoqi_ros      — Pepper's on-board ALTextToSpeech via naoqi_bridge.
-  kokoro_local   — Kokoro-82M synthesised locally, played on the laptop speakers.
-                   Useful for development / testing without the robot.
-  kokoro_pepper  — Kokoro-82M synthesised locally, played on Pepper's speakers.
-                   Two playback methods (set via config key 'playback_method'):
-                     "file"   — SCP WAV to robot, then ALAudioPlayer.loadFile.
-                                Full feedback + cancellable. Requires SSH key access.
-                                Set robot_ip, robot_user, robot_audio_dir in config.
-                     "stream" — Raw PCM chunks via send_audio_buffer / ALAudioDevice.
-                                No SCP needed, works out of the box.
+The node pulls sentences from the /text_to_speech/input topic (typically fed
+by an LLM response stream) and speaks them as they arrive, so Pepper can
+start talking before the full response has finished generating. Sentences
+are queued and drained sequentially by a background playback thread, which
+ensures strict ordering even while new sentences keep arriving.
 
-Features:
-  - Sentence queue with a background playback thread.
-  - Barge-in detection: user speech during playback stops Pepper immediately.
-  - Microphone muting during playback (naoqi_ros / kokoro_local backends).
-  - /text_to_speech action server for programmatic TTS calls.
+Synthesis/playback is handled by one of several interchangeable backends,
+selected via the 'engine' config key: 'naoqi_ros' (Pepper's on-board
+ALTextToSpeech via naoqi_bridge), 'kokoro_local' / 'kokoro_pepper' (Kokoro-82M
+synthesised locally and played on the laptop or on Pepper's speakers), and
+'elevenlabs_local' / 'elevenlabs_pepper' (ElevenLabs streaming TTS played
+locally or on Pepper). While playback is active, voice-activity probability
+on /speech_event/vad_speech_prob is monitored for barge-in: if the user
+starts speaking, Pepper's playback is interrupted immediately and the
+remaining queued sentences are dropped. The node also exposes a
+/text_to_speech action server so other nodes can request ad-hoc TTS playback
+and wait for completion.
 
-ROS Subscriptions:
-  /text_to_speech/input (std_msgs/String)
-  /speech_event/vad_speech_prob         (std_msgs/Float32)
+Subscribers:
+    /text_to_speech/input (std_msgs/String)
+        Sentences to speak, enqueued and played in order as they arrive.
+    /speech_event/vad_speech_prob (std_msgs/Float32)
+        Voice-activity probability used to detect user barge-in during playback.
 
-ROS Service clients:
-  /speech_event/set_enabled             (std_srvs/SetBool)
-  /naoqi_driver/load_audio_file         (naoqi_bridge_msgs/srv/LoadAudioFile)
-  /naoqi_driver/unload_audio_file       (naoqi_bridge_msgs/srv/UnloadAudioFile)
+Publishers:
+    /text_to_speech/speaking (std_msgs/Bool)
+        True while Pepper is actively speaking, false otherwise.
+    <naoqi_speech_topic> (std_msgs/String)
+        Plain-text sentences for naoqi_bridge to speak (naoqi_ros engine only).
 
-ROS Action clients:
-  /naoqi_driver/play_audio              (naoqi_bridge_msgs/action/PlayAudio)
+Services:
+    /speech_event/set_enabled (std_srvs/SetBool)
+        Client used to mute/unmute the microphone during playback.
+    /naoqi_driver/load_audio_file (naoqi_bridge_msgs/srv/LoadAudioFile)
+        Client used to upload synthesised WAV audio to the robot (Pepper backends).
+    /naoqi_driver/unload_audio_file (naoqi_bridge_msgs/srv/UnloadAudioFile)
+        Client used to free an audio file on the robot after playback.
+    /naoqi_driver/send_audio_buffer (naoqi_bridge_msgs/srv/SendAudioBuffer)
+        Client used to stream raw PCM audio buffers to the robot (stream playback method).
 
-ROS Action server:
-  /text_to_speech                                  (dec_interfaces/action/TTS)
+Actions:
+    /naoqi_driver/play_audio (naoqi_bridge_msgs/action/PlayAudio)
+        Client used to play an uploaded audio file on Pepper's speakers.
+    /text_to_speech (dec_interfaces/action/TTS)
+        Server that accepts text, queues it for speech, and reports completion.
 
-ROS Publishers:
-  /text_to_speech/speaking              (std_msgs/Bool)
+Parameters (loaded from text_to_speech_configuration.yaml):
+    engine (str, default: "naoqi_ros")
+    naoqi_speech_topic (str, default: "/speech")
+    chars_per_second (float, default: 12.0)
+    speech_padding_s (float, default: 0.5)
+    voice (str, default: "af_bella")
+    sample_rate (int, default: 24000)
+    output_device (int, default: -1)
+    playback_method (str, default: "stream")
+    stream_volume (float, default: 1.0)
+    barge_in_threshold (float, default: 0.85)
+    barge_in_chunks (int, default: 3)
+    elevenlabs_api_key (str, default: "")
+    elevenlabs_voice_id (str, default: "21m00Tcm4TlvDq8ikWAM")
+    elevenlabs_model (str, default: "eleven_turbo_v2_5")
+    elevenlabs_stability (float, default: 0.5)
+    elevenlabs_similarity_boost (float, default: 0.75)
+    elevenlabs_style (float, default: 0.0)
+    elevenlabs_speed (float, default: 1.0)
 
-Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
 Email: yohatad123@gmail.com
 Date: April 2025
 Version: v1.0
@@ -90,16 +119,7 @@ SOFTWARE_VERSION = "v1.0"
 # ---------------------------------------------------------------------------
 
 class TextToSpeechNode(LifecycleNode):
-    """
-    Lifecycle node that drives Pepper's voice.
-
-    Lifecycle:
-      configure  → init TTS backend (Kokoro warmup, AudioPlayer), create publishers
-                   + service clients + action server
-      activate   → start background playback thread, create /text_to_speech/input + VAD subscriptions
-      deactivate → stop playback thread, destroy subscriptions
-      cleanup    → destroy publishers
-    """
+    """Lifecycle node that converts text to speech and plays it on Pepper's speakers."""
 
     def __init__(self, config: dict):
         super().__init__("text_to_speech")
@@ -111,7 +131,7 @@ class TextToSpeechNode(LifecycleNode):
     # ── Lifecycle callbacks ─────────────────────────────────────────────────────
 
     def on_configure(self, _state) -> TransitionCallbackReturn:
-        """Init TTS backend, create publishers, service clients, and action server."""
+        """Initialize the TTS backend and create publishers, service clients, and the action server."""
         self.get_logger().info(
             f"{self.node_name}: configuring — engine={self.engine}, "
             f"barge_in_threshold={self.config['barge_in_threshold']}"
@@ -173,7 +193,7 @@ class TextToSpeechNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_activate(self, _state) -> TransitionCallbackReturn:
-        """Activate publishers, create subscriptions, start playback thread."""
+        """Activate publishers, subscribe to text input and VAD topics, and start the playback thread."""
         super().on_activate(_state)
 
         self._sub_tts_input = self.create_subscription(
@@ -195,7 +215,7 @@ class TextToSpeechNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_deactivate(self, _state) -> TransitionCallbackReturn:
-        """Stop playback thread, destroy subscriptions, deactivate publishers."""
+        """Stop the playback thread, drain the queue, and destroy subscriptions."""
         self.cleanup()   # stops thread, drains queue
 
         self.destroy_subscription(self._sub_tts_input)
@@ -206,6 +226,7 @@ class TextToSpeechNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_cleanup(self, _state) -> TransitionCallbackReturn:
+        """Destroy publishers, service clients, the action server, and release the audio player."""
         self.destroy_lifecycle_publisher(self.speaking_pub)
         if self.engine == "naoqi_ros" and hasattr(self, "naoqi_pub"):
             self.destroy_lifecycle_publisher(self.naoqi_pub)
@@ -226,6 +247,7 @@ class TextToSpeechNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_shutdown(self, _state) -> TransitionCallbackReturn:
+        """Log the shutdown transition before the node is destroyed."""
         self.get_logger().info(f"{self.node_name}: shutting down")
         return TransitionCallbackReturn.SUCCESS
 

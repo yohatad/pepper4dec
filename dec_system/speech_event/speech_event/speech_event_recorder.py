@@ -1,18 +1,32 @@
 #!/usr/bin/env python3
 
-"""
-ROS2 Audio Recorder for naoqi_bridge_msgs/AudioBuffer
+""" speech_event_recorder.py
 
-- Subscribes to a topic publishing naoqi_bridge_msgs/msg/AudioBuffer
-- Writes interleaved PCM to a multichannel .wav
-- Optional: also writes one mono .wav per channel
+Entry point for the audio_recorder node.
+Running this module starts AudioRecorderNode, which records microphone audio
+to WAV files for offline inspection or debugging.
 
-Params (ros2 params):
-  mic_topic     (string) : topic name (default: "/pepper_robot/audio")
-  output_base   (string) : file path prefix without extension (default: "./pepper_audio")
-  max_seconds   (int)    : stop after N seconds (0 = run until Ctrl-C)
-  split_channels(bool)   : also save per-channel WAVs (default: false)
+The node subscribes to a topic publishing naoqi_bridge_msgs/msg/AudioBuffer and
+writes the interleaved PCM data to a multichannel .wav file. It can optionally
+also write one mono .wav file per channel. Recording stops after `max_seconds`
+(if nonzero) or on Ctrl-C.
 
+Subscribers:
+    <mic_topic> (naoqi_bridge_msgs/AudioBuffer)
+        Raw multi-channel microphone audio (topic name set by the
+        `mic_topic` parameter).
+
+Parameters (loaded from speech_event_configuration.yaml):
+    mic_topic (string, default: "/audio")
+    output_base (string, default: "./pepper_audio")
+    max_seconds (int, default: 0)
+    split_channels (bool, default: false)
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: April 27, 2026
+Version: v1.0
 """
 
 import os
@@ -38,6 +52,8 @@ CHANNEL_LABELS = {
 }
 
 class AudioRecorderNode(Node):
+    """Node that records microphone AudioBuffer messages to multichannel and per-channel WAV files."""
+
     def __init__(self):
         super().__init__('audio_recorder')
 

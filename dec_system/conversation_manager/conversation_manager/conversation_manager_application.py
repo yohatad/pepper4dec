@@ -1,38 +1,35 @@
 #!/usr/bin/env python3
-"""
-ROS2 node developed for conversation management for Pepper robot, utilizing Retrieval-Augmented Generation
-(RAG) techniques.
+""" conversation_manager_application.py
 
-The application controls when to call the RAG service.
+Entry point for the ConversationManagerNode lifecycle node.
+Running this node provides a Retrieval-Augmented Generation (RAG) action server
+that answers natural-language questions about the Upanzi Network knowledge base.
 
-Environment Variables:
-    LLM_API_KEY: API key for LLM service (MUST be exported as environment variable)
+On configure, the node loads its YAML configuration, initializes (or builds) a
+ChromaDB collection from the knowledge-base JSON file, and starts an action
+server for handling conversational queries. Each goal triggers a vector search
+over the knowledge base followed by a streaming LLM call: as the LLM generates
+its answer, complete sentences are published to /text_to_speech/input so that
+text-to-speech can begin speaking before the full response is ready. The action
+result carries the full answer text, classified intent, and confidence score for
+downstream consumers (e.g. behavior-tree nodes).
 
-Configuration (config/converation_manager_configuration.yaml):
-    llm:         base_url, model
-    embedding:   model
-    search:      similarity_threshold, top_k
-    conversation: max_history_turns, context_turns
-    data:        default_path (knowledge base JSON file)
-    debug:       verbose
-
-ROS Parameters:
-    collection_name (str, default: 'upanzi_knowledge'): ChromaDB collection name
-    verbose        (bool, default: False): Enable verbose logging
+Publishers:
+    /text_to_speech/input (std_msgs/String)
+        Streamed answer sentences, published as the LLM generates its response
 
 Actions:
-    prompt (dec_interfaces/action/ConversationManager): Answer questions using RAG
-        Feedback: status – "searching" | "generating"
-        Result:   success, response
+    /conversation_manager (dec_interfaces/action/ConversationManager)
+        Answer a natural-language prompt using RAG; feedback reports
+        "searching" | "generating", result carries success, response,
+        intent, and confidence
 
-Lifecycle:
-    configure  → load YAML config, init ChromaDB collection, create lifecycle publisher
-                 + action server
-    activate   → activate publishers (managed by super().on_activate)
-    deactivate → deactivate publishers (managed by super().on_deactivate)
-    cleanup    → destroy publisher, clear collection + history
+Parameters (loaded from config/converation_manager_configuration.yaml):
+    collection_name (str, default: 'upanzi_knowledge')
+    verbose (bool, default: False)
 
-Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
 Email: yohatad123@gmail.com
 Date: February 28, 2026
 Version: v1.0
@@ -63,6 +60,7 @@ PACKAGE_PATH = Path(get_package_share_directory('conversation_manager'))
 
 
 class ConversationManagerNode(LifecycleNode):
+    """Lifecycle node that answers conversational queries via RAG and streams responses to TTS."""
 
     def __init__(self):
         super().__init__('conversation_manager')
@@ -74,7 +72,7 @@ class ConversationManagerNode(LifecycleNode):
     # ── Lifecycle callbacks ─────────────────────────────────────────────────────
 
     def on_configure(self, _state) -> TransitionCallbackReturn:
-        """Load config, init ChromaDB collection, create publisher and action server."""
+        """Load YAML configuration, initialize the ChromaDB collection, and create the publisher and action server."""
 
         # Load configuration from YAML file
         config_file = PACKAGE_PATH / 'config' / 'converation_manager_configuration.yaml'
@@ -136,19 +134,19 @@ class ConversationManagerNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_activate(self, _state) -> TransitionCallbackReturn:
-        """Activate managed publishers."""
+        """Activate the managed text-to-speech publisher so the node is ready to answer queries."""
         super().on_activate(_state)
         self.get_logger().info("conversation_manager: activated — ready to answer queries")
         return TransitionCallbackReturn.SUCCESS
 
     def on_deactivate(self, _state) -> TransitionCallbackReturn:
-        """Deactivate managed publishers."""
+        """Deactivate the managed text-to-speech publisher."""
         super().on_deactivate(_state)
         self.get_logger().info("conversation_manager: deactivated")
         return TransitionCallbackReturn.SUCCESS
 
     def on_cleanup(self, _state) -> TransitionCallbackReturn:
-        """Destroy publisher, action server, and clear in-memory state."""
+        """Destroy the publisher and action server, and clear the ChromaDB collection and conversation history."""
         self.destroy_lifecycle_publisher(self.stream_pub)
         self._action_server.destroy()
         self.collection = None
@@ -157,6 +155,7 @@ class ConversationManagerNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_shutdown(self, _state) -> TransitionCallbackReturn:
+        """Log that the node is shutting down."""
         self.get_logger().info("conversation_manager: shutting down")
         return TransitionCallbackReturn.SUCCESS
 

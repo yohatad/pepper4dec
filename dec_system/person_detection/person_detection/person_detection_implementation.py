@@ -1,13 +1,21 @@
-"""
-person_detection_implementation.py - Implementation code for running the Person Detection and Localization ROS2 node.
+""" person_detection_implementation.py
 
-Supports configurable person detection with ByteTrack tracking using the bytetracker package.
+Core LifecycleNode implementation for person detection and tracking. Provides
+the base PersonDetectionNode (publishers, debug visualization, camera topic
+resolution, depth lookup) and the YOLOv11 subclass, which loads an ONNX
+detection model and a ByteTrack tracker to detect and track configurable
+COCO classes from synchronized color/depth camera streams.
 
-It uses a YOLOv11 ONNX model for detection and can handle both compressed and uncompressed image topics from various 
-camera types (RealSense, Pepper, video). The node publishes detected person data including class, confidence, 
-bounding box, and depth information.
+Lifecycle:
+    configure  -> create lifecycle publishers, load camera/config settings and target classes
+    activate   -> start the visualization and status timers
+    deactivate -> cancel the visualization and status timers
+    cleanup    -> destroy the lifecycle publishers
+    shutdown   -> log that the node is shutting down
 
 Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
 Date: December 07, 2025
 Version: v1.0
 """
@@ -123,15 +131,7 @@ def get_class_indices(target_classes: List, class_names: List[str] = COCO_CLASSE
     
     return indices
 class PersonDetectionNode(LifecycleNode):
-    """
-    Base lifecycle node for person detection.
-
-    Lifecycle:
-      configure  → create publishers, init state
-      activate   → start visualization + status timers
-      deactivate → cancel timers, deactivate publishers
-      cleanup    → destroy publishers
-    """
+    """Lifecycle node that detects and tracks people (or configured COCO classes) in the camera feed."""
 
     def __init__(self, config: Dict, node_name: str = 'personDetection'):
         super().__init__(node_name)
@@ -140,6 +140,7 @@ class PersonDetectionNode(LifecycleNode):
     # ── Base lifecycle callbacks ──────────────────────────────────────────────
 
     def on_configure(self, _state) -> TransitionCallbackReturn:
+        """Create the detection and debug publishers, and load camera/config settings and target classes."""
         self.pub_objects     = self.create_lifecycle_publisher(PersonDetection, '/person_detection/data', 10)
         self.debug_pub       = self.create_lifecycle_publisher(Image, '/person_detection/debug', 1)
         self.depth_debug_pub = self.create_lifecycle_publisher(Image, '/person_detection/depth_debug', 1)
@@ -170,12 +171,14 @@ class PersonDetectionNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_activate(self, _state) -> TransitionCallbackReturn:
+        """Activate the lifecycle publishers and start the visualization and status timers."""
         super().on_activate(_state)
         self.vis_timer    = self.create_timer(1.0 / 30.0, self.visualization_callback)
         self.status_timer = self.create_timer(10.0, self.status_callback)
         return TransitionCallbackReturn.SUCCESS
 
     def on_deactivate(self, _state) -> TransitionCallbackReturn:
+        """Cancel the visualization and status timers and deactivate the lifecycle publishers."""
         self.vis_timer.cancel()
         self.destroy_timer(self.vis_timer)
         self.status_timer.cancel()
@@ -184,12 +187,14 @@ class PersonDetectionNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_cleanup(self, _state) -> TransitionCallbackReturn:
+        """Destroy the detection and debug lifecycle publishers."""
         self.destroy_lifecycle_publisher(self.pub_objects)
         self.destroy_lifecycle_publisher(self.debug_pub)
         self.destroy_lifecycle_publisher(self.depth_debug_pub)
         return TransitionCallbackReturn.SUCCESS
 
     def on_shutdown(self, _state) -> TransitionCallbackReturn:
+        """Log that the node is shutting down."""
         self.get_logger().info(f'{self.get_name()} shutting down')
         return TransitionCallbackReturn.SUCCESS
 

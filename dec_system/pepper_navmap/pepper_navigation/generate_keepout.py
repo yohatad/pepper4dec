@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
-"""
-Nav2 Keepout Zone Generator
-Generates a PGM + YAML keepout zone mask from rectangles and circles.
+""" generate_keepout.py
 
-Usage:
-    python3 generate_keepout.py
+Generates a Nav2-compatible keepout zone mask (PGM image + YAML metadata) from
+a list of rectangle and circle exclusion zones defined in pixel coordinates.
+Run with `python3 generate_keepout.py` after editing the MAP_CONFIG,
+RECTANGLES, and CIRCLES sections below to match the target map and desired
+keepout areas.
 
-Edit the CONFIG section below to define your map and zones.
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: March 31, 2026
+Version: v1.0
 """
 
 import numpy as np
