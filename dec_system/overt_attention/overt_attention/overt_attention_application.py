@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-""" overt_attention_unified_attention.py
+""" overt_attention_application.py
 
 Entry point and lifecycle node implementation for the unified attention controller.
 Fuses face detections and bottom-up saliency into a single gaze target and commands

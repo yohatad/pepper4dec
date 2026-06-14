@@ -70,7 +70,7 @@ def generate_launch_description():
         # Unified attention controller (Laptop)
         Node(
             package='overt_attention',
-            executable='overt_attention_unified_attention',
+            executable='overt_attention',
             name='unified_attention_node',
             parameters=[LaunchConfiguration('params_file')],
             output='screen'
