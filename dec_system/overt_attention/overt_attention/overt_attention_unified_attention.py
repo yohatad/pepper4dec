@@ -57,6 +57,9 @@ class OvertAttention(Node):
             self.get_logger().error(f"Failed to load topics configuration: {e}")
             raise
         
+        # Camera selection
+        self.declare_parameter("camera_type", "pepper")  # Camera to use: "pepper" or "realsense"
+
         # System parameters
         self.declare_parameter("start_enabled", True)  # Start with attention enabled
         self.declare_parameter("move_to_default_on_disable", True)  # Move to default position when disabled
@@ -101,14 +104,18 @@ class OvertAttention(Node):
         self.declare_parameter("ior_cleanup_threshold", 0.05)
         self.declare_parameter("ior_max_locations", 20)
         
+        # Load parameters
+        self.camera_type = self.get_parameter("camera_type").value
+        if self.camera_type not in ('pepper', 'realsense'):
+            raise ValueError(f"Invalid camera_type: {self.camera_type}")
+
         # Load topics from YAML config
         self.face_topic = self.topics_config['topics']['face']
         self.saliency_topic = self.topics_config['topics']['saliency']['peak']
-        self.camera_info_topic = self.topics_config['topics']['camera_info']
+        self.camera_info_topic = self.topics_config['topics']['camera_info'][self.camera_type]
         self.head_cmd_topic = self.topics_config['topics']['joint_angles']
         self.target_topic = self.topics_config['topics']['target_angles']
-        
-        # Load parameters
+
         self.move_to_default_on_disable = self.get_parameter("move_to_default_on_disable").value
         self.default_yaw = self.get_parameter("default_yaw").value
         self.default_pitch = self.get_parameter("default_pitch").value

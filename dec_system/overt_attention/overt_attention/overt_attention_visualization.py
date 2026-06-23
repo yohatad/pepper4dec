@@ -73,23 +73,28 @@ class VisualizationNode(Node):
             raise
         
         # Parameters
+        self.declare_parameter('camera_type', 'pepper')
         self.declare_parameter('show_face_ids', True)
         self.declare_parameter('show_depth', True)
         self.declare_parameter('show_engagement', True)
 
         # Load parameters
+        self.camera_type = self.get_parameter('camera_type').value
         self.show_face_ids = self.get_parameter('show_face_ids').value
         self.show_depth = self.get_parameter('show_depth').value
         self.show_engagement = self.get_parameter('show_engagement').value
+
+        if self.camera_type not in ('pepper', 'realsense'):
+            raise ValueError(f"Invalid camera_type: {self.camera_type}")
 
         # Load topics from YAML config
         self.face_topic = self.topics_config['topics']['face']
         self.saliency_topic = self.topics_config['topics']['saliency']['peak']
         self.target_topic = self.topics_config['topics']['target_angles']
-        self.camera_info_topic = self.topics_config['topics']['camera_info']
+        self.camera_info_topic = self.topics_config['topics']['camera_info'][self.camera_type]
 
-        # Load image topic from YAML config
-        image_base = self.topics_config['topics']['image']['base']
+        # Load image topic for the selected camera from YAML config
+        image_base = self.topics_config['topics']['image'][self.camera_type]
         self.use_compressed = self.topics_config['topics']['image']['use_compressed']
 
         # Construct image topic

@@ -1,16 +1,20 @@
 topics:
   image:
-    base: "/camera/front/image_raw"
+    pepper: "/pepper/front/image_raw"
+    realsense: "/camera/color/image_raw_custom"
     use_compressed: false
   depth:
-    base: "/camera/aligned_depth_to_color/image_raw_custom"
+    pepper: "/naoqi_driver/camera/depth/image_raw"
+    realsense: "/camera/aligned_depth_to_color/image_raw_custom"
     use_compressed: false
+  camera_info:
+    pepper: "/pepper/front/camera_info"
+    realsense: "/camera/color/camera_info"
   saliency:
     peak: "/attn/saliency_peak"
     map: "/attn/saliency_map/compressed"
   face: "/faceDetection/data"
   audio: "/audio/azimuth_rad"
-  camera_info: "/camera/front/camera_info"
   target_angles: "/attn/target_angles"
   joint_state: "/head_cmd/joint_states"
   joint_angles: "/joint_angles"

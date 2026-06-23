@@ -4,6 +4,7 @@
 /**:
   ros__parameters:
     use_compressed: false
+    camera_type: "pepper"   # Camera to use: "pepper" or "realsense"
 
 # ===========================================
 # Laptop saliency node params

@@ -31,6 +31,11 @@ from math import cos, sin, pi
 from scipy.optimize import linear_sum_assignment
 from dec_interfaces.msg import FaceDetection, PersonDetection
 
+# Sentinel cost for impossible face-person matches. Using a large finite value
+# instead of np.inf keeps the cost matrix feasible for linear_sum_assignment
+# (an all-inf row/column makes scipy raise "cost matrix is infeasible").
+IMPOSSIBLE_MATCH_COST = 1e6
+
 def load_configuration() -> Dict:
     """
     Load configuration from the default YAML file location.
@@ -657,14 +662,14 @@ class SixDrepNet(FaceDetectionNode):
             img_w: Image width
             
         Returns:
-            float: Cost value (lower is better, np.inf if impossible match)
+            float: Cost value (lower is better, IMPOSSIBLE_MATCH_COST if impossible match)
         """
         face_cx, face_cy = face['centroid']
         px1, py1, px2, py2 = person['box']
         
         # Check if face centroid is inside person box
         if not (px1 <= face_cx <= px2 and py1 <= face_cy <= py2):
-            return np.inf  # Impossible match
+            return IMPOSSIBLE_MATCH_COST  # Impossible match
         
         # Calculate person dimensions and center
         person_cx = (px1 + px2) / 2
@@ -674,7 +679,7 @@ class SixDrepNet(FaceDetectionNode):
         person_area = person_width * person_height
         
         if person_area == 0:
-            return np.inf
+            return IMPOSSIBLE_MATCH_COST
         
         # 1. Calculate normalized distance from face to person center
         distance = np.sqrt((face_cx - person_cx)**2 + (face_cy - person_cy)**2)
@@ -731,7 +736,7 @@ class SixDrepNet(FaceDetectionNode):
         # Build cost matrix
         n_faces = len(faces)
         n_persons = len(persons)
-        cost_matrix = np.full((n_faces, n_persons), np.inf)
+        cost_matrix = np.full((n_faces, n_persons), IMPOSSIBLE_MATCH_COST)
         
         for f_idx, face in enumerate(faces):
             for p_idx, person in enumerate(persons):
@@ -744,7 +749,7 @@ class SixDrepNet(FaceDetectionNode):
             # Filter out impossible matches and collect valid ones
             matches = []
             for f_idx, p_idx in zip(face_indices, person_indices):
-                if cost_matrix[f_idx, p_idx] < np.inf:
+                if cost_matrix[f_idx, p_idx] < IMPOSSIBLE_MATCH_COST:
                     matches.append((f_idx, p_idx))
             
             # Additional pass: check for multiple faces in same person box
@@ -755,11 +760,11 @@ class SixDrepNet(FaceDetectionNode):
                     continue
                 
                 # Find best person box this face falls into
-                best_cost = np.inf
+                best_cost = IMPOSSIBLE_MATCH_COST
                 best_person_idx = None
                 for p_idx, person in enumerate(persons):
                     cost = self.calculate_matching_cost(face, person, img_h, img_w)
-                    if cost < best_cost and cost < np.inf:
+                    if cost < best_cost:
                         best_cost = cost
                         best_person_idx = p_idx
                 

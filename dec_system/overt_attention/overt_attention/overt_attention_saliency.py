@@ -198,7 +198,7 @@ class SaliencyNode(Node):
 
     def setup_parameters(self):
         """Declare all ROS parameters."""
-        self.declare_parameter('camera_type', 'realsense')
+        self.declare_parameter('camera_type', 'pepper')
         self.declare_parameter('use_compressed', True)
         self.declare_parameter('use_depth_weighting', True)
         self.declare_parameter('depth_min_m', 0.3)
@@ -218,9 +218,12 @@ class SaliencyNode(Node):
         self.camera_type = self.get_parameter('camera_type').value
         self.use_compressed = self.get_parameter('use_compressed').value
 
-        # Load topic base paths from YAML config
-        self.image_topic_base = self.topics_config['topics']['image']['base']
-        self.depth_topic_base = self.topics_config['topics']['depth']['base']
+        if self.camera_type not in ('pepper', 'realsense'):
+            raise ValueError(f"Invalid camera_type: {self.camera_type}")
+
+        # Load topic base paths for the selected camera from YAML config
+        self.image_topic_base = self.topics_config['topics']['image'][self.camera_type]
+        self.depth_topic_base = self.topics_config['topics']['depth'][self.camera_type]
 
         # Pepper depth is unreliable — force depth weighting off regardless of config
         if self.camera_type == 'pepper':

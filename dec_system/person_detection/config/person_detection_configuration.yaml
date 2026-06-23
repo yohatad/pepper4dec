@@ -2,7 +2,7 @@
 # Camera Settings
 # =============================================================================
 
-camera: realsense
+camera: pepper
 useCompressed: false
 imageTimeout: 2.0
 verboseMode: false
