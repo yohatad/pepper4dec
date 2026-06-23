@@ -31,7 +31,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'odom_topic',
-            default_value='/odom',
+            default_value='/wheel_odom',
             description='Input odometry topic'
         ),
         DeclareLaunchArgument(

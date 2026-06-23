@@ -29,7 +29,7 @@ class RobotLocalization(Node):
         self.declare_parameter('initial_x', 0.0)
         self.declare_parameter('initial_y', 0.0)
         self.declare_parameter('initial_theta', 0.0)
-        self.declare_parameter('odom_topic', '/odom')
+        self.declare_parameter('odom_topic', '/wheel_odom')
         self.declare_parameter('pose_topic', '/robotLocalization/pose')
         self.declare_parameter('publish_rate', 10.0)  # Hz
         
