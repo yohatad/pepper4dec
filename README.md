@@ -167,8 +167,6 @@ Detailed documentation is available:
 For issues or questions:
 - **Contact**: 
   - [yohatad123@gmail.com](mailto:yohatad123@gmail.com)
-  - [mahadanso79@gmail.com](mailto:mahadanso79@gmail.com)
-
 # 📜 License
 Copyright (C) 2026 Upanzi Network
 Licensed under the BSD-3-Clause License. See individual package licenses for details.
