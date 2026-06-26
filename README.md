@@ -55,6 +55,7 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 - **Python 3.10+**
 - **Pepper Robot** (or simulation environment)
 - **Intel RealSense Camera** (for perception modules)
+- **Unitree L2 Lidar** (for localization and Navigation)
 
 ### Installation
 
