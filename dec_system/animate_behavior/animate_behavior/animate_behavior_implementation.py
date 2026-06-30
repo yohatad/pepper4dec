@@ -24,9 +24,11 @@ Date: April 27, 2026
 Version: v1.0
 """
 
+import math
 import rclpy
 import time
 import random
+import threading
 from typing import List, Dict
 from dataclasses import dataclass
 from rclpy.lifecycle import LifecycleNode, TransitionCallbackReturn
@@ -87,8 +89,6 @@ class AnimateBehaviorNode(LifecycleNode):
 
     def on_configure(self, _state) -> TransitionCallbackReturn:
         """Read parameters, build joint definitions, create publishers/servers/timers."""
-        node_name = self.get_name()
-
         self.verbose_mode       = self.get_parameter('verbose_mode').get_parameter_value().bool_value
         self.led_enabled        = self.get_parameter('led_enabled').get_parameter_value().bool_value
         self.led_white_step     = self.get_parameter('led_white_step').get_parameter_value().double_value
@@ -104,7 +104,7 @@ class AnimateBehaviorNode(LifecycleNode):
         self.motion_speed       = self.get_parameter('gesture_motion_speed').get_parameter_value().double_value
 
         if self.verbose_mode:
-            self.get_logger().info(f'{node_name}: ANIMATE BEHAVIOR NODE (LIFECYCLE)')
+            self.get_logger().info('ANIMATE BEHAVIOR NODE (LIFECYCLE)')
 
         self.callback_group = ReentrantCallbackGroup()
 
@@ -113,24 +113,24 @@ class AnimateBehaviorNode(LifecycleNode):
                 names=['RShoulderPitch', 'RShoulderRoll', 'RElbowYaw', 'RElbowRoll', 'RWristYaw'],
                 min=[-2.09, -1.56, -2.09, 0.01, -1.82],
                 max=[2.09, -0.01, 2.09, 1.56, 1.82],
-                home=[1.54, -0.10, 1.70, 0.31, -0.06],
+                home=[1.7410, -0.09664, 1.6981, 0.09664, -0.05679],
                 factors=[0.6, 0.4, 0.6, 0.4, 0.5]
             ),
             'LArm': JointDef(
                 names=['LShoulderPitch', 'LShoulderRoll', 'LElbowYaw', 'LElbowRoll', 'LWristYaw'],
                 min=[-2.09, 0.01, -2.09, -1.56, -1.82],
                 max=[2.09, 1.56, 2.09, -0.01, 1.82],
-                home=[1.56, 0.10, -1.72, -0.34, 0.07],
+                home=[1.7625, 0.09970, -1.7150, -0.1334, 0.06592],
                 factors=[0.6, 0.4, 0.6, 0.4, 0.5]
             ),
-            'RHand': JointDef(names=['RHand'], min=[0.0], max=[1.0], home=[0.67], factors=[0.5]),
-            'LHand': JointDef(names=['LHand'], min=[0.0], max=[1.0], home=[0.67], factors=[0.5]),
+            'RHand': JointDef(names=['RHand'], min=[0.0], max=[1.0], home=[0.67], factors=[0.8]),
+            'LHand': JointDef(names=['LHand'], min=[0.0], max=[1.0], home=[0.67], factors=[0.8]),
             'Leg': JointDef(
                 names=['HipPitch', 'HipRoll', 'KneePitch'],
                 min=[-1.04, -0.51, -0.51],
                 max=[1.04, 0.51, 0.51],
-                home=[-0.10, -0.01, 0.03],
-                factors=[0.2, 0.2, 0.1]
+                home=[0.0107, -0.00766, 0.03221],
+                factors=[0.0, 0.2, 0.0]
             ),
         }
 
@@ -139,13 +139,15 @@ class AnimateBehaviorNode(LifecycleNode):
         self.behavior               = ''
         self.range                  = 0.2
         self.limbs_to_animate       = []
-        self.last_gesture           = {}
         self.last_rotation          = 0.0
+        self.last_gesture_time      = 0.0
         self.gesture_count          = 0
         self.current_goal_handle    = None
         self.start_time             = 0.0
         self.duration               = 0.0
         self.goal_complete_event    = None
+        self._rotation_sign         = 1.0
+        self._rotation_stop_timer   = None
         self.current_positions: Dict[str, float] = {}
         self.target_positions: Dict[str, float]  = {}
         self.joint_states_received  = False
@@ -176,7 +178,7 @@ class AnimateBehaviorNode(LifecycleNode):
         self.led_active    = False
         self.led_scheduled_timers: List = []
 
-        self.get_logger().info(f'{node_name}: configured')
+        self.get_logger().info('configured')
         return TransitionCallbackReturn.SUCCESS
 
     def on_activate(self, state) -> TransitionCallbackReturn:
@@ -199,22 +201,15 @@ class AnimateBehaviorNode(LifecycleNode):
             callback_group=self.callback_group,
         )
 
-        # Start LED animation if the server is available
+        # Start LED animation — server check runs in a thread to avoid blocking the lifecycle callback
         if self.led_enabled:
-            if self.led_client.wait_for_server(timeout_sec=5.0):
-                self.led_active = True
-                self.cascade_wave()
-                if self.verbose_mode:
-                    self.get_logger().info(f'{self.get_name()}: LED animation enabled')
-            else:
-                if self.verbose_mode:
-                    self.get_logger().warn(f'{self.get_name()}: LED server not available — disabled')
+            threading.Thread(target=self._start_led_async, daemon=True).start()
         else:
             if self.verbose_mode:
-                self.get_logger().info(f'{self.get_name()}: LED animation disabled in config')
+                self.get_logger().info('LED animation disabled in config')
 
         self.get_logger().info(
-            f'{self.get_name()}: activated — animation@{self.update_rate}Hz, '
+            f'activated — animation@{self.update_rate}Hz, '
             f'feedback@2Hz | waiting for goals on /animate_behavior'
         )
         return TransitionCallbackReturn.SUCCESS
@@ -223,16 +218,19 @@ class AnimateBehaviorNode(LifecycleNode):
         """Stop animation, cancel timers, destroy subscription, deactivate publishers."""
         self._lifecycle_active = False
         self.stop()
+        self.stop_leds()
 
-        self.animation_timer.cancel()
-        self.destroy_timer(self.animation_timer)
-        self.feedback_timer.cancel()
-        self.destroy_timer(self.feedback_timer)
-
-        self.destroy_subscription(self.joint_sub)
+        if hasattr(self, 'animation_timer'):
+            self.animation_timer.cancel()
+            self.destroy_timer(self.animation_timer)
+        if hasattr(self, 'feedback_timer'):
+            self.feedback_timer.cancel()
+            self.destroy_timer(self.feedback_timer)
+        if hasattr(self, 'joint_sub'):
+            self.destroy_subscription(self.joint_sub)
 
         super().on_deactivate(state)
-        self.get_logger().info(f'{self.get_name()}: deactivated')
+        self.get_logger().info('deactivated')
         return TransitionCallbackReturn.SUCCESS
 
     def on_cleanup(self, state) -> TransitionCallbackReturn:
@@ -242,12 +240,12 @@ class AnimateBehaviorNode(LifecycleNode):
         self.action_server.destroy()
         self.destroy_service(self.stop_service)
         self.led_client.destroy()
-        self.get_logger().info(f'{self.get_name()}: cleaned up')
+        self.get_logger().info('cleaned up')
         return TransitionCallbackReturn.SUCCESS
 
     def on_shutdown(self, state) -> TransitionCallbackReturn:
         """Log the shutdown transition; no additional resources to release."""
-        self.get_logger().info(f'{self.get_name()}: shutting down')
+        self.get_logger().info('shutting down')
         return TransitionCallbackReturn.SUCCESS
 
     # ── Subscription callback ────────────────────────────────────────────────────
@@ -260,29 +258,29 @@ class AnimateBehaviorNode(LifecycleNode):
             self.joint_states_received = True
             if self.verbose_mode:
                 self.get_logger().info(
-                    f'{self.get_name()}: joint states received: {len(self.current_positions)} joints'
+                    f'joint states received: {len(self.current_positions)} joints'
                 )
 
     # ── Action server callbacks ──────────────────────────────────────────────────
 
     def goal_callback(self, goal_request):
         if not self._lifecycle_active:
-            self.get_logger().warn(f'{self.get_name()}: rejecting goal — node is not active')
+            self.get_logger().warn('rejecting goal — node is not active')
             return GoalResponse.REJECT
         if self.verbose_mode:
             self.get_logger().info(
-                f'{self.get_name()}: goal: {goal_request.behavior_type}, '
+                f'goal: {goal_request.behavior_type}, '
                 f'range={goal_request.selected_range}, duration={goal_request.duration_seconds}s'
             )
-        valid_behaviors = ['All', 'body', 'head', 'arms', 'hands', 'idle']
+        valid_behaviors = ['All', 'body', 'arms', 'hands', 'idle', 'rotation', 'home']
         if goal_request.behavior_type not in valid_behaviors:
-            self.get_logger().error(f'{self.get_name()}: invalid behavior: {goal_request.behavior_type}')
+            self.get_logger().error(f'invalid behavior: {goal_request.behavior_type}')
             return GoalResponse.REJECT
         return GoalResponse.ACCEPT
 
     def cancel_callback(self, goal_handle):
         if self.verbose_mode:
-            self.get_logger().info(f'{self.get_name()}: cancel requested')
+            self.get_logger().info('cancel requested')
         return CancelResponse.ACCEPT
 
     def execute_callback(self, goal_handle):
@@ -294,32 +292,52 @@ class AnimateBehaviorNode(LifecycleNode):
 
         if self.verbose_mode:
             self.get_logger().info(
-                f'{self.get_name()}: starting behavior: {self.behavior}, range={self.range}'
+                f'starting behavior: {self.behavior}, range={self.range}'
             )
 
-        self.limbs_to_animate = []
+        limbs: set = set()
         if self.behavior in ['All', 'body']:
-            self.limbs_to_animate.extend(['RArm', 'LArm', 'RHand', 'LHand', 'Leg'])
-        if self.behavior in ['All', 'head']:
-            self.limbs_to_animate.append('Head')
+            limbs.update(['RArm', 'LArm', 'RHand', 'LHand', 'Leg'])
         if self.behavior in ['All', 'arms']:
-            self.limbs_to_animate.extend(['RArm', 'LArm'])
+            limbs.update(['RArm', 'LArm'])
         if self.behavior in ['All', 'hands']:
-            self.limbs_to_animate.extend(['RHand', 'LHand'])
-        if self.behavior == 'idle':
-            self.limbs_to_animate = []
+            limbs.update(['RHand', 'LHand'])
+        if self.behavior == 'home':
+            # Move all joints to neutral; auto-stop after smoothing settles
+            for joint_def in self.joints.values():
+                for i, name in enumerate(joint_def.names):
+                    self.target_positions[name] = joint_def.home[i]
+            if self.duration == 0.0:
+                self.duration = 1.5
+        self.limbs_to_animate = list(limbs)
 
-        self.active           = True
-        self.gesture_count    = 0
-        self.last_gesture     = {}
-        self.last_rotation    = 0.0
-        self.gesture_interval = random.uniform(self.gesture_interval_min, self.gesture_interval_max)
+        self.active            = True
+        self.gesture_count     = 0
+        self.last_gesture_time = time.time()
+        self.last_rotation     = time.time()
+        self._rotation_sign    = 1.0
+        self.gesture_interval  = random.uniform(self.gesture_interval_min, self.gesture_interval_max)
 
-        goal_handle.execute_async()
+        self.goal_complete_event = threading.Event()
+        self.goal_complete_event.wait()
 
-    def stop_service_callback(self, request, response):
+        elapsed = (self.get_clock().now() - self.start_time).nanoseconds / 1e9
+        result = AnimateBehavior.Result()
+        result.total_duration = elapsed
+        if goal_handle.is_cancel_requested:
+            goal_handle.canceled()
+            result.success = False
+            result.message = 'Cancelled'
+        else:
+            goal_handle.succeed()
+            result.success = True
+            result.message = 'Completed'
+        self.current_goal_handle = None
+        return result
+
+    def stop_service_callback(self, _, response):
         if self.verbose_mode:
-            self.get_logger().info(f'{self.get_name()}: stop service called')
+            self.get_logger().info('stop service called')
         self.stop()
         response.success = True
         response.message = 'Animation stopped'
@@ -327,12 +345,18 @@ class AnimateBehaviorNode(LifecycleNode):
 
     def stop(self):
         self.active = False
-        msg = Twist()
-        self.vel_pub.publish(msg)
-        self.stop_leds()
-        self.limbs_to_animate = []
-        self.last_gesture     = {}
+        if self._rotation_stop_timer is not None:
+            self._rotation_stop_timer.cancel()
+            self.destroy_timer(self._rotation_stop_timer)
+            self._rotation_stop_timer = None
+        self.vel_pub.publish(Twist())
+        self.limbs_to_animate  = []
+        self.last_gesture_time = 0.0
+        self.gesture_count     = 0
         self.target_positions.clear()
+        if self.goal_complete_event is not None:
+            self.goal_complete_event.set()
+            self.goal_complete_event = None
 
     # ── Timer callbacks ──────────────────────────────────────────────────────────
 
@@ -341,18 +365,16 @@ class AnimateBehaviorNode(LifecycleNode):
             return
         elapsed  = (self.get_clock().now() - self.start_time).nanoseconds / 1e9
         feedback = AnimateBehavior.Feedback()
-        feedback.elapsed_seconds = elapsed
+        feedback.elapsed_time        = elapsed
+        feedback.current_limb        = self.limbs_to_animate[0] if self.limbs_to_animate else ''
+        feedback.gestures_completed  = self.gesture_count
+        feedback.is_running          = self.active
         self.current_goal_handle.publish_feedback(feedback)
 
         if self.duration > 0 and elapsed >= self.duration:
             if self.verbose_mode:
-                self.get_logger().info(f'{self.get_name()}: duration reached: {self.duration}s')
+                self.get_logger().info(f'duration reached: {self.duration}s')
             self.stop()
-            result = AnimateBehavior.Result()
-            result.completed             = True
-            result.final_elapsed_seconds = elapsed
-            self.current_goal_handle.set_succeeded(result)
-            self.current_goal_handle = None
 
     def animation_update(self):
         if not self.active or not self.joint_states_received:
@@ -360,24 +382,45 @@ class AnimateBehaviorNode(LifecycleNode):
 
         current_time = time.time()
 
-        if self.limbs_to_animate:
+        if self.behavior in ('All', 'body', 'rotation'):
             if current_time - self.last_rotation >= self.rotation_interval:
                 self.apply_rotation()
                 self.last_rotation = current_time
 
-            if current_time - self.gesture_count >= self.gesture_interval:
+        if self.limbs_to_animate:
+            if current_time - self.last_gesture_time >= self.gesture_interval:
                 self.apply_gesture()
-                self.gesture_count    = current_time
-                self.gesture_interval = random.uniform(self.gesture_interval_min, self.gesture_interval_max)
+                self.last_gesture_time = current_time
+                self.gesture_count    += 1
+                self.gesture_interval  = random.uniform(self.gesture_interval_min, self.gesture_interval_max)
 
         self.publish_joints()
 
     # ── Motion helpers ───────────────────────────────────────────────────────────
 
     def apply_rotation(self):
+        speed    = 0.3                          # rad/s
+        duration = (math.pi / 4.0) / speed     # time to turn exactly 45°
+
+        if self._rotation_stop_timer is not None:
+            self._rotation_stop_timer.cancel()
+            self.destroy_timer(self._rotation_stop_timer)
+            self._rotation_stop_timer = None
+
         twist = Twist()
-        twist.angular.z = 0.3
+        twist.angular.z = speed * self._rotation_sign
+        self._rotation_sign *= -1.0
         self.vel_pub.publish(twist)
+
+        def _finish():
+            self._rotation_stop_timer.cancel()
+            self.destroy_timer(self._rotation_stop_timer)
+            self._rotation_stop_timer = None
+            self.vel_pub.publish(Twist())
+
+        self._rotation_stop_timer = self.create_timer(
+            duration, _finish, callback_group=self.callback_group
+        )
 
     def apply_gesture(self):
         for limb in self.limbs_to_animate:
@@ -389,11 +432,9 @@ class AnimateBehaviorNode(LifecycleNode):
         for i, name in enumerate(joint_def.names):
             factor    = joint_def.factors[i]
             rand_val  = random.uniform(-1, 1) * self.range * factor
-            mid       = (joint_def.max[i] + joint_def.min[i]) / 2
-            target    = mid + rand_val
+            target    = joint_def.home[i] + rand_val
             target    = max(joint_def.min[i], min(joint_def.max[i], target))
             self.target_positions[name] = target
-        self.last_gesture[limb_name] = time.time()
 
     def publish_joints(self):
         msg = JointAnglesWithSpeed()
@@ -440,11 +481,26 @@ class AnimateBehaviorNode(LifecycleNode):
         ref = [None]
         def fire():
             ref[0].cancel()
+            self.destroy_timer(ref[0])
+            try:
+                self.led_scheduled_timers.remove(ref)
+            except ValueError:
+                pass
             if self.led_active:
                 callback()
         timer = self.create_timer(delay_sec, fire, callback_group=self.callback_group)
         ref[0] = timer
         self.led_scheduled_timers.append(ref)
+
+    def _start_led_async(self):
+        if self.led_client.wait_for_server(timeout_sec=5.0):
+            self.led_active = True
+            self.cascade_wave()
+            if self.verbose_mode:
+                self.get_logger().info('LED animation enabled')
+        else:
+            if self.verbose_mode:
+                self.get_logger().warn('LED server not available — disabled')
 
     def cascade_wave(self):
         n          = len(self.CASCADE_LAYERS)
@@ -472,6 +528,12 @@ class AnimateBehaviorNode(LifecycleNode):
 
     def stop_leds(self):
         self.led_active = False
+        for ref in self.led_scheduled_timers:
+            if ref[0] is not None:
+                ref[0].cancel()
+                self.destroy_timer(ref[0])
+                ref[0] = None
+        self.led_scheduled_timers.clear()
         for names, _ in self.CASCADE_LAYERS:
             for n in names:
                 self.send_off(target=n)
