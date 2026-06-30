@@ -203,7 +203,7 @@ class AnimateBehaviorNode(LifecycleNode):
 
         # Start LED animation — server check runs in a thread to avoid blocking the lifecycle callback
         if self.led_enabled:
-            threading.Thread(target=self._start_led_async, daemon=True).start()
+            threading.Thread(target=self.start_led_async, daemon=True).start()
         else:
             if self.verbose_mode:
                 self.get_logger().info('LED animation disabled in config')
@@ -412,14 +412,14 @@ class AnimateBehaviorNode(LifecycleNode):
         self._rotation_sign *= -1.0
         self.vel_pub.publish(twist)
 
-        def _finish():
+        def finish():
             self._rotation_stop_timer.cancel()
             self.destroy_timer(self._rotation_stop_timer)
             self._rotation_stop_timer = None
             self.vel_pub.publish(Twist())
 
         self._rotation_stop_timer = self.create_timer(
-            duration, _finish, callback_group=self.callback_group
+            duration, finish, callback_group=self.callback_group
         )
 
     def apply_gesture(self):
@@ -492,7 +492,7 @@ class AnimateBehaviorNode(LifecycleNode):
         ref[0] = timer
         self.led_scheduled_timers.append(ref)
 
-    def _start_led_async(self):
+    def start_led_async(self):
         if self.led_client.wait_for_server(timeout_sec=5.0):
             self.led_active = True
             self.cascade_wave()
