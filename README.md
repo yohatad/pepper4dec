@@ -55,6 +55,7 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 - **Python 3.10+**
 - **Pepper Robot** (or simulation environment)
 - **Intel RealSense Camera** (for perception modules)
+- **Unitree L2 Lidar** (for localization and Navigation)
 
 ### Installation
 
@@ -167,8 +168,6 @@ Detailed documentation is available:
 For issues or questions:
 - **Contact**: 
   - [yohatad123@gmail.com](mailto:yohatad123@gmail.com)
-  - [mahadanso79@gmail.com](mailto:mahadanso79@gmail.com)
-
 # 📜 License
 Copyright (C) 2026 Upanzi Network
 Licensed under the BSD-3-Clause License. See individual package licenses for details.
