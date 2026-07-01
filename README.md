@@ -45,7 +45,7 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 ## 🖥️ Hardware Diagram
 
 <div align="center">
-<img src="dec_system/Hardware Diagram_white_lower.png" alt="Hardware Diagram" width="900px">
+<img src="dec_system/Hardware Diagram.png" alt="Hardware Diagram" width="900px">
 </div>
 
 ## 🚀 Quick Start
