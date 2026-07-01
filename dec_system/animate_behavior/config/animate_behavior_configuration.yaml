@@ -1,20 +1,22 @@
-# General Configuration
-verbose_mode: true
+# ROS2 Parameters for animate_behavior node
+animate_behavior:
+  ros__parameters:
 
-# LED Animation Configuration
-led_animation:
-  enabled: true
-  white_step: 0.06      # delay between layers rising white (bottom → top)
-  dark_step: 0.04       # delay between layers going dark  (top → bottom)
-  fade_duration: 0.10   # fade duration per layer
-  white_hold: 2.0       # seconds to hold all-white
-  dark_pause: 0.2       # dark pause before next wave
+    # General
+    verbose_mode: true
 
-# Gesture Animation Configuration
-gesture_animation:
-  update_rate: 30.0       # Hz - animation loop frequency
-  smoothing_factor: 0.15 # exponential smoothing factor
-  motion_speed: 0.08      # speed parameter for ALMotion
-  gesture_interval_min: 2.5  # min seconds between gestures
-  gesture_interval_max: 4.5  # max seconds between gestures
-  rotation_interval: 5.0      # seconds between rotations
+    # LED Animation
+    led_enabled: true
+    led_white_step: 0.06        # delay between layers rising white (sec)
+    led_dark_step: 0.04         # delay between layers going dark (sec)
+    led_fade_duration: 0.10     # fade duration per layer (sec)
+    led_white_hold: 2.0         # seconds to hold all-white
+    led_dark_pause: 0.2         # dark pause before next wave (sec)
+
+    # Gesture Animation
+    gesture_update_rate: 30.0         # animation loop frequency (Hz)
+    gesture_smoothing_factor: 0.15    # exponential smoothing coefficient
+    gesture_motion_speed: 0.08        # ALMotion speed parameter
+    gesture_interval_min: 2.5         # min seconds between gesture targets
+    gesture_interval_max: 4.5         # max seconds between gesture targets
+    gesture_rotation_interval: 5.0    # seconds between base rotation changes

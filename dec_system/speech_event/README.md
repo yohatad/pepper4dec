@@ -96,7 +96,7 @@ ros2 run speech_event speech_event_localization
 
 | Topic | Type | Description |
 |-------|------|-------------|
-| `/audio` | `naoqi_bridge_msgs/AudioBuffer` | Raw multi-channel audio from robot microphone (48 kHz, 4 channels) |
+| `/naoqi_driver/audio` | `naoqi_bridge_msgs/AudioBuffer` | Raw multi-channel audio from robot microphone (48 kHz, 4 channels) |
 
 ### Published Topics
 
@@ -109,7 +109,13 @@ ros2 run speech_event speech_event_localization
 
 | Action | Type | Description |
 |--------|------|-------------|
-| `/speech_recognition_action` | `dec_interfaces/action/SpeechRecognition` | Synchronous transcription requests |
+| `/speech_recognition` | `dec_interfaces/action/SpeechRecognition` | Synchronous transcription requests |
+
+### Services
+
+| Service | Type | Description |
+|---------|------|-------------|
+| `/speech_event/set_enabled` | `std_srvs/SetBool` | Enable or disable audio processing (e.g. mute mic during TTS) |
 
 ## Action Interface
 
@@ -169,6 +175,7 @@ speech_event/
 ├── config/
 │   └── speech_event_configuration.yaml
 ├── data/
+│   ├── noise_profile.npy
 │   └── pepper_topics.yaml
 ├── models/
 │   └── silero_vad.onnx
@@ -212,7 +219,7 @@ ros2 node list
 ros2 action list
 
 # Send a test transcription request
-ros2 action send_goal /speech_recognition_action dec_interfaces/action/SpeechRecognition \
+ros2 action send_goal /speech_recognition dec_interfaces/action/SpeechRecognition \
   "{wait: 5.0}"
 
 # Monitor VAD probabilities

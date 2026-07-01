@@ -1,0 +1,3 @@
+#!/bin/bash
+source "$HOME/ros2_ws/.venvs/venv_map.sh"
+exec "$VENV_AGE_DETECTION" -m face_detection.age_gender_detection "$@"

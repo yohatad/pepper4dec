@@ -1,6 +1,49 @@
 #!/usr/bin/env python3
-"""
-Saliency Node - Computes bottom-up visual attention using Boolean Map Saliency (BMS)
+""" overt_attention_saliency.py
+
+Entry point for the saliency node.
+Computes bottom-up visual saliency from the robot's camera stream and publishes
+ranked attention peaks.
+
+The node buffers the latest color (and optional depth) frame, then on a fixed
+timer downsamples the frame and runs Boolean Map Saliency (BMS) to produce a
+saliency map. If depth weighting is enabled, the map is reweighted so closer
+objects are favored. The top spatially-separated peaks are extracted and published
+as flattened (u, v, score) triplets for the unified attention controller, and an
+optional color-mapped overlay image is published for visualization/debugging.
+
+Subscribers:
+    /camera/color/image_raw_custom[/compressed] (sensor_msgs/Image or CompressedImage)
+        Color camera frames used to compute the saliency map.
+    /camera/aligned_depth_to_color/image_raw_custom[/compressedDepth] (sensor_msgs/Image or CompressedImage)
+        Depth frames used for depth-based saliency weighting (only if use_depth_weighting is true).
+
+Publishers:
+    /overt_attention/saliency_peak (std_msgs/Float32MultiArray)
+        Top saliency peaks as flattened (u, v, score) triplets.
+    /overt_attention/saliency_map/compressed (sensor_msgs/CompressedImage)
+        Color-mapped saliency overlay with peak markers (only if publish_map is true).
+
+Parameters (loaded from overt_attention_configuration.yaml):
+    use_compressed (bool, default: false)
+    use_depth_weighting (bool, default: true)
+    depth_min_m (float, default: 0.3)
+    depth_max_m (float, default: 10.0)
+    depth_weight_min (float, default: 0.2)
+    publish_map (bool, default: true)
+    down_w (int, default: 160)
+    down_h (int, default: 120)
+    min_peak (float, default: 0.5)
+    overlay_alpha (float, default: 0.4)
+    num_peaks (int, default: 5)
+    peak_min_distance_px (int, default: 50)
+    process_hz (float, default: 1.0)
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: March 05, 2026
+Version: v1.0
 """
 
 import threading
@@ -118,6 +161,8 @@ class BooleanMapSaliency:
 
 
 class SaliencyNode(Node):
+    """ROS2 node that computes BMS-based visual saliency peaks from camera (and optional depth) input."""
+
     def __init__(self):
         super().__init__('saliency_node')
         

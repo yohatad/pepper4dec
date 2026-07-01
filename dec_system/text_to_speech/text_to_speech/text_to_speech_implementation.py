@@ -1,36 +1,24 @@
-"""
-text_to_speech_implementation.py Implementation code for Text-to-Speech synthesis 
-and local audio playback.
+""" text_to_speech_implementation.py
 
-Three synthesis / playback backends are supported (configured via
-text_to_speech_configuration.yaml):
+Implements the synthesis, audio-conversion, and playback helpers used by the
+text_to_speech_application LifecycleNode.
 
-  naoqi_ros      — Publishes plain text to a ROS2 topic consumed by
-                   naoqi_bridge.  Pepper's on-board ALTextToSpeech handles
-                   synthesis and plays through the robot's built-in speakers.
-                   No extra Python dependencies.  Recommended for robot
-                   deployments.
+The module-level helpers cover sentence splitting, duration estimation,
+configuration loading, Kokoro-82M and ElevenLabs speech synthesis, WAV/PCM
+audio conversion and resampling for Pepper's onboard speakers, and local
+playback via sounddevice (AudioPlayer).
 
-  kokoro_local   — Kokoro-82M neural TTS synthesised on this machine, played
-                   through sounddevice.  Zero network calls, ~100 ms TTFA.
-                   Useful for laptop testing without the robot.
-                   Requires:  pip install kokoro soundfile sounddevice
-
-  kokoro_pepper  — Kokoro-82M synthesis on this machine.  Raw WAV bytes are
-                   sent to naoqi_driver via the load_audio_file service (no
-                   SCP/SSH).  naoqi_driver writes the bytes to the robot via
-                   ALFileManager and plays through Pepper's speakers via the
-                   play_audio action.
-                   Requires:  pip install kokoro soundfile
-
-Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
 Date: April 2025
-Version: v3.0
+Version: v1.0
 """
 
 import io
 import math
 import os
+import queue
 import re
 import threading
 from typing import Generator, Iterator, List, Optional, Tuple
@@ -531,5 +519,4 @@ class AudioPlayer:
     def stop(self):
         """Interrupt playback at the next chunk boundary (~50 ms)."""
         self._stop_event.set()
-
 

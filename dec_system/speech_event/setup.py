@@ -13,17 +13,15 @@ setup(
     maintainer_email="yohanneh@alumni.cmu.edu",
     description="Speech recognition node",
     license="",
-    entry_points={
-        "console_scripts": [
-            "speech_event = speech_event.speech_event_application:main",
-            "speech_event_recorder  = speech_event.speech_event_recorder:main",
-            "speech_event_localization = speech_event.speech_event_localization:main"
-        ],
-    },
+    scripts=[
+        "scripts/speech_event",
+        "scripts/speech_event_recorder",
+        "scripts/speech_event_localization",
+    ],
     data_files=[
         ("share/ament_index/resource_index/packages", [f"resource/{pkg}"]),
         (f"share/{pkg}", ["package.xml"]),
-        # (f"share/{pkg}/launch", glob("launch/*.launch.py")),
+        (f"share/{pkg}/launch", glob("launch/*.launch.py")),
         (f"share/{pkg}/config", glob("config/*")),
         (f"share/{pkg}/models", glob("models/*")),
         (f"share/{pkg}/data", glob("data/*")),

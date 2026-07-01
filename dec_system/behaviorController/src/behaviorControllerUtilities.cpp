@@ -1,10 +1,17 @@
-/* behaviorControllerUtilities.cpp - Utility functions and helper classes
+/* behaviorControllerUtilities.cpp
+ *
+ * Implements the singleton ConfigManager and KnowledgeManager (YAML
+ * configuration and knowledge-base loading/validation), the
+ * Logger/ServiceManager/TopicMonitor/TextUtils helper classes, and the free
+ * utility functions (logSystemInfo, isValidLanguage, getSupportedLanguages,
+ * fileExists, getPackageDataPath, printNodeInfo, nodeStatusToString,
+ * validateEnvironmentKnowledgeBase) used throughout behavior_controller.
  *
  * Author: Yohannes Tadesse Haile
- * Date: Feb 09, 2026
- * Version: v1.0 - Updated for BehaviorTree.ROS2 with valid dec_interfaces
- *
- * Copyright (C) 2025 CyLab Carnegie Mellon University Africa
+ * Affiliation: Carnegie Mellon University Africa
+ * Email: yohatad123@gmail.com
+ * Date: February 09, 2026
+ * Version: v1.0
  */
 
 #include "behaviorController/behaviorControllerInterface.h"

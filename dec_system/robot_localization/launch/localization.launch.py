@@ -31,12 +31,12 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'odom_topic',
-            default_value='/wheel_odom',
+            default_value='/pepper_odom',
             description='Input odometry topic'
         ),
         DeclareLaunchArgument(
             'pose_topic',
-            default_value='/robotLocalization/pose',
+            default_value='/robot_localization/pose',
             description='Output absolute pose topic'
         ),
         DeclareLaunchArgument(

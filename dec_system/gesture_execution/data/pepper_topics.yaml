@@ -3,4 +3,4 @@ topics:
   JointAngles: "/joint_angles"
   Wheels: "/cmd_vel"
   JointStates: "/joint_states"
-  RobotPose: "/robotLocalization/pose"
+  RobotPose: "/robot_localization/pose"

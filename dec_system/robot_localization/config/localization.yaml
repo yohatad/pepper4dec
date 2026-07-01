@@ -6,8 +6,8 @@ robot_localization:
     initial_theta: 0.0  # radians (0.0 = facing forward)
     
     # Topics
-    odom_topic: "/wheel_odom"
-    pose_topic: "/robotLocalization/pose"
+    odom_topic: "/pepper_odom"
+    pose_topic: "/robot_localization/pose"
     
     # Publish rate (Hz)
     publish_rate: 10.0

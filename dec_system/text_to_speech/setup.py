@@ -13,11 +13,7 @@ setup(
     maintainer_email="yohanneh@alumni.cmu.edu",
     description="Text to Speech node",
     license="",
-    entry_points={
-        "console_scripts": [
-            "text_to_speech = text_to_speech.text_to_speech_application:main",
-        ],
-    },
+    scripts=["scripts/text_to_speech"],
     data_files=[
         ("share/ament_index/resource_index/packages", [f"resource/{pkg}"]),
         (f"share/{pkg}", ["package.xml"]),

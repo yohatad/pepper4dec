@@ -16,7 +16,7 @@ setup(
     entry_points={
     'console_scripts': [
         'overt_attention_saliency = overt_attention.overt_attention_saliency:main',
-        'overt_attention_unified_attention = overt_attention.overt_attention_unified_attention:main',
+        'overt_attention = overt_attention.overt_attention_application:main',
         'overt_attention_visualization = overt_attention.overt_attention_visualization:main',
         ],
     },

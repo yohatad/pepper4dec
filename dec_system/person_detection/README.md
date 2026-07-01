@@ -6,7 +6,7 @@
   <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
-The **Person Detection and Tracking** package is a ROS2 package designed to detect and track multiple persons in real-time by subscribing to image topics. It publishes an array of detected persons with their bounding boxes, labels, and tracking IDs to the `/personDetection/data` topic. Each entry includes the label, centroid coordinates, bounding box dimensions, and a unique tracking ID for maintaining identity across frames.
+The **Person Detection and Tracking** package is a ROS2 package designed to detect and track multiple persons in real-time by subscribing to image topics. It publishes an array of detected persons with their bounding boxes, labels, and tracking IDs to the `/person_detection/data` topic. Each entry includes the label, centroid coordinates, bounding box dimensions, and a unique tracking ID for maintaining identity across frames.
 
 ## Key Features
 - **ROS2 Native**: Built for ROS2 Humble
@@ -51,7 +51,7 @@ pip install -r ~/ros2_ws/src/pepper4dec/dec_system/person_detection/requirements
 ### Model Files
 
 Download the required ONNX model files to the `models/` directory:
-- `yolov8n.onnx` - YOLOv8 detection model (or other YOLO variant)
+- `person_detection_yolov11m.onnx` - YOLOv11 detection model (or other YOLO variant)
 
 ## Configuration
 
@@ -61,8 +61,8 @@ Configuration is managed via `config/person_detection_configuration.yaml`:
 |-----------|-------------|---------|
 | `camera` | Camera type to use | `realsense` |
 | `useCompressed` | Use compressed ROS image topics | `False` |
-| `confidenceThreshold` | Confidence threshold for person detection | `0.7` |
-| `targetClasses` | List of target classes to detect (or `all`) | `all` |
+| `confidenceThreshold` | Confidence threshold for person detection | `0.6` |
+| `targetClasses` | List of target classes to detect (or `all`) | `[person]` |
 | `trackThreshold` | Confidence threshold for tracking (ByteTrack) | `0.45` |
 | `trackBuffer` | Number of frames to keep lost tracks before removing | `30` |
 | `matchThreshold` | IoU threshold for matching detections to tracks | `0.8` |
@@ -114,19 +114,23 @@ ros2 run person_detection person_detection
 
 | Topic | Type | Description |
 |-------|------|-------------|
-| `/personDetection/data` | `dec_interfaces/msg/PersonDetection` | Detected persons with tracking IDs |
+| `/person_detection/data` | `dec_interfaces/msg/PersonDetection` | Detected persons with tracking IDs |
+| `/person_detection/debug` | `sensor_msgs/Image` | Debug RGB image with detection overlays |
+| `/person_detection/depth_debug` | `sensor_msgs/Image` | Debug colorized depth image |
 
 ## Message Structure
 
-### `/personDetection/data` (`dec_interfaces/msg/PersonDetection`)
+### `/person_detection/data` (`dec_interfaces/msg/PersonDetection`)
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `label[]` | string[] | Array of person labels |
-| `centroids[]` | `geometry_msgs/Point[]` | Array of centroid coordinates |
-| `width[]` | float[] | Array of bounding box widths |
-| `height[]` | float[] | Array of bounding box heights |
-| `track_id[]` | int32[] | Array of tracking IDs |
+| `person_label_id[]` | string[] | Array of unique tracking IDs |
+| `class_names[]` | string[] | Array of class names (always `person`) |
+| `class_ids[]` | int32[] | Array of COCO class IDs (always `0`) |
+| `confidences[]` | float32[] | Array of detection confidence scores |
+| `centroids[]` | `geometry_msgs/Point[]` | Array of centroid coordinates (z = depth in meters) |
+| `width[]` | float32[] | Array of bounding box widths |
+| `height[]` | float32[] | Array of bounding box heights |
 
 ## Package Structure
 
@@ -136,8 +140,10 @@ person_detection/
 │   └── person_detection_configuration.yaml
 ├── data/
 │   └── pepper_topics.yaml
+├── launch/
+│   └── person_detection_launch_robot.launch.py
 ├── models/
-│   └── yolov8n.onnx
+│   └── person_detection_yolov11m.onnx
 ├── resource/
 │   └── person_detection
 ├── person_detection/
@@ -169,7 +175,7 @@ The person detection system consists of two main components:
 ros2 node list
 
 # Monitor person detection output
-ros2 topic echo /personDetection/data
+ros2 topic echo /person_detection/data
 
 # Verify topics
 ros2 topic list

@@ -12,7 +12,9 @@
 
 // ROS includes
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp/executors/multi_threaded_executor.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
+#include <rclcpp_lifecycle/lifecycle_node.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <nav2_msgs/action/navigate_to_pose.hpp>
@@ -318,7 +320,7 @@ public:
 };
 
 // Wraps dec_interfaces::action::TTS
-// Sends text to the /tts action server (text_to_speech node), which synthesises
+// Sends text to the /text_to_speech action server (text_to_speech node), which synthesises
 // audio via Kokoro or ElevenLabs and plays it through the configured backend.
 // Blocks until playback is complete.
 class TTSNode
@@ -337,7 +339,7 @@ public:
     BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
 };
 
-// Calls animate_behavior/stop (std_srvs::srv::Trigger) to immediately stop animation.
+// Calls /animate_behavior/stop (std_srvs::srv::Trigger) to immediately stop animation.
 // Returns SUCCESS if the service reports success, FAILURE otherwise.
 class StopAnimateBehavior
     : public BT::RosServiceNode<std_srvs::srv::Trigger>
@@ -354,7 +356,7 @@ public:
     BT::NodeStatus onFailure(BT::ServiceNodeErrorCode error) override;
 };
 
-// Calls /attn/set_enabled (std_srvs::srv::SetBool) to enable or disable overt attention.
+// Calls /overt_attention/set_enabled (std_srvs::srv::SetBool) to enable or disable overt attention.
 // Input port 'enabled' (bool): true = enable, false = disable.
 // Returns SUCCESS if the service confirms the change, FAILURE otherwise.
 class SetOvertAttention
@@ -413,7 +415,7 @@ public:
     BT::NodeStatus onFailure(BT::ServiceNodeErrorCode error) override;
 };
 
-// Subscribes to /faceDetection/data and blocks (RUNNING) until face(s) are present,
+// Subscribes to /face_detection/data and blocks (RUNNING) until face(s) are present,
 // then returns SUCCESS. Never times out — runs indefinitely until condition is met.
 class CheckFaceDetected : public BT::StatefulActionNode
 {
@@ -436,7 +438,7 @@ private:
     std::mutex mutex_;
 };
 
-// Blocks (RUNNING) until at least one face appears on /faceDetection/data.
+// Blocks (RUNNING) until at least one face appears on /face_detection/data.
 // Returns FAILURE when the "timeout" port (seconds) expires without a face.
 class IsVisitorDiscovered : public BT::StatefulActionNode
 {
@@ -458,7 +460,7 @@ private:
     std::mutex mutex_;
 };
 
-// Blocks (RUNNING) until mutual gaze is detected on /faceDetection/data.
+// Blocks (RUNNING) until mutual gaze is detected on /face_detection/data.
 // Returns FAILURE when the "timeout" port (seconds) expires.
 class IsMutualGazeDiscovered : public BT::StatefulActionNode
 {
@@ -717,5 +719,56 @@ void printNodeInfo(std::shared_ptr<rclcpp::Node> node);
 std::string nodeStatusToString(BT::NodeStatus status);
 
 } // namespace behavior_controller
+
+//=============================================================================
+// BehaviorControllerLifecycleNode
+//
+// Lifecycle state machine:
+//   UNCONFIGURED → on_configure:  load config + knowledge base, build BT tree
+//   INACTIVE     → on_activate:   start 50 Hz tick timer
+//   ACTIVE       → on_deactivate: cancel tick timer (tree stays built)
+//   INACTIVE     → on_cleanup:    halt + destroy BT tree
+//   any          → on_shutdown:   cancel timer + halt tree
+//
+// Why a companion bt_node_?
+//   BT::RosNodeParams requires std::shared_ptr<rclcpp::Node>.
+//   rclcpp_lifecycle::LifecycleNode does NOT inherit rclcpp::Node, so it
+//   cannot be passed directly.  bt_node_ is a plain rclcpp::Node used
+//   exclusively for BT action/service clients and topic subscriptions.
+//   Both lc_node and bt_node_ are added to the MultiThreadedExecutor in main().
+//=============================================================================
+
+class BehaviorControllerLifecycleNode : public rclcpp_lifecycle::LifecycleNode
+{
+public:
+    using CallbackReturn =
+        rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
+
+    explicit BehaviorControllerLifecycleNode();
+
+    /// Expose the companion node so main() can add it to the executor.
+    rclcpp::Node::SharedPtr get_bt_node() const { return bt_node_; }
+
+    // ── Lifecycle callbacks ─────────────────────────────────────────────────
+    CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;
+    CallbackReturn on_activate  (const rclcpp_lifecycle::State& state) override;
+    CallbackReturn on_deactivate(const rclcpp_lifecycle::State& state) override;
+    CallbackReturn on_cleanup   (const rclcpp_lifecycle::State& state) override;
+    CallbackReturn on_shutdown  (const rclcpp_lifecycle::State& state) override;
+
+private:
+    /// Companion plain node — used by all BT nodes (BT::RosNodeParams,
+    /// StatefulActionNode subscriptions, etc.)
+    rclcpp::Node::SharedPtr bt_node_;
+
+    /// The live behavior tree (empty until on_configure succeeds).
+    BT::Tree tree_;
+
+    /// 50 Hz tick timer — created in on_activate, cancelled in on_deactivate.
+    rclcpp::TimerBase::SharedPtr tick_timer_;
+
+    /// Guard: true only after initializeTree() succeeds inside on_configure.
+    bool tree_initialized_ = false;
+};
 
 #endif // BEHAVIOR_CONTROLLER_INTERFACE_H

@@ -1,0 +1,3 @@
+#!/bin/bash
+source "$HOME/ros2_ws/.venvs/venv_map.sh"
+exec "$VENV_LANGUAGE_MODEL" -m conversation_manager.conversation_manager_application "$@"

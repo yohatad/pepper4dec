@@ -13,12 +13,7 @@ setup(
     maintainer_email='mahadanso79@gmail.com and yohatad123@gmail.com',
     description='RAG system server wrapper for large language model',
     license='Apache-2.0',
-    entry_points={
-        'console_scripts': [
-            'conversation_manager = conversation_manager.conversation_manager_application:main',
-        ],
-    },
-    
+    scripts=["scripts/conversation_manager"],
     data_files=[
         ("share/ament_index/resource_index/packages", [f"resource/{package_name}"]),
         (f"share/{package_name}", ["package.xml"]),
