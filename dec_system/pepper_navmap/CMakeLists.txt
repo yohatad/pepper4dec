@@ -28,11 +28,23 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
 )
 
+install(PROGRAMS pepper_navigation/odom_path_publisher.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME odom_path_publisher
+)
+
 # Install launch files
 install(DIRECTORY
   launch/
   DESTINATION share/${PROJECT_NAME}/launch
   FILES_MATCHING PATTERN "*.py"
+)
+
+# Install rviz configs
+install(DIRECTORY
+  rviz/
+  DESTINATION share/${PROJECT_NAME}/rviz
+  FILES_MATCHING PATTERN "*.rviz"
 )
 
 # Install config files
