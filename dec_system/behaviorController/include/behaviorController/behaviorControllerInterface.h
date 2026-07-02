@@ -111,7 +111,6 @@ public:
     
     // Getters
     bool isVerbose() const;
-    std::string getLanguage() const;
     std::string getScenarioSpecification() const;
     std::string getCultureKnowledgeBasePath() const;
     std::string getEnvironmentKnowledgeBasePath() const;
@@ -119,7 +118,6 @@ public:
 private:
     ConfigManager() = default;
     bool verbose = false;
-    std::string language = "English";
     std::string scenarioSpecification = "lab_tour";
     std::string cultureKnowledgeBasePath = "cultureKnowledgeBase.yaml";
     std::string environmentKnowledgeBasePath = "labEnvironmentKnowledgeBase.yaml";
@@ -135,8 +133,8 @@ public:
     static KnowledgeManager& instance();
     
     [[nodiscard]] bool loadFromPackage(const std::string& packagePath);
-    
-    std::string getUtilityPhrase(const std::string& phraseId, const std::string& language = "");
+
+    std::string getUtilityPhrase(const std::string& phraseId);
     LocationInfo getLocationInfo(const std::string& locationId);
     TourSpec getTourSpecification();
 
@@ -677,19 +675,6 @@ BT::Tree initializeTree(const std::string& scenario,
  * @param node The ROS2 node to query
  */
 void logSystemInfo(std::shared_ptr<rclcpp::Node> node);
-
-/**
- * @brief Check if a language is supported
- * @param language The language name to check (e.g. "English", "Kinyarwanda")
- * @return true if supported, false otherwise
- */
-[[nodiscard]] bool isValidLanguage(const std::string& language);
-
-/**
- * @brief Get list of supported languages
- * @return Vector of supported language names
- */
-std::vector<std::string> getSupportedLanguages();
 
 /**
  * @brief Check if a file exists at the given path

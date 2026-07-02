@@ -1,5 +1,4 @@
 # Cultural Knowledge Base
-phrase_language: "English"
 
 # Behavioral Parameters
 passing_distance: 100
@@ -15,18 +14,13 @@ phrase_rhythm_english: "Nice"
 
 # Greetings and Phrases
 phrase_greeting_english: "Greetings"
-phrase_greeting_kinyarwanda: "Muraho"
 phrase_title_english: "Excellency"
 phrase_preamble_english: "It is nice to meet you. How are you?"
 phrase_social_english: "I hope you are well"
 phrase_address_older_english: "Hello"
-phrase_address_older_kinyarwanda: "Muraho"
 phrase_address_same_age_english: "Hello"
-phrase_address_same_age_kinyarwanda: "Muraho"
 phrase_address_younger_english: "Hello"
-phrase_address_younger_kinyarwanda: "Muraho"
 phrase_passing_english: "Hello"
-phrase_passing_kinyarwanda: "Muraho"
 
 # Timing and Turn-taking
 pause_duration: 2
@@ -88,11 +82,3 @@ utility_phrases:
     5: "Would you like a tour of the lab?"
     6: "Here is the door"
     7: "Goodbye"
-  kinyarwanda:
-    1: "Mukande Yego cyangwa Oya kuri ekara yanjye"
-    2: "Munkurikire"
-    3: "Ahari ikindi gihe"
-    4: "Muraho! Murakazaneza muri robotikisi lab. Nitwa pepa nkaba ndi robo ifasha mugutembereza abashyitsi."
-    5: "Wakwifuza gutemberezwa muri laboratwari?"
-    6: "Umuryango uri hano"
-    7: "Murabeho"
