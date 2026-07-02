@@ -13,7 +13,6 @@ The **Behavior Controller** package orchestrates robot behavior on the Pepper ro
 - **BehaviorTree.CPP v4**: Mission logic expressed as composable XML behavior trees
 - **Intent-aware routing**: The `ConversationManager` BT node now exposes `intent` and `confidence` output ports; the `asr_cm_tts_pipeline.xml` tree branches on intent to drive speech, navigation, gesture, or stop behavior accordingly
 - **Streaming TTS**: Sentences stream to `/text_to_speech/input` while the LLM generates; the `TTS` BT node blocks until playback is complete
-- **Multi-language Support**: Speech output in English and Kinyarwanda
 - **Configurable**: Configuration via YAML file; active scenario selectable at runtime
 - **Knowledge Base Driven**: Loads location data and cultural phrases from YAML knowledge bases
 - **Groot2 Compatible**: Publishes BT state for live visualization in Groot2
@@ -47,9 +46,8 @@ Managed via `config/behaviorControllerConfiguration.yaml`:
 | Parameter | Description | Default Value |
 |-----------|-------------|---------------|
 | `scenario_specification` | XML behavior tree file name (without `.xml`) in `data/` | `lab_tour` |
-| `culture_knowledge_base` | YAML file with utility phrases per language | `cultureKnowledgeBase.yaml` |
+| `culture_knowledge_base` | YAML file with utility phrases | `cultureKnowledgeBase.yaml` |
 | `environment_knowledge_base` | YAML file with locations, tour stops, and gesture targets | `labEnvironmentKnowledgeBase.yaml` |
-| `language` | Speech output language (`English` or `Kinyarwanda`) | `English` |
 | `verbose_mode` | Print per-tick action goals, feedback, and results | `false` |
 
 # 🚀 Running the Node
@@ -118,7 +116,7 @@ All nodes registered in the factory:
 ## Components
 
 1. **ConfigManager** — Singleton that loads and exposes all YAML configuration at startup.
-2. **KnowledgeManager** — Singleton that loads the culture knowledge base (utility phrases per language) and the environment knowledge base (location poses, gesture targets, tour sequence).
+2. **KnowledgeManager** — Singleton that loads the culture knowledge base (utility phrases) and the environment knowledge base (location poses, gesture targets, tour sequence).
 3. **BehaviorTree execution engine** — Registers all BT leaf nodes, loads the XML scenario, and ticks the tree at the executor rate.
 
 ## Intent-Driven Pipeline (`asr_cm_tts_pipeline.xml`)
