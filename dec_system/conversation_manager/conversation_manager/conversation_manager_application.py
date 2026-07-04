@@ -100,29 +100,39 @@ class ConversationManagerNode(LifecycleNode):
         )
         self.get_logger().info(f"Embedding Model: {config.embedding_model}")
         self.get_logger().info(f"Data Default Path: {config.data_default_path}")
+        self.get_logger().info(f"Retrieval Mode: {config.retrieval_mode}")
 
         # State
         self.collection = None
         self.conversation_history: List[Dict] = []
 
-        # Init ChromaDB collection
         collection_name = self.get_parameter('collection_name').get_parameter_value().string_value
-        try:
-            self.initialize_collection(collection_name)
-        except Exception as e:
-            self.get_logger().error(f"Failed to initialize collection: {e}")
-            return TransitionCallbackReturn.FAILURE
+
+        if config.retrieval_mode == 'rag':
+            # Init ChromaDB collection (only needed for vector search)
+            try:
+                self.initialize_collection(collection_name)
+            except Exception as e:
+                self.get_logger().error(f"Failed to initialize collection: {e}")
+                return TransitionCallbackReturn.FAILURE
+        else:
+            self.get_logger().info(
+                "Retrieval mode is 'full_context' — skipping ChromaDB/embedding initialization"
+            )
 
         # Action server
         self._action_server = ActionServer(
             self, ConversationManager, '/conversation_manager', self.execute_callback
         )
 
-        status = (
-            f"Collection: {collection_name} ({self.collection.count()} docs)"
-            if self.collection
-            else "Collection: Failed to load"
-        )
+        if config.retrieval_mode == 'rag':
+            status = (
+                f"Collection: {collection_name} ({self.collection.count()} docs)"
+                if self.collection
+                else "Collection: Failed to load"
+            )
+        else:
+            status = "Full-context mode: knowledge base sent directly to LLM"
         self.get_logger().info(f"conversation_manager: configured. {status}")
         return TransitionCallbackReturn.SUCCESS
 
@@ -234,7 +244,8 @@ class ConversationManagerNode(LifecycleNode):
 
         result = ConversationManager.Result()
 
-        if self.collection is None:
+        config = get_config()
+        if config.retrieval_mode == 'rag' and self.collection is None:
             self.log_verbose("Collection is None - knowledge base not initialized")
             result.success = False
             result.response = "Knowledge base not initialized. Please restart the node."
@@ -254,12 +265,10 @@ class ConversationManagerNode(LifecycleNode):
         feedback_msg = ConversationManager.Feedback()
 
         try:
-            config = get_config()
-
-            # Stage 1: vector search
+            # Stage 1: retrieval (vector search in "rag" mode, whole KB in "full_context" mode)
             feedback_msg.status = 'searching'
             goal_handle.publish_feedback(feedback_msg)
-            self.log_verbose("Searching knowledge base...")
+            self.log_verbose("Retrieving knowledge base context...")
             search_results = search(self.collection, query)
 
             # Stage 2: streaming LLM generation
