@@ -64,6 +64,8 @@ DEFAULT_LLM_API_KEY = "sk-no-key-required"
 DEFAULT_LLM_MODEL = "HuggingFaceTB/SmolLM3-3B"
 DEFAULT_CHROMA_PATH = str(PACKAGE_PATH / 'data')
 DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+DEFAULT_RETRIEVAL_MODE = "rag"
+VALID_RETRIEVAL_MODES = ("rag", "full_context")
 DEFAULT_SIMILARITY_THRESHOLD = 0.15
 DEFAULT_TOP_K = 10
 DEFAULT_MAX_HISTORY_TURNS = 15
@@ -99,7 +101,10 @@ class ConversationManagerConfig:
     
     # Embedding settings
     embedding_model: str = DEFAULT_EMBEDDING_MODEL
-    
+
+    # Retrieval settings: "rag" (vector search) or "full_context" (send entire KB every turn)
+    retrieval_mode: str = DEFAULT_RETRIEVAL_MODE
+
     # Search settings
     similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD
     default_top_k: int = DEFAULT_TOP_K
@@ -139,7 +144,12 @@ class ConversationManagerConfig:
         
         if not self.llm_model:
             errors.append("llm_model cannot be empty")
-        
+
+        if self.retrieval_mode not in VALID_RETRIEVAL_MODES:
+            errors.append(
+                f"retrieval_mode must be one of {VALID_RETRIEVAL_MODES}, got '{self.retrieval_mode}'"
+            )
+
         if not 0.0 <= self.similarity_threshold <= 1.0:
             errors.append(f"similarity_threshold must be between 0 and 1, got {self.similarity_threshold}")
         
@@ -173,6 +183,7 @@ global_config: Optional[ConversationManagerConfig] = None
 openai_client_instance: Optional[openai.OpenAI] = None
 chroma_client_instance: Optional[chromadb.PersistentClient] = None
 embedding_function_instance = None
+full_context_cache: Optional[List[Dict]] = None
 
 
 def get_config() -> ConversationManagerConfig:
@@ -192,7 +203,7 @@ def set_config(config: ConversationManagerConfig) -> None:
     Raises:
         ConfigError: If configuration validation fails
     """
-    global global_config, openai_client_instance, chroma_client_instance, embedding_function_instance
+    global global_config, openai_client_instance, chroma_client_instance, embedding_function_instance, full_context_cache
 
     is_valid, errors = config.validate()
     if not is_valid:
@@ -202,6 +213,7 @@ def set_config(config: ConversationManagerConfig) -> None:
     openai_client_instance = None
     chroma_client_instance = None
     embedding_function_instance = None
+    full_context_cache = None
 
     logger.debug(f"Configuration updated: llm_base_url={config.llm_base_url}, llm_model={config.llm_model}")
 
@@ -362,6 +374,17 @@ def parse_upanzi_format(json_data: Dict) -> List[Dict]:
     logger.debug(f"Parsed {len(documents)} documents from Upanzi format")
     return documents
 
+def _build_document_content(doc: Dict) -> str:
+    """Build searchable/displayable content from a document's title, keywords, and text."""
+    title = doc.get('title', '')
+    keywords = doc.get('keywords', [])
+
+    content = f"Title: {title}\n" if title else ""
+    if keywords:
+        content += f"Keywords: {', '.join(keywords)}\n"
+    content += doc.get('text', '')
+    return content
+
 # =============================================================================
 # Collection Management
 # =============================================================================
@@ -438,21 +461,12 @@ def populate_collection(collection: chromadb.Collection, documents: List[Dict]) 
             continue
         seen_ids.add(doc_id)
 
-        # Build searchable content
-        title = doc.get('title', '')
-        keywords = doc.get('keywords', [])
-
-        content = f"Title: {title}\n" if title else ""
-        if keywords:
-            content += f"Keywords: {', '.join(keywords)}\n"
-        content += text
-
-        docs.append(content)
+        docs.append(_build_document_content(doc))
         ids.append(doc_id)
         metadatas.append({
-            'title': title,
+            'title': doc.get('title', ''),
             'category': doc.get('category', ''),
-            'keywords': ' '.join(keywords)
+            'keywords': ' '.join(doc.get('keywords', []))
         })
 
     if docs:
@@ -502,34 +516,84 @@ def setup_collection(name: str, json_path: str, description: str = "", force_rel
     return collection
 
 # =============================================================================
+# Full-context retrieval (retrieval_mode == "full_context")
+# =============================================================================
+
+def get_full_context_documents(category_filter: str = None) -> List[Dict]:
+    """
+    Load the entire knowledge base as a list of "search results" (score fixed
+    at 1.0), formatted the same way as search() output so callers don't need
+    to know which retrieval mode is active. Loaded once and cached; the cache
+    is cleared on set_config() (e.g. if data_default_path changes).
+
+    Args:
+        category_filter: Optional category to filter by
+
+    Returns:
+        List of results with doc_id, title, content, score
+    """
+    global full_context_cache
+
+    if full_context_cache is None:
+        config = get_config()
+        logger.debug(f"Loading full knowledge base from: {config.data_default_path}")
+        documents = load_json_data(config.data_default_path)
+        full_context_cache = [
+            {
+                'doc_id': doc.get('doc_id') or str(i),
+                'title': doc.get('title', ''),
+                'content': _build_document_content(doc),
+                'score': 1.0,
+                'category': doc.get('category', ''),
+            }
+            for i, doc in enumerate(documents)
+            if doc.get('text', '')
+        ]
+        logger.debug(f"Loaded {len(full_context_cache)} documents for full-context mode")
+
+    if category_filter:
+        return [r for r in full_context_cache if r.get('category') == category_filter]
+    return list(full_context_cache)
+
+# =============================================================================
 # Search
 # =============================================================================
 
 def search(
-    collection: chromadb.Collection,
+    collection: Optional[chromadb.Collection],
     query: str,
     top_k: int = None,
     category_filter: str = None
 ) -> List[Dict]:
     """
-    Search for relevant documents.
-    
+    Retrieve relevant documents for a query.
+
+    Dispatches on config.retrieval_mode:
+      - "rag": vector similarity search against the ChromaDB collection.
+      - "full_context": return the entire knowledge base, ignoring `collection`
+        and `top_k` (no vector search is performed).
+
     Args:
-        collection: ChromaDB collection
+        collection: ChromaDB collection (unused in "full_context" mode)
         query: Search query
-        top_k: Number of results (default from config)
+        top_k: Number of results (default from config, "rag" mode only)
         category_filter: Optional category to filter by
-        
+
     Returns:
         List of results with doc_id, title, content, score
     """
     if not query or not query.strip():
         logger.debug("Empty query, returning empty results")
         return []
-    
+
     config = get_config()
+
+    if config.retrieval_mode == "full_context":
+        logger.debug("Full-context mode: returning entire knowledge base")
+        return get_full_context_documents(category_filter=category_filter)
+
     top_k = top_k if top_k is not None else config.default_top_k
-    
+
     logger.debug(f"Searching for query: '{query}' with top_k={top_k}, category_filter={category_filter}")
     
     where_filter = None
@@ -1044,6 +1108,8 @@ def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
           model: "llama-3.1-8b-instant"
         embedding:
           model: "all-MiniLM-L6-v2"
+        retrieval:
+          mode: "rag"  # "rag" or "full_context"
         search:
           similarity_threshold: 0.15
           top_k: 5
@@ -1063,10 +1129,20 @@ def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
     # Extract nested values with defaults
     llm = yaml_config.get('llm', {})
     embedding = yaml_config.get('embedding', {})
+    retrieval = yaml_config.get('retrieval', {})
     search_cfg = yaml_config.get('search', {})
     conversation = yaml_config.get('conversation', {})
     data = yaml_config.get('data', {})
     debug = yaml_config.get('debug', {})
+
+    # Parse retrieval mode
+    retrieval_mode, warn = safe_str(
+        retrieval.get('mode'),
+        DEFAULT_RETRIEVAL_MODE,
+        'retrieval.mode'
+    )
+    if warn:
+        messages.append(warn)
 
     # Parse numeric values safely
     similarity_threshold, warn = safe_float(
@@ -1124,6 +1200,7 @@ def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
             llm_model=llm.get('model', DEFAULT_LLM_MODEL),
             chroma_path=DEFAULT_CHROMA_PATH,
             embedding_model=embedding.get('model', DEFAULT_EMBEDDING_MODEL),
+            retrieval_mode=retrieval_mode,
             similarity_threshold=similarity_threshold,
             default_top_k=top_k,
             max_history_turns=max_history_turns,
