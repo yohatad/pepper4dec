@@ -18,7 +18,10 @@ find_package(nav_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 
 # Executable
-add_executable(robot_localization src/robot_localization_application.cpp)
+add_executable(robot_localization
+  src/robot_localization_application.cpp
+  src/robot_localization_implementation.cpp
+)
 target_include_directories(robot_localization PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>

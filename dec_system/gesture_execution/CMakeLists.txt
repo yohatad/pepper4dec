@@ -26,6 +26,7 @@ find_package(yaml-cpp REQUIRED)
 
 # Library
 add_library(${PROJECT_NAME}_lib
+  src/gesture_execution_implementation.cpp
   src/pepper_kinematics_utilities.cpp
 )
 target_include_directories(${PROJECT_NAME}_lib PUBLIC
