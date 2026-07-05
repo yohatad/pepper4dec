@@ -43,7 +43,7 @@ from .conversation_manager_implementation import (
     get_collection,
     setup_collection,
     handle_query,
-    search,
+    retrieve_documents,
     generate_response,
     generate_response_stream,
     extract_answer_from_raw,
@@ -269,7 +269,7 @@ class ConversationManagerNode(LifecycleNode):
             feedback_msg.status = 'searching'
             goal_handle.publish_feedback(feedback_msg)
             self.log_verbose("Retrieving knowledge base context...")
-            search_results = search(self.collection, query)
+            search_results = retrieve_documents(self.collection, query)
 
             # Stage 2: streaming LLM generation
             # Sentences are accumulated; the BT TTS node speaks the full response.
