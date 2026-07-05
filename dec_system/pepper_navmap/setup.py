@@ -26,6 +26,7 @@ setup(
     entry_points={
         'console_scripts': [
             'send_goal = pepper_navigation.send_goal:main',
+            'odom_path_publisher = pepper_navigation.odom_path_publisher:main',
         ],
     },
 )

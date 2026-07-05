@@ -794,10 +794,11 @@ class TextToSpeechNode(LifecycleNode):
 # ---------------------------------------------------------------------------
 
 def main(args=None):
-    rclpy_inited = False
+    rclpy.init(args=args)
     node = None
 
     try:
+        config = load_configuration()
         node = TextToSpeechNode(config)
         rclpy.spin(node)
     except KeyboardInterrupt:

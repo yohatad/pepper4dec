@@ -3,8 +3,8 @@
 
 # General Settings
 useCompressed: false         # Use compressed image topics
-camera: "realsense"          # Camera type: "realsense", "pepper", or "video"
-verboseMode: true           # Enable verbose logging and display
+camera: "pepper"          # Camera type: "realsense", "pepper", or "video"
+verboseMode: false           # Enable verbose logging and display
 imageTimeout: 2.0            # Timeout in seconds for image reception
 
 # SixDrepNet Algorithm Settings

@@ -142,7 +142,7 @@ SaliencyNode::SaliencyNode() : Node("saliency_node") {
 }
 
 void SaliencyNode::setupParameters() {
-    declare_parameter("camera_type", std::string("realsense"));
+    declare_parameter("camera_type", std::string("pepper"));
     declare_parameter("use_compressed", true);
     declare_parameter("use_depth_weighting", true);
     declare_parameter("depth_min_m", 0.3);
@@ -162,8 +162,8 @@ void SaliencyNode::loadParameters() {
     camera_type_ = get_parameter("camera_type").as_string();
     use_compressed_ = get_parameter("use_compressed").as_bool();
 
-    image_topic_base_ = topics_config_.image.base;
-    depth_topic_base_ = topics_config_.depth.base;
+    image_topic_base_ = selectCameraTopic(camera_type_, topics_config_.image.pepper, topics_config_.image.realsense);
+    depth_topic_base_ = selectCameraTopic(camera_type_, topics_config_.depth.pepper, topics_config_.depth.realsense);
 
     // Pepper depth is unreliable — force depth weighting off regardless of config
     if (camera_type_ == "pepper") {

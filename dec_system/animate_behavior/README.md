@@ -10,7 +10,7 @@ The **Animate Behavior** package is a ROS2 action server that provides natural, 
 
 ## Key Features
 - **ROS2 Native**: Built for ROS2 Humble
-- **Multiple Behavior Types**: Supports All, body, hands, arms, rotation, and home behaviors
+- **Multiple Behavior Types**: Supports All, body, arms, hands, idle, rotation, and home behaviors
 - **High-Frequency Updates**: 30Hz motion updates for smooth animation
 - **Exponential Smoothing**: Natural, fluid movements with configurable smoothing factor
 - **BehaviorTree Integration**: Action-based stop via `home` behavior type
@@ -44,6 +44,7 @@ Configuration is managed via `config/animate_behavior_configuration.yaml`:
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
+| `verbose_mode` | Enable verbose logging | `true` |
 | `gesture_update_rate` | Animation loop frequency (Hz) | `30.0` |
 | `gesture_interval_min` | Minimum time between gesture targets (sec) | `2.5` |
 | `gesture_interval_max` | Maximum time between gesture targets (sec) | `4.5` |
@@ -64,23 +65,55 @@ The node supports multiple animation modes for different interaction scenarios:
 | Behavior Type | Limbs Animated | Description |
 |--------------|----------------|-------------|
 | `All` | Arms, Hands, Legs, Base | Full-body animation including all limbs and base rotation |
-| `body` | Arms, Legs | Torso and leg movements (excludes hands) |
+| `body` | Arms, Hands, Legs | Torso and limb movements |
+| `arms` | Arms only | Arm movements (excludes hands) |
 | `hands` | Hands only | Hand opening/closing gestures |
-| `arms` | Arms, Hands | Arm and hand movements (excludes hip joints) |
+| `idle` | None | LEDs only; no limb gestures or rotation |
 | `rotation` | Base only | Base rotation without limb movement |
-| `home` | All limbs | Returns all limbs to neutral home position (immediate stop) |
+| `home` | All limbs | Moves all joints to neutral home position then stops |
 
 > **Note:** The `home` behavior type provides an action-based stop mechanism, immediately returning all limbs to their neutral positions, canceling any ongoing animation, and turning off all face LEDs.
 
 ## Joint Movement Ranges
 
-Each joint group has defined movement factors that scale with the `selected_range` parameter:
+Joint limits and home positions are taken from the CSSR4Africa D5.1 Actuator Tests deliverable. Movement factors scale the random gesture amplitude relative to `selected_range`.
 
-| Joint Group | Joints | Movement Factors |
-|-------------|--------|------------------|
-| **Arms** | ShoulderPitch, ShoulderRoll, ElbowYaw, ElbowRoll, WristYaw | 0.6, 0.4, 0.6, 0.4, 0.5 |
-| **Hands** | Hand (open/close) | 0.5 |
-| **Legs** | HipPitch, HipRoll, KneePitch | 0.2, 0.2, 0.1 (conservative for stability) |
+### Right Arm
+
+| Joint | Min (rad) | Max (rad) | Home (rad) | Factor |
+|-------|-----------|-----------|------------|--------|
+| RShoulderPitch | -2.0857 | 2.0857 | 1.7410 | 0.6 |
+| RShoulderRoll | -1.5620 | -0.0087 | -0.09664 | 0.4 |
+| RElbowYaw | -2.0857 | 2.0857 | 1.6981 | 0.6 |
+| RElbowRoll | 0.0087 | 1.5620 | 0.09664 | 0.4 |
+| RWristYaw | -1.8239 | 1.8239 | -0.05679 | 0.5 |
+
+### Left Arm
+
+| Joint | Min (rad) | Max (rad) | Home (rad) | Factor |
+|-------|-----------|-----------|------------|--------|
+| LShoulderPitch | -2.0857 | 2.0857 | 1.7625 | 0.6 |
+| LShoulderRoll | 0.0087 | 1.5620 | 0.09970 | 0.4 |
+| LElbowYaw | -2.0857 | 2.0857 | -1.7150 | 0.6 |
+| LElbowRoll | -1.5620 | -0.0087 | -0.1334 | 0.4 |
+| LWristYaw | -1.8239 | 1.8239 | 0.06592 | 0.5 |
+
+### Hands
+
+| Joint | Min | Max | Home | Factor |
+|-------|-----|-----|------|--------|
+| LHand | 0.0 | 1.0 | 0.67 | 0.5 |
+| RHand | 0.0 | 1.0 | 0.67 | 0.5 |
+
+`0.0` = fully closed, `1.0` = fully open.
+
+### Legs
+
+| Joint | Min (rad) | Max (rad) | Home (rad) | Factor |
+|-------|-----------|-----------|------------|--------|
+| HipPitch | -1.0385 | 1.0385 | -0.0107 | 0.2 |
+| HipRoll | -0.5149 | 0.5149 | -0.00766 | 0.2 |
+| KneePitch | -0.5149 | 0.5149 | 0.03221 | 0.1 |
 
 ## Running the Node
 
@@ -135,7 +168,7 @@ ros2 run animate_behavior animate_behavior
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `behavior_type` | string | "All", "body", "hands", "arms", "rotation", "home" |
+| `behavior_type` | string | "All", "body", "arms", "hands", "idle", "rotation", "home" |
 | `selected_range` | float32 | Movement amplitude scaling (0.0 to 1.0) |
 | `duration_seconds` | int32 | How long to run (0 = infinite until cancelled) |
 
@@ -225,7 +258,7 @@ Each fade uses `MODE_RGB_FADE` with a `led_fade_duration` second transition. LED
 
 ### Dependency
 
-The LED animation requires the `naoqi_driver` node to be running with the `/naoqi_driver/run_led` action server available. If the server is not found within 10 seconds at startup, LED animation is automatically disabled and body animation continues normally.
+The LED animation requires the `naoqi_driver` node to be running with the `/naoqi_driver/run_led` action server available. If the server is not found within 5 seconds at startup, LED animation is automatically disabled and body animation continues normally.
 
 ## Package Structure
 
