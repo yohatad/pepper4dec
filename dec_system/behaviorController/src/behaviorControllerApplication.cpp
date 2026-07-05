@@ -51,7 +51,6 @@
  *   scenario_specification (string, default: "lab_tour")
  *   culture_knowledge_base (string, default: "cultureKnowledgeBase.yaml")
  *   environment_knowledge_base (string, default: "labEnvironmentKnowledgeBase.yaml")
- *   language (string, default: "English")
  *   verbose_mode (bool, default: false)
  *
  * Lifecycle:
@@ -135,7 +134,6 @@ BehaviorControllerLifecycleNode::on_configure(const rclcpp_lifecycle::State& /*s
     const auto& cfg = ConfigManager::instance();
     RCLCPP_INFO(get_logger(), "Configuration loaded successfully:");
     RCLCPP_INFO(get_logger(), "  Verbose mode : %s", cfg.isVerbose() ? "Yes" : "No");
-    RCLCPP_INFO(get_logger(), "  Language     : %s", cfg.getLanguage().c_str());
     RCLCPP_INFO(get_logger(), "  Scenario     : %s", cfg.getScenarioSpecification().c_str());
 
     // ── Build behavior tree ─────────────────────────────────────────────────

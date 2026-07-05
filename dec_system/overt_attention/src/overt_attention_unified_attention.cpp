@@ -20,6 +20,7 @@ UnifiedAttentionNode::UnifiedAttentionNode() : Node("simple_attention") {
     }
 
     // System parameters
+    declare_parameter("camera_type", std::string("pepper"));
     declare_parameter("start_enabled", true);
     declare_parameter("move_to_default_on_disable", true);
     declare_parameter("default_yaw", 0.0);
@@ -64,9 +65,11 @@ UnifiedAttentionNode::UnifiedAttentionNode() : Node("simple_attention") {
     declare_parameter("ior_max_locations", 20);
 
     // Load topics from YAML config
+    std::string camera_type = get_parameter("camera_type").as_string();
     std::string face_topic = topics_config_.face;
     std::string saliency_topic = topics_config_.saliency.peak;
-    std::string camera_info_topic = topics_config_.camera_info;
+    std::string camera_info_topic = selectCameraTopic(
+        camera_type, topics_config_.camera_info.pepper, topics_config_.camera_info.realsense);
     std::string head_cmd_topic = topics_config_.joint_angles;
     std::string target_topic = topics_config_.target_angles;
 

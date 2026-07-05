@@ -702,6 +702,8 @@ class YOLOv11(PersonDetectionNode):
             if hasattr(self, 'depth_sub'):
                 self.destroy_subscription(self.depth_sub.sub)
         elif hasattr(self, 'color_sub'):
+            # Pepper RGB-only path: color_sub is a plain subscription, not
+            # wrapped by message_filters.Subscriber.
             self.destroy_subscription(self.color_sub)
         return super().on_deactivate(_state)
 

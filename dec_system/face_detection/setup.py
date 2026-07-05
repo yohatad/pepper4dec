@@ -13,12 +13,7 @@ setup(
     maintainer_email="yohanneh@alumni.cmu.edu",
     description="Face detection node",
     license="MIT",
-    entry_points={
-        "console_scripts": [
-            "face_detection = face_detection.face_detection_application:main",
-            "age_detection = face_detection.age_gender_detection:main",
-        ],
-    },
+    scripts=["scripts/face_detection", "scripts/age_detection"],
     data_files=[
         ("share/ament_index/resource_index/packages", [f"resource/{pkg}"]),
         (f"share/{pkg}", ["package.xml"]),

@@ -8,7 +8,13 @@ llm:
 embedding:
   model: all-MiniLM-L6-v2
 
-# Search Settings
+# Retrieval Settings
+retrieval:
+  # "rag": vector search over ChromaDB, only relevant snippets sent to the LLM
+  # "full_context": skip vector search, send the entire knowledge base every turn
+  mode: rag
+
+# Search Settings (only used when retrieval.mode is "rag")
 search:
   similarity_threshold: 0.15
   top_k: 5

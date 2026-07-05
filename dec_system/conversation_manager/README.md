@@ -13,7 +13,7 @@ The **Conversation Manager Package** implements a **Retrieval-Augmented Generati
 - **Retrieval-Augmented Generation**: Combines vector search with large language models for accurate, context-aware responses
 - **ChromaDB Integration**: Local vector database for privacy-preserving knowledge storage
 - **Configurable LLM Support**: Compatible with any OpenAI-compatible API (DeepSeek, Groq, etc.)
-- **Streaming TTS Output**: Publishes answer sentences to `/text_to_speech/input` as they arrive from the LLM, enabling Pepper to start speaking before the full response is ready
+- **NAOqi-Ready Output**: Embeds ALTextToSpeech prosody tags in the response so the BT `SpeechWithFeedback` node can drive natural-sounding speech and contextual gestures via ALAnimatedSpeech
 - **Conversation Memory**: Maintains context from previous interactions (configurable number of turns)
 - **Multi-format Data Support**: Handles structured JSON knowledge bases and flat document lists
 - **ROS2 Action Interface**: Action-based architecture for integration with other ROS2 nodes and the BehaviorTree controller, with feedback during processing
@@ -112,7 +112,8 @@ ros2 run conversation_manager conversation_manager \
 
 ### `/conversation_manager` (`dec_interfaces/action/ConversationManager`)
 Receives a natural-language prompt, performs a RAG query, and returns the generated answer.
-Sentences are streamed to `/text_to_speech/input` while the LLM is generating so that the TTS node can start speaking before the full response is ready.
+The LLM response is streamed internally and accumulated into the full answer text; the action
+result carries the complete text once generation finishes.
 
 **Goal Fields:**
 | Field    | Type   | Description                       |
@@ -132,19 +133,13 @@ Sentences are streamed to `/text_to_speech/input` while the LLM is generating so
 | `intent`   | string | Detected conversation intent (e.g., ASK_EXHIBIT_QUESTION) |
 | `confidence` | float | Confidence score for intent detection (0.0-1.0)   |
 
-## Publisher
-
-### `/text_to_speech/input` (`std_msgs/String`)
-Individual answer sentences published one at a time as they arrive from the LLM stream.
-The `text_to_speech` node subscribes here to begin playback before the action completes.
-
 ## BehaviorTree Integration
 
-The node is called from the `behaviorController` via the `ConversationManager` BT node, which wraps this action server. The generated `response` is written to the blackboard and passed directly to the `TTS` BT node (wrapping `dec_interfaces/action/TTS`) for playback through the configured Kokoro or ElevenLabs backend.
+The node is called from the `behaviorController` via the `ConversationManager` BT node, which wraps this action server. The generated `response` (with embedded NAOqi ALTextToSpeech prosody tags) is written to the blackboard and passed directly to the `SpeechWithFeedback` BT node, which calls the `/naoqi_driver/speech_with_feedback` action. ALAnimatedSpeech interprets the prosody tags and drives contextual body-language gestures automatically.
 
 Typical BT sequence:
 ```
-SpeechRecognition → ConversationManager → TTS
+SpeechRecognition → ConversationManager → SpeechWithFeedback
 ```
 
 ## Knowledge Base Initialization
@@ -161,8 +156,8 @@ The RAG system has three main components:
 3. **Conversation Manager Node**:
    - Receives prompts via the `/conversation_manager` action server
    - Performs semantic search on the vector database (`searching` feedback)
-   - Streams LLM-generated sentences to `/text_to_speech/input` as they arrive (`generating` feedback)
-   - Returns the full answer text as the action result for any other consumer
+   - Streams the LLM generation internally, accumulating sentences into the full answer (`generating` feedback)
+   - Returns the full answer text as the action result for the BT `SpeechWithFeedback` node to play back
    - Maintains per-session conversation history for context-aware responses
 
 ## Data Flow
@@ -177,9 +172,9 @@ User utterance
       │
       ├─► Stage 2: Streaming LLM generation    →  feedback: "generating"
       │         │
-      │         └─► sentences ──► /text_to_speech/input  (TTS starts speaking immediately)
+      │         └─► sentences accumulated into the full response (not published)
       │
-      └─► Action result: full response text    →  TTSNode waits for playback to finish
+      └─► Action result: full response text    →  SpeechWithFeedback plays it back
 ```
 
 ## Knowledge Base JSON Format
@@ -212,9 +207,6 @@ ros2 action send_goal /conversation_manager dec_interfaces/action/ConversationMa
 
 ros2 action send_goal /conversation_manager dec_interfaces/action/ConversationManager \
   "{prompt: 'Tell me about the Digital Experience Center.'}"
-
-# Monitor TTS streaming output
-ros2 topic echo /text_to_speech/input
 ```
 
 # 💡 Support

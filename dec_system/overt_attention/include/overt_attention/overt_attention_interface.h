@@ -43,6 +43,7 @@
 #include <cmath>
 #include <algorithm>
 #include <functional>
+#include <stdexcept>
 
 //=============================================================================
 // Shared configuration / helpers
@@ -51,12 +52,14 @@
 // Mirrors the structure of data/pepper_topics.yaml
 struct TopicsConfig {
     struct {
-        std::string base;
+        std::string pepper;
+        std::string realsense;
         bool use_compressed = false;
     } image;
 
     struct {
-        std::string base;
+        std::string pepper;
+        std::string realsense;
         bool use_compressed = false;
     } depth;
 
@@ -65,9 +68,13 @@ struct TopicsConfig {
         std::string map;
     } saliency;
 
+    struct {
+        std::string pepper;
+        std::string realsense;
+    } camera_info;
+
     std::string face;
     std::string audio;
-    std::string camera_info;
     std::string target_angles;
     std::string joint_state;
     std::string joint_angles;
@@ -76,6 +83,15 @@ struct TopicsConfig {
 
 // Load topics configuration from a YAML file located under a package's share directory.
 TopicsConfig loadTopicsConfig(const std::string& package_name, const std::string& relative_path);
+
+// Select the pepper/realsense variant of a topic pair based on the camera_type parameter.
+// Throws std::invalid_argument if camera_type is neither "pepper" nor "realsense".
+inline const std::string& selectCameraTopic(
+    const std::string& camera_type, const std::string& pepper, const std::string& realsense) {
+    if (camera_type == "pepper") return pepper;
+    if (camera_type == "realsense") return realsense;
+    throw std::invalid_argument("Invalid camera_type: " + camera_type);
+}
 
 // QoS profile suitable for image transport over WiFi (best-effort, volatile, keep-last 1).
 rclcpp::QoS getImageQoS();

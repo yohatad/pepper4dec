@@ -8,15 +8,11 @@ that answers natural-language questions about the Upanzi Network knowledge base.
 On configure, the node loads its YAML configuration, initializes (or builds) a
 ChromaDB collection from the knowledge-base JSON file, and starts an action
 server for handling conversational queries. Each goal triggers a vector search
-over the knowledge base followed by a streaming LLM call: as the LLM generates
-its answer, complete sentences are published to /text_to_speech/input so that
-text-to-speech can begin speaking before the full response is ready. The action
-result carries the full answer text, classified intent, and confidence score for
-downstream consumers (e.g. behavior-tree nodes).
-
-Publishers:
-    /text_to_speech/input (std_msgs/String)
-        Streamed answer sentences, published as the LLM generates its response
+over the knowledge base followed by a streaming LLM call; sentences are
+accumulated into the full response as they arrive. The action result carries
+the full answer text, classified intent, and confidence score. The BT
+SpeechWithFeedback node is the sole consumer responsible for playback, using
+NAOqi ALAnimatedSpeech to interpret embedded prosody tags and drive gestures.
 
 Actions:
     /conversation_manager (dec_interfaces/action/ConversationManager)
@@ -41,18 +37,18 @@ from typing import List, Dict
 from rclpy.action import ActionServer
 from rclpy.lifecycle import LifecycleNode, TransitionCallbackReturn
 from ament_index_python.packages import get_package_share_directory
-from std_msgs.msg import String
 from dec_interfaces.action import ConversationManager
 from .conversation_manager_implementation import (
     get_config,
     get_collection,
     setup_collection,
     handle_query,
-    search,
+    retrieve_documents,
     generate_response,
     generate_response_stream,
     extract_answer_from_raw,
     extract_intent_from_raw,
+    apply_speech_tags,
     apply_config_file,
 )
 
@@ -104,32 +100,39 @@ class ConversationManagerNode(LifecycleNode):
         )
         self.get_logger().info(f"Embedding Model: {config.embedding_model}")
         self.get_logger().info(f"Data Default Path: {config.data_default_path}")
+        self.get_logger().info(f"Retrieval Mode: {config.retrieval_mode}")
 
         # State
         self.collection = None
         self.conversation_history: List[Dict] = []
 
-        # Init ChromaDB collection
         collection_name = self.get_parameter('collection_name').get_parameter_value().string_value
-        try:
-            self.initialize_collection(collection_name)
-        except Exception as e:
-            self.get_logger().error(f"Failed to initialize collection: {e}")
-            return TransitionCallbackReturn.FAILURE
 
-        # Managed publisher — silenced while INACTIVE, active once activated
-        self.stream_pub = self.create_lifecycle_publisher(String, '/text_to_speech/input', 10)
+        if config.retrieval_mode == 'rag':
+            # Init ChromaDB collection (only needed for vector search)
+            try:
+                self.initialize_collection(collection_name)
+            except Exception as e:
+                self.get_logger().error(f"Failed to initialize collection: {e}")
+                return TransitionCallbackReturn.FAILURE
+        else:
+            self.get_logger().info(
+                "Retrieval mode is 'full_context' — skipping ChromaDB/embedding initialization"
+            )
 
         # Action server
         self._action_server = ActionServer(
             self, ConversationManager, '/conversation_manager', self.execute_callback
         )
 
-        status = (
-            f"Collection: {collection_name} ({self.collection.count()} docs)"
-            if self.collection
-            else "Collection: Failed to load"
-        )
+        if config.retrieval_mode == 'rag':
+            status = (
+                f"Collection: {collection_name} ({self.collection.count()} docs)"
+                if self.collection
+                else "Collection: Failed to load"
+            )
+        else:
+            status = "Full-context mode: knowledge base sent directly to LLM"
         self.get_logger().info(f"conversation_manager: configured. {status}")
         return TransitionCallbackReturn.SUCCESS
 
@@ -146,8 +149,7 @@ class ConversationManagerNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_cleanup(self, _state) -> TransitionCallbackReturn:
-        """Destroy the publisher and action server, and clear the ChromaDB collection and conversation history."""
-        self.destroy_lifecycle_publisher(self.stream_pub)
+        """Destroy the action server, and clear the ChromaDB collection and conversation history."""
         self._action_server.destroy()
         self.collection = None
         self.conversation_history = []
@@ -230,20 +232,20 @@ class ConversationManagerNode(LifecycleNode):
     # ── Action callback ───────────────────────────────────────────────────────────
 
     def execute_callback(self, goal_handle):
-        """Handle RAG query as an action, streaming sentences to TTS as they arrive.
+        """Handle RAG query as an action.
 
         Flow:
           1. Vector search (fast, ~50-200ms)
-          2. Streaming LLM call — each complete answer sentence is published to
-             /text_to_speech/input so text_to_speech can begin
-             speaking before the full response is ready.
-          3. Action result carries the full answer text for any other consumer.
+          2. Streaming LLM call — sentences are accumulated into the full response.
+          3. Action result carries the full answer text; the BT TTS node is the
+             sole consumer responsible for playback.
         """
         self.log_verbose(f"Action goal received: prompt=\"{goal_handle.request.prompt}\"")
 
         result = ConversationManager.Result()
 
-        if self.collection is None:
+        config = get_config()
+        if config.retrieval_mode == 'rag' and self.collection is None:
             self.log_verbose("Collection is None - knowledge base not initialized")
             result.success = False
             result.response = "Knowledge base not initialized. Please restart the node."
@@ -263,17 +265,14 @@ class ConversationManagerNode(LifecycleNode):
         feedback_msg = ConversationManager.Feedback()
 
         try:
-            config = get_config()
-
-            # Stage 1: vector search
+            # Stage 1: retrieval (vector search in "rag" mode, whole KB in "full_context" mode)
             feedback_msg.status = 'searching'
             goal_handle.publish_feedback(feedback_msg)
-            self.log_verbose("Searching knowledge base...")
-            search_results = search(self.collection, query)
+            self.log_verbose("Retrieving knowledge base context...")
+            search_results = retrieve_documents(self.collection, query)
 
             # Stage 2: streaming LLM generation
-            # Sentences are published to /text_to_speech/input
-            # as they arrive, allowing TTS to start speaking immediately.
+            # Sentences are accumulated; the BT TTS node speaks the full response.
             feedback_msg.status = 'generating'
             goal_handle.publish_feedback(feedback_msg)
             self.log_verbose("Streaming response...")
@@ -285,10 +284,7 @@ class ConversationManagerNode(LifecycleNode):
                 query, search_results, self.conversation_history, raw_out
             ):
                 yielded_sentences.append(sentence)
-                msg = String()
-                msg.data = sentence
-                self.stream_pub.publish(msg)
-                self.log_verbose(f"Streamed: '{sentence}'")
+                self.log_verbose(f"Accumulated: '{sentence}'")
 
             # Derive the canonical answer text, intent, and confidence
             # from the full raw LLM buffer captured during streaming.
@@ -300,6 +296,11 @@ class ConversationManagerNode(LifecycleNode):
 
             intent, confidence = extract_intent_from_raw(raw) if raw else ("UNKNOWN", 0.0)
             self.log_verbose(f"Intent: {intent} (confidence={confidence:.2f})")
+
+            # Apply sentence-level speed tag based on intent (e.g. \rspd=85\ for
+            # technical answers). Word-level tags (*pau=N*) are already converted
+            # inside extract_answer_from_raw().
+            response_text = apply_speech_tags(response_text, intent)
 
             # Update conversation history
             self.conversation_history.append({'query': query, 'response': response_text})

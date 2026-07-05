@@ -3,9 +3,9 @@
  * Implements the singleton ConfigManager and KnowledgeManager (YAML
  * configuration and knowledge-base loading/validation), the
  * Logger/ServiceManager/TopicMonitor/TextUtils helper classes, and the free
- * utility functions (logSystemInfo, isValidLanguage, getSupportedLanguages,
- * fileExists, getPackageDataPath, printNodeInfo, nodeStatusToString,
- * validateEnvironmentKnowledgeBase) used throughout behavior_controller.
+ * utility functions (logSystemInfo, fileExists, getPackageDataPath,
+ * printNodeInfo, nodeStatusToString, validateEnvironmentKnowledgeBase)
+ * used throughout behavior_controller.
  *
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa
@@ -39,7 +39,6 @@ bool ConfigManager::loadFromFile(const std::string& configPath) {
         scenarioSpecification        = config["scenario_specification"].as<std::string>("lab_tour");
         cultureKnowledgeBasePath     = config["culture_knowledge_base"].as<std::string>("cultureKnowledgeBase.yaml");
         environmentKnowledgeBasePath = config["environment_knowledge_base"].as<std::string>("labEnvironmentKnowledgeBase.yaml");
-        language                     = config["language"].as<std::string>("English");
         verbose                      = config["verbose_mode"].as<bool>(false);
 
         if (verbose) {
@@ -56,7 +55,6 @@ bool ConfigManager::loadFromFile(const std::string& configPath) {
 
 std::string ConfigManager::getScenarioSpecification()           const { return scenarioSpecification; }
 bool ConfigManager::isVerbose()                                 const { return verbose; }
-std::string ConfigManager::getLanguage()                        const { return language; }
 std::string ConfigManager::getCultureKnowledgeBasePath()        const { return cultureKnowledgeBasePath; }
 std::string ConfigManager::getEnvironmentKnowledgeBasePath()    const { return environmentKnowledgeBasePath; }
 
@@ -85,16 +83,11 @@ bool KnowledgeManager::loadFromPackage(const std::string& packagePath) {
             return false;
         }
         YAML::Node cultureConfig = YAML::LoadFile(cultureFilePath);
-        if (cultureConfig["utility_phrases"]) {
-            for (const auto& langNode : cultureConfig["utility_phrases"]) {
-                std::string lang = langNode.first.as<std::string>();
-                for (const auto& phraseNode : langNode.second) {
-                    std::string phraseId = phraseNode.first.as<std::string>();
-                    std::string phrase = phraseNode.second.as<std::string>();
-                    std::string langLower = lang;
-                    std::transform(langLower.begin(), langLower.end(), langLower.begin(), ::tolower);
-                    utilityPhrases[langLower + ":" + phraseId] = phrase;
-                }
+        if (cultureConfig["utility_phrases"] && cultureConfig["utility_phrases"]["english"]) {
+            for (const auto& phraseNode : cultureConfig["utility_phrases"]["english"]) {
+                std::string phraseId = phraseNode.first.as<std::string>();
+                std::string phrase = phraseNode.second.as<std::string>();
+                utilityPhrases[phraseId] = phrase;
             }
         }
         
@@ -154,35 +147,17 @@ bool KnowledgeManager::loadFromPackage(const std::string& packagePath) {
     }
 }
 
-std::string KnowledgeManager::getUtilityPhrase(const std::string& phraseId,
-                                               const std::string& language) {
+std::string KnowledgeManager::getUtilityPhrase(const std::string& phraseId) {
     if (!loaded) {
         throw std::runtime_error("Knowledge base not loaded");
     }
-    std::string lang = language.empty() ? ConfigManager::instance().getLanguage() : language;
 
-    // Normalize language to lowercase for key lookup
-    std::string languageKey = (lang == "English")     ? "english" :
-                              (lang == "Kinyarwanda") ? "kinyarwanda" : "english";
-    
-    std::string key = languageKey + ":" + phraseId;
-    auto it = utilityPhrases.find(key);
+    auto it = utilityPhrases.find(phraseId);
     if (it != utilityPhrases.end()) {
         return it->second;
     }
-    
-    // Try fallback to English
-    std::string fallbackKey = "english:" + phraseId;
-    it = utilityPhrases.find(fallbackKey);
-    if (it != utilityPhrases.end()) {
-        RCLCPP_WARN(rclcpp::get_logger("behavior_controller"),
-                    "Using English fallback for phrase: %s (requested language: %s)",
-                    phraseId.c_str(), lang.c_str());
-        return it->second;
-    }
-    
-    throw std::runtime_error("Utility phrase not found: " + phraseId + 
-                           " (language: " + lang + ")");
+
+    throw std::runtime_error("Utility phrase not found: " + phraseId);
 }
 
 LocationInfo KnowledgeManager::getLocationInfo(const std::string& locationId) {
@@ -432,23 +407,9 @@ void logSystemInfo(std::shared_ptr<rclcpp::Node> node) {
     // Log configuration
     RCLCPP_INFO(logger, "Active Configuration:");
     RCLCPP_INFO(logger, "  - Verbose mode: %s", config.isVerbose() ? "ON" : "OFF");
-    RCLCPP_INFO(logger, "  - Language: %s", config.getLanguage().c_str());
     RCLCPP_INFO(logger, "  - Scenario: %s", config.getScenarioSpecification().c_str());
 
     RCLCPP_INFO(logger, "=========================");
-}
-
-bool isValidLanguage(const std::string& language) {
-    static const std::vector<std::string> supportedLanguages = {
-        "English",
-        "Kinyarwanda"
-    };
-    return std::find(supportedLanguages.begin(), supportedLanguages.end(), language)
-           != supportedLanguages.end();
-}
-
-std::vector<std::string> getSupportedLanguages() {
-    return {"English", "Kinyarwanda"};
 }
 
 bool fileExists(const std::string& filepath) {

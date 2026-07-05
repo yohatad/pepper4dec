@@ -23,10 +23,12 @@ VisualizationNode::VisualizationNode() : Node("visualization_node") {
     }
 
     // Parameters
+    declare_parameter("camera_type", std::string("pepper"));
     declare_parameter("show_face_ids", true);
     declare_parameter("show_depth", true);
     declare_parameter("show_engagement", true);
 
+    std::string camera_type = get_parameter("camera_type").as_string();
     show_face_ids_ = get_parameter("show_face_ids").as_bool();
     show_depth_ = get_parameter("show_depth").as_bool();
     show_engagement_ = get_parameter("show_engagement").as_bool();
@@ -35,10 +37,13 @@ VisualizationNode::VisualizationNode() : Node("visualization_node") {
     std::string face_topic = topics_config_.face;
     std::string saliency_topic = topics_config_.saliency.peak;
     std::string target_topic = topics_config_.target_angles;
-    std::string camera_info_topic = topics_config_.camera_info;
+    std::string camera_info_topic = selectCameraTopic(
+        camera_type, topics_config_.camera_info.pepper, topics_config_.camera_info.realsense);
 
     use_compressed_ = topics_config_.image.use_compressed;
-    image_topic_ = getImageTopic(topics_config_.image.base, use_compressed_);
+    image_topic_ = getImageTopic(
+        selectCameraTopic(camera_type, topics_config_.image.pepper, topics_config_.image.realsense),
+        use_compressed_);
 
     // QoS
     rclcpp::QoS qos = getImageQoS();

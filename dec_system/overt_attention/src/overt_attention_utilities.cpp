@@ -15,15 +15,18 @@ TopicsConfig loadTopicsConfig(const std::string& package_name, const std::string
     YAML::Node topics = yaml["topics"];
 
     TopicsConfig cfg;
-    cfg.image.base = topics["image"]["base"].as<std::string>();
+    cfg.image.pepper = topics["image"]["pepper"].as<std::string>();
+    cfg.image.realsense = topics["image"]["realsense"].as<std::string>();
     cfg.image.use_compressed = topics["image"]["use_compressed"].as<bool>();
-    cfg.depth.base = topics["depth"]["base"].as<std::string>();
+    cfg.depth.pepper = topics["depth"]["pepper"].as<std::string>();
+    cfg.depth.realsense = topics["depth"]["realsense"].as<std::string>();
     cfg.depth.use_compressed = topics["depth"]["use_compressed"].as<bool>();
     cfg.saliency.peak = topics["saliency"]["peak"].as<std::string>();
     cfg.saliency.map = topics["saliency"]["map"].as<std::string>();
     cfg.face = topics["face"].as<std::string>();
     cfg.audio = topics["audio"].as<std::string>();
-    cfg.camera_info = topics["camera_info"].as<std::string>();
+    cfg.camera_info.pepper = topics["camera_info"]["pepper"].as<std::string>();
+    cfg.camera_info.realsense = topics["camera_info"]["realsense"].as<std::string>();
     cfg.target_angles = topics["target_angles"].as<std::string>();
     cfg.joint_state = topics["joint_state"].as<std::string>();
     cfg.joint_angles = topics["joint_angles"].as<std::string>();
