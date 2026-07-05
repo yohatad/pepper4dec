@@ -23,7 +23,10 @@ find_package(dec_interfaces REQUIRED)
 find_package(naoqi_bridge_msgs REQUIRED)
 
 # Executable
-add_executable(animate_behavior src/animate_behavior_application.cpp)
+add_executable(animate_behavior
+  src/animate_behavior_application.cpp
+  src/animate_behavior_implementation.cpp
+)
 target_include_directories(animate_behavior PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
