@@ -586,7 +586,7 @@ class SpeechRecognitionNode(LifecycleNode):
 
         With vad_always_active=True, audio is processed (and VAD probabilities
         published) even when no ASR action goal is active.  Transcription is
-        still only attempted when a goal IS active (see finalize_speech).
+        still only attempted when a goal IS active (see finalize_speech_segment).
         """
         if not self.listening_enabled:
             return False
@@ -685,7 +685,7 @@ class SpeechRecognitionNode(LifecycleNode):
             self.silence_chunks = 0
             self.speech_chunk_count += 1
             if self.speech_chunk_count >= max_chunks:
-                self.finalize_speech(speech_prob, reason="max_duration")
+                self.finalize_speech_segment(speech_prob, reason="max_duration")
 
         elif self.speech_active and vad_is_silence:
             # ---- POSSIBLE END ----
@@ -693,18 +693,18 @@ class SpeechRecognitionNode(LifecycleNode):
             self.silence_chunks += 1
             self.speech_chunk_count += 1
             if self.silence_chunks >= self.min_silence_chunks:
-                self.finalize_speech(speech_prob, reason="silence")
+                self.finalize_speech_segment(speech_prob, reason="silence")
             elif self.speech_chunk_count >= max_chunks:
-                self.finalize_speech(speech_prob, reason="max_duration")
+                self.finalize_speech_segment(speech_prob, reason="max_duration")
 
         elif self.speech_active:
             # ---- IN BETWEEN THRESHOLDS ----
             self.speech_buffer.append(vad_chunk.copy())
             self.speech_chunk_count += 1
             if self.speech_chunk_count >= max_chunks:
-                self.finalize_speech(speech_prob, reason="max_duration")
+                self.finalize_speech_segment(speech_prob, reason="max_duration")
 
-    def finalize_speech(self, speech_prob: float, reason: str):
+    def finalize_speech_segment(self, speech_prob: float, reason: str):
         """
         Finalize a speech segment and submit transcription to the thread pool.
         Non-blocking: the audio callback returns immediately after this call.

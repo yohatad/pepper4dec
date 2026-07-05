@@ -522,7 +522,7 @@ def setup_collection(name: str, json_path: str, description: str = "", force_rel
 def get_full_context_documents(category_filter: str = None) -> List[Dict]:
     """
     Load the entire knowledge base as a list of "search results" (score fixed
-    at 1.0), formatted the same way as search() output so callers don't need
+    at 1.0), formatted the same way as retrieve_documents() output so callers don't need
     to know which retrieval mode is active. Loaded once and cached; the cache
     is cleared on set_config() (e.g. if data_default_path changes).
 
@@ -556,10 +556,10 @@ def get_full_context_documents(category_filter: str = None) -> List[Dict]:
     return list(full_context_cache)
 
 # =============================================================================
-# Search
+# Retrieval
 # =============================================================================
 
-def search(
+def retrieve_documents(
     collection: Optional[chromadb.Collection],
     query: str,
     top_k: int = None,
@@ -795,7 +795,7 @@ def handle_query(
     
     # Search for relevant documents
     logger.debug("Searching for relevant documents...")
-    results = search(collection, query, top_k=top_k, category_filter=category_filter)
+    results = retrieve_documents(collection, query, top_k=top_k, category_filter=category_filter)
     
     # Generate response
     logger.debug("Generating response...")
