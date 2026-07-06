@@ -1,6 +1,42 @@
 /* gesture_execution_interface.h
  *
+ * Lifecycle node implementing Pepper's gesture execution action server,
+ * providing deictic, iconic, bowing, and nodding gestures with
+ * elapsed-time feedback. Loads gesture descriptors and topic mappings
+ * from YAML, computes the joint trajectories needed to perform a
+ * requested gesture (using inverse kinematics for deictic pointing via
+ * pepper_kinematics_utilities), and streams the resulting joint-angle
+ * trajectory to the robot. While a gesture is executing, it periodically
+ * reports elapsed time back to the action client. Deictic gestures also
+ * publish RViz markers showing the target point, shoulder position, and
+ * pointing vector.
+ *
+ * Subscribers:
+ *   /joint_states (sensor_msgs/JointState)
+ *     Current joint positions, used to track the robot's arm/head/leg state.
+ *   /robot_localization/pose (geometry_msgs/Pose2D)
+ *     Current robot pose in the world frame, used to compute pointing direction.
+ *
+ * Publishers:
+ *   /joint_angles_trajectory (naoqi_bridge_msgs/JointAnglesTrajectory)
+ *     Joint angle trajectories sent to the robot to perform gestures.
+ *   /gesture_execution/visualization (visualization_msgs/Marker)
+ *     Markers visualizing deictic gesture targets, shoulder, and pointing arrow.
+ *
+ * Actions:
+ *   /gesture_execution (dec_interfaces/action/Gesture)
+ *     Executes a named or typed gesture (deictic, iconic, bow, nod) with
+ *     feedback on elapsed time and a success/failure result.
+ *
+ * Parameters (loaded from gesture_execution_configuration.yaml):
+ *   verboseMode (bool, default: true)
+ *   gestureDescriptors, robotTopics are loaded but unused — the gesture
+ *   and topic data file paths are fixed (data/gesture.yaml,
+ *   data/pepper_topics.yaml), mirroring the reference Python ConfigManager.
+ *
  * Author: Yohannes Tadesse Haile
+ * Affiliation: Carnegie Mellon University Africa
+ * Email: yohatad123@gmail.com
  * Date: Jul 05, 2026
  * Version: v1.0 - C++ port of gesture_execution_implementation.py / gesture_execution_application.py
  *
@@ -91,7 +127,12 @@ struct HomePositions {
     std::vector<double> leg{0.0, 0.0, 0.0};
 };
 
-// Loads gesture descriptors from data/gesture.yaml.
+/**
+ * @brief Load gesture descriptors from a gesture.yaml file.
+ * @param yaml_path Absolute path to the gesture.yaml file.
+ * @return Map of gesture name to its per-arm waypoint data. Empty if the
+ *         file is missing or malformed.
+ */
 std::unordered_map<std::string, GestureDescriptor> loadGestureDescriptors(const std::string& yaml_path);
 
 // Loads the robot topic mapping from data/pepper_topics.yaml (falls back to
@@ -100,21 +141,28 @@ struct RobotTopics {
     std::string joint_states = "/joint_states";
     std::string robot_pose = "/robot_localization/pose";
 };
+
+/**
+ * @brief Load the robot topic mapping from a pepper_topics.yaml file.
+ * @param yaml_path Absolute path to the pepper_topics.yaml file.
+ * @return RobotTopics with any keys present in the file overriding the
+ *         hardcoded defaults.
+ */
 RobotTopics loadRobotTopics(const std::string& yaml_path);
 
 //=============================================================================
 // GestureExecutionSystem
 //
 // Lifecycle state machine:
-//   UNCONFIGURED -> on_configure:  load gesture descriptors + topic mapping,
-//                                  init kinematics/state, create the
-//                                  lifecycle publishers and the action server.
-//   INACTIVE     -> on_activate:   activate publishers, subscribe to
-//                                  joint_states and robot_pose.
-//   ACTIVE       -> on_deactivate: destroy the joint_states/robot_pose
-//                                  subscriptions and deactivate publishers.
-//   INACTIVE     -> on_cleanup:    destroy the lifecycle publishers and the
-//                                  action server.
+//   UNCONFIGURED → on_configure:  load gesture descriptors + topic mapping,
+//                                 init kinematics/state, create the
+//                                 lifecycle publishers and the action server.
+//   INACTIVE     → on_activate:   activate publishers, subscribe to
+//                                 joint_states and robot_pose.
+//   ACTIVE       → on_deactivate: destroy the joint_states/robot_pose
+//                                 subscriptions and deactivate publishers.
+//   INACTIVE     → on_cleanup:    destroy the lifecycle publishers and the
+//                                 action server.
 //=============================================================================
 
 class GestureExecutionSystem : public rclcpp_lifecycle::LifecycleNode {
@@ -126,6 +174,7 @@ public:
 
     GestureExecutionSystem();
 
+    // ── Lifecycle callbacks ─────────────────────────────────────────────────
     CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;
     CallbackReturn on_activate  (const rclcpp_lifecycle::State& state) override;
     CallbackReturn on_deactivate(const rclcpp_lifecycle::State& state) override;

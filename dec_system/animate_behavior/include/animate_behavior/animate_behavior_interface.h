@@ -1,6 +1,46 @@
 /* animate_behavior_interface.h
  *
+ * Lifecycle node that drives Pepper's idle gestures, body rotation, and
+ * face-LED animations. Once accepted, an action goal animates a
+ * configurable subset of the robot's limbs (arms, hands, head, legs) with
+ * smooth random gestures and periodic body rotation while reporting
+ * elapsed-time feedback. Joint commands are computed from live
+ * /joint_states feedback and published as smoothed joint angle targets.
+ * An /animate_behavior/stop service and goal cancellation allow the
+ * animation to be halted early. While active, a cascading face-LED
+ * "breathing" animation is driven via the naoqi LED action server, unless
+ * disabled.
+ *
+ * Subscribers:
+ *   /joint_states (sensor_msgs/JointState)
+ *     Current joint positions, used as the basis for smoothed gesture targets.
+ *
+ * Publishers:
+ *   /joint_angles (naoqi_bridge_msgs/JointAnglesWithSpeed)
+ *     Smoothed target joint angles for the animated limbs.
+ *   /cmd_vel (geometry_msgs/Twist)
+ *     Periodic body rotation command issued while a behavior is active.
+ *
+ * Services:
+ *   /animate_behavior/stop (std_srvs/Trigger)
+ *     Immediately stops the current animation and zeroes velocity/LEDs.
+ *
+ * Actions:
+ *   /animate_behavior (dec_interfaces/AnimateBehavior)
+ *     Runs a gesture/rotation/LED animation for a requested behavior type,
+ *     range, and duration, reporting elapsed-time feedback.
+ *   /naoqi_driver/run_led (naoqi_bridge_msgs/RunLed)
+ *     Action client used to drive the cascading face-LED animation.
+ *
+ * Parameters (loaded from animate_behavior_configuration.yaml):
+ *   verbose_mode, led_enabled, led_white_step, led_dark_step,
+ *   led_fade_duration, led_white_hold, led_dark_pause, gesture_update_rate,
+ *   gesture_smoothing_factor, gesture_motion_speed, gesture_interval_min,
+ *   gesture_interval_max, gesture_rotation_interval.
+ *
  * Author: Yohannes Tadesse Haile
+ * Affiliation: Carnegie Mellon University Africa
+ * Email: yohatad123@gmail.com
  * Date: Jul 05, 2026
  * Version: v1.0 - C++ port of animate_behavior_implementation.py / animate_behavior_application.py
  *
@@ -43,20 +83,20 @@ struct JointDef {
 // AnimateBehaviorNode
 //
 // Lifecycle state machine:
-//   UNCONFIGURED -> on_configure:  read parameters, build joint definitions,
-//                                  create the joint-angle/velocity lifecycle
-//                                  publishers, the action server, the stop
-//                                  service, and the LED action client.
-//   INACTIVE     -> on_activate:   activate the lifecycle publishers,
-//                                  subscribe to /joint_states, start the
-//                                  animation/feedback timers, and kick off
-//                                  the face-LED cascade animation if enabled.
-//   ACTIVE       -> on_deactivate: stop any active animation, cancel and
-//                                  destroy the animation/feedback timers,
-//                                  destroy the joint-state subscription, and
-//                                  deactivate the lifecycle publishers.
-//   INACTIVE     -> on_cleanup:    destroy the lifecycle publishers, action
-//                                  server, stop service, and LED client.
+//   UNCONFIGURED → on_configure:  read parameters, build joint definitions,
+//                                 create the joint-angle/velocity lifecycle
+//                                 publishers, the action server, the stop
+//                                 service, and the LED action client.
+//   INACTIVE     → on_activate:   activate the lifecycle publishers,
+//                                 subscribe to /joint_states, start the
+//                                 animation/feedback timers, and kick off
+//                                 the face-LED cascade animation if enabled.
+//   ACTIVE       → on_deactivate: stop any active animation, cancel and
+//                                 destroy the animation/feedback timers,
+//                                 destroy the joint-state subscription, and
+//                                 deactivate the lifecycle publishers.
+//   INACTIVE     → on_cleanup:    destroy the lifecycle publishers, action
+//                                 server, stop service, and LED client.
 //=============================================================================
 
 class AnimateBehaviorNode : public rclcpp_lifecycle::LifecycleNode {
@@ -69,6 +109,7 @@ public:
 
     AnimateBehaviorNode();
 
+    // ── Lifecycle callbacks ─────────────────────────────────────────────────
     CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;
     CallbackReturn on_activate  (const rclcpp_lifecycle::State& state) override;
     CallbackReturn on_deactivate(const rclcpp_lifecycle::State& state) override;

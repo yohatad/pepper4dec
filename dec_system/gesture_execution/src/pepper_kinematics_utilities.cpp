@@ -1,9 +1,14 @@
-/*
-Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
-Email: yohatad123@gmail.com
-Date: July 05, 2026
-Version: v1.0 - C++ port of pepper_kinematics_utilities.py
-*/
+/* pepper_kinematics_utilities.cpp
+ *
+ * Implements the forward/inverse kinematics helpers declared in
+ * pepper_kinematics_utilities.h.
+ *
+ * Author: Yohannes Tadesse Haile
+ * Affiliation: Carnegie Mellon University Africa
+ * Email: yohatad123@gmail.com
+ * Date: July 05, 2026
+ * Version: v1.0 - C++ port of pepper_kinematics_utilities.py
+ */
 
 #include "gesture_execution/pepper_kinematics_utilities.h"
 

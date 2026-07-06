@@ -1,9 +1,17 @@
-/*
-Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
-Email: yohatad123@gmail.com
-Date: July 05, 2026
-Version: v1.0 - C++ port of animate_behavior_implementation.py
-*/
+/* animate_behavior_implementation.cpp
+ *
+ * Implements AnimateBehaviorNode: builds the per-limb joint definitions,
+ * runs the action server that drives random gesture/rotation/LED
+ * animations, and streams elapsed-time feedback while a goal is active.
+ * See animate_behavior_interface.h for the full subscriber/publisher/
+ * action/parameter reference and the lifecycle state-machine diagram.
+ *
+ * Author: Yohannes Tadesse Haile
+ * Affiliation: Carnegie Mellon University Africa
+ * Email: yohatad123@gmail.com
+ * Date: July 05, 2026
+ * Version: v1.0 - C++ port of animate_behavior_implementation.py
+ */
 
 #include "animate_behavior/animate_behavior_interface.h"
 
@@ -26,6 +34,10 @@ double randomUniform(double lo, double hi) {
 }
 }  // namespace
 
+//=============================================================================
+// Face-LED cascade layers
+//=============================================================================
+
 const std::vector<std::vector<std::string>> AnimateBehaviorNode::kCascadeLayers = {
     {"FaceLedRight1", "FaceLedLeft1"},
     {"FaceLedRight0", "FaceLedRight2", "FaceLedLeft0", "FaceLedLeft2"},
@@ -33,6 +45,11 @@ const std::vector<std::vector<std::string>> AnimateBehaviorNode::kCascadeLayers 
     {"FaceLedRight6", "FaceLedRight4", "FaceLedLeft6", "FaceLedLeft4"},
     {"FaceLedRight5", "FaceLedLeft5"},
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AnimateBehaviorNode — constructor
+// Declares parameters so they are settable via launch before configure.
+// ─────────────────────────────────────────────────────────────────────────────
 
 AnimateBehaviorNode::AnimateBehaviorNode() : rclcpp_lifecycle::LifecycleNode("animate_behavior") {
     // Declare parameters here so they are settable via launch before configure
@@ -50,6 +67,10 @@ AnimateBehaviorNode::AnimateBehaviorNode() : rclcpp_lifecycle::LifecycleNode("an
     declare_parameter("gesture_interval_max", 4.5);
     declare_parameter("gesture_rotation_interval", 5.0);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// on_configure — build joint definitions, create publishers/server/service
+// ─────────────────────────────────────────────────────────────────────────────
 
 AnimateBehaviorNode::CallbackReturn AnimateBehaviorNode::on_configure(const rclcpp_lifecycle::State&) {
     verbose_mode_ = get_parameter("verbose_mode").as_bool();
@@ -140,6 +161,10 @@ AnimateBehaviorNode::CallbackReturn AnimateBehaviorNode::on_configure(const rclc
     return CallbackReturn::SUCCESS;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// on_activate — subscribe to /joint_states, start animation/feedback timers
+// ─────────────────────────────────────────────────────────────────────────────
+
 AnimateBehaviorNode::CallbackReturn AnimateBehaviorNode::on_activate(const rclcpp_lifecycle::State& state) {
     LifecycleNode::on_activate(state);
     lifecycle_active_ = true;
@@ -168,6 +193,10 @@ AnimateBehaviorNode::CallbackReturn AnimateBehaviorNode::on_activate(const rclcp
     return CallbackReturn::SUCCESS;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// on_deactivate — stop any active animation, cancel timers and subscription
+// ─────────────────────────────────────────────────────────────────────────────
+
 AnimateBehaviorNode::CallbackReturn AnimateBehaviorNode::on_deactivate(const rclcpp_lifecycle::State& state) {
     lifecycle_active_ = false;
     stop();
@@ -188,6 +217,10 @@ AnimateBehaviorNode::CallbackReturn AnimateBehaviorNode::on_deactivate(const rcl
     return CallbackReturn::SUCCESS;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// on_cleanup — destroy publishers, action server, stop service, LED client
+// ─────────────────────────────────────────────────────────────────────────────
+
 AnimateBehaviorNode::CallbackReturn AnimateBehaviorNode::on_cleanup(const rclcpp_lifecycle::State&) {
     joint_pub_.reset();
     vel_pub_.reset();
@@ -197,6 +230,10 @@ AnimateBehaviorNode::CallbackReturn AnimateBehaviorNode::on_cleanup(const rclcpp
     RCLCPP_INFO(get_logger(), "cleaned up");
     return CallbackReturn::SUCCESS;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// on_shutdown — log the shutdown transition
+// ─────────────────────────────────────────────────────────────────────────────
 
 AnimateBehaviorNode::CallbackReturn AnimateBehaviorNode::on_shutdown(const rclcpp_lifecycle::State&) {
     RCLCPP_INFO(get_logger(), "shutting down");
