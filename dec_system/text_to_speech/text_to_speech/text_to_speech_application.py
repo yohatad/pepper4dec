@@ -4,7 +4,7 @@
 
 Entry point for the TextToSpeechNode lifecycle node.
 Running this node lets Pepper convert streamed text into spoken audio with
-low latency and barge-in support.
+low latency.
 
 The node pulls sentences from the /text_to_speech/input topic (typically fed
 by an LLM response stream) and speaks them as they arrive, so Pepper can
@@ -17,18 +17,12 @@ selected via the 'engine' config key: 'naoqi_ros' (Pepper's on-board
 ALTextToSpeech via naoqi_bridge), 'kokoro_local' / 'kokoro_pepper' (Kokoro-82M
 synthesised locally and played on the laptop or on Pepper's speakers), and
 'elevenlabs_local' / 'elevenlabs_pepper' (ElevenLabs streaming TTS played
-locally or on Pepper). While playback is active, voice-activity probability
-on /speech_event/vad_speech_prob is monitored for barge-in: if the user
-starts speaking, Pepper's playback is interrupted immediately and the
-remaining queued sentences are dropped. The node also exposes a
-/text_to_speech action server so other nodes can request ad-hoc TTS playback
-and wait for completion.
+locally or on Pepper). The node also exposes a /text_to_speech action server
+so other nodes can request ad-hoc TTS playback and wait for completion.
 
 Subscribers:
     /text_to_speech/input (std_msgs/String)
         Sentences to speak, enqueued and played in order as they arrive.
-    /speech_event/vad_speech_prob (std_msgs/Float32)
-        Voice-activity probability used to detect user barge-in during playback.
 
 Publishers:
     /text_to_speech/speaking (std_msgs/Bool)
@@ -62,8 +56,6 @@ Parameters (loaded from text_to_speech_configuration.yaml):
     output_device (int, default: -1)
     playback_method (str, default: "stream")
     stream_volume (float, default: 1.0)
-    barge_in_threshold (float, default: 0.85)
-    barge_in_chunks (int, default: 3)
     elevenlabs_api_key (str, default: "")
     elevenlabs_voice_id (str, default: "21m00Tcm4TlvDq8ikWAM")
     elevenlabs_model (str, default: "eleven_turbo_v2_5")
@@ -90,7 +82,7 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.lifecycle import LifecycleNode, TransitionCallbackReturn
 
-from std_msgs.msg import Bool, Float32, String
+from std_msgs.msg import Bool, String
 from std_srvs.srv import SetBool
 
 from dec_interfaces.action import TTS
@@ -133,20 +125,18 @@ class TextToSpeechNode(LifecycleNode):
     def on_configure(self, _state) -> TransitionCallbackReturn:
         """Initialize the TTS backend and create publishers, service clients, and the action server."""
         self.get_logger().info(
-            f"{self.node_name}: configuring — engine={self.engine}, "
-            f"barge_in_threshold={self.config['barge_in_threshold']}"
+            f"{self.node_name}: configuring — engine={self.engine}"
         )
 
         # Internal state
         self.sentence_queue: queue.Queue = queue.Queue()
-        self.is_speaking        = False
-        self.barge_in_counter   = 0
-        self.barge_in_triggered = False
-        self.state_lock         = threading.Lock()
-        self.shutdown           = False
-        self.audio_player       = None
-        self.play_goal_handle   = None
-        self.play_done_event    = threading.Event()
+        self.is_speaking      = False
+        self.stop_requested   = False
+        self.state_lock       = threading.Lock()
+        self.shutdown         = False
+        self.audio_player     = None
+        self.play_goal_handle = None
+        self.play_done_event  = threading.Event()
 
         # Per-backend initialisation
         if self.engine in ("kokoro_local", "kokoro_pepper"):
@@ -181,7 +171,6 @@ class TextToSpeechNode(LifecycleNode):
 
         # Action server — callback groups for concurrent operation
         self._stream_cb_group = MutuallyExclusiveCallbackGroup()
-        self._vad_cb_group    = MutuallyExclusiveCallbackGroup()
         self._action_cb_group = MutuallyExclusiveCallbackGroup()
 
         self._tts_action = ActionServer(
@@ -193,16 +182,12 @@ class TextToSpeechNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_activate(self, _state) -> TransitionCallbackReturn:
-        """Activate publishers, subscribe to text input and VAD topics, and start the playback thread."""
+        """Activate publishers, subscribe to the text input topic, and start the playback thread."""
         super().on_activate(_state)
 
         self._sub_tts_input = self.create_subscription(
             String, "/text_to_speech/input", self.stream_sentence_callback, 10,
             callback_group=self._stream_cb_group,
-        )
-        self._sub_vad = self.create_subscription(
-            Float32, "/speech_event/vad_speech_prob", self.vad_prob_callback, 10,
-            callback_group=self._vad_cb_group,
         )
 
         self.shutdown = False
@@ -219,7 +204,6 @@ class TextToSpeechNode(LifecycleNode):
         self.cleanup()   # stops thread, drains queue
 
         self.destroy_subscription(self._sub_tts_input)
-        self.destroy_subscription(self._sub_vad)
 
         super().on_deactivate(_state)
         self.get_logger().info(f"{self.node_name}: deactivated")
@@ -271,42 +255,6 @@ class TextToSpeechNode(LifecycleNode):
         sentence = msg.data.strip()
         if sentence:
             self.sentence_queue.put(sentence)
-
-    # ── VAD / barge-in ──────────────────────────────────────────────────────────
-
-    def vad_prob_callback(self, msg: Float32):
-        """Detect user speech during playback and trigger barge-in."""
-        with self.state_lock:
-            if not self.is_speaking:
-                self.barge_in_counter = 0
-                return
-
-            if msg.data >= self.config["barge_in_threshold"]:
-                self.barge_in_counter += 1
-            else:
-                self.barge_in_counter = 0
-
-            if self.barge_in_counter >= self.config["barge_in_chunks"]:
-                if not self.barge_in_triggered:
-                    self.barge_in_triggered = True
-                    self.get_logger().info(
-                        f"{self.node_name}: barge-in detected "
-                        f"(VAD={msg.data:.2f} × {self.barge_in_counter}). "
-                        "Interrupting playback."
-                    )
-                    self.interrupt_playback()
-                    while not self.sentence_queue.empty():
-                        try:
-                            self.sentence_queue.get_nowait()
-                        except queue.Empty:
-                            break
-
-    def interrupt_playback(self):
-        """Stop whichever backend is currently playing."""
-        if self.engine == "kokoro_local" and self.audio_player is not None:
-            self.audio_player.stop()
-        elif self.engine == "kokoro_pepper" and self.play_goal_handle is not None:
-            self.play_goal_handle.cancel_goal_async()
 
     # ── TTS action server ───────────────────────────────────────────────────────
 
@@ -375,8 +323,7 @@ class TextToSpeechNode(LifecycleNode):
     def speak_sentence(self, sentence: str):
         """Dispatch a single sentence to the active backend."""
         with self.state_lock:
-            self.barge_in_triggered = False
-            self.barge_in_counter = 0
+            self.stop_requested = False
             self.is_speaking = True
 
         self.publish_speaking(True)
@@ -413,7 +360,7 @@ class TextToSpeechNode(LifecycleNode):
         Publish text to the NAOqi speech topic and wait for estimated duration.
 
         Mic stays enabled — Pepper's hardware echo cancellation prevents
-        feedback.  Barge-in via VAD still works.
+        feedback.
         """
         msg = String()
         msg.data = sentence
@@ -429,7 +376,7 @@ class TextToSpeechNode(LifecycleNode):
         while time.monotonic() < deadline:
             time.sleep(0.05)
             with self.state_lock:
-                if self.barge_in_triggered:
+                if self.stop_requested:
                     return
 
     # ── kokoro_local backend ─────────────────────────────────────────────────────
@@ -583,7 +530,7 @@ class TextToSpeechNode(LifecycleNode):
         try:
             for audio_list, wait_time in iter_robot_chunks(gen, api_rate, volume):
                 with self.state_lock:
-                    if self.barge_in_triggered:
+                    if self.stop_requested:
                         return
                 if not self.send_audio_buffer(audio_list):
                     return
@@ -624,7 +571,7 @@ class TextToSpeechNode(LifecycleNode):
         try:
             for audio_list, wait_time in prepare_stream_audio(wav_bytes, volume):
                 with self.state_lock:
-                    if self.barge_in_triggered:
+                    if self.stop_requested:
                         break
                 if not self.send_audio_buffer(audio_list):
                     self.get_logger().error(f"{self.node_name}: send_audio_buffer failed")
@@ -770,9 +717,9 @@ class TextToSpeechNode(LifecycleNode):
             print("[text_to_speech] shutting down…")
         self.shutdown = True
 
-        # Trigger barge-in to break out of any active stream sleep loop
+        # Signal any in-progress playback loop to stop
         with self.state_lock:
-            self.barge_in_triggered = True
+            self.stop_requested = True
 
         # Stop local audio player if active
         if self.engine == "kokoro_local" and self.audio_player is not None:

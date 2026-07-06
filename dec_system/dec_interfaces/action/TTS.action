@@ -8,9 +8,7 @@
 # making it safe to sequence in a BehaviorTree after ConversationManager.
 #
 # The text is split into sentences internally; each sentence is queued and
-# played in order. Barge-in (VAD-based interruption) is still honoured —
-# if the user speaks during playback the remaining sentences are dropped and
-# the action returns success=true.
+# played in order.
 
 # ── Goal ──────────────────────────────────────────────────────────────────────
 # Text to synthesise and speak. May contain multiple sentences.
@@ -19,7 +17,7 @@ string text
 ---
 
 # ── Result ────────────────────────────────────────────────────────────────────
-# True if playback completed (or was cleanly interrupted by barge-in)
+# True if playback completed successfully
 bool success
 # "OK" on success; human-readable error description otherwise
 string message
