@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(robot_localization)
+project(pepper_odom_anchor)
 
 # Default to C++17
 if(NOT CMAKE_CXX_STANDARD)
@@ -18,15 +18,15 @@ find_package(nav_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 
 # Executable
-add_executable(robot_localization
-  src/robot_localization_application.cpp
-  src/robot_localization_implementation.cpp
+add_executable(pepper_odom_anchor
+  src/pepper_odom_anchor_application.cpp
+  src/pepper_odom_anchor_implementation.cpp
 )
-target_include_directories(robot_localization PUBLIC
+target_include_directories(pepper_odom_anchor PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
-ament_target_dependencies(robot_localization
+ament_target_dependencies(pepper_odom_anchor
   rclcpp
   rclcpp_lifecycle
   nav_msgs
@@ -34,7 +34,7 @@ ament_target_dependencies(robot_localization
 )
 
 # Install
-install(TARGETS robot_localization
+install(TARGETS pepper_odom_anchor
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 install(DIRECTORY include/ DESTINATION include/)

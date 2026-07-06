@@ -1,4 +1,4 @@
-/* robot_localization_implementation.cpp
+/* pepper_odom_anchor_implementation.cpp
  *
  * Implements the RobotLocalization lifecycle node: reads odometry, anchors
  * it to a configured initial pose on the first reading after activation,
@@ -11,7 +11,7 @@
  * Version: v1.0 - C++ port of robot_localization.py
  */
 
-#include "robot_localization/robot_localization_interface.h"
+#include "pepper_odom_anchor/pepper_odom_anchor_interface.h"
 
 #include <cmath>
 

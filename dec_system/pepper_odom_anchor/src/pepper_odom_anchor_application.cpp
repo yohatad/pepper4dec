@@ -1,8 +1,8 @@
-/* robot_localization_application.cpp
+/* pepper_odom_anchor_application.cpp
  *
- * Entry point for the robot_localization lifecycle node. Spins the node
+ * Entry point for the pepper_odom_anchor lifecycle node. Spins the node
  * single-threaded; the RobotLocalization class itself is implemented in
- * robot_localization_implementation.cpp.
+ * pepper_odom_anchor_implementation.cpp.
  *
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa
@@ -11,7 +11,7 @@
  * Version: v1.0
  */
 
-#include "robot_localization/robot_localization_interface.h"
+#include "pepper_odom_anchor/pepper_odom_anchor_interface.h"
 
 int main(int argc, char** argv) {
     rclcpp::init(argc, argv);
