@@ -1,4 +1,4 @@
-# pepper_navmap config — odometry naming
+# pepper_navigation config — odometry naming
 
 ## Frame and topic convention
 
@@ -6,9 +6,14 @@ Pepper's wheel odometry uses distinct names to avoid conflicts with SLAM/VIO/LIO
 
 | What | Name |
 |------|------|
-| Wheel odom topic (from naoqi_driver2) | `/pepper_odom` |
+| Wheel odom topic (naoqi_driver2's raw `/odom`, republished with real covariance by `pepper_odom_covariance`) | `/pepper_odom` |
 | Wheel odom TF frame | `pepper_odom` |
 | Fused/SLAM odom frame (Nav2 primary) | `odom` |
+
+`pepper_odom_covariance` is a separate top-level package
+(`~/ros2_ws/src/pepper_odom_covariance/`), not part of `pepper_navigation` or
+`dec_system` - it's infrastructure-tier, alongside `naoqi_driver2`, not
+navigation-specific.
 
 ## How it maps to these config files
 
@@ -18,7 +23,7 @@ Pepper's wheel odometry uses distinct names to avoid conflicts with SLAM/VIO/LIO
 - `local_costmap.global_frame: odom` — local costmap anchors to the fused odom frame (EKF output); update this to `pepper_odom` if the EKF is removed and the driver's TF is used directly
 
 **`ekf_nav.yaml.yaml`**
-- `odom0: /pepper_odom` — EKF input: raw wheel odometry from the driver
+- `odom0: /pepper_odom` — EKF input: wheel odometry, covariance-corrected by `pepper_odom_covariance`
 - `odom_frame: pepper_odom` / `world_frame: pepper_odom` — EKF output frame
 
 **`mapper_params_online_async.yaml`**
