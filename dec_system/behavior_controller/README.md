@@ -41,7 +41,7 @@ source install/setup.bash
 
 # 🔧 Configuration Parameters
 
-Managed via `config/behaviorControllerConfiguration.yaml`:
+Managed via `config/behavior_controller_configuration.yaml`:
 
 | Parameter | Description | Default Value |
 |-----------|-------------|---------------|
@@ -67,7 +67,7 @@ ros2 launch dec_system decSystemLaunchRobot.launch.py \
 
 3. **Run the behavior controller**:
 ```bash
-ros2 run behavior_controller behaviorController
+ros2 run behavior_controller behavior_controller
 ```
 
 ## Required Action Servers and Topics
@@ -167,9 +167,9 @@ XML files are in the `data/` folder. The active scenario is set via `scenario_sp
 ## 📁 Package Structure
 
 ```
-behaviorController/
+behavior_controller/
 ├── config/
-│   └── behaviorControllerConfiguration.yaml
+│   └── behavior_controller_configuration.yaml
 ├── data/
 │   ├── asr_cm_tts_pipeline.xml                     # default intent-routed BT scenario
 │   ├── listen_cm_tts_pipeline.xml
@@ -180,14 +180,14 @@ behaviorController/
 │   ├── decEnvironmentKnowledgeBase(_short).yaml
 │   └── XML_USE.md                                   # BT XML authoring guide
 ├── include/
-│   └── behaviorController/
-│       └── behaviorControllerInterface.h      # shared class/struct declarations
+│   └── behavior_controller/
+│       └── behavior_controller_interface.h    # shared class/struct declarations
 ├── launch/
 │   └── behavior_controller.launch.py
 ├── src/
-│   ├── behaviorControllerApplication.cpp      # node entry point, BT engine setup
-│   ├── behaviorControllerImplementation.cpp   # BT leaf node implementations
-│   └── behaviorControllerUtilities.cpp        # ConfigManager/KnowledgeManager
+│   ├── behavior_controller_application.cpp      # node entry point, BT engine setup
+│   ├── behavior_controller_implementation.cpp   # BT leaf node implementations
+│   └── behavior_controller_utilities.cpp        # ConfigManager/KnowledgeManager
 ├── CMakeLists.txt
 ├── package.xml
 └── README.md

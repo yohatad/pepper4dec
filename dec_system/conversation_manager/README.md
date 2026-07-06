@@ -147,7 +147,7 @@ The system prompt instructs the LLM to reply with a single JSON object:
 {"answer": "...", "intent": "ASK_EXHIBIT_QUESTION", "confidence": 0.92}
 ```
 
-| Intent | Triggered behavior (in behaviorController) |
+| Intent | Triggered behavior (in behavior_controller) |
 |---|---|
 | `ASK_EXHIBIT_QUESTION` | Speak answer + point gesture at exhibit |
 | `ASK_TOUR_META` | Speak answer only |
@@ -162,7 +162,7 @@ The system prompt instructs the LLM to reply with a single JSON object:
 
 ## BehaviorTree Integration
 
-The node is called from the `behaviorController` via the `ConversationManager` BT node, which wraps this action server. The generated `response` (with embedded NAOqi ALTextToSpeech prosody tags) is written to the blackboard and passed directly to the `SpeechWithFeedback` BT node, which calls the `/naoqi_driver/speech_with_feedback` action. ALAnimatedSpeech interprets the prosody tags and drives contextual body-language gestures automatically.
+The node is called from the `behavior_controller` via the `ConversationManager` BT node, which wraps this action server. The generated `response` (with embedded NAOqi ALTextToSpeech prosody tags) is written to the blackboard and passed directly to the `SpeechWithFeedback` BT node, which calls the `/naoqi_driver/speech_with_feedback` action. ALAnimatedSpeech interprets the prosody tags and drives contextual body-language gestures automatically.
 
 Typical BT sequence:
 ```

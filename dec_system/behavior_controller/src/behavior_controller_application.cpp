@@ -1,4 +1,4 @@
-/* behaviorControllerApplication.cpp
+/* behavior_controller_application.cpp
  *
  * Entry point for the behavior_controller lifecycle node.
  * Loads the scenario configuration and knowledge base, builds the
@@ -6,8 +6,8 @@
  *
  * The custom BT node types ticked by this tree (ROS action/service wrappers,
  * perception/speech conditions, tour-loop and blackboard utilities) are
- * implemented in behaviorControllerImplementation.cpp; configuration and
- * knowledge-base loading live in behaviorControllerUtilities.cpp.
+ * implemented in behavior_controller_implementation.cpp; configuration and
+ * knowledge-base loading live in behavior_controller_utilities.cpp.
  *
  * Because rclcpp_lifecycle::LifecycleNode does not inherit rclcpp::Node, this
  * node owns a companion plain rclcpp::Node (bt_node_) used for all BT
@@ -47,14 +47,14 @@
  *   /speech_event/set_enabled (std_srvs/srv/SetBool)
  *       Mute or unmute speech recognition (SetSpeechListening).
  *
- * Parameters (loaded from behaviorControllerConfiguration.yaml):
+ * Parameters (loaded from behavior_controller_configuration.yaml):
  *   scenario_specification (string, default: "lab_tour")
  *   culture_knowledge_base (string, default: "cultureKnowledgeBase.yaml")
  *   environment_knowledge_base (string, default: "labEnvironmentKnowledgeBase.yaml")
  *   verbose_mode (bool, default: false)
  *
  * Lifecycle:
- *   configure  -> load behaviorControllerConfiguration.yaml + knowledge base, build the BT tree
+ *   configure  -> load behavior_controller_configuration.yaml + knowledge base, build the BT tree
  *   activate   -> start the 50 Hz tick timer
  *   deactivate -> cancel the tick timer (tree stays built)
  *   cleanup    -> halt and destroy the BT tree
@@ -67,7 +67,7 @@
  * Version: v1.0
  */
 
-#include "behaviorController/behaviorControllerInterface.h"
+#include "behavior_controller/behavior_controller_interface.h"
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
@@ -76,7 +76,7 @@
 #include <behaviortree_cpp/bt_factory.h>
 #include <behaviortree_cpp/loggers/groot2_publisher.h>
 
-// Forward declaration (defined in behaviorControllerImplementation.cpp)
+// Forward declaration (defined in behavior_controller_implementation.cpp)
 namespace behavior_controller {
     BT::Tree initializeTree(const std::string& scenario,
                             std::shared_ptr<rclcpp::Node> node_handle);
@@ -116,7 +116,7 @@ BehaviorControllerLifecycleNode::on_configure(const rclcpp_lifecycle::State& /*s
     const std::string packagePath =
         ament_index_cpp::get_package_share_directory("behavior_controller");
     const std::string configPath =
-        packagePath + "/config/behaviorControllerConfiguration.yaml";
+        packagePath + "/config/behavior_controller_configuration.yaml";
 
     if (!ConfigManager::instance().loadFromFile(configPath)) {
         RCLCPP_ERROR(get_logger(),

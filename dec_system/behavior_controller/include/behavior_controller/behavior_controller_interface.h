@@ -1,4 +1,4 @@
-/* behaviorControllerInterface.h 
+/* behavior_controller_interface.h
  *
  * Author: Yohannes Tadesse Haile
  * Date: Feb 07, 2026

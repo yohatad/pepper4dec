@@ -1,4 +1,4 @@
-/* behaviorControllerImplementation.cpp
+/* behavior_controller_implementation.cpp
  *
  * Implements the custom BehaviorTree.CPP node types used by the
  * behavior_controller's tour-guide trees: ROS action/service wrappers
@@ -18,7 +18,7 @@
  * Version: v1.0
  */
 
-#include "behaviorController/behaviorControllerInterface.h"
+#include "behavior_controller/behavior_controller_interface.h"
 #include <behaviortree_ros2/bt_service_node.hpp>
 #include <behaviortree_ros2/bt_action_node.hpp>
 #include <behaviortree_ros2/ros_node_params.hpp>
