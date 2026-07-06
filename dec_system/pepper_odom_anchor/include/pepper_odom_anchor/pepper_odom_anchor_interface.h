@@ -1,4 +1,4 @@
-/* robot_localization_interface.h
+/* pepper_odom_anchor_interface.h
  *
  * Lifecycle node that converts relative odometry readings into an absolute
  * robot pose using a fixed initial position as the anchor.
@@ -38,8 +38,8 @@
  * Copyright (C) 2025 Carnegie Mellon University Africa
  */
 
-#ifndef ROBOT_LOCALIZATION_INTERFACE_H
-#define ROBOT_LOCALIZATION_INTERFACE_H
+#ifndef PEPPER_ODOM_ANCHOR_INTERFACE_H
+#define PEPPER_ODOM_ANCHOR_INTERFACE_H
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
@@ -104,4 +104,4 @@ private:
     rclcpp::TimerBase::SharedPtr pub_timer_;
 };
 
-#endif  // ROBOT_LOCALIZATION_INTERFACE_H
+#endif  // PEPPER_ODOM_ANCHOR_INTERFACE_H

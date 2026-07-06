@@ -1,7 +1,7 @@
 <package format="3">
-  <name>robot_localization</name>
+  <name>pepper_odom_anchor</name>
   <version>0.1.0</version>
-  <description>Robot Localization node(s)</description>
+  <description>Anchors Pepper's relative wheel odometry to an absolute starting pose</description>
   <maintainer email="you@example.com">Yohannes</maintainer>
   <license>BSD-3-Clause</license>
 
