@@ -177,17 +177,17 @@ ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
 ### Saving a New Map (SLAM Toolbox)
 
 ```bash
-ros2 run nav2_map_server map_saver_cli -f ~/ros2_ws/src/pepper4dec/dec_system/pepper_navmap/map/my_new_map
+ros2 run nav2_map_server map_saver_cli -f ~/ros2_ws/src/pepper4dec/dec_system/pepper_navigation/map/my_new_map
 ```
 
 ## Package Structure
 
 ```
-pepper_navmap/
+pepper_navigation/
 ├── config/
 │   ├── mapper_params_online_async.yaml
 │   ├── nav2_params.yaml
-│   └── ekf_nav.yaml.yaml
+│   └── ekf_nav.yaml.yaml       # robot_localization EKF parameters (not yet launched)
 ├── launch/
 │   ├── pepper_navigation.launch.py
 │   ├── rtabmap_realsense.launch.py
@@ -199,31 +199,59 @@ pepper_navmap/
 ├── pepper_navigation/
 │   ├── __init__.py
 │   ├── send_goal.py
+│   ├── odom_path_publisher.py
 │   └── generate_keepout.py
+├── resource/
 ├── package.xml
 ├── setup.py
+├── setup.cfg
 └── README.md
 ```
 
+Note: the wheel-odometry covariance node that `ekf_nav.yaml`'s `odom0` expects
+(`/pepper_odom`) lives in a separate top-level package, `pepper_odom_covariance`
+(`~/ros2_ws/src/pepper_odom_covariance/`) — not inside this package. It's
+infrastructure-tier (reusable, dependency-light), not navigation-specific, so
+it sits alongside `naoqi_driver2` rather than under `dec_system`.
+
 ## 🏗️ Architecture
 
-The navigation stack integrates three main subsystems:
+The navigation stack integrates four main subsystems:
 
-1. **Mapping Layer** (choose one):
+1. **Odometry Layer** (upstream, separate package):
+   - `naoqi_driver2` publishes raw wheel+IMU odometry on `/odom`, with a flat,
+     non-growing covariance
+   - `pepper_odom_covariance` (top-level package, not under `dec_system`)
+     republishes it as `/pepper_odom` with a covariance that grows with
+     distance/rotation traveled - this is what `ekf_nav.yaml`'s `odom0` and
+     `nav2_params.yaml`'s `amcl.odom_frame_id` expect as input
+
+2. **Mapping Layer** (choose one):
    - **RTAB-Map**: RGB-D SLAM using RealSense
    - **SLAM Toolbox**: 2D LiDAR SLAM with loop closure
 
-2. **Localization Layer**:
+3. **Localization Layer**:
    - RTAB-Map provides continuous localization
    - AMCL for static map localization
+   - `ekf_nav.yaml` configures `robot_localization`'s `ekf_node` to fuse
+     `/pepper_odom` (and, once wired in, a LIO odometry source) - drafted but
+     not yet launched by anything
 
-3. **Navigation Layer (Nav2)**:
+4. **Navigation Layer (Nav2)**:
    - **Map Server**: Serves occupancy grid and keepout filter mask
    - **Controller Server**: Local trajectory following
    - **Planner Server**: Global path computation
    - **Behavior Server**: Recovery behaviors
    - **BT Navigator**: Behavior tree orchestration
    - **Lifecycle Manager**: Node lifecycle management
+
+> **Fixed**: `pepper_navigation.launch.py` used to also launch a
+> `static_transform_publisher` publishing a fixed identity `map→odom`
+> transform unconditionally, alongside AMCL's own live, scan-corrected one -
+> two publishers of the same transform, a real TF conflict and a likely
+> source of localization jitter. Removed; AMCL's `nav2_params.yaml` already
+> has `set_initial_pose: true` (origin) and `tf_broadcast: true`, so it
+> publishes the real transform on its own without it.
 
 ## 🧪 Testing
 
