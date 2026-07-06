@@ -14,7 +14,7 @@ ekf_filter_node:
     # -------------------------------
     map_frame: map
     odom_frame: pepper_odom
-    base_link_frame: base_footprint_nav
+    base_link_frame: base_footprint
     world_frame: pepper_odom
 
     # -------------------------------
