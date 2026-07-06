@@ -13,7 +13,7 @@
   <exec_depend>overt_attention</exec_depend>
   <exec_depend>person_detection</exec_depend>
   <exec_depend>face_detection</exec_depend>
-  <exec_depend>robot_localization</exec_depend>
+  <exec_depend>pepper_odom_anchor</exec_depend>
   <exec_depend>animate_behavior</exec_depend>
   <exec_depend>gesture_execution</exec_depend>
   <exec_depend>speech_event</exec_depend>

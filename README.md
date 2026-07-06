@@ -36,8 +36,8 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 - **`overt_attention`** - Controls robot's attention mechanism based on visitor presence
 
 ### **Navigation & Localization**
-- **`pepper_navmap`** (ROS2 package name: `pepper_navigation`) - RTAB-Map/SLAM Toolbox for mapping and Nav2 for navigation
-- **`robot_localization`** - EKF-based pose estimation node
+- **`pepper_navigation`** - RTAB-Map/SLAM Toolbox for mapping and Nav2 for navigation
+- **`pepper_odom_anchor`** - Anchors Pepper's relative wheel odometry to an absolute starting pose
 
 ### **Infrastructure & Utilities**
 - **`dec_launch`** - System launch files and startup configurations
@@ -74,7 +74,7 @@ source install/setup.bash
 
 2. **Set Up Python Environments**
 
-`behavior_controller` is C++ and needs no Python environment. Every other package (`animate_behavior`, `conversation_manager`, `face_detection`, `gesture_execution`, `overt_attention`, `person_detection`, `robot_localization`, `speech_event`, `text_to_speech`) is Python and expects its own dedicated virtual environment — see each package's own README for the exact venv name and `pip install -r requirements.txt` it expects.
+`behavior_controller` is C++ and needs no Python environment. Every other package (`animate_behavior`, `conversation_manager`, `face_detection`, `gesture_execution`, `overt_attention`, `person_detection`, `pepper_odom_anchor`, `speech_event`, `text_to_speech`) is Python and expects its own dedicated virtual environment — see each package's own README for the exact venv name and `pip install -r requirements.txt` it expects.
 
 3. **Download Model Files**
    - Place required ONNX model files in their respective `models/` directories
@@ -131,7 +131,7 @@ Each package contains configuration files in their `config/` directories:
 - **Adaptation**: Culturally-aware behavior selection based on context
 
 ### **Navigation System**
-- **Localization**: Adaptive Monte Carlo Localization (AMCL), RTAB-MAP, or the `robot_localization` EKF node
+- **Localization**: Adaptive Monte Carlo Localization (AMCL), RTAB-MAP, or the `pepper_odom_anchor` pose-anchoring node
 - **Mapping**: Uses pre-built maps (`dec_system/map.pgm`)
 - **Path Planning**: Nav2 stack for safe navigation
 - **Integration**: Full coordination with behavior controller

@@ -39,7 +39,7 @@ def generate_launch_description():
         _include('overt_attention', 'attention_system.launch.py'),
 
         # Localization (EKF pose estimate)
-        _include('robot_localization', 'localization.launch.py'),
+        _include('pepper_odom_anchor', 'localization.launch.py'),
 
         # Actuation
         _include('animate_behavior', 'animate_behavior.launch.py'),
