@@ -1,9 +1,18 @@
-/*
-Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
-Email: yohatad123@gmail.com
-Date: July 05, 2026
-Version: v1.0 - C++ port of gesture_execution_implementation.py
-*/
+/* gesture_execution_implementation.cpp
+ *
+ * Implements GestureExecutionSystem: loads gesture descriptors and topic
+ * mappings from YAML, runs the /gesture_execution action server, and
+ * computes/publishes the joint trajectories for deictic, iconic, bow, and
+ * nod gestures. See gesture_execution_interface.h for the full
+ * subscriber/publisher/action/parameter reference and the lifecycle
+ * state-machine diagram.
+ *
+ * Author: Yohannes Tadesse Haile
+ * Affiliation: Carnegie Mellon University Africa
+ * Email: yohatad123@gmail.com
+ * Date: July 05, 2026
+ * Version: v1.0 - C++ port of gesture_execution_implementation.py
+ */
 
 #include "gesture_execution/gesture_execution_interface.h"
 
@@ -85,7 +94,16 @@ RobotTopics loadRobotTopics(const std::string& yaml_path) {
     return topics;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// GestureExecutionSystem — constructor
+// ─────────────────────────────────────────────────────────────────────────────
+
 GestureExecutionSystem::GestureExecutionSystem() : rclcpp_lifecycle::LifecycleNode("gesture_action_server") {}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// on_configure — load YAML configs, init kinematics/state, create publishers
+// and the action server
+// ─────────────────────────────────────────────────────────────────────────────
 
 GestureExecutionSystem::CallbackReturn GestureExecutionSystem::on_configure(const rclcpp_lifecycle::State&) {
     std::string package_path;
@@ -136,6 +154,10 @@ GestureExecutionSystem::CallbackReturn GestureExecutionSystem::on_configure(cons
     return CallbackReturn::SUCCESS;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// on_activate — activate publishers, subscribe to joint_states and robot_pose
+// ─────────────────────────────────────────────────────────────────────────────
+
 GestureExecutionSystem::CallbackReturn GestureExecutionSystem::on_activate(const rclcpp_lifecycle::State& state) {
     LifecycleNode::on_activate(state);
     lifecycle_active_ = true;
@@ -149,6 +171,10 @@ GestureExecutionSystem::CallbackReturn GestureExecutionSystem::on_activate(const
     return CallbackReturn::SUCCESS;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// on_deactivate — destroy the joint_states/robot_pose subscriptions
+// ─────────────────────────────────────────────────────────────────────────────
+
 GestureExecutionSystem::CallbackReturn GestureExecutionSystem::on_deactivate(const rclcpp_lifecycle::State& state) {
     lifecycle_active_ = false;
     joint_sub_.reset();
@@ -158,6 +184,10 @@ GestureExecutionSystem::CallbackReturn GestureExecutionSystem::on_deactivate(con
     return CallbackReturn::SUCCESS;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// on_cleanup — destroy the lifecycle publishers and the action server
+// ─────────────────────────────────────────────────────────────────────────────
+
 GestureExecutionSystem::CallbackReturn GestureExecutionSystem::on_cleanup(const rclcpp_lifecycle::State&) {
     joint_traj_pub_.reset();
     marker_pub_.reset();
@@ -165,6 +195,10 @@ GestureExecutionSystem::CallbackReturn GestureExecutionSystem::on_cleanup(const 
     RCLCPP_INFO(get_logger(), "GestureExecutionSystem cleaned up");
     return CallbackReturn::SUCCESS;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// on_shutdown — log the shutdown transition
+// ─────────────────────────────────────────────────────────────────────────────
 
 GestureExecutionSystem::CallbackReturn GestureExecutionSystem::on_shutdown(const rclcpp_lifecycle::State&) {
     RCLCPP_INFO(get_logger(), "GestureExecutionSystem shutting down");

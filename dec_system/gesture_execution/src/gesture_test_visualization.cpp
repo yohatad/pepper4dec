@@ -11,6 +11,7 @@
  * the fixed frame to base_link to view the markers.
  *
  * Author: Yohannes Tadesse Haile
+ * Affiliation: Carnegie Mellon University Africa
  * Date: Jul 05, 2026
  * Version: v1.0 - C++ port of gesture_test_visualization.py
  *

@@ -1,16 +1,26 @@
-/*
-Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
-Email: yohatad123@gmail.com
-Date: July 05, 2026
-Version: v1.0 - C++ port of robot_localization.py
-*/
+/* robot_localization_implementation.cpp
+ *
+ * Implements the RobotLocalization lifecycle node: reads odometry, anchors
+ * it to a configured initial pose on the first reading after activation,
+ * and publishes the resulting absolute pose at a fixed rate.
+ *
+ * Author: Yohannes Tadesse Haile
+ * Affiliation: Carnegie Mellon University Africa
+ * Email: yohatad123@gmail.com
+ * Date: July 05, 2026
+ * Version: v1.0 - C++ port of robot_localization.py
+ */
 
 #include "robot_localization/robot_localization_interface.h"
 
 #include <cmath>
 
+// ─────────────────────────────────────────────────────────────────────────────
+// RobotLocalization — constructor
+// Declares parameters so they are settable via launch/CLI before configure.
+// ─────────────────────────────────────────────────────────────────────────────
+
 RobotLocalization::RobotLocalization() : rclcpp_lifecycle::LifecycleNode("robot_localization") {
-    // Declare parameters here so they are settable via launch/CLI before configure
     declare_parameter("initial_x", 0.0);
     declare_parameter("initial_y", 0.0);
     declare_parameter("initial_theta", 0.0);
@@ -18,6 +28,10 @@ RobotLocalization::RobotLocalization() : rclcpp_lifecycle::LifecycleNode("robot_
     declare_parameter("pose_topic", std::string("/robot_localization/pose"));
     declare_parameter("publish_rate", 10.0);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// on_configure — read parameters, init pose/anchor state, create publisher
+// ─────────────────────────────────────────────────────────────────────────────
 
 RobotLocalization::CallbackReturn RobotLocalization::on_configure(const rclcpp_lifecycle::State&) {
     double initial_x = get_parameter("initial_x").as_double();
@@ -49,6 +63,10 @@ RobotLocalization::CallbackReturn RobotLocalization::on_configure(const rclcpp_l
     return CallbackReturn::SUCCESS;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// on_activate — subscribe to odometry, start the pose-publishing timer
+// ─────────────────────────────────────────────────────────────────────────────
+
 RobotLocalization::CallbackReturn RobotLocalization::on_activate(const rclcpp_lifecycle::State& state) {
     LifecycleNode::on_activate(state);
 
@@ -62,6 +80,10 @@ RobotLocalization::CallbackReturn RobotLocalization::on_activate(const rclcpp_li
     return CallbackReturn::SUCCESS;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// on_deactivate — cancel the timer, destroy the odometry subscription
+// ─────────────────────────────────────────────────────────────────────────────
+
 RobotLocalization::CallbackReturn RobotLocalization::on_deactivate(const rclcpp_lifecycle::State& state) {
     pub_timer_->cancel();
     pub_timer_.reset();
@@ -72,6 +94,10 @@ RobotLocalization::CallbackReturn RobotLocalization::on_deactivate(const rclcpp_
     return CallbackReturn::SUCCESS;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// on_cleanup — destroy the publisher, reset the odometry anchor
+// ─────────────────────────────────────────────────────────────────────────────
+
 RobotLocalization::CallbackReturn RobotLocalization::on_cleanup(const rclcpp_lifecycle::State&) {
     pose_pub_.reset();
     odom_initialized_ = false;
@@ -79,10 +105,18 @@ RobotLocalization::CallbackReturn RobotLocalization::on_cleanup(const rclcpp_lif
     return CallbackReturn::SUCCESS;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// on_shutdown — log the shutdown transition
+// ─────────────────────────────────────────────────────────────────────────────
+
 RobotLocalization::CallbackReturn RobotLocalization::on_shutdown(const rclcpp_lifecycle::State&) {
     RCLCPP_INFO(get_logger(), "RobotLocalization shutting down");
     return CallbackReturn::SUCCESS;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// odomCallback — anchor the first reading, then integrate subsequent ones
+// ─────────────────────────────────────────────────────────────────────────────
 
 void RobotLocalization::odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg) {
     double odom_x = msg->pose.pose.position.x;
@@ -117,6 +151,10 @@ void RobotLocalization::odomCallback(const nav_msgs::msg::Odometry::SharedPtr ms
     absolute_theta_ = normalizeAngle(initial_theta_ + (odom_theta - first_odom_theta_));
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// publishPose — publish the current absolute pose at a fixed rate
+// ─────────────────────────────────────────────────────────────────────────────
+
 void RobotLocalization::publishPose() {
     geometry_msgs::msg::Pose2D msg;
     msg.x = absolute_x_;
@@ -124,6 +162,10 @@ void RobotLocalization::publishPose() {
     msg.theta = absolute_theta_;
     pose_pub_->publish(msg);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// normalizeAngle — wrap an angle to [-pi, pi]
+// ─────────────────────────────────────────────────────────────────────────────
 
 double RobotLocalization::normalizeAngle(double angle) {
     while (angle > M_PI) angle -= 2.0 * M_PI;
