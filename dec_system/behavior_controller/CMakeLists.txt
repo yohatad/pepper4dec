@@ -28,8 +28,8 @@ find_package(ament_index_cpp REQUIRED)
 
 # Library
 add_library(${PROJECT_NAME}_lib
-  src/behaviorControllerImplementation.cpp
-  src/behaviorControllerUtilities.cpp
+  src/behavior_controller_implementation.cpp
+  src/behavior_controller_utilities.cpp
 )
 target_include_directories(${PROJECT_NAME}_lib PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -52,11 +52,11 @@ ament_target_dependencies(${PROJECT_NAME}_lib
 target_link_libraries(${PROJECT_NAME}_lib yaml-cpp)
 
 # Executable — inherits all deps from ${PROJECT_NAME}_lib
-add_executable(behaviorController src/behaviorControllerApplication.cpp)
-target_link_libraries(behaviorController ${PROJECT_NAME}_lib)
+add_executable(behavior_controller src/behavior_controller_application.cpp)
+target_link_libraries(behavior_controller ${PROJECT_NAME}_lib)
 
 # Install
-install(TARGETS behaviorController ${PROJECT_NAME}_lib
+install(TARGETS behavior_controller ${PROJECT_NAME}_lib
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}

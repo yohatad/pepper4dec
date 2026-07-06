@@ -41,7 +41,7 @@ source install/setup.bash
 
 # 🔧 Configuration Parameters
 
-Managed via `config/behaviorControllerConfiguration.yaml`:
+Managed via `config/behavior_controller_configuration.yaml`:
 
 | Parameter | Description | Default Value |
 |-----------|-------------|---------------|
@@ -67,7 +67,7 @@ ros2 launch dec_system decSystemLaunchRobot.launch.py \
 
 3. **Run the behavior controller**:
 ```bash
-ros2 run behavior_controller behaviorController
+ros2 run behavior_controller behavior_controller
 ```
 
 ## Required Action Servers and Topics
@@ -166,9 +166,9 @@ XML files are in the `data/` folder. The active scenario is set via `scenario_sp
 ## Package Structure
 
 ```
-behaviorController/
+behavior_controller/
 ├── config/
-│   └── behaviorControllerConfiguration.yaml
+│   └── behavior_controller_configuration.yaml
 ├── data/
 │   ├── dec_Tour.xml
 │   ├── asr_cm_tts_pipeline.xml
@@ -180,12 +180,12 @@ behaviorController/
 │   ├── decEnvironmentKnowledgeBase_short.yaml
 │   └── labEnvironmentKnowledgeBase.yaml
 ├── include/
-│   └── behaviorController/
-│       └── behaviorControllerInterface.h
+│   └── behavior_controller/
+│       └── behavior_controller_interface.h
 ├── src/
-│   ├── behaviorControllerApplication.cpp
-│   ├── behaviorControllerImplementation.cpp
-│   └── behaviorControllerUtilities.cpp
+│   ├── behavior_controller_application.cpp
+│   ├── behavior_controller_implementation.cpp
+│   └── behavior_controller_utilities.cpp
 ├── CMakeLists.txt
 ├── package.xml
 └── README.md
