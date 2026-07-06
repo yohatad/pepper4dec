@@ -35,7 +35,7 @@
  * Date: Jul 05, 2026
  * Version: v1.0 - C++ port of robot_localization.py
  *
- * Copyright (C) 2025 CyLab Carnegie Mellon University Africa
+ * Copyright (C) 2025 Carnegie Mellon University Africa
  */
 
 #ifndef ROBOT_LOCALIZATION_INTERFACE_H

@@ -44,7 +44,7 @@
  * Date: Jul 05, 2026
  * Version: v1.0 - C++ port of animate_behavior_implementation.py / animate_behavior_application.py
  *
- * Copyright (C) 2025 CyLab Carnegie Mellon University Africa
+ * Copyright (C) 2025 Carnegie Mellon University Africa
  */
 
 #ifndef ANIMATE_BEHAVIOR_INTERFACE_H

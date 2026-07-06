@@ -109,7 +109,7 @@ BehaviorControllerLifecycleNode::on_configure(const rclcpp_lifecycle::State& /*s
         "\n"
         "**************************************************\n"
         "\t\tBehavior Controller v2.0 (BehaviorTree.ROS2)\n"
-        "\t\tCopyright (C) 2025 CyLab Carnegie Mellon University Africa\n"
+        "\t\tCopyright (C) 2025 Carnegie Mellon University Africa\n"
         "**************************************************\n");
 
     // ── Load YAML configuration ─────────────────────────────────────────────

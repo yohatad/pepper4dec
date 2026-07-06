@@ -4,7 +4,7 @@
  * Date: Feb 07, 2026
  * Version: v1.0
  *
- * Copyright (C) 2025 CyLab Carnegie Mellon University Africa
+ * Copyright (C) 2025 Carnegie Mellon University Africa
  */
 
 #ifndef BEHAVIOR_CONTROLLER_INTERFACE_H

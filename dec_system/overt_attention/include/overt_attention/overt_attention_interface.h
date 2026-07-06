@@ -4,7 +4,7 @@
  * Date: Jun 12, 2026
  * Version: v1.0
  *
- * Copyright (C) 2025 CyLab Carnegie Mellon University Africa
+ * Copyright (C) 2025 Carnegie Mellon University Africa
  */
 
 #ifndef OVERT_ATTENTION_INTERFACE_H
