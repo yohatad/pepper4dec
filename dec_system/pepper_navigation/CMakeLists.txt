@@ -7,8 +7,6 @@ endif()
 
 # Find dependencies
 find_package(ament_cmake REQUIRED)
-find_package(ament_cmake_python REQUIRED)
-find_package(rclpy REQUIRED)
 find_package(nav2_bringup REQUIRED)
 find_package(nav2_map_server REQUIRED)
 find_package(nav2_amcl REQUIRED)
@@ -18,20 +16,51 @@ find_package(nav2_behaviors REQUIRED)
 find_package(nav2_bt_navigator REQUIRED)
 find_package(nav2_lifecycle_manager REQUIRED)
 find_package(nav2_costmap_2d REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(rclcpp_action REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
+find_package(nav2_msgs REQUIRED)
 
-# Install Python modules
-ament_python_install_package(${PROJECT_NAME})
+# Dev/debug tooling (src/tools/) - not part of the production navigation
+# pipeline. pepper_odom_covariance now lives in its own top-level package.
 
-# Install Python executables
-install(PROGRAMS
-  pepper_navigation/send_goal.py
-  DESTINATION lib/${PROJECT_NAME}
+# odom_path_publisher: accumulates /pepper_odom into a nav_msgs/Path +
+# RViz markers for closed-loop odometry quality testing
+add_executable(odom_path_publisher
+  src/tools/odom_path_publisher.cpp
+)
+ament_target_dependencies(odom_path_publisher
+  rclcpp
+  nav_msgs
+  geometry_msgs
+  visualization_msgs
+  std_srvs
+)
+install(TARGETS odom_path_publisher
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
-install(PROGRAMS pepper_navigation/odom_path_publisher.py
-  DESTINATION lib/${PROJECT_NAME}
-  RENAME odom_path_publisher
+# send_goal: one-shot Nav2 goal sender (reimplements the relevant subset of
+# nav2_simple_commander's Python-only BasicNavigator)
+add_executable(send_goal
+  src/tools/send_goal.cpp
 )
+ament_target_dependencies(send_goal
+  rclcpp
+  rclcpp_action
+  geometry_msgs
+  nav2_msgs
+)
+install(TARGETS send_goal
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
+)
+
+# Note: tools/generate_keepout.py is a standalone map-editing utility, not a
+# ROS2 node - run manually with `python3 tools/generate_keepout.py`, not
+# installed here.
 
 # Install launch files
 install(DIRECTORY
@@ -61,12 +90,6 @@ install(DIRECTORY
   FILES_MATCHING
   PATTERN "*.yaml"
   PATTERN "*.pgm"
-)
-
-# Install resource files
-install(DIRECTORY
-  resource/
-  DESTINATION share/${PROJECT_NAME}/resource
 )
 
 if(BUILD_TESTING)
