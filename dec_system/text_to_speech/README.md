@@ -14,7 +14,6 @@ The **Text-to-Speech (TTS)** package is a ROS2 package designed to synthesize an
 - **Two Playback Methods**: stream (PCM chunks via ALAudioDevice) and file (SCP + ALAudioPlayer action)
 - **ElevenLabs Streaming**: Audio starts playing within ~200 ms of the first API chunk
 - **Sentence Queue**: Background playback thread ensures strict ordering
-- **Barge-in Detection**: User speech during playback stops Pepper immediately
 - **Microphone Muting**: Automatic mic control during playback
 - **ROS2 Action Server**: `/text_to_speech` action for programmatic TTS calls with completion feedback
 
@@ -93,8 +92,6 @@ Configuration is managed via `config/text_to_speech_configuration.yaml`.
 | `elevenlabs_similarity_boost` | ElevenLabs similarity boost (0.0–1.0) | `0.75` |
 | `elevenlabs_style` | ElevenLabs style exaggeration (0.0–1.0) | `0.0` |
 | `elevenlabs_speed` | ElevenLabs speaking speed multiplier | `1.0` |
-| `barge_in_threshold` | VAD probability to trigger barge-in | `0.85` |
-| `barge_in_chunks` | Consecutive VAD chunks above threshold required | `3` |
 
 ## 🚀 Running the Node
 
@@ -123,7 +120,6 @@ ros2 action send_goal /text_to_speech dec_interfaces/action/TTS "{text: 'Hello, 
 | Topic | Type | Description |
 |-------|------|-------------|
 | `/text_to_speech/input` | `std_msgs/String` | Text to speak — accepts sentences from any source |
-| `/speech_event/vad_speech_prob` | `std_msgs/Float32` | VAD probability used for barge-in detection |
 
 ### Published Topics
 
@@ -191,8 +187,6 @@ flowchart TD
     I --> J["ALAudioDevice"]
     H -- "file" --> K["SCP + play_audio"]
     K --> L["ALAudioPlayer"]
-
-    M(["/speech_event/vad_speech_prob"]) -. "barge-in interrupts" .-> D
 ```
 
 ## 🧪 Testing

@@ -87,10 +87,6 @@ def load_configuration() -> dict:
         # 1.0 = unity gain; 2.0 = double amplitude (clips at ±32767)
         'stream_volume': 1.0,
 
-        # Barge-in detection (all backends)
-        'barge_in_threshold': 0.85,
-        'barge_in_chunks': 3,
-
         # ElevenLabs backend
         'elevenlabs_api_key': '',
         'elevenlabs_voice_id': '21m00Tcm4TlvDq8ikWAM',  # Rachel
