@@ -54,10 +54,12 @@ The configuration is managed via `config/converation_manager_configuration.yaml`
 | `llm.api_key`                    | API key for LLM service                                          | String           | (from `LLM_API_KEY` env var)        |
 | `llm.model`                      | LLM model name                                                   | String           | `HuggingFaceTB/SmolLM3-3B`          |
 | `embedding.model`                | Sentence transformer model for embeddings                        | String           | `all-MiniLM-L6-v2`           |
+| `retrieval.mode`                 | `rag` (vector search) or `full_context` (send entire KB every turn) | `rag` \| `full_context` | `rag`                |
 | `search.similarity_threshold`    | Similarity threshold for document retrieval                      | `[0.0 – 1.0]`   | `0.15`                        |
 | `search.top_k`                   | Number of documents to retrieve for context                      | Positive integer | `10`                           |
 | `conversation.max_history_turns` | Number of past turns kept in conversation memory               | Positive integer | `15`                           |
 | `conversation.context_turns`     | Number of recent turns included in each LLM request             | Positive integer | `10`                           |
+| `conversation.max_response_sentences` | Target answer length; controls the LLM's token budget       | Positive integer | `3`                           |
 | `data.default_path`              | Path to JSON knowledge base (relative to package share dir)      | String (path)    | `./data/upanzi_data.json`     |
 | `debug.verbose`                  | Enable verbose logging                                           | Boolean          | `false`                       |
 
@@ -75,6 +77,9 @@ llm:
 embedding:
   model: all-MiniLM-L6-v2
 
+retrieval:
+  mode: rag
+
 search:
   similarity_threshold: 0.15
   top_k: 5
@@ -82,6 +87,7 @@ search:
 conversation:
   max_history_turns: 15
   context_turns: 10
+  max_response_sentences: 3
 
 data:
   default_path: ./data/upanzi_data.json
@@ -133,6 +139,27 @@ result carries the complete text once generation finishes.
 | `intent`   | string | Detected conversation intent (e.g., ASK_EXHIBIT_QUESTION) |
 | `confidence` | float | Confidence score for intent detection (0.0-1.0)   |
 
+## LLM Response Contract
+
+The system prompt instructs the LLM to reply with a single JSON object:
+
+```json
+{"answer": "...", "intent": "ASK_EXHIBIT_QUESTION", "confidence": 0.92}
+```
+
+| Intent | Triggered behavior (in behaviorController) |
+|---|---|
+| `ASK_EXHIBIT_QUESTION` | Speak answer + point gesture at exhibit |
+| `ASK_TOUR_META` | Speak answer only |
+| `NAVIGATION_REQUEST` | Speak answer + navigate in parallel |
+| `SOCIAL_SMALL_TALK` | Speak answer only |
+| `OFF_TOPIC` | Speak polite apology only |
+| `STOP` | Stop animation immediately, no speech |
+| `AFFIRMATIVE` | Speak "yes" (parent subtree handles) |
+| `NEGATIVE` | Speak "no" (parent subtree handles) |
+
+`answer` may embed NAOqi prosody placeholders (e.g. `*pau=200*`), converted to `\pau=200\` control sequences; a sentence-level `\rspd=85\` slow-speed tag is also prepended for `ASK_EXHIBIT_QUESTION`/`ASK_TOUR_META`. `<think>...</think>` reasoning-model output is stripped before parsing either field.
+
 ## BehaviorTree Integration
 
 The node is called from the `behaviorController` via the `ConversationManager` BT node, which wraps this action server. The generated `response` (with embedded NAOqi ALTextToSpeech prosody tags) is written to the blackboard and passed directly to the `SpeechWithFeedback` BT node, which calls the `/naoqi_driver/speech_with_feedback` action. ALAnimatedSpeech interprets the prosody tags and drives contextual body-language gestures automatically.
@@ -153,7 +180,7 @@ The RAG system has three main components:
 
 1. **Knowledge Base**: Structured JSON data stored in `data/upanzi_data.json`
 2. **Vector Database**: ChromaDB with persistent local storage for document embeddings
-3. **Conversation Manager Node**: Ties the two together and maintains per-session conversation history for context-aware responses
+3. **Conversation Manager Node**: Ties the two together and maintains a running conversation history across turns for context-aware responses (single history per node — the action goal carries no session ID)
 
 ## Data Flow
 
