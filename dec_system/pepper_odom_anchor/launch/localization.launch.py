@@ -47,8 +47,8 @@ def generate_launch_description():
 
         # Localization node
         Node(
-            package='robot_localization',  # Change to your package name
-            executable='robot_localization',
+            package='pepper_odom_anchor',
+            executable='pepper_odom_anchor',
             name='robot_localization',
             output='screen',
             parameters=[{

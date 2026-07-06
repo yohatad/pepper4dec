@@ -2,7 +2,7 @@ from setuptools import setup
 import os
 from glob import glob
 
-package_name = 'robot_localization'
+package_name = 'pepper_odom_anchor'
 
 setup(
     name=package_name,
@@ -24,7 +24,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'robot_localization = robot_localization.robot_localization:main',
+            'pepper_odom_anchor = pepper_odom_anchor.pepper_odom_anchor:main',
         ],
     },
 )

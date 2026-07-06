@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-""" robot_localization.py
+""" pepper_odom_anchor.py
 
 Entry point and lifecycle node implementation for absolute robot localization.
 Converts relative odometry readings into an absolute robot pose using a fixed
