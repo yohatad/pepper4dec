@@ -170,7 +170,7 @@ local_costmap:
     ros__parameters:
       update_frequency: 15.0
       publish_frequency: 2.0
-      global_frame: odom
+      global_frame: pepper_odom
       robot_base_frame: base_footprint
       use_sim_time: False
       rolling_window: true
