@@ -8,7 +8,7 @@
 
 The **Pepper Navigation and Mapping** package provides autonomous localization, mapping, and navigation capabilities for the Pepper robot. It integrates RTAB-Map for 3D SLAM using an Intel RealSense depth camera, SLAM Toolbox for 2D LiDAR-based mapping, and Nav2 for path planning, obstacle avoidance, and goal navigation. The package also supports keepout zones and provides a utility node for programmatically sending navigation goals.
 
-## Key Features
+## ✨ Key Features
 - **ROS2 Native**: Built for ROS2 Humble
 - **RTAB-Map Integration**: 3D SLAM using RealSense RGB-D camera
 - **SLAM Toolbox Integration**: 2D LiDAR-based online asynchronous SLAM with loop closure
@@ -17,14 +17,14 @@ The **Pepper Navigation and Mapping** package provides autonomous localization, 
 - **Goal Navigation API**: Python utility for programmatic navigation goal sending
 - **Pre-built Maps**: Includes saved maps for localization-only deployments
 
-## Prerequisites
+## ✅ Prerequisites
 - **ROS2 Humble** or newer
 - **Python 3.10** or compatible version
 - **Intel RealSense D-series camera** (for RTAB-Map)
 - **YDLidar or compatible 2D LiDAR** (for SLAM Toolbox)
 - **Pepper robot** with ROS2 driver configured
 
-## Installation
+## 🛠️ Installation
 
 ### Required ROS2 Packages
 
@@ -57,7 +57,7 @@ colcon build --packages-select pepper_navigation
 source install/setup.bash
 ```
 
-## Configuration
+## 🔧 Configuration
 
 ### SLAM Toolbox (`config/mapper_params_online_async.yaml`)
 
@@ -81,7 +81,7 @@ source install/setup.bash
 | `behavior_server` | Recovery behaviors |
 | `costmap_filter` | Keepout zone filter integration |
 
-## Running the Stack
+## 🚀 Running the Stack
 
 ```bash
 # Source the workspace
@@ -112,7 +112,7 @@ ros2 launch pepper_navigation rtabmap_realsense.launch.py rviz:=true
 ros2 launch pepper_navigation slam_toolbox.launch.py
 ```
 
-## ROS Interface
+## 🖥️ ROS Interface
 
 ### Subscribed Topics
 
@@ -205,7 +205,7 @@ pepper_navmap/
 └── README.md
 ```
 
-## Architecture
+## 🏗️ Architecture
 
 The navigation stack integrates three main subsystems:
 
@@ -225,7 +225,7 @@ The navigation stack integrates three main subsystems:
    - **BT Navigator**: Behavior tree orchestration
    - **Lifecycle Manager**: Node lifecycle management
 
-## Testing
+## 🧪 Testing
 
 ```bash
 # Check active nodes
@@ -241,12 +241,12 @@ ros2 run tf2_tools view_frames
 ros2 action list
 ```
 
-## Support
+## 💡 Support
 
 For issues or questions:
 - Create an issue on the [pepper4dec GitHub repository](https://github.com/yohatad/pepper4dec/issues)
 - Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a>
 
-## License
+## 📜 License
 Copyright (C) 2026 Upanzi Network
 Licensed under the BSD-3-Clause License. See individual package licenses for details.

@@ -8,7 +8,7 @@
 
 The **Face and Mutual Gaze Detection and Localization** package detects multiple faces and evaluates their mutual gaze in real-time by subscribing to image topics. It publishes an array of detected faces and their mutual gaze status to the `/face_detection/data` topic. Each entry includes the label ID, centroid coordinates, bounding box dimensions, and mutual gaze status.
 
-## Key Features
+## ✨ Key Features
 - **ROS2 Native**: Built for ROS2 Humble
 - **SixDrepNet Algorithm**: State-of-the-art face detection and head pose estimation
 - **Person Detection Integration**: Uses YOLO-based person detection to locate faces
@@ -17,13 +17,13 @@ The **Face and Mutual Gaze Detection and Localization** package detects multiple
 - **Multi-camera Support**: RealSense and Pepper camera support
 - **ROS2 Bag Compatible**: Optional camera launch for use with recorded data
 
-## Prerequisites
+## ✅ Prerequisites
 - **ROS2 Humble** or newer
 - **Python 3.10** or compatible version
 - **CUDA-capable GPU** (recommended for optimal performance)
 - **Intel RealSense camera** (if using RealSense) with USB 3.0 connection
 
-## Installation
+## 🛠️ Installation
 
 ### Package Installation
 
@@ -48,7 +48,7 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 pip install -r ~/ros2_ws/src/pepper4dec/dec_system/face_detection/requirements.txt
 ```
 
-## Configuration
+## 🔧 Configuration
 
 Configuration is managed via `config/face_detection_configuration.yaml`:
 
@@ -63,7 +63,7 @@ Configuration is managed via `config/face_detection_configuration.yaml`:
 | `requirePersonDetection` | Require person detection before running face detection | `True` |
 | `objectDetectionTimeout` | Timeout for person detection messages (s) | `0.5` |
 
-## Running the Node
+## 🚀 Running the Node
 
 ```bash
 # Source the workspace
@@ -96,7 +96,7 @@ source ~/face_detection_env/bin/activate
 ros2 run face_detection face_detection
 ```
 
-## ROS Interface
+## 🖥️ ROS Interface
 
 ### Subscribed Topics
 
@@ -114,7 +114,7 @@ ros2 run face_detection face_detection
 | `/face_detection/debug` | `sensor_msgs/Image` | Debug RGB image with face detection overlays |
 | `/face_detection/depth_debug` | `sensor_msgs/Image` | Debug colorized depth image |
 
-## Message Structure
+## 📨 Message Structure
 
 ### `/face_detection/data` (`dec_interfaces/msg/FaceDetection`)
 
@@ -153,7 +153,7 @@ face_detection/
 └── README.md
 ```
 
-## Architecture
+## 🏗️ Architecture
 
 The face detection system consists of three main components:
 
@@ -166,7 +166,7 @@ The face detection system consists of three main components:
    - Determines mutual gaze based on head pose angles
    - Publishes face detection results
 
-## Testing
+## 🧪 Testing
 
 ```bash
 # Check node is running
@@ -179,12 +179,12 @@ ros2 topic echo /face_detection/data
 ros2 topic list
 ```
 
-## Support
+## 💡 Support
 
 For issues or questions:
 - Create an issue on the [pepper4dec GitHub repository](https://github.com/yohatad/pepper4dec/issues)
 - Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a>
 
-## License
+## 📜 License
 Copyright (C) 2026 Upanzi Network
 Licensed under the BSD-3-Clause License. See individual package licenses for details.

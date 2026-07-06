@@ -8,7 +8,7 @@
 
 The **Gesture Execution** package is a ROS2 action server that executes various types of gestures on the Pepper humanoid robot. It provides an action server interface for executing deictic (pointing), iconic (predefined arm motions), bowing, and nodding gestures with smooth Bézier interpolation for natural motion. The system includes real-time feedback on gesture execution progress and comprehensive visualization support for debugging.
 
-## Key Features
+## ✨ Key Features
 - **ROS2 Native**: Built for ROS2 Humble with action-based interface
 - **Multiple Gesture Types**: Supports deictic, iconic, bowing, and nodding gestures
 - **Bézier Interpolation**: Smooth motion with continuous velocity and acceleration profiles
@@ -17,13 +17,13 @@ The **Gesture Execution** package is a ROS2 action server that executes various 
 - **RViz2 Visualization**: Publishes markers for visualizing pointing gestures
 - **Real-time Feedback**: Provides elapsed time feedback during gesture execution
 
-## Prerequisites
+## ✅ Prerequisites
 - **ROS2 Humble** or newer
 - **Python 3.10** or compatible version
 - **Pepper Robot** or simulator with NAOqi bridge
 - **dec_interfaces** package for action definitions
 
-## Installation
+## 🛠️ Installation
 
 ### Package Installation
 
@@ -44,7 +44,7 @@ source install/setup.bash
 pip install PyYAML
 ```
 
-## Configuration
+## 🔧 Configuration
 
 Configuration is managed via `config/gesture_execution_configuration.yaml`:
 
@@ -80,7 +80,7 @@ topics:
   RobotPose: "/robot_localization/pose"
 ```
 
-## Running the Node
+## 🚀 Running the Node
 
 ```bash
 # Source the workspace
@@ -90,7 +90,7 @@ source ~/ros2_ws/install/setup.bash
 ros2 run gesture_execution gesture_execution
 ```
 
-## ROS Interface
+## 🖥️ ROS Interface
 
 ### Subscribed Topics
 
@@ -112,7 +112,7 @@ ros2 run gesture_execution gesture_execution
 |--------|------|-------------|
 | `/gesture_execution` | `dec_interfaces/action/Gesture` | Main gesture execution interface |
 
-## Action Interface
+## 🔌 Action Interface
 
 **Action Type:** `dec_interfaces/action/Gesture`
 
@@ -206,7 +206,7 @@ gesture_execution/
 └── README.md
 ```
 
-## Architecture
+## 🏗️ Architecture
 
 The gesture execution system uses Bézier interpolation for smooth motion:
 
@@ -234,7 +234,7 @@ The gesture execution system uses Bézier interpolation for smooth motion:
 - **Nodding Angle**: 5-30 degrees
 - **Gesture Duration**: 1000-5000 milliseconds
 
-## Testing
+## 🧪 Testing
 
 ```bash
 # Check node is running
@@ -265,12 +265,12 @@ ros2 run rviz2 rviz2
 2. Set topic to: `/gesture_execution/visualization`
 3. Ensure "Global Options" → "Fixed Frame" is set to `base_link`
 
-## Support
+## 💡 Support
 
 For issues or questions:
 - Create an issue on the [pepper4dec GitHub repository](https://github.com/yohatad/pepper4dec/issues)
 - Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a>
 
-## License
+## 📜 License
 Copyright (C) 2026 Upanzi Network
 Licensed under the BSD-3-Clause License. See individual package licenses for details.

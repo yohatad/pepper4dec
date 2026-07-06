@@ -8,7 +8,7 @@
 
 The **Behavior Controller** package orchestrates robot behavior on the Pepper robot using [BehaviorTree.CPP v4](https://www.behaviortree.dev/) and [BehaviorTree.ROS2](https://github.com/BehaviorTree/BehaviorTree.ROS2). It loads a mission defined as an XML behavior tree and executes it by dispatching ROS2 action calls to speech, gesture, navigation, conversation, and face-detection nodes. At startup it loads a YAML configuration file and two knowledge bases — a culture knowledge base (utility phrases) and an environment knowledge base (locations and tour stops).
 
-## Key Features
+## ✨ Key Features
 - **ROS2 Native**: Built for ROS2 Humble
 - **BehaviorTree.CPP v4**: Mission logic expressed as composable XML behavior trees
 - **Intent-aware routing**: The `ConversationManager` BT node now exposes `intent` and `confidence` output ports; the `asr_cm_tts_pipeline.xml` tree branches on intent to drive speech, navigation, gesture, or stop behavior accordingly
@@ -19,7 +19,7 @@ The **Behavior Controller** package orchestrates robot behavior on the Pepper ro
 
 # 🛠️ Installation
 
-## Prerequisites
+## ✅ Prerequisites
 - **ROS2 Humble** or newer
 - **BehaviorTree.CPP v4** (`behaviortree_cpp`)
 - **BehaviorTree.ROS2** (`behaviortree_ros2`)
@@ -191,7 +191,7 @@ behaviorController/
 └── README.md
 ```
 
-## Testing
+## 🧪 Testing
 
 ```bash
 # Check node is running
@@ -204,7 +204,7 @@ ros2 topic list
 ros2 run groot2_gui groot2_gui
 ```
 
-## Support
+## 💡 Support
 
 For issues or questions:
 - Create an issue on the [pepper4dec GitHub repository](https://github.com/yohatad/pepper4dec/issues)

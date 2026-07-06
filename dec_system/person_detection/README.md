@@ -8,7 +8,7 @@
 
 The **Person Detection and Tracking** package is a ROS2 package designed to detect and track multiple persons in real-time by subscribing to image topics. It publishes an array of detected persons with their bounding boxes, labels, and tracking IDs to the `/person_detection/data` topic. Each entry includes the label, centroid coordinates, bounding box dimensions, and a unique tracking ID for maintaining identity across frames.
 
-## Key Features
+## ✨ Key Features
 - **ROS2 Native**: Built for ROS2 Humble
 - **YOLO-based Detection**: Uses state-of-the-art YOLO models for person detection
 - **ByteTrack Tracking**: Multi-person tracking with ByteTrack algorithm
@@ -17,13 +17,13 @@ The **Person Detection and Tracking** package is a ROS2 package designed to dete
 - **Multi-camera Support**: RealSense and Pepper camera support
 - **ROS2 Bag Compatible**: Optional camera launch for use with recorded data
 
-## Prerequisites
+## ✅ Prerequisites
 - **ROS2 Humble** or newer
 - **Python 3.10** or compatible version
 - **CUDA-capable GPU** (recommended for optimal performance)
 - **Intel RealSense camera** (if using RealSense) with USB 3.0 connection
 
-## Installation
+## 🛠️ Installation
 
 ### Package Installation
 
@@ -53,7 +53,7 @@ pip install -r ~/ros2_ws/src/pepper4dec/dec_system/person_detection/requirements
 Download the required ONNX model files to the `models/` directory:
 - `person_detection_yolov11m.onnx` - YOLOv11 detection model (or other YOLO variant)
 
-## Configuration
+## 🔧 Configuration
 
 Configuration is managed via `config/person_detection_configuration.yaml`:
 
@@ -72,7 +72,7 @@ Configuration is managed via `config/person_detection_configuration.yaml`:
 
 > **Note:** Enabling `verboseMode` (`True`) activates real-time visualization via OpenCV windows.
 
-## Running the Node
+## 🚀 Running the Node
 
 ```bash
 # Source the workspace
@@ -101,7 +101,7 @@ source ~/person_detection_env/bin/activate
 ros2 run person_detection person_detection
 ```
 
-## ROS Interface
+## 🖥️ ROS Interface
 
 ### Subscribed Topics
 
@@ -118,7 +118,7 @@ ros2 run person_detection person_detection
 | `/person_detection/debug` | `sensor_msgs/Image` | Debug RGB image with detection overlays |
 | `/person_detection/depth_debug` | `sensor_msgs/Image` | Debug colorized depth image |
 
-## Message Structure
+## 📨 Message Structure
 
 ### `/person_detection/data` (`dec_interfaces/msg/PersonDetection`)
 
@@ -157,7 +157,7 @@ person_detection/
 └── README.md
 ```
 
-## Architecture
+## 🏗️ Architecture
 
 The person detection system consists of two main components:
 
@@ -168,7 +168,7 @@ The person detection system consists of two main components:
    - Tracks persons across frames using ByteTrack algorithm
    - Publishes person detection results
 
-## Testing
+## 🧪 Testing
 
 ```bash
 # Check node is running
@@ -181,12 +181,12 @@ ros2 topic echo /person_detection/data
 ros2 topic list
 ```
 
-## Support
+## 💡 Support
 
 For issues or questions:
 - Create an issue on the [pepper4dec GitHub repository](https://github.com/yohatad/pepper4dec/issues)
 - Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a>
 
-## License
+## 📜 License
 Copyright (C) 2026 Upanzi Network
 Licensed under the BSD-3-Clause License. See individual package licenses for details.

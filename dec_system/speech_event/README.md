@@ -8,7 +8,7 @@
 
 The **Speech Event Recognition and Localization** package provides real-time speech recognition using Whisper ASR, voice activity detection (VAD) with Silero VAD (ONNX), and optional sound-source localization. It processes the robot's microphone audio (48 kHz, `naoqi_bridge_msgs/AudioBuffer`), detects speech segments, applies a noise reduction pipeline post-VAD and pre-ASR, transcribes them with a low-latency Whisper model, and publishes the recognized text. The module can also estimate the direction-of-arrival of a sound using SRP-PHAT beamforming on Pepper's 4-microphone array.
 
-## Key Features
+## ✨ Key Features
 - **ROS2 Native**: Built for ROS2 Humble
 - **Whisper ASR**: State-of-the-art speech recognition with low latency
 - **Silero VAD**: Voice activity detection with two-threshold hysteresis
@@ -17,13 +17,13 @@ The **Speech Event Recognition and Localization** package provides real-time spe
 - **Action Server Interface**: Synchronous transcription requests with feedback
 - **Multi-microphone Array**: 4-channel audio processing for localization
 
-## Prerequisites
+## ✅ Prerequisites
 - **ROS2 Humble** or newer
 - **Python 3.10** or compatible version
 - **CUDA-capable GPU** (optional but recommended for Whisper acceleration)
 - **Intel RealSense camera** (for localization)
 
-## Installation
+## 🛠️ Installation
 
 ### Package Installation
 
@@ -48,7 +48,7 @@ pip install torch==2.5.1+cu121 torchaudio==2.5.1+cu121 --index-url https://downl
 pip install -r ~/ros2_ws/src/pepper4dec/dec_system/speech_event/requirements.txt
 ```
 
-## Configuration
+## 🔧 Configuration
 
 Configuration is managed via `config/speech_event_configuration.yaml`:
 
@@ -67,7 +67,7 @@ Configuration is managed via `config/speech_event_configuration.yaml`:
 | `noise_profile_path` | Path to a `.npy` mean-magnitude-spectrum file recorded at 16 kHz; leave empty for online-only estimation | `"data/noise_profile.npy"` |
 | `noise_alpha` | Wiener filter aggressiveness (0.0–1.0); higher = more suppression, more distortion risk | `0.5` |
 
-## Running the Node
+## 🚀 Running the Node
 
 ```bash
 # Source the workspace
@@ -90,7 +90,7 @@ ros2 run speech_event speech_event_recorder
 ros2 run speech_event speech_event_localization
 ```
 
-## ROS Interface
+## 🖥️ ROS Interface
 
 ### Subscribed Topics
 
@@ -117,7 +117,7 @@ ros2 run speech_event speech_event_localization
 |---------|------|-------------|
 | `/speech_event/set_enabled` | `std_srvs/SetBool` | Enable or disable audio processing (e.g. mute mic during TTS) |
 
-## Action Interface
+## 🔌 Action Interface
 
 **Action Type:** `dec_interfaces/action/SpeechRecognition`
 
@@ -138,14 +138,6 @@ ros2 run speech_event speech_event_localization
 | Field | Type | Description |
 |-------|------|-------------|
 | `status` | string | "waiting", "speech", "transcribing" |
-
-## Operating Modes
-
-### Action Server Mode (default)
-Audio processing is gated — audio is only processed while an active goal is being handled.
-
-### Standalone Mode (`action_server: false`)
-The node continuously listens and processes audio independent of any action client.
 
 ## Sound Source Localization
 
@@ -195,21 +187,61 @@ speech_event/
 └── README.md
 ```
 
-## Architecture
+## 🏗️ Architecture
 
-1. **Audio Input**: Receives multi-channel audio from robot microphone
-2. **VAD Processing**: Silero VAD detects speech segments with hysteresis
-3. **Noise Reduction**: `SpeechDenoiser` applies a post-VAD, pre-ASR cleaning pipeline:
-   - Bandpass filter (80 Hz – 7500 Hz)
-   - Harmonic IIR notch filters targeting fan hum fundamental and harmonics
-   - Wiener filter with online minimum-statistics noise estimation
-   - Spectral floor and median smoothing to suppress musical noise
-   - RMS normalisation to preserve Whisper's internal level thresholds
-4. **Transcription**: Whisper ASR transcribes the cleaned speech segments
-5. **Feedback**: Streams status updates during processing
-6. **Result**: Returns transcription text as action result
+```mermaid
+flowchart TD
+    A["/naoqi_driver/audio"] --> B["Resample to 16 kHz mono"]
+    B --> C{"Silero VAD"}
+    C -- "per-frame probability" --> D(["/speech_event/vad_speech_prob"])
+    C -- "speech segment detected" --> E["Speech Segment Buffer"]
+    E --> F["SpeechDenoiser"]
+    F --> G["Whisper ASR"]
+    G --> H{"action_server mode?"}
+    H -- "true (default): gated,\nonly while a goal is active" --> I(["/speech_recognition\naction result"])
+    H -- "false: standalone,\nalways listening" --> J(["/speech_event/text"])
 
-## Testing
+    A --> K["speech_event_localization node\n(SRP-PHAT beamforming)"]
+    K --> L(["/sound_localization/direction"])
+    K --> M(["/sound_localization/azimuth"])
+    K --> N(["/sound_localization/confidence"])
+```
+
+`SpeechDenoiser`'s post-VAD, pre-ASR cleaning pipeline:
+- Bandpass filter (80 Hz – 7500 Hz)
+- Harmonic IIR notch filters targeting fan hum fundamental and harmonics
+- Wiener filter with online minimum-statistics noise estimation
+- Spectral floor and median smoothing to suppress musical noise
+- RMS normalisation to preserve Whisper's internal level thresholds
+
+### Node Lifecycle
+
+`SpeechRecognitionNode` is a `LifecycleNode`; `dec_launch`'s `nav2_lifecycle_manager` drives it through these transitions on startup:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Unconfigured
+
+    Unconfigured --> Inactive: configure
+    Inactive --> Active: activate
+    Active --> Inactive: deactivate
+    Inactive --> Unconfigured: cleanup
+
+    Unconfigured --> Finalized: shutdown
+    Inactive --> Finalized: shutdown
+    Active --> Finalized: shutdown
+    Finalized --> [*]
+```
+
+| Transition | What happens |
+|---|---|
+| `configure` | Load Silero VAD + Whisper models, construct `SpeechDenoiser`, create publishers, `set_enabled` service, and action server |
+| `activate` | Activate publishers, subscribe to `/naoqi_driver/audio` |
+| `deactivate` | Destroy the audio subscription, deactivate publishers |
+| `cleanup` | Destroy publishers/service/action server, release Whisper/Silero/denoiser instances |
+| `shutdown` | Log shutdown and exit (reachable from any state) |
+
+## 🧪 Testing
 
 ```bash
 # Check node is running
@@ -229,12 +261,12 @@ ros2 topic echo /speech_event/vad_speech_prob
 ros2 topic echo /speech_event/text
 ```
 
-## Support
+## 💡 Support
 
 For issues or questions:
 - Create an issue on the [pepper4dec GitHub repository](https://github.com/yohatad/pepper4dec/issues)
 - Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a>
 
-## License
+## 📜 License
 Copyright (C) 2026 Upanzi Network
 Licensed under the BSD-3-Clause License. See individual package licenses for details.
