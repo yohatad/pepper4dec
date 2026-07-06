@@ -36,8 +36,8 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 - **`overt_attention`** - Controls robot's attention mechanism based on visitor presence
 
 ### **Navigation & Localization**
-- **`pepper_navmap`** (ROS2 package name: `pepper_navigation`) - RTAB-Map/SLAM Toolbox for mapping and Nav2 for navigation
-- **`robot_localization`** - EKF-based pose estimation node
+- **`pepper_navigation`** - RTAB-Map/SLAM Toolbox for mapping and Nav2 for navigation
+- **`pepper_odom_anchor`** - Anchors Pepper's relative wheel odometry to an absolute starting pose
 
 ### **Infrastructure & Utilities**
 - **`dec_launch`** - System launch files and startup configurations
@@ -74,7 +74,7 @@ source install/setup.bash
 
 2. **Set Up Python Environments**
 
-Most perception/actuation packages (`animate_behavior`, `behavior_controller`, `face_detection`, `gesture_execution`, `overt_attention`, `person_detection`, `robot_localization`) are C++ and need no Python environment. The remaining Python packages (`conversation_manager`, `speech_event`, `text_to_speech`) each expect their own dedicated virtual environment — see each package's own README for the exact venv name and `pip install -r requirements.txt` it expects.
+Most perception/actuation packages (`animate_behavior`, `behavior_controller`, `face_detection`, `gesture_execution`, `overt_attention`, `person_detection`, `pepper_odom_anchor`) are C++ and need no Python environment. The remaining Python packages (`conversation_manager`, `speech_event`, `text_to_speech`) each expect their own dedicated virtual environment — see each package's own README for the exact venv name and `pip install -r requirements.txt` it expects.
 
 3. **Download Model Files**
    - Place required ONNX model files in their respective `models/` directories
