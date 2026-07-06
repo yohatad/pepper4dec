@@ -8,7 +8,7 @@
 
 The **Behavior Controller** package orchestrates robot behavior on the Pepper robot using [BehaviorTree.CPP v4](https://www.behaviortree.dev/) and [BehaviorTree.ROS2](https://github.com/BehaviorTree/BehaviorTree.ROS2). It loads a mission defined as an XML behavior tree and executes it by dispatching ROS2 action calls to speech, gesture, navigation, conversation, and face-detection nodes. At startup it loads a YAML configuration file and two knowledge bases — a culture knowledge base (utility phrases) and an environment knowledge base (locations and tour stops).
 
-## Key Features
+## ✨ Key Features
 - **ROS2 Native**: Built for ROS2 Humble
 - **BehaviorTree.CPP v4**: Mission logic expressed as composable XML behavior trees
 - **Intent-aware routing**: The `ConversationManager` BT node now exposes `intent` and `confidence` output ports; the `asr_cm_tts_pipeline.xml` tree branches on intent to drive speech, navigation, gesture, or stop behavior accordingly
@@ -19,7 +19,7 @@ The **Behavior Controller** package orchestrates robot behavior on the Pepper ro
 
 # 🛠️ Installation
 
-## Prerequisites
+## ✅ Prerequisites
 - **ROS2 Humble** or newer
 - **BehaviorTree.CPP v4** (`behaviortree_cpp`)
 - **BehaviorTree.ROS2** (`behaviortree_ros2`)
@@ -157,41 +157,43 @@ XML files are in the `data/` folder. The active scenario is set via `scenario_sp
 
 | File | Description |
 |------|-------------|
+| `lab_tour.xml` | Default scenario (`scenario_specification` default) — guided tour of the lab environment |
 | `dec_Tour.xml` | Guided tour of the DEC environment |
 | `asr_cm_tts_pipeline.xml` | Intent-routed ASR → ConversationManager → TTS pipeline |
 | `listen_cm_tts_pipeline.xml` | Standalone ASR → ConversationManager → TTS pipeline |
 | `dec_DeicticTest.xml` | Test tree for the exhibit-loop / deictic gesture nodes |
 | `dec_GestureNavTest.xml` | Test tree for gesture and navigation nodes |
 
-## Package Structure
+## 📁 Package Structure
 
 ```
 behaviorController/
 ├── config/
 │   └── behaviorControllerConfiguration.yaml
 ├── data/
-│   ├── dec_Tour.xml
-│   ├── asr_cm_tts_pipeline.xml
+│   ├── asr_cm_tts_pipeline.xml                     # default intent-routed BT scenario
 │   ├── listen_cm_tts_pipeline.xml
-│   ├── dec_DeicticTest.xml
-│   ├── dec_GestureNavTest.xml
-│   ├── cultureKnowledgeBase.yaml
-│   ├── decEnvironmentKnowledgeBase.yaml
-│   ├── decEnvironmentKnowledgeBase_short.yaml
-│   └── labEnvironmentKnowledgeBase.yaml
+│   ├── lab_tour.xml, dec_Tour.xml                   # tour scenarios
+│   ├── dec_DeicticTest.xml, dec_GestureNavTest.xml  # test scenarios
+│   ├── cultureKnowledgeBase.yaml                    # utility phrases
+│   ├── labEnvironmentKnowledgeBase.yaml              # location poses, gesture targets, tour sequence
+│   ├── decEnvironmentKnowledgeBase(_short).yaml
+│   └── XML_USE.md                                   # BT XML authoring guide
 ├── include/
 │   └── behaviorController/
-│       └── behaviorControllerInterface.h
+│       └── behaviorControllerInterface.h      # shared class/struct declarations
+├── launch/
+│   └── behavior_controller.launch.py
 ├── src/
-│   ├── behaviorControllerApplication.cpp
-│   ├── behaviorControllerImplementation.cpp
-│   └── behaviorControllerUtilities.cpp
+│   ├── behaviorControllerApplication.cpp      # node entry point, BT engine setup
+│   ├── behaviorControllerImplementation.cpp   # BT leaf node implementations
+│   └── behaviorControllerUtilities.cpp        # ConfigManager/KnowledgeManager
 ├── CMakeLists.txt
 ├── package.xml
 └── README.md
 ```
 
-## Testing
+## 🧪 Testing
 
 ```bash
 # Check node is running
@@ -204,7 +206,7 @@ ros2 topic list
 ros2 run groot2_gui groot2_gui
 ```
 
-## Support
+## 💡 Support
 
 For issues or questions:
 - Create an issue on the [pepper4dec GitHub repository](https://github.com/yohatad/pepper4dec/issues)

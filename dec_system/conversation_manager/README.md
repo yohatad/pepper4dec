@@ -8,7 +8,7 @@
 
 The **Conversation Manager Package** implements a **Retrieval-Augmented Generation (RAG)** system for the Pepper robot to serve as a lab assistant at the Upanzi Network, Carnegie Mellon University Africa. The system allows Pepper to answer questions about Upanzi Network's research, projects, facilities, and impact areas using a knowledge base built from structured JSON data.
 
-## Key Features
+## ✨ Key Features
 - **ROS2 Native**: Built for ROS2 Humble
 - **Retrieval-Augmented Generation**: Combines vector search with large language models for accurate, context-aware responses
 - **ChromaDB Integration**: Local vector database for privacy-preserving knowledge storage
@@ -20,7 +20,7 @@ The **Conversation Manager Package** implements a **Retrieval-Augmented Generati
 
 # 🛠️ Installation
 
-## Prerequisites
+## ✅ Prerequisites
 - **ROS2 Humble** or newer
 - **Python 3.8** or compatible version
 - **ROS 2 installation** with `rclpy` support
@@ -153,28 +153,17 @@ The RAG system has three main components:
 
 1. **Knowledge Base**: Structured JSON data stored in `data/upanzi_data.json`
 2. **Vector Database**: ChromaDB with persistent local storage for document embeddings
-3. **Conversation Manager Node**:
-   - Receives prompts via the `/conversation_manager` action server
-   - Performs semantic search on the vector database (`searching` feedback)
-   - Streams the LLM generation internally, accumulating sentences into the full answer (`generating` feedback)
-   - Returns the full answer text as the action result for the BT `SpeechWithFeedback` node to play back
-   - Maintains per-session conversation history for context-aware responses
+3. **Conversation Manager Node**: Ties the two together and maintains per-session conversation history for context-aware responses
 
 ## Data Flow
 
-```
-User utterance
-      │
-      ▼
-/conversation_manager action goal  (prompt)
-      │
-      ├─► Stage 1: ChromaDB similarity search  →  feedback: "searching"
-      │
-      ├─► Stage 2: Streaming LLM generation    →  feedback: "generating"
-      │         │
-      │         └─► sentences accumulated into the full response (not published)
-      │
-      └─► Action result: full response text    →  SpeechWithFeedback plays it back
+```mermaid
+flowchart TD
+    A(["User utterance"]) --> B(["/conversation_manager action goal (prompt)"])
+    B --> C["ChromaDB similarity search"]
+    C -- "feedback: searching" --> D["Streaming LLM generation"]
+    D -- "feedback: generating\n(sentences accumulated, not published)" --> E(["Action result: full response text"])
+    E --> F["SpeechWithFeedback plays it back"]
 ```
 
 ## Knowledge Base JSON Format
@@ -215,21 +204,26 @@ For issues or questions:
 - Create an issue on the [pepper4dec GitHub repository](https://github.com/yohatad/pepper4dec/issues)
 - Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a>, <a href="mailto:mahadanso79@gmail.com">mahadanso79@gmail.com</a>
 
-## Package Structure
+## 📁 Package Structure
 
 ```
 conversation_manager/
 ├── config/
-│   └── converation_manager_configuration.yaml
+│   └── converation_manager_configuration.yaml  # RAG/LLM parameters
 ├── data/
-│   ├── upanzi_data.json
-│   └── system_prompt.txt
+│   ├── upanzi_data.json                        # knowledge base source
+│   └── system_prompt.txt                       # LLM system prompt
 ├── launch/
+│   └── conversation_manager.launch.py
+├── scripts/
+│   └── conversation_manager                    # venv launcher for `ros2 run`
+├── resource/
+│   └── conversation_manager
 ├── conversation_manager/
 │   ├── __init__.py
-│   ├── conversation_manager_application.py
-│   ├── conversation_manager_implementation.py
-│   └── conversation_manager_utilities.py
+│   ├── conversation_manager_application.py     # node entry point, lifecycle node + action server
+│   ├── conversation_manager_implementation.py  # RAG pipeline (ChromaDB + LLM)
+│   └── conversation_manager_utilities.py       # prompt/intent/speech-tag helpers
 ├── package.xml
 ├── setup.py
 ├── setup.cfg
