@@ -24,7 +24,7 @@ RobotLocalization::RobotLocalization() : rclcpp_lifecycle::LifecycleNode("robot_
     declare_parameter("initial_x", 0.0);
     declare_parameter("initial_y", 0.0);
     declare_parameter("initial_theta", 0.0);
-    declare_parameter("odom_topic", std::string("/pepper_odom"));
+    declare_parameter("odom_topic", std::string("/pepper_odom_filtered"));
     declare_parameter("pose_topic", std::string("/robot_localization/pose"));
     declare_parameter("publish_rate", 10.0);
 }

@@ -20,7 +20,7 @@ ekf_filter_node:
     # -------------------------------
     # Wheel odometry input
     # -------------------------------
-    odom0: /pepper_odom
+    odom0: /pepper_odom_filtered
 
     # [x, y, z,
     #  roll, pitch, yaw,

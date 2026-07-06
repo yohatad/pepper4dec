@@ -1,6 +1,6 @@
 /* odom_path_publisher.cpp
  *
- * Subscribes to /pepper_odom and accumulates a nav_msgs/Path for visual
+ * Subscribes to /pepper_odom_filtered and accumulates a nav_msgs/Path for visual
  * odometry-quality inspection in RViz, along with start/end markers and a
  * deviation line back to the start pose. A reset service clears the
  * accumulated path to begin a new closed-loop test run.
@@ -33,7 +33,7 @@ public:
         path_.header.frame_id = "pepper_odom";
 
         odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
-            "/pepper_odom", 10, std::bind(&OdomPathPublisher::odomCallback, this, std::placeholders::_1));
+            "/pepper_odom_filtered", 10, std::bind(&OdomPathPublisher::odomCallback, this, std::placeholders::_1));
         path_pub_ = create_publisher<nav_msgs::msg::Path>("/odom_path", 10);
         marker_pub_ = create_publisher<visualization_msgs::msg::Marker>("/odom_markers", 10);
         reset_srv_ = create_service<std_srvs::srv::Empty>(
@@ -177,7 +177,7 @@ private:
         path_.poses.clear();
         has_start_pose_ = false;
         pose_count_ = 0;
-        RCLCPP_INFO(get_logger(), "Path reset - waiting for next /pepper_odom message.");
+        RCLCPP_INFO(get_logger(), "Path reset - waiting for next /pepper_odom_filtered message.");
     }
 
     static double yaw(const geometry_msgs::msg::Quaternion& q) {

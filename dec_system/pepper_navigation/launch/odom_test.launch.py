@@ -35,7 +35,7 @@ def generate_launch_description():
         DeclareLaunchArgument('min_angle', default_value='0.05',
                               description='Minimum radians between recorded path poses'),
 
-        # Accumulates /pepper_odom poses into nav_msgs/Path and publishes markers
+        # Accumulates /pepper_odom_filtered poses into nav_msgs/Path and publishes markers
         Node(
             package='pepper_navigation',
             executable='odom_path_publisher',
