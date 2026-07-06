@@ -9,7 +9,7 @@
  * Date: Jul 05, 2026
  * Version: v1.0 - C++ port of pepper_kinematics_utilities.py
  *
- * Copyright (C) 2025 CyLab Carnegie Mellon University Africa
+ * Copyright (C) 2025 Carnegie Mellon University Africa
  */
 
 #ifndef GESTURE_EXECUTION_PEPPER_KINEMATICS_UTILITIES_H

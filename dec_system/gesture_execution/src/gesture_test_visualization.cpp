@@ -15,7 +15,7 @@
  * Date: Jul 05, 2026
  * Version: v1.0 - C++ port of gesture_test_visualization.py
  *
- * Copyright (C) 2025 CyLab Carnegie Mellon University Africa
+ * Copyright (C) 2025 Carnegie Mellon University Africa
  */
 
 #include <rclcpp/rclcpp.hpp>
