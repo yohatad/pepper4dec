@@ -6,13 +6,12 @@
   <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
-The **Animate Behavior** package is a ROS2 action server that provides natural, lifelike animation for the Pepper humanoid robot during idle periods or social interactions. It generates smooth, randomized gestural movements across various body parts (arms, hands, legs, and base rotation) to enhance the robot's expressiveness and engagement during human-robot interaction. The module uses high-frequency motion updates (30Hz) with exponential smoothing to achieve natural, fluid movements that avoid mechanical or jerky appearance. A synchronized LED cascade wave on the face LEDs runs in parallel with body animation to further enhance expressiveness.
+The **Animate Behavior** package is a ROS2 action server that provides natural, lifelike animation for the Pepper humanoid robot during idle periods or social interactions. It generates smooth, randomized gestural movements across various body parts (arms, hands, legs, and base rotation) to enhance the robot's expressiveness and engagement during human-robot interaction. Each gesture is sent as a single bezier-interpolated joint trajectory, letting NAOqi's onboard motion controller handle smooth, natural movement without streaming continuous commands. A synchronized LED cascade wave on the face LEDs runs in parallel with body animation to further enhance expressiveness.
 
 ## ✨ Key Features
 - **ROS2 Native**: Built for ROS2 Humble
 - **Multiple Behavior Types**: Supports All, body, arms, hands, idle, rotation, and home behaviors
-- **High-Frequency Updates**: 30Hz motion updates for smooth animation
-- **Exponential Smoothing**: Natural, fluid movements with configurable smoothing factor
+- **Bezier Trajectories**: Each gesture is sent as one onboard-interpolated trajectory instead of a continuous command stream
 - **BehaviorTree Integration**: Action-based stop via `home` behavior type
 - **Real-time Feedback**: Continuous feedback on animated limb, gestures completed, and elapsed time
 - **LED Cascade Animation**: Synchronized face LED wave effect driven via the `naoqi_driver` `/naoqi_driver/run_led` action server
@@ -49,8 +48,6 @@ Configuration is managed via `config/animate_behavior_configuration.yaml`:
 | `gesture_interval_min` | Minimum time between gesture targets (sec) | `2.5` |
 | `gesture_interval_max` | Maximum time between gesture targets (sec) | `4.5` |
 | `gesture_rotation_interval` | Time between base rotation changes (sec) | `5.0` |
-| `gesture_smoothing_factor` | Exponential smoothing coefficient | `0.15` |
-| `gesture_motion_speed` | ALMotion speed parameter | `0.08` |
 | `led_enabled` | Enable/disable LED cascade animation | `true` |
 | `led_white_step` | Delay between each LED layer fading white (sec) | `0.06` |
 | `led_dark_step` | Delay between each LED layer fading dark (sec) | `0.04` |
@@ -133,13 +130,13 @@ ros2 run animate_behavior animate_behavior
 
 | Topic | Type | Description |
 |-------|------|-------------|
-| `/joint_states` | `sensor_msgs/JointState` | Current joint positions from robot (used for smooth interpolation) |
+| `/joint_states` | `sensor_msgs/JointState` | Current joint positions from robot (used to hold position on stop) |
 
 ### Published Topics
 
 | Topic | Type | Description |
 |-------|------|-------------|
-| `/joint_angles` | `naoqi_bridge_msgs/JointAnglesWithSpeed` | Joint angle commands sent to Pepper robot at 30Hz |
+| `/joint_angles_trajectory` | `naoqi_bridge_msgs/JointAnglesTrajectory` | Per-gesture bezier joint trajectories sent to Pepper robot |
 | `/cmd_vel` | `geometry_msgs/Twist` | Base rotation velocity commands |
 
 ### Action Servers
@@ -282,11 +279,11 @@ animate_behavior/
 
 ## 🏗️ Architecture
 
-The animation system uses high-frequency motion updates (30Hz) with exponential smoothing to achieve natural, fluid movements:
+The animation system checks timing at 30Hz but only publishes a joint command when a new gesture or rotation is due:
 
-1. **Animation Loop**: Runs at 30Hz, publishing joint angle commands
+1. **Animation Loop**: Runs at 30Hz, checking whether it's time for a new gesture or rotation
 2. **Gesture Generation**: Randomizes target positions for each joint group
-3. **Exponential Smoothing**: Interpolates between current and target positions
+3. **Trajectory Dispatch**: Publishes one bezier-interpolated `JointAnglesTrajectory` per gesture, timed to the next gesture interval; NAOqi's onboard controller performs the interpolation
 4. **Feedback Thread**: Publishes status updates at 2Hz
 5. **Action Server**: Handles goal requests and cancellation
 6. **LED Cascade**: ROS timer-based scheduler fires `MODE_RGB_FADE` goals against `/naoqi_driver/run_led` in a looping wave pattern; cancelled and turned off when animation stops
@@ -305,7 +302,7 @@ ros2 action send_goal /animate_behavior dec_interfaces/action/AnimateBehavior \
   "{behavior_type: 'All', selected_range: 0.5, duration_seconds: 10}"
 
 # Monitor joint commands
-ros2 topic echo /joint_angles
+ros2 topic echo /joint_angles_trajectory
 ```
 
 ## 💡 Support

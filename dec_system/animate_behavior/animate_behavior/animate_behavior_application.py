@@ -8,9 +8,10 @@ body rotation, and face LED animations.
 
 This node implements an action server on `/animate_behavior` that, once accepted, animates a
 configurable subset of the robot's limbs (arms, hands, head, legs) with smooth random gestures
-and periodic body rotation while reporting elapsed-time feedback. Joint commands are computed
-from live `/joint_states` feedback and published as smoothed joint angle targets. An
-`/animate_behavior/stop` service and goal cancellation allow the animation to be halted early.
+and periodic body rotation while reporting elapsed-time feedback. Each gesture is dispatched as
+a single bezier joint trajectory, with `/joint_states` feedback used only to hold the current
+position if the animation is stopped mid-gesture. An `/animate_behavior/stop` service and goal
+cancellation allow the animation to be halted early.
 While active, a cascading face-LED "breathing" animation is driven via the naoqi LED action
 server, unless disabled.
 
@@ -20,11 +21,11 @@ everything is torn down symmetrically in `on_deactivate`/`on_cleanup`.
 
 Subscribers:
     /joint_states (sensor_msgs/JointState)
-        Current joint positions, used as the basis for smoothed gesture targets.
+        Current joint positions, used to hold position when a gesture is stopped early.
 
 Publishers:
-    /joint_angles (naoqi_bridge_msgs/JointAnglesWithSpeed)
-        Smoothed target joint angles for the animated limbs.
+    /joint_angles_trajectory (naoqi_bridge_msgs/JointAnglesTrajectory)
+        Per-gesture bezier trajectories for the animated limbs.
     /cmd_vel (geometry_msgs/Twist)
         Periodic body rotation command issued while a behavior is active.
 
@@ -48,8 +49,6 @@ Parameters (loaded from animate_behavior_configuration.yaml):
     led_white_hold (double, default: 2.0)
     led_dark_pause (double, default: 0.2)
     gesture_update_rate (double, default: 30.0)
-    gesture_smoothing_factor (double, default: 0.15)
-    gesture_motion_speed (double, default: 0.08)
     gesture_interval_min (double, default: 2.5)
     gesture_interval_max (double, default: 4.5)
     gesture_rotation_interval (double, default: 5.0)
