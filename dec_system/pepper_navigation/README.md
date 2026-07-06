@@ -119,7 +119,7 @@ ros2 launch pepper_navigation slam_toolbox.launch.py
 | Topic | Type | Description |
 |-------|------|-------------|
 | `/scan` | `sensor_msgs/LaserScan` | 2D LiDAR scan |
-| `/odom` | `nav_msgs/Odometry` | Robot odometry |
+| `/pepper_odom_filtered` | `nav_msgs/Odometry` | Covariance-corrected wheel odometry |
 | `/tf` | `tf2_msgs/TFMessage` | Transform tree |
 | `/camera/color/image_raw_custom` | `sensor_msgs/Image` | RGB image (RTAB-Map) |
 | `/camera/aligned_depth_to_color/image_raw_custom` | `sensor_msgs/Image` | Depth image (RTAB-Map) |
@@ -209,7 +209,7 @@ pepper_navigation/
 ```
 
 Note: the wheel-odometry covariance node that `ekf_nav.yaml`'s `odom0` expects
-(`/pepper_odom`) lives in a separate top-level package, `pepper_odom_covariance`
+(`/pepper_odom_filtered`) lives in a separate top-level package, `pepper_odom_covariance`
 (`~/ros2_ws/src/pepper_odom_covariance/`) — not inside this package. It's
 infrastructure-tier (reusable, dependency-light), not navigation-specific, so
 it sits alongside `naoqi_driver2` rather than under `dec_system`.
@@ -219,12 +219,12 @@ it sits alongside `naoqi_driver2` rather than under `dec_system`.
 The navigation stack integrates four main subsystems:
 
 1. **Odometry Layer** (upstream, separate package):
-   - `naoqi_driver2` publishes raw wheel+IMU odometry on `/odom`, with a flat,
-     non-growing covariance
+   - `naoqi_driver2` publishes raw wheel+IMU odometry on `/pepper_odom`, with a
+     flat, non-growing covariance
    - `pepper_odom_covariance` (top-level package, not under `dec_system`)
-     republishes it as `/pepper_odom` with a covariance that grows with
-     distance/rotation traveled - this is what `ekf_nav.yaml`'s `odom0` and
-     `nav2_params.yaml`'s `amcl.odom_frame_id` expect as input
+     republishes it as `/pepper_odom_filtered` with a covariance that grows
+     with distance/rotation traveled - this is what `ekf_nav.yaml`'s `odom0`
+     and `nav2_params.yaml`'s `bt_navigator.odom_topic` expect as input
 
 2. **Mapping Layer** (choose one):
    - **RTAB-Map**: RGB-D SLAM using RealSense
@@ -234,8 +234,8 @@ The navigation stack integrates four main subsystems:
    - RTAB-Map provides continuous localization
    - AMCL for static map localization
    - `ekf_nav.yaml` configures `robot_localization`'s `ekf_node` to fuse
-     `/pepper_odom` (and, once wired in, a LIO odometry source) - drafted but
-     not yet launched by anything
+     `/pepper_odom_filtered` (and, once wired in, a LIO odometry source) -
+     drafted but not yet launched by anything
 
 4. **Navigation Layer (Nav2)**:
    - **Map Server**: Serves occupancy grid and keepout filter mask

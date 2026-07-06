@@ -29,7 +29,7 @@ Parameters:
         Initial global y position of the robot.
     initial_theta (double, default: 0.0)
         Initial global heading of the robot, in radians.
-    odom_topic (string, default: "/pepper_odom")
+    odom_topic (string, default: "/pepper_odom_filtered")
         Topic to subscribe to for odometry messages.
     pose_topic (string, default: "/robot_localization/pose")
         Topic on which the absolute pose is published.
@@ -70,7 +70,7 @@ class RobotLocalization(LifecycleNode):
         self.declare_parameter('initial_x', 0.0)
         self.declare_parameter('initial_y', 0.0)
         self.declare_parameter('initial_theta', 0.0)
-        self.declare_parameter('odom_topic', '/pepper_odom')
+        self.declare_parameter('odom_topic', '/pepper_odom_filtered')
         self.declare_parameter('pose_topic', '/robot_localization/pose')
         self.declare_parameter('publish_rate', 10.0)  # Hz
 

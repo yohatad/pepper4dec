@@ -24,7 +24,7 @@ class OdomPathPublisher(Node):
         self.start_pose = None
         self.pose_count = 0
 
-        self.sub = self.create_subscription(Odometry, '/pepper_odom', self._odom_cb, 10)
+        self.sub = self.create_subscription(Odometry, '/pepper_odom_filtered', self._odom_cb, 10)
         self.path_pub = self.create_publisher(Path, '/odom_path', 10)
         self.marker_pub = self.create_publisher(Marker, '/odom_markers', 10)
         self.create_service(Empty, 'reset_odom_path', self._reset_cb)
@@ -135,7 +135,7 @@ class OdomPathPublisher(Node):
         self.path.poses.clear()
         self.start_pose = None
         self.pose_count = 0
-        self.get_logger().info('Path reset — waiting for next /pepper_odom message.')
+        self.get_logger().info('Path reset — waiting for next /pepper_odom_filtered message.')
         return response
 
     # ------------------------------------------------------------------ #
