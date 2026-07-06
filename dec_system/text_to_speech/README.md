@@ -189,6 +189,33 @@ flowchart TD
     K --> L["ALAudioPlayer"]
 ```
 
+### Node Lifecycle
+
+`TextToSpeechNode` is a `LifecycleNode`; `dec_launch`'s `nav2_lifecycle_manager` drives it through these transitions on startup. Several steps are gated by `engine` — see the table below.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Unconfigured
+
+    Unconfigured --> Inactive: configure
+    Inactive --> Active: activate
+    Active --> Inactive: deactivate
+    Inactive --> Unconfigured: cleanup
+
+    Unconfigured --> Finalized: shutdown
+    Inactive --> Finalized: shutdown
+    Active --> Finalized: shutdown
+    Finalized --> [*]
+```
+
+| Transition | What happens |
+|---|---|
+| `configure` | Create the sentence queue/state; warm up Kokoro (`kokoro_local`/`kokoro_pepper` only); create the local `AudioPlayer` (`kokoro_local`/`elevenlabs_local` only); create the `/text_to_speech/speaking` publisher (+ NAOqi speech topic publisher for `naoqi_ros`); create the mic-mute client, and the pepper-backend load/unload/send-buffer/play_audio clients (`kokoro_pepper`/`elevenlabs_pepper` only); create the `/text_to_speech` action server |
+| `activate` | Subscribe to `/text_to_speech/input`, start the background playback thread |
+| `deactivate` | Stop the playback thread, drain the sentence queue, destroy the subscription |
+| `cleanup` | Destroy publishers/clients/action server (engine-dependent, mirroring `configure`), release the audio player |
+| `shutdown` | Log shutdown and exit (reachable from any state) |
+
 ## 🧪 Testing
 
 ```bash
