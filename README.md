@@ -36,7 +36,8 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 - **`overt_attention`** - Controls robot's attention mechanism based on visitor presence
 
 ### **Navigation & Localization**
-- **`pepper_navmap`** - For navigation, RTAB-Map for SLAM and Nav2 for Navigation.
+- **`pepper_navmap`** (ROS2 package name: `pepper_navigation`) - RTAB-Map/SLAM Toolbox for mapping and Nav2 for navigation
+- **`robot_localization`** - EKF-based pose estimation node
 
 ### **Infrastructure & Utilities**
 - **`dec_launch`** - System launch files and startup configurations
@@ -71,15 +72,9 @@ colcon build
 source install/setup.bash
 ```
 
-2. **Set Up Python Environment**
-```bash
-# Create virtual environment (recommended)
-python3.10 -m venv ~/dec_virtual_envs
-source ~/dec_virtual_envs/bin/activate
+2. **Set Up Python Environments**
 
-# Install Python dependencies
-pip install -r ~/ros2_ws/src/pepper4dec/dec_system/face_detection/requirements.txt
-```
+Most perception/actuation packages (`animate_behavior`, `behavior_controller`, `face_detection`, `gesture_execution`, `overt_attention`, `person_detection`, `robot_localization`) are C++ and need no Python environment. The remaining Python packages (`conversation_manager`, `speech_event`, `text_to_speech`) each expect their own dedicated virtual environment — see each package's own README for the exact venv name and `pip install -r requirements.txt` it expects.
 
 3. **Download Model Files**
    - Place required ONNX model files in their respective `models/` directories
@@ -93,7 +88,7 @@ pip install -r ~/ros2_ws/src/pepper4dec/dec_system/face_detection/requirements.t
 source ~/ros2_ws/install/setup.bash
 
 # Launch the complete system (requires all dependencies and robot hardware)
-ros2 launch dec_launch rtabmap_realsense.launch.py
+ros2 launch dec_launch dec_system.launch.py
 ```
 
 ### Component-Based Launch
@@ -111,7 +106,7 @@ ros2 run behavior_controller behavior_controller
 
 3. **Launch SLAM Toolbox (2D Mapping)**
 ```bash
-ros2 launch dec_launch slam_toolbox.launch.py
+ros2 launch pepper_navigation slam_toolbox.launch.py
 ```
 
 ### Configuration
@@ -126,7 +121,7 @@ Each package contains configuration files in their `config/` directories:
 - **Algorithm**: SixDrepNet for head pose estimation
 - **Features**: Multi-face detection, mutual gaze evaluation, age/gender estimation
 - **Input**: RGB-D streams from RealSense or Pepper cameras
-- **Output**: `/faceDetection/data` topic with face centroids, gaze status, demographics
+- **Output**: `/face_detection/data` topic with face centroids, gaze status, demographics
 - **Performance**: Real-time processing with GPU acceleration support
 
 ### **Behavior Controller**
@@ -136,12 +131,12 @@ Each package contains configuration files in their `config/` directories:
 - **Adaptation**: Culturally-aware behavior selection based on context
 
 ### **Navigation System**
-- **Localization**: Adaptive Monte Carlo Localization (AMCL) or RTAB-MAP
+- **Localization**: Adaptive Monte Carlo Localization (AMCL), RTAB-MAP, or the `robot_localization` EKF node
 - **Mapping**: Uses pre-built maps (`dec_system/map.pgm`)
 - **Path Planning**: Nav2 stack for safe navigation
 - **Integration**: Full coordination with behavior controller
 
-## �️ Development
+## 🔧 Development
 
 ### Adding New Features
 1. Create new package in `dec_system/` directory
@@ -168,6 +163,6 @@ Detailed documentation is available:
 For issues or questions:
 - **Contact**: 
   - [yohatad123@gmail.com](mailto:yohatad123@gmail.com)
-# 📜 License
+## 📜 License
 Copyright (C) 2026 Upanzi Network
 Licensed under the BSD-3-Clause License. See individual package licenses for details.
