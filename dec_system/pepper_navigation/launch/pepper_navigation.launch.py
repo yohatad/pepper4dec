@@ -10,7 +10,7 @@ def generate_launch_description():
     pkg_dir = get_package_share_directory('pepper_navigation')
     map_file = os.path.join(pkg_dir, 'map', 'rtabmap_march_28.yaml')
     params_file = os.path.join(pkg_dir, 'config', 'nav2_params.yaml')
-    keepout_mask_file = os.path.join(pkg_dir, 'map', 'keepout_zones.yaml')
+    keepout_mask_file = os.path.join(pkg_dir, 'map', 'keepout_zone.yaml')
     
     return LaunchDescription([
         # Map Server (lifecycle node)
@@ -87,13 +87,6 @@ def generate_launch_description():
             name='bt_navigator',
             output='screen',
             parameters=[params_file]
-        ),
-
-        Node(
-            package='tf2_ros',
-            executable='static_transform_publisher',
-            name='static_map_to_odom',
-            arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom']
         ),
 
         # Lifecycle Manager (ONLY lifecycle nodes here)
