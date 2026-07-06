@@ -89,6 +89,10 @@ Configuration is managed via `config/text_to_speech_configuration.yaml`.
 | `elevenlabs_api_key` | ElevenLabs API key | `""` |
 | `elevenlabs_voice_id` | ElevenLabs voice ID | `21m00Tcm4TlvDq8ikWAM` (Rachel) |
 | `elevenlabs_model` | ElevenLabs model ID | `eleven_turbo_v2_5` |
+| `elevenlabs_stability` | ElevenLabs voice stability (0.0–1.0) | `0.5` |
+| `elevenlabs_similarity_boost` | ElevenLabs similarity boost (0.0–1.0) | `0.75` |
+| `elevenlabs_style` | ElevenLabs style exaggeration (0.0–1.0) | `0.0` |
+| `elevenlabs_speed` | ElevenLabs speaking speed multiplier | `1.0` |
 | `barge_in_threshold` | VAD probability to trigger barge-in | `0.85` |
 | `barge_in_chunks` | Consecutive VAD chunks above threshold required | `3` |
 
@@ -166,6 +170,12 @@ ros2 action send_goal /text_to_speech dec_interfaces/action/TTS "{text: 'Hello, 
 | `success` | bool | Whether speech completed successfully |
 | `message` | string | Status message |
 
+### Feedback
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | string | "queuing" (sentences being enqueued), "speaking" (audio actively playing) |
+
 ## 🏗️ Architecture
 
 ```mermaid
@@ -175,8 +185,8 @@ flowchart TD
     C --> D["speak_sentence()"]
     D --> E{"engine"}
     E -- "naoqi_ros" --> F(["/speech"])
-    E -- "kokoro_local" --> G["sounddevice"]
-    E -- "kokoro_pepper /\nelevenlabs_*" --> H{"playback_method"}
+    E -- "kokoro_local /\nelevenlabs_local" --> G["sounddevice"]
+    E -- "kokoro_pepper /\nelevenlabs_pepper" --> H{"playback_method"}
     H -- "stream" --> I["send_audio_buffer"]
     I --> J["ALAudioDevice"]
     H -- "file" --> K["SCP + play_audio"]
