@@ -14,7 +14,7 @@ The **Pepper Navigation and Mapping** package provides autonomous localization, 
 - **SLAM Toolbox Integration**: 2D LiDAR-based online asynchronous SLAM with loop closure
 - **Nav2 Stack**: Full autonomous navigation with path planning and obstacle avoidance
 - **Keepout Zones**: Configurable restricted areas using costmap filter masks
-- **Goal Navigation API**: Python utility for programmatic navigation goal sending
+- **Goal Navigation API**: C++ utility for programmatic navigation goal sending
 - **Pre-built Maps**: Includes saved maps for localization-only deployments
 
 ## ✅ Prerequisites
@@ -150,12 +150,12 @@ Use the **Nav2 Goal** tool in RViz2 to click a target pose on the map.
 ros2 run pepper_navigation send_goal
 ```
 
-Edit `pepper_navigation/send_goal.py` to change target coordinates:
+Edit `src/tools/send_goal.cpp` to change target coordinates (requires a rebuild after editing):
 
-```python
-goal_pose.pose.position.x = 2.0   # Target X in map frame (meters)
-goal_pose.pose.position.y = 1.0   # Target Y in map frame (meters)
-goal_pose.pose.orientation.w = 1.0 # Orientation (1.0 = facing forward)
+```cpp
+goal.pose.pose.position.x = 2.0;   // Target X in map frame (meters)
+goal.pose.pose.position.y = 1.0;   // Target Y in map frame (meters)
+goal.pose.pose.orientation.w = 1.0; // Orientation (1.0 = facing forward)
 ```
 
 ### Using Nav2 Action CLI
@@ -178,17 +178,20 @@ ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
 ### Saving a New Map (SLAM Toolbox)
 
 ```bash
-ros2 run nav2_map_server map_saver_cli -f ~/ros2_ws/src/pepper4dec/dec_system/pepper_navmap/map/my_new_map
+ros2 run nav2_map_server map_saver_cli -f ~/ros2_ws/src/pepper4dec/dec_system/pepper_navigation/map/my_new_map
 ```
 
 ## 📁 Package Structure
 
+Pure C++ (`ament_cmake`), aside from one standalone, non-ROS utility script
+(`tools/generate_keepout.py`):
+
 ```
-pepper_navmap/
+pepper_navigation/
 ├── config/
 │   ├── mapper_params_online_async.yaml       # SLAM Toolbox parameters
 │   ├── nav2_params.yaml                      # Nav2 stack parameters
-│   ├── ekf_nav.yaml.yaml                     # robot_localization EKF parameters
+│   ├── ekf_nav.yaml.yaml                     # robot_localization EKF parameters (not yet launched)
 │   └── README.md
 ├── launch/
 │   ├── pepper_navigation.launch.py
@@ -201,40 +204,62 @@ pepper_navmap/
 │   ├── rtabmap_feb_15.yaml, rtabmap_feb_26.yaml  # earlier RTAB-Map captures; .pgm alongside
 │   ├── keepout_zone.yaml         # keepout filter mask; .pgm alongside
 │   └── *.png                     # map preview renders
-├── pepper_navigation/
-│   ├── __init__.py
-│   ├── send_goal.py              # CLI utility to send Nav2 goals
-│   ├── odom_path_publisher.py    # publishes traversed path for RViz2
-│   └── generate_keepout.py       # builds keepout mask from a map
+├── src/tools/                    # dev/debug tooling, not the production pipeline
+│   ├── send_goal.cpp             # CLI utility to send Nav2 goals
+│   └── odom_path_publisher.cpp   # publishes traversed path for RViz2
+├── tools/
+│   └── generate_keepout.py       # standalone script: builds a keepout mask from a map
+│                                  # (not a ROS2 node - run manually with python3)
 ├── rviz/
 │   └── odometry_test.rviz
-├── resource/
-│   └── pepper_navigation
 ├── package.xml
-├── setup.py
-├── setup.cfg
 └── README.md
 ```
 
+Note: the wheel-odometry covariance node that `ekf_nav.yaml`'s `odom0` expects
+(`/pepper_odom`) lives in a separate top-level package, `pepper_odom_covariance`
+(`~/ros2_ws/src/pepper_odom_covariance/`) — not inside this package. It's
+infrastructure-tier (reusable, dependency-light), not navigation-specific, so
+it sits alongside `naoqi_driver2` rather than under `dec_system`.
+
 ## 🏗️ Architecture
 
-The navigation stack integrates three main subsystems:
+The navigation stack integrates four main subsystems:
 
-1. **Mapping Layer** (choose one):
+1. **Odometry Layer** (upstream, separate package):
+   - `naoqi_driver2` publishes raw wheel+IMU odometry on `/odom`, with a flat,
+     non-growing covariance
+   - `pepper_odom_covariance` (top-level package, not under `dec_system`)
+     republishes it as `/pepper_odom` with a covariance that grows with
+     distance/rotation traveled - this is what `ekf_nav.yaml`'s `odom0` and
+     `nav2_params.yaml`'s `amcl.odom_frame_id` expect as input
+
+2. **Mapping Layer** (choose one):
    - **RTAB-Map**: RGB-D SLAM using RealSense
    - **SLAM Toolbox**: 2D LiDAR SLAM with loop closure
 
-2. **Localization Layer**:
+3. **Localization Layer**:
    - RTAB-Map provides continuous localization
    - AMCL for static map localization
+   - `ekf_nav.yaml` configures `robot_localization`'s `ekf_node` to fuse
+     `/pepper_odom` (and, once wired in, a LIO odometry source) - drafted but
+     not yet launched by anything
 
-3. **Navigation Layer (Nav2)**:
+4. **Navigation Layer (Nav2)**:
    - **Map Server**: Serves occupancy grid and keepout filter mask
    - **Controller Server**: Local trajectory following
    - **Planner Server**: Global path computation
    - **Behavior Server**: Recovery behaviors
    - **BT Navigator**: Behavior tree orchestration
    - **Lifecycle Manager**: Node lifecycle management
+
+> **Fixed**: `pepper_navigation.launch.py` used to also launch a
+> `static_transform_publisher` publishing a fixed identity `map→odom`
+> transform unconditionally, alongside AMCL's own live, scan-corrected one -
+> two publishers of the same transform, a real TF conflict and a likely
+> source of localization jitter. Removed; AMCL's `nav2_params.yaml` already
+> has `set_initial_pose: true` (origin) and `tf_broadcast: true`, so it
+> publishes the real transform on its own without it.
 
 ## 🧪 Testing
 
