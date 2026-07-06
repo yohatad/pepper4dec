@@ -1113,6 +1113,10 @@ def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
         search:
           similarity_threshold: 0.15
           top_k: 5
+        conversation:
+          max_history_turns: 15
+          context_turns: 10
+          max_response_sentences: 3
         data:
           default_path: "./data/upanzi_data.json"
         debug:
@@ -1166,13 +1170,21 @@ def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
         messages.append(warn)
     
     context_turns, warn = safe_int(
-        conversation.get('context_turns'), 
-        DEFAULT_CONTEXT_TURNS, 
+        conversation.get('context_turns'),
+        DEFAULT_CONTEXT_TURNS,
         'context_turns'
     )
     if warn:
         messages.append(warn)
-    
+
+    max_response_sentences, warn = safe_int(
+        conversation.get('max_response_sentences'),
+        DEFAULT_MAX_RESPONSE_SENTENCES,
+        'max_response_sentences'
+    )
+    if warn:
+        messages.append(warn)
+
     # Get data default path
     data_default_path, warn = safe_str(
         data.get('default_path'),
@@ -1205,6 +1217,7 @@ def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
             default_top_k=top_k,
             max_history_turns=max_history_turns,
             context_turns=context_turns,
+            max_response_sentences=max_response_sentences,
             data_default_path=data_default_path,
             verbose=verbose,
         )
