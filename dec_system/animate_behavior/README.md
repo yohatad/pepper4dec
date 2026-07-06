@@ -8,7 +8,7 @@
 
 The **Animate Behavior** package is a ROS2 action server that provides natural, lifelike animation for the Pepper humanoid robot during idle periods or social interactions. It generates smooth, randomized gestural movements across various body parts (arms, hands, legs, and base rotation) to enhance the robot's expressiveness and engagement during human-robot interaction. The module uses high-frequency motion updates (30Hz) with exponential smoothing to achieve natural, fluid movements that avoid mechanical or jerky appearance. A synchronized LED cascade wave on the face LEDs runs in parallel with body animation to further enhance expressiveness.
 
-## Key Features
+## ✨ Key Features
 - **ROS2 Native**: Built for ROS2 Humble
 - **Multiple Behavior Types**: Supports All, body, arms, hands, idle, rotation, and home behaviors
 - **High-Frequency Updates**: 30Hz motion updates for smooth animation
@@ -17,13 +17,13 @@ The **Animate Behavior** package is a ROS2 action server that provides natural, 
 - **Real-time Feedback**: Continuous feedback on animated limb, gestures completed, and elapsed time
 - **LED Cascade Animation**: Synchronized face LED wave effect driven via the `naoqi_driver` `/naoqi_driver/run_led` action server
 
-## Prerequisites
+## ✅ Prerequisites
 - **ROS2 Humble** or newer
 - **Python 3.10** or compatible version
 - **Physical Pepper robot** or compatible simulator
 - **naoqi_bridge_msgs** for joint command publishing
 
-## Installation
+## 🛠️ Installation
 
 ### Package Installation
 
@@ -38,7 +38,7 @@ colcon build --packages-select animate_behavior
 source install/setup.bash
 ```
 
-## Configuration
+## 🔧 Configuration
 
 Configuration is managed via `config/animate_behavior_configuration.yaml`:
 
@@ -115,7 +115,7 @@ Joint limits and home positions are taken from the CSSR4Africa D5.1 Actuator Tes
 | HipRoll | -0.5149 | 0.5149 | -0.00766 | 0.2 |
 | KneePitch | -0.5149 | 0.5149 | 0.03221 | 0.1 |
 
-## Running the Node
+## 🚀 Running the Node
 
 ```bash
 # Source the workspace
@@ -127,7 +127,7 @@ ros2 run animate_behavior animate_behavior
 
 > **Note:** Ensure your robot is properly launched and the required topics (`/joint_states`) are available before running this node.
 
-## ROS Interface
+## 🖥️ ROS Interface
 
 ### Subscribed Topics
 
@@ -160,7 +160,7 @@ ros2 run animate_behavior animate_behavior
 |---------|------|-------------|
 | `/animate_behavior/stop` | `std_srvs/Trigger` | Alternative stop mechanism (explicit service call) |
 
-## Action Interface
+## 🔌 Action Interface
 
 **Action Type:** `dec_interfaces/action/AnimateBehavior`
 
@@ -260,27 +260,28 @@ Each fade uses `MODE_RGB_FADE` with a `led_fade_duration` second transition. LED
 
 The LED animation requires the `naoqi_driver` node to be running with the `/naoqi_driver/run_led` action server available. If the server is not found within 5 seconds at startup, LED animation is automatically disabled and body animation continues normally.
 
-## Package Structure
+## 📁 Package Structure
 
 ```
 animate_behavior/
 ├── config/
-│   └── animate_behavior_configuration.yaml   # all ROS2 parameters
+│   └── animate_behavior_configuration.yaml   # ROS2 parameters
 ├── data/
-│   └── pepper_topics.yaml
-├── resource/
-│   └── animate_behavior
-├── animate_behavior/
-│   ├── __init__.py
-│   ├── animate_behavior_application.py
-│   └── animate_behavior_implementation.py
+│   └── pepper_topics.yaml                    # topic name overrides
+├── include/
+│   └── animate_behavior/
+│       └── animate_behavior_interface.h      # shared class/struct declarations
+├── launch/
+│   └── animate_behavior.launch.py
+├── src/
+│   ├── animate_behavior_application.cpp      # node entry point, lifecycle + action server
+│   └── animate_behavior_implementation.cpp   # animation/LED synthesis helpers
+├── CMakeLists.txt
 ├── package.xml
-├── setup.py
-├── setup.cfg
 └── README.md
 ```
 
-## Architecture
+## 🏗️ Architecture
 
 The animation system uses high-frequency motion updates (30Hz) with exponential smoothing to achieve natural, fluid movements:
 
@@ -291,7 +292,7 @@ The animation system uses high-frequency motion updates (30Hz) with exponential 
 5. **Action Server**: Handles goal requests and cancellation
 6. **LED Cascade**: ROS timer-based scheduler fires `MODE_RGB_FADE` goals against `/naoqi_driver/run_led` in a looping wave pattern; cancelled and turned off when animation stops
 
-## Testing
+## 🧪 Testing
 
 ```bash
 # Check node is running
@@ -308,12 +309,12 @@ ros2 action send_goal /animate_behavior dec_interfaces/action/AnimateBehavior \
 ros2 topic echo /joint_angles
 ```
 
-## Support
+## 💡 Support
 
 For issues or questions:
 - Create an issue on the [pepper4dec GitHub repository](https://github.com/yohatad/pepper4dec/issues)
 - Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a>
 
-## License
+## 📜 License
 Copyright (C) 2026 Upanzi Network
 Licensed under the BSD-3-Clause License. See individual package licenses for details.

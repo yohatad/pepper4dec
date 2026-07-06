@@ -8,7 +8,7 @@
 
 The **Overt Visual Attention System** package implements a unified visual attention controller for robot heads. It integrates multiple attention cues including face detection with engagement awareness, bottom-up visual saliency, and optional audio localization to generate natural, human-like head movements. The system prioritizes engaged faces, then detected faces, and finally saliency peaks with inhibition of return (IOR) to prevent repetitive scanning.
 
-## Key Features
+## ✨ Key Features
 - **ROS2 Native**: Built for ROS2 Humble
 - **Multi-modal Attention**: Integrates face detection, visual saliency, and audio cues
 - **Engagement Awareness**: Prioritizes faces with mutual gaze (engaged attention)
@@ -17,14 +17,14 @@ The **Overt Visual Attention System** package implements a unified visual attent
 - **Real-time Processing**: Processes multiple attention cues simultaneously
 - **Visualization**: Real-time visualization of attention targets and saliency peaks
 
-## Prerequisites
+## ✅ Prerequisites
 - **ROS2 Humble** or newer
 - **Python 3.10** or compatible version
 - **OpenCV** and **NumPy** for image processing
 - **Face Detection Node**: Requires the `face_detection` package
 - **Camera System**: RGB camera (RealSense, Pepper camera, or similar)
 
-## Installation
+## 🛠️ Installation
 
 ### Package Installation
 
@@ -45,7 +45,7 @@ source install/setup.bash
 pip install opencv-python numpy scipy
 ```
 
-## Configuration
+## 🔧 Configuration
 
 Configuration is managed via `config/overt_attention_configuration.yaml`:
 
@@ -66,7 +66,7 @@ Configuration is managed via `config/overt_attention_configuration.yaml`:
 
 Topic names (face detection, saliency, camera, joint angles, target angles) are configured separately via `data/pepper_topics.yaml`.
 
-## Running the Node
+## 🚀 Running the Node
 
 ```bash
 # Source the workspace
@@ -103,7 +103,7 @@ ros2 run overt_attention overt_attention_visualization \
   -p show_metrics:=true
 ```
 
-## ROS Interface
+## 🖥️ ROS Interface
 
 ### Subscribed Topics
 
@@ -136,31 +136,31 @@ ros2 run overt_attention overt_attention_visualization \
 3. **Saliency Peaks**: When no recent faces, switches to saliency with IOR cooldown
 4. **Inhibition of Return**: Recently visited locations are suppressed to encourage exploration
 
-## Package Structure
+## 📁 Package Structure
 
 ```
 overt_attention/
 ├── config/
-│   └── overt_attention_configuration.yaml
+│   └── overt_attention_configuration.yaml    # ROS2 parameters
 ├── data/
-│   └── pepper_topics.yaml
+│   └── pepper_topics.yaml                    # topic name overrides
 ├── launch/
 │   ├── attention_system.launch.py
 │   └── realsense_camera.launch.py
 ├── include/
 │   └── overt_attention/
-│       └── overt_attention_interface.h
+│       └── overt_attention_interface.h       # shared class/struct declarations
 ├── src/
-│   ├── overt_attention_utilities.cpp
-│   ├── overt_attention_saliency.cpp
-│   ├── overt_attention_unified_attention.cpp
-│   └── overt_attention_visualization.cpp
+│   ├── overt_attention_utilities.cpp         # shared helpers
+│   ├── overt_attention_saliency.cpp          # saliency node (BMS)
+│   ├── overt_attention_unified_attention.cpp # attention controller node
+│   └── overt_attention_visualization.cpp     # visualization node
 ├── CMakeLists.txt
 ├── package.xml
 └── README.md
 ```
 
-## Architecture
+## 🏗️ Architecture
 
 The overt attention system consists of three main nodes:
 
@@ -168,7 +168,7 @@ The overt attention system consists of three main nodes:
 2. **Unified Attention Controller**: Priority-based attention selection with IOR
 3. **Visualization Node**: Creates real-time visualization overlay
 
-## Testing
+## 🧪 Testing
 
 ```bash
 # Check node is running
@@ -185,12 +185,12 @@ ros2 service call /overt_attention/set_enabled std_srvs/SetBool "{data: false}"
 ros2 service call /overt_attention/set_enabled std_srvs/SetBool "{data: true}"
 ```
 
-## Support
+## 💡 Support
 
 For issues or questions:
 - Create an issue on the [pepper4dec GitHub repository](https://github.com/yohatad/pepper4dec/issues)
 - Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a>
 
-## License
+## 📜 License
 Copyright (C) 2026 Upanzi Network
 Licensed under the BSD-3-Clause License. See individual package licenses for details.

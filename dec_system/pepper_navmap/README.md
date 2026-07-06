@@ -8,7 +8,7 @@
 
 The **Pepper Navigation and Mapping** package provides autonomous localization, mapping, and navigation capabilities for the Pepper robot. It integrates RTAB-Map for 3D SLAM using an Intel RealSense depth camera, SLAM Toolbox for 2D LiDAR-based mapping, and Nav2 for path planning, obstacle avoidance, and goal navigation. The package also supports keepout zones and provides a utility node for programmatically sending navigation goals.
 
-## Key Features
+## ✨ Key Features
 - **ROS2 Native**: Built for ROS2 Humble
 - **RTAB-Map Integration**: 3D SLAM using RealSense RGB-D camera
 - **SLAM Toolbox Integration**: 2D LiDAR-based online asynchronous SLAM with loop closure
@@ -17,14 +17,14 @@ The **Pepper Navigation and Mapping** package provides autonomous localization, 
 - **Goal Navigation API**: Python utility for programmatic navigation goal sending
 - **Pre-built Maps**: Includes saved maps for localization-only deployments
 
-## Prerequisites
+## ✅ Prerequisites
 - **ROS2 Humble** or newer
 - **Python 3.10** or compatible version
 - **Intel RealSense D-series camera** (for RTAB-Map)
 - **YDLidar or compatible 2D LiDAR** (for SLAM Toolbox)
 - **Pepper robot** with ROS2 driver configured
 
-## Installation
+## 🛠️ Installation
 
 ### Required ROS2 Packages
 
@@ -57,7 +57,7 @@ colcon build --packages-select pepper_navigation
 source install/setup.bash
 ```
 
-## Configuration
+## 🔧 Configuration
 
 ### SLAM Toolbox (`config/mapper_params_online_async.yaml`)
 
@@ -81,7 +81,7 @@ source install/setup.bash
 | `behavior_server` | Recovery behaviors |
 | `costmap_filter` | Keepout zone filter integration |
 
-## Running the Stack
+## 🚀 Running the Stack
 
 ```bash
 # Source the workspace
@@ -112,7 +112,7 @@ ros2 launch pepper_navigation rtabmap_realsense.launch.py rviz:=true
 ros2 launch pepper_navigation slam_toolbox.launch.py
 ```
 
-## ROS Interface
+## 🖥️ ROS Interface
 
 ### Subscribed Topics
 
@@ -170,6 +170,7 @@ ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
 | File | Description |
 |------|-------------|
 | `rtabmap_march_28.yaml` | Map built with RTAB-Map (default for Nav2) |
+| `rtabmap_feb_15.yaml`, `rtabmap_feb_26.yaml` | Earlier RTAB-Map captures |
 | `map.yaml` | General-purpose map |
 | `my_map.yaml` | Alternative saved map |
 | `keepout_zone.yaml` | Keepout zone filter mask |
@@ -180,32 +181,42 @@ ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
 ros2 run nav2_map_server map_saver_cli -f ~/ros2_ws/src/pepper4dec/dec_system/pepper_navmap/map/my_new_map
 ```
 
-## Package Structure
+## 📁 Package Structure
 
 ```
 pepper_navmap/
 ├── config/
-│   ├── mapper_params_online_async.yaml
-│   ├── nav2_params.yaml
-│   └── ekf_nav.yaml.yaml
+│   ├── mapper_params_online_async.yaml       # SLAM Toolbox parameters
+│   ├── nav2_params.yaml                      # Nav2 stack parameters
+│   ├── ekf_nav.yaml.yaml                     # robot_localization EKF parameters
+│   └── README.md
 ├── launch/
 │   ├── pepper_navigation.launch.py
 │   ├── rtabmap_realsense.launch.py
-│   └── slam_toolbox.launch.py
+│   ├── slam_toolbox.launch.py
+│   └── odom_test.launch.py
 ├── map/
-│   ├── map.yaml
-│   ├── rtabmap_march_28.yaml
-│   └── keepout_zone.yaml
+│   ├── rtabmap_march_28.yaml     # default RTAB-Map map (used by Nav2); .pgm alongside
+│   ├── map.yaml, my_map.yaml     # general-purpose saved maps; .pgm alongside
+│   ├── rtabmap_feb_15.yaml, rtabmap_feb_26.yaml  # earlier RTAB-Map captures; .pgm alongside
+│   ├── keepout_zone.yaml         # keepout filter mask; .pgm alongside
+│   └── *.png                     # map preview renders
 ├── pepper_navigation/
 │   ├── __init__.py
-│   ├── send_goal.py
-│   └── generate_keepout.py
+│   ├── send_goal.py              # CLI utility to send Nav2 goals
+│   ├── odom_path_publisher.py    # publishes traversed path for RViz2
+│   └── generate_keepout.py       # builds keepout mask from a map
+├── rviz/
+│   └── odometry_test.rviz
+├── resource/
+│   └── pepper_navigation
 ├── package.xml
 ├── setup.py
+├── setup.cfg
 └── README.md
 ```
 
-## Architecture
+## 🏗️ Architecture
 
 The navigation stack integrates three main subsystems:
 
@@ -225,7 +236,7 @@ The navigation stack integrates three main subsystems:
    - **BT Navigator**: Behavior tree orchestration
    - **Lifecycle Manager**: Node lifecycle management
 
-## Testing
+## 🧪 Testing
 
 ```bash
 # Check active nodes
@@ -241,12 +252,12 @@ ros2 run tf2_tools view_frames
 ros2 action list
 ```
 
-## Support
+## 💡 Support
 
 For issues or questions:
 - Create an issue on the [pepper4dec GitHub repository](https://github.com/yohatad/pepper4dec/issues)
 - Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a>
 
-## License
+## 📜 License
 Copyright (C) 2026 Upanzi Network
 Licensed under the BSD-3-Clause License. See individual package licenses for details.
