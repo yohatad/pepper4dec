@@ -9,13 +9,13 @@ def generate_launch_description():
     config = os.path.join(
         get_package_share_directory('behavior_controller'),
         'config',
-        'behaviorControllerConfiguration.yaml'
+        'behavior_controller_configuration.yaml'
     )
 
     return LaunchDescription([
         Node(
             package='behavior_controller',
-            executable='behaviorController',
+            executable='behavior_controller',
             name='behavior_controller',
             parameters=[config],
             output='screen',

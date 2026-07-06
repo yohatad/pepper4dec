@@ -23,7 +23,7 @@ Beyond automation, the project serves as a real-world testbed for **culturally a
 The system is built on **ROS2 (Humble)** and follows a modular architecture with specialized packages handling different aspects of robot behavior and perception:
 
 ### **Core Control Packages**
-- **`behaviorController`** - Central mission interpreter that orchestrates tour execution, translating mission specifications into executable robot commands
+- **`behavior_controller`** - Central mission interpreter that orchestrates tour execution, translating mission specifications into executable robot commands
 - **`animate_behavior`** - Manages animated behavior sequences for expressive robot performance
 - **`conversation_manager`** - Manages dialogue flow and visitor interaction sequences
 - **`gesture_execution`** - Controls Pepper's arm and body movements for expressive gesturing
@@ -106,7 +106,7 @@ ros2 launch face_detection face_detection_launch_robot.launch.py
 
 2. **Launch Behavior Controller**
 ```bash
-ros2 run behaviorController behaviorController
+ros2 run behavior_controller behavior_controller
 ```
 
 3. **Launch SLAM Toolbox (2D Mapping)**
@@ -116,7 +116,7 @@ ros2 launch dec_launch slam_toolbox.launch.py
 
 ### Configuration
 Each package contains configuration files in their `config/` directories:
-- `behaviorController/config/behaviorControllerConfiguration.yaml` - Mission parameters
+- `behavior_controller/config/behavior_controller_configuration.yaml` - Mission parameters
 - `face_detection/config/face_detection_configuration.yaml` - Perception settings
 - Navigation and gesture parameters in respective package configs
 

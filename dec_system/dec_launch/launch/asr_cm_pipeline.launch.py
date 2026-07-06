@@ -85,7 +85,7 @@ def generate_launch_description():
     #    which is served by naoqi_driver (started separately).
     behavior_controller_node = Node(
         package='behavior_controller',
-        executable='behaviorController',
+        executable='behavior_controller',
         name='behavior_controller',
         output='screen',
     )

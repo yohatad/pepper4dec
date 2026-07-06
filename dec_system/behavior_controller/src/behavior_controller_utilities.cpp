@@ -1,4 +1,4 @@
-/* behaviorControllerUtilities.cpp
+/* behavior_controller_utilities.cpp
  *
  * Implements the singleton ConfigManager and KnowledgeManager (YAML
  * configuration and knowledge-base loading/validation), the
@@ -14,7 +14,7 @@
  * Version: v1.0
  */
 
-#include "behaviorController/behaviorControllerInterface.h"
+#include "behavior_controller/behavior_controller_interface.h"
 
 #include <yaml-cpp/yaml.h>
 #include <algorithm>

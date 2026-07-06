@@ -1,6 +1,6 @@
 # Behavior Controller - XML Behavior Tree Reference
 
-This document describes how to write XML behavior tree files for the `behaviorController` package. Tree files are placed in the `data/` folder and selected via the `scenarioSpecification` field in `behaviorControllerConfiguration.yaml`.
+This document describes how to write XML behavior tree files for the `behavior_controller` package. Tree files are placed in the `data/` folder and selected via the `scenario_specification` field in `behavior_controller_configuration.yaml`.
 
 ## File Structure
 
@@ -541,7 +541,7 @@ Declare all custom nodes in `<TreeNodesModel>` for Groot editor compatibility. P
 ## Adding a New Tree
 
 1. Create a new `.xml` file in the `data/` folder (e.g., `my_scenario.xml`)
-2. Set `scenarioSpecification: my_scenario` in `behaviorControllerConfiguration.yaml`
+2. Set `scenario_specification: my_scenario` in `behavior_controller_configuration.yaml`
 3. Rebuild the package so the new file is installed:
    ```bash
    cd ~/ros2_ws && colcon build --packages-select behavior_controller && source install/setup.bash
