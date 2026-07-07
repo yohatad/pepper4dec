@@ -14,6 +14,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ObjectDetection.msg"
   "msg/PersonDetection.msg"
   "srv/ConversationManagerPrompt.srv"
+  "srv/GetDepthROI.srv"
   "action/ConversationManager.action"
   "action/TTS.action"
   "action/Gesture.action"
