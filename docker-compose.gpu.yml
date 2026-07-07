@@ -1,0 +1,20 @@
+# GPU override for Pepper4DEC
+#
+# The base docker-compose.yml stays CPU-only by default so it works on any
+# machine. To actually attach an NVIDIA GPU at runtime (in addition to
+# building with --build-arg USE_CUDA=1 / USE_CUDA=1 in .env), layer this
+# file on top:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
+#
+# Requires the NVIDIA Container Toolkit installed on the host.
+
+services:
+  pepper4dec:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

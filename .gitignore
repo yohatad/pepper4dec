@@ -1,3 +1,4 @@
+.env
 **/*.wav
 **/*.mp4
 **/sensorTestOutput.dat

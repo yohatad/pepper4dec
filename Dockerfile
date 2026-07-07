@@ -115,14 +115,22 @@ RUN pip install --upgrade pip setuptools wheel
 # -----------------------------------------------------------------------------
 # Install PyTorch (Conditional - for GPU support)
 # -----------------------------------------------------------------------------
-# Note: PyTorch installation depends on CUDA version
-# Uncomment the appropriate version for your GPU
+# Honors the USE_CUDA build arg: USE_CUDA=1 installs the CUDA 12.1 build,
+# anything else (default 0) installs the CPU-only build.
+RUN if [ "$USE_CUDA" = "1" ]; then \
+        pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121; \
+    else \
+        pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cpu; \
+    fi
 
-# For CUDA 12.1 (default)
-RUN pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121
-
-# For CPU only (uncomment if not using GPU)
-# RUN pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+# -----------------------------------------------------------------------------
+# Install ONNX Runtime (Conditional - GPU vs CPU build)
+# -----------------------------------------------------------------------------
+RUN if [ "$USE_CUDA" = "1" ]; then \
+        pip install onnxruntime-gpu==1.19.0; \
+    else \
+        pip install onnxruntime==1.19.0; \
+    fi
 
 # -----------------------------------------------------------------------------
 # Install Python Dependencies
@@ -132,7 +140,6 @@ RUN pip install \
     numpy==1.26.3 \
     scipy==1.14.1 \
     opencv-python==4.10.0.84 \
-    onnxruntime-gpu==1.19.0 \
     onnx \
     pillow \
     scikit-learn \
@@ -196,6 +203,7 @@ RUN git clone https://github.com/yohatad/pepper4dec.git src/pepper4dec
 # Install ROS2 package dependencies
 # -----------------------------------------------------------------------------
 RUN cd /home/pepper/ros2_ws && \
+    rosdep update && \
     rosdep install --from-paths src --ignore-src -r -y
 
 # -----------------------------------------------------------------------------
@@ -209,7 +217,9 @@ RUN cd /home/pepper/ros2_ws && \
 # -----------------------------------------------------------------------------
 RUN pip install --no-deps -r /home/pepper/ros2_ws/src/pepper4dec/dec_system/face_detection/requirements.txt && \
     pip install --no-deps -r /home/pepper/ros2_ws/src/pepper4dec/dec_system/conversation_manager/requirements.txt && \
-    pip install --no-deps -r /home/pepper/ros2_ws/src/pepper4dec/dec_system/text_to_speech/requirements.txt
+    pip install --no-deps -r /home/pepper/ros2_ws/src/pepper4dec/dec_system/text_to_speech/requirements.txt && \
+    pip install --no-deps -r /home/pepper/ros2_ws/src/pepper4dec/dec_system/person_detection/requirements.txt && \
+    pip install --no-deps -r /home/pepper/ros2_ws/src/pepper4dec/dec_system/speech_event/requirements.txt
 
 # -----------------------------------------------------------------------------
 # Download Model Files (Optional - for face detection)
@@ -232,7 +242,7 @@ RUN echo '#!/bin/bash' > /opt/pepper4dec_setup.sh && \
     chmod +x /opt/pepper4dec_setup.sh
 
 # -----------------------------------------------------------------------------
-# Create non-root user (optional)
+# Create non-root user (available if you want it, not used by default)
 # -----------------------------------------------------------------------------
 RUN useradd -m -s /bin/bash pepper && \
     chown -R pepper:pepper /home/pepper
@@ -240,6 +250,11 @@ RUN useradd -m -s /bin/bash pepper && \
 # -----------------------------------------------------------------------------
 # Final Configuration
 # -----------------------------------------------------------------------------
+# Runs as root by default (needed for the privileged device access this
+# project uses - /dev/ttyUSB*, camera/lidar devices, etc.). WORKDIR is the
+# ROS workspace so any shell/exec into the container lands where the code
+# actually is and can source the build immediately.
+USER root
 WORKDIR /home/pepper/ros2_ws
 
 # Set default environment

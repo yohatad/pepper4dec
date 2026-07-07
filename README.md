@@ -80,6 +80,29 @@ source install/setup.bash
    - Place required ONNX model files in their respective `models/` directories
    - Ensure face detection models are in `dec_system/face_detection/models/`
 
+### Docker (Alternative to native install)
+
+1. **Configure environment**
+```bash
+cp .env.example .env
+# Edit .env and set your real LLM_API_KEY (used by conversation_manager)
+```
+
+2. **Build and run (CPU-only, default)**
+```bash
+docker compose up --build
+```
+
+3. **Build and run with GPU**
+```bash
+# Set USE_CUDA=1 in .env, then build with the GPU build arg and layer the GPU override
+docker compose build --build-arg USE_CUDA=1
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
+```
+Requires the [NVIDIA Container Toolkit](https://github.com/NVIDIA/nvidia-container-toolkit) on the host.
+
+The containers use `network_mode: host` so ROS2 DDS discovery works with tools running on the host (e.g. `rviz2`, `ros2 topic echo`) and with the robot on the LAN, and `privileged: true` for device access (camera, lidar, NAOqi) instead of hardcoding specific `/dev/ttyUSB*` paths.
+
 ## 🚀 Running the Tour System
 
 ### Basic Launch
