@@ -30,6 +30,10 @@
   <exec_depend>python3-opencv</exec_depend>
   <exec_depend>realsense2_camera</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
+  <!-- LiDAR colorizer / depth calibrator nodes -->
+  <exec_depend>message_filters</exec_depend>
+  <exec_depend>sensor_msgs_py</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
   <exec_depend>image_transport</exec_depend>
   <exec_depend>rtabmap_launch</exec_depend>
   <exec_depend>rtabmap_sync</exec_depend>

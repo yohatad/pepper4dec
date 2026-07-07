@@ -14,9 +14,11 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}/
 )
 
-# Install Python nodes (RealSense depth ROI service, Jetson-only)
+# Install Python nodes (RealSense depth ROI service, LiDAR colorizer/calibrator)
 install(PROGRAMS
   scripts/depth_roi_service.py
+  scripts/lidar_colorizer.py
+  scripts/lidar_depth_calibrator.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

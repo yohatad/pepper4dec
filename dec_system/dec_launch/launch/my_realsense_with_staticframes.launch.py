@@ -90,7 +90,7 @@ def generate_launch_description():
         Node(
             package='tf2_ros',
             executable='static_transform_publisher',
-            name='camera_link_to_color_frame',
+            name='camera_camera_link_to_color_frame',
             arguments=[
                 '-0.0002168898', '0.0149532212', '0.0000253627',
                 '0.0008947', '-0.0011830', '0.0035573', '0.9999925',
@@ -115,7 +115,7 @@ def generate_launch_description():
         Node(
             package='tf2_ros',
             executable='static_transform_publisher',
-            name='camera_link_to_depth_frame',
+            name='camera_camera_link_to_depth_frame',
             arguments=[
                 '0', '0', '0',
                 '0', '0', '0', '1',
@@ -140,7 +140,7 @@ def generate_launch_description():
         Node(
             package='tf2_ros',
             executable='static_transform_publisher',
-            name='camera_link_to_accel_frame',
+            name='camera_camera_link_to_accel_frame',
             arguments=[
                 '-0.01174', '-0.00552', '0.00510',
                 '0', '0', '0', '1',
@@ -165,7 +165,7 @@ def generate_launch_description():
         Node(
             package='tf2_ros',
             executable='static_transform_publisher',
-            name='camera_link_to_gyro_frame',
+            name='camera_camera_link_to_gyro_frame',
             arguments=[
                 '-0.01174', '-0.00552', '0.00510',
                 '0', '0', '0', '1',
