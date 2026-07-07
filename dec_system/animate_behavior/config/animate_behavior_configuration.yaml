@@ -15,8 +15,6 @@ animate_behavior:
 
     # Gesture Animation
     gesture_update_rate: 30.0         # animation loop frequency (Hz)
-    gesture_smoothing_factor: 0.15    # exponential smoothing coefficient
-    gesture_motion_speed: 0.08        # ALMotion speed parameter
     gesture_interval_min: 2.5         # min seconds between gesture targets
     gesture_interval_max: 4.5         # max seconds between gesture targets
     gesture_rotation_interval: 5.0    # seconds between base rotation changes

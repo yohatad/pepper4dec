@@ -5,7 +5,7 @@ cascading face-LED animations for Pepper while an `/animate_behavior` action goa
 
 Lifecycle:
     configure  -> Read parameters, build per-limb joint definitions, create the
-                   joint-angle/velocity lifecycle publishers, the action server,
+                   joint-trajectory/velocity lifecycle publishers, the action server,
                    the stop service, and the LED action client.
     activate   -> Activate the lifecycle publishers, subscribe to /joint_states,
                    start the animation and feedback timers, and kick off the
@@ -36,7 +36,7 @@ from rclpy.action import ActionServer, ActionClient, CancelResponse, GoalRespons
 from rclpy.callback_groups import ReentrantCallbackGroup
 
 from geometry_msgs.msg import Twist
-from naoqi_bridge_msgs.msg import JointAnglesWithSpeed
+from naoqi_bridge_msgs.msg import JointAnglesTrajectory
 from naoqi_bridge_msgs.action import RunLed
 from sensor_msgs.msg import JointState
 from dec_interfaces.action import AnimateBehavior
@@ -76,8 +76,6 @@ class AnimateBehaviorNode(LifecycleNode):
         self.declare_parameter('led_white_hold', 2.0)
         self.declare_parameter('led_dark_pause', 0.2)
         self.declare_parameter('gesture_update_rate', 30.0)
-        self.declare_parameter('gesture_smoothing_factor', 0.15)
-        self.declare_parameter('gesture_motion_speed', 0.08)
         self.declare_parameter('gesture_interval_min', 2.5)
         self.declare_parameter('gesture_interval_max', 4.5)
         self.declare_parameter('gesture_rotation_interval', 5.0)
@@ -100,8 +98,6 @@ class AnimateBehaviorNode(LifecycleNode):
         self.gesture_interval_max  = self.get_parameter('gesture_interval_max').get_parameter_value().double_value
         self.rotation_interval  = self.get_parameter('gesture_rotation_interval').get_parameter_value().double_value
         self.update_rate        = self.get_parameter('gesture_update_rate').get_parameter_value().double_value
-        self.smoothing_factor   = self.get_parameter('gesture_smoothing_factor').get_parameter_value().double_value
-        self.motion_speed       = self.get_parameter('gesture_motion_speed').get_parameter_value().double_value
 
         if self.verbose_mode:
             self.get_logger().info('ANIMATE BEHAVIOR NODE (LIFECYCLE)')
@@ -129,7 +125,7 @@ class AnimateBehaviorNode(LifecycleNode):
                 names=['HipPitch', 'HipRoll', 'KneePitch'],
                 min=[-1.04, -0.51, -0.51],
                 max=[1.04, 0.51, 0.51],
-                home=[0.0107, -0.00766, 0.03221],
+                home=[-0.207, -0.00766, 0.03221],
                 factors=[0.0, 0.2, 0.0]
             ),
         }
@@ -154,7 +150,7 @@ class AnimateBehaviorNode(LifecycleNode):
         self.gesture_interval       = random.uniform(self.gesture_interval_min, self.gesture_interval_max)
 
         # Managed publishers — silenced when node is INACTIVE
-        self.joint_pub = self.create_lifecycle_publisher(JointAnglesWithSpeed, '/joint_angles', 10)
+        self.joint_pub = self.create_lifecycle_publisher(JointAnglesTrajectory, '/joint_angles_trajectory', 10)
         self.vel_pub   = self.create_lifecycle_publisher(Twist, '/cmd_vel', 10)
 
         # Action server — created once; goal_callback guards against inactive state
@@ -303,12 +299,15 @@ class AnimateBehaviorNode(LifecycleNode):
         if self.behavior in ['All', 'hands']:
             limbs.update(['RHand', 'LHand'])
         if self.behavior == 'home':
-            # Move all joints to neutral; auto-stop after smoothing settles
+            # Move all joints to neutral in one trajectory; auto-stop once it completes
+            names, angles = [], []
             for joint_def in self.joints.values():
-                for i, name in enumerate(joint_def.names):
-                    self.target_positions[name] = joint_def.home[i]
+                names.extend(joint_def.names)
+                angles.extend(joint_def.home)
             if self.duration == 0.0:
                 self.duration = 1.5
+            self.target_positions = dict(zip(names, angles))
+            self.publish_trajectory(names, angles, self.duration)
         self.limbs_to_animate = list(limbs)
 
         self.active            = True
@@ -350,6 +349,10 @@ class AnimateBehaviorNode(LifecycleNode):
             self.destroy_timer(self._rotation_stop_timer)
             self._rotation_stop_timer = None
         self.vel_pub.publish(Twist())
+        if self.target_positions:
+            names  = list(self.target_positions.keys())
+            angles = [self.current_positions.get(name, target) for name, target in self.target_positions.items()]
+            self.publish_trajectory(names, angles, 0.3)
         self.limbs_to_animate  = []
         self.last_gesture_time = 0.0
         self.gesture_count     = 0
@@ -389,12 +392,10 @@ class AnimateBehaviorNode(LifecycleNode):
 
         if self.limbs_to_animate:
             if current_time - self.last_gesture_time >= self.gesture_interval:
+                self.gesture_interval  = random.uniform(self.gesture_interval_min, self.gesture_interval_max)
                 self.apply_gesture()
                 self.last_gesture_time = current_time
                 self.gesture_count    += 1
-                self.gesture_interval  = random.uniform(self.gesture_interval_min, self.gesture_interval_max)
-
-        self.publish_joints()
 
     # ── Motion helpers ───────────────────────────────────────────────────────────
 
@@ -429,27 +430,26 @@ class AnimateBehaviorNode(LifecycleNode):
 
     def random_gesture(self, limb_name: str):
         joint_def = self.joints[limb_name]
+        names  = []
+        angles = []
         for i, name in enumerate(joint_def.names):
             factor    = joint_def.factors[i]
             rand_val  = random.uniform(-1, 1) * self.range * factor
             target    = joint_def.home[i] + rand_val
             target    = max(joint_def.min[i], min(joint_def.max[i], target))
             self.target_positions[name] = target
-
-    def publish_joints(self):
-        msg = JointAnglesWithSpeed()
-        msg.header.stamp = self.get_clock().now().to_msg()
-        names  = []
-        angles = []
-        for name, target in self.target_positions.items():
-            current  = self.current_positions.get(name, target)
-            smoothed = current + self.smoothing_factor * (target - current)
-            self.current_positions[name] = smoothed
             names.append(name)
-            angles.append(smoothed)
+            angles.append(target)
+        self.publish_trajectory(names, angles, self.gesture_interval)
+
+    def publish_trajectory(self, names: List[str], angles: List[float], duration: float):
+        msg = JointAnglesTrajectory()
+        msg.header.stamp = self.get_clock().now().to_msg()
         msg.joint_names  = names
-        msg.joint_angles = angles
-        msg.speed        = self.motion_speed
+        msg.joint_angles = [float(a) for a in angles]
+        msg.times        = [float(duration)] * len(names)
+        msg.relative     = 0
+        msg.use_bezier   = True
         if names:
             self.joint_pub.publish(msg)
 
