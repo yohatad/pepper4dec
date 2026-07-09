@@ -54,16 +54,24 @@ Configuration is managed via `config/speech_event_configuration.yaml`:
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
+| `microphone_topic` | ROS topic publishing `naoqi_bridge_msgs/AudioBuffer` | `/naoqi_driver/audio` |
 | `sample_rate` | Target sample rate for VAD/ASR (Hz) | `16000` |
 | `input_sample_rate` | Robot's native microphone sample rate (Hz) | `48000` |
 | `device` | PyTorch device for Whisper inference | `cuda` |
+| `compute_type` | Whisper computation precision (`float16`/`float32`) | `float16` |
 | `language` | Language code for ASR (ISO 639-1) | `en` |
+| `whisper_model_id` | HuggingFace model ID or local path for the Whisper model | `deepdml/faster-whisper-large-v3-turbo-ct2` |
 | `speech_threshold` | VAD probability threshold for speech start | `0.7` |
 | `neg_threshold` | VAD probability threshold for silence | `0.35` |
-| `min_silence_duration_ms` | Minimum silence duration to end speech (ms) | `300` |
+| `min_silence_duration_ms` | Minimum continuous silence to end a speech segment (ms) | `800` |
+| `min_speech_duration` | Minimum segment duration to submit for transcription (s) | `0.3` |
 | `max_speech_duration_s` | Maximum speech segment duration (s) | `10.0` |
-| `action_server` | Enable action server mode | `true` |
-| `noise_cleaning_enabled` | Enable post-VAD noise reduction before ASR | `true` |
+| `pre_speech_buffer_ms` | Lookback audio prepended before speech onset (ms) | `200` |
+| `intensity_threshold` | RMS amplitude gate; quiet audio is skipped before VAD | `0.001` |
+| `transcription_timeout_s` | Timeout waiting for a transcription result (s) | `5.0` |
+| `action_server` | Enable action server mode (`false` = continuous, publishes to `/speech_event/text`) | `true` |
+| `vad_always_active` | Keep VAD running (publishing `/speech_event/vad_speech_prob`) even with no active goal, enabling barge-in monitoring during TTS playback | `true` |
+| `noise_cleaning_enabled` | Enable post-VAD noise reduction before ASR | `false` |
 | `noise_profile_path` | Path to a `.npy` mean-magnitude-spectrum file recorded at 16 kHz; leave empty for online-only estimation | `"data/noise_profile.npy"` |
 | `noise_alpha` | Wiener filter aggressiveness (0.0–1.0); higher = more suppression, more distortion risk | `0.5` |
 

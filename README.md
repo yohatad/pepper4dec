@@ -42,6 +42,7 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 ### **Infrastructure & Utilities**
 - **`dec_launch`** - System launch files and startup configurations
 - **`dec_interfaces`** - Custom ROS2 message and service definitions
+- **`dec_common`** - Shared header-only C++ utilities for `dec_system` nodes
 
 ## 🖥️ Hardware Diagram
 

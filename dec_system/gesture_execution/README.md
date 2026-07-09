@@ -19,7 +19,6 @@ The **Gesture Execution** package is a ROS2 action server that executes various 
 
 ## ✅ Prerequisites
 - **ROS2 Humble** or newer
-- **Python 3.10** or compatible version
 - **Pepper Robot** or simulator with NAOqi bridge
 - **dec_interfaces** package for action definitions
 
@@ -32,27 +31,22 @@ The **Gesture Execution** package is a ROS2 action server that executes various 
 cd ~/ros2_ws/src
 git clone https://github.com/yohatad/pepper4dec.git
 
-# Build the workspace
+# Build the workspace (pulls in the dec_interfaces dependency automatically)
 cd ~/ros2_ws
-colcon build --packages-select gesture_execution dec_interfaces
+colcon build --packages-up-to gesture_execution
 source install/setup.bash
-```
-
-### Python Dependencies
-
-```bash
-pip install PyYAML
 ```
 
 ## 🔧 Configuration
 
-Configuration is managed via `config/gesture_execution_configuration.yaml`:
+Configuration is managed via `config/gesture_execution_configuration.yaml`, loaded manually
+(yaml-cpp, not yet ROS2 parameters) in `on_configure()`:
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `gestureDescriptors` | Path to gesture descriptor file | `gesture.yaml` |
-| `robotTopics` | Path to robot topic mapping file | `pepperTopics.yaml` |
 | `verboseMode` | Enable detailed logging and debugging | `true` |
+| `gestureDescriptors` | **Unused** — gesture definitions always load from the fixed path `data/gesture.yaml` | n/a |
+| `robotTopics` | **Unused** — topic mappings always load from the fixed path `data/pepper_topics.yaml` | n/a |
 
 ### Gesture Definitions
 
@@ -89,6 +83,13 @@ source ~/ros2_ws/install/setup.bash
 # Run the gesture execution node (Action Server)
 ros2 run gesture_execution gesture_execution
 ```
+
+This is an `rclcpp_lifecycle::LifecycleNode` (node name `gesture_action_server`); the action server
+and subscriptions don't exist until it's configured and activated. Neither this nor
+`launch/gesture_execution.launch.py` transitions it automatically — either drive it manually
+(`ros2 lifecycle set /gesture_action_server configure` then `... activate`), or launch the whole
+stack via `dec_launch`'s `dec_system.launch.py`, which drives these transitions through
+`nav2_lifecycle_manager`.
 
 ## 🖥️ ROS Interface
 
