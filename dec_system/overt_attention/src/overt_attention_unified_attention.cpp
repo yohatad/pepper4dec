@@ -130,13 +130,13 @@ UnifiedAttentionNode::UnifiedAttentionNode() : Node("simple_attention") {
 
     // Services
     srv_enable_ = create_service<std_srvs::srv::SetBool>(
-        "/attn/set_enabled",
+        "/overt_attention/set_enabled",
         std::bind(&UnifiedAttentionNode::handleSetEnabled, this, std::placeholders::_1, std::placeholders::_2));
 
     std::string status = attention_enabled_ ? "ENABLED" : "DISABLED";
     std::string default_mode = move_to_default_on_disable_ ? "move to default" : "hold position";
     RCLCPP_INFO(get_logger(), "Improved attention controller ready (%s)", status.c_str());
-    RCLCPP_INFO(get_logger(), "Service: /attn/set_enabled (std_srvs/SetBool)");
+    RCLCPP_INFO(get_logger(), "Service: /overt_attention/set_enabled (std_srvs/SetBool)");
     RCLCPP_INFO(get_logger(), "Disable mode: %s (yaw=%.1f\xc2\xb0, pitch=%.1f\xc2\xb0)",
                 default_mode.c_str(), default_yaw_ * 180.0 / M_PI, default_pitch_ * 180.0 / M_PI);
 }
