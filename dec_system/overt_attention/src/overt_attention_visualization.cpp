@@ -71,7 +71,7 @@ VisualizationNode::VisualizationNode() : Node("visualization_node") {
         camera_info_topic, qos, std::bind(&VisualizationNode::onCamInfo, this, std::placeholders::_1));
 
     // Publisher
-    pub_overlay_ = create_publisher<sensor_msgs::msg::Image>("/attn/visualization", 10);
+    pub_overlay_ = create_publisher<sensor_msgs::msg::Image>("/overt_attention/visualization", 10);
 
     RCLCPP_INFO(get_logger(), "Improved visualization ready (Faces w/ Tracking + Engagement + Saliency)");
 }
@@ -254,7 +254,7 @@ void VisualizationNode::processFrame(const cv::Mat& frame, const builtin_interfa
         pub_overlay_->publish(*out_msg);
 
         if (image_count_ == 1) {
-            RCLCPP_INFO(get_logger(), "First visualization published to /attn/visualization");
+            RCLCPP_INFO(get_logger(), "First visualization published to /overt_attention/visualization");
         }
     } catch (const std::exception& e) {
         RCLCPP_ERROR(get_logger(), "Error publishing visualization: %s", e.what());
