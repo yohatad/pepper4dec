@@ -18,6 +18,7 @@ find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(dec_interfaces REQUIRED)
+find_package(dec_common REQUIRED)
 find_package(message_filters REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(ament_index_cpp REQUIRED)
@@ -44,6 +45,7 @@ ament_target_dependencies(${PROJECT_NAME}_lib
   geometry_msgs
   sensor_msgs
   dec_interfaces
+  dec_common
   message_filters
   cv_bridge
   ament_index_cpp

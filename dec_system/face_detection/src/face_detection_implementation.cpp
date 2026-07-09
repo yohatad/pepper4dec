@@ -17,6 +17,7 @@
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <cv_bridge/cv_bridge.h>
+#include <dec_common/param_loader.h>
 #include <yaml-cpp/yaml.h>
 #include <rmw/qos_profiles.h>
 
@@ -24,43 +25,26 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
-#include <filesystem>
 #include <random>
 #include <set>
 #include <thread>
 
-FaceDetectionConfig loadConfiguration() {
+FaceDetectionConfig loadConfiguration(rclcpp_lifecycle::LifecycleNode* node) {
     FaceDetectionConfig config;
-    try {
-        std::string package_path = ament_index_cpp::get_package_share_directory("face_detection");
-        std::string config_file = package_path + "/config/face_detection_configuration.yaml";
-        if (std::filesystem::exists(config_file)) {
-            YAML::Node yaml = YAML::LoadFile(config_file);
-            if (yaml["algorithm"]) config.algorithm = yaml["algorithm"].as<std::string>();
-            if (yaml["useCompressed"]) config.use_compressed = yaml["useCompressed"].as<bool>();
-            if (yaml["camera"]) config.camera = yaml["camera"].as<std::string>();
-            if (yaml["verboseMode"]) config.verbose_mode = yaml["verboseMode"].as<bool>();
-            if (yaml["imageTimeout"]) config.image_timeout = yaml["imageTimeout"].as<double>();
-            if (yaml["sixdrepnetConfidence"]) config.sixdrepnet_confidence = yaml["sixdrepnetConfidence"].as<double>();
-            if (yaml["sixdrepnetHeadposeAngle"]) {
-                config.sixdrepnet_headpose_angle = yaml["sixdrepnetHeadposeAngle"].as<double>();
-            }
-            if (yaml["requirePersonDetection"]) {
-                config.require_person_detection = yaml["requirePersonDetection"].as<bool>();
-            }
-            if (yaml["personDetectionTimeout"]) {
-                config.person_detection_timeout = yaml["personDetectionTimeout"].as<double>();
-            }
-            if (yaml["prioritizeFaceDepth"]) config.prioritize_face_depth = yaml["prioritizeFaceDepth"].as<bool>();
-            std::cout << "Loaded configuration from " << config_file << std::endl;
-        } else {
-            std::cout << "Warning: Configuration file not found at " << config_file << ", using defaults"
-                      << std::endl;
-        }
-    } catch (const std::exception& e) {
-        std::cout << "Error reading configuration file: " << e.what() << std::endl;
-        std::cout << "Using default configuration values" << std::endl;
-    }
+    config.use_compressed = dec_common::declareAndGetParameter(node, "use_compressed", config.use_compressed);
+    config.camera = dec_common::declareAndGetParameter(node, "camera", config.camera);
+    config.verbose_mode = dec_common::declareAndGetParameter(node, "verbose_mode", config.verbose_mode);
+    config.image_timeout = dec_common::declareAndGetParameter(node, "image_timeout", config.image_timeout);
+    config.sixdrepnet_confidence =
+        dec_common::declareAndGetParameter(node, "sixdrepnet_confidence", config.sixdrepnet_confidence);
+    config.sixdrepnet_headpose_angle =
+        dec_common::declareAndGetParameter(node, "sixdrepnet_headpose_angle", config.sixdrepnet_headpose_angle);
+    config.require_person_detection =
+        dec_common::declareAndGetParameter(node, "require_person_detection", config.require_person_detection);
+    config.person_detection_timeout =
+        dec_common::declareAndGetParameter(node, "person_detection_timeout", config.person_detection_timeout);
+    config.prioritize_face_depth =
+        dec_common::declareAndGetParameter(node, "prioritize_face_depth", config.prioritize_face_depth);
     return config;
 }
 
@@ -175,12 +159,13 @@ std::pair<std::vector<cv::Rect2d>, std::vector<float>> YOLOONNX::postprocess(
 
 // ── FaceDetectionNode ────────────────────────────────────────────────────────
 
-FaceDetectionNode::FaceDetectionNode(const FaceDetectionConfig& config, const std::string& node_name)
+FaceDetectionNode::FaceDetectionNode(const std::string& node_name)
     : rclcpp_lifecycle::LifecycleNode(node_name),
-      config_(config),
       face_tracker_(0.5f, 30, 0.3f, 15) {}
 
 FaceDetectionNode::CallbackReturn FaceDetectionNode::on_configure(const rclcpp_lifecycle::State&) {
+    config_ = loadConfiguration(this);
+
     pub_gaze_ = create_publisher<dec_interfaces::msg::FaceDetection>("/face_detection/data", 10);
     debug_pub_ = create_publisher<sensor_msgs::msg::Image>("/face_detection/debug", 1);
     depth_debug_pub_ = create_publisher<sensor_msgs::msg::Image>("/face_detection/depth_debug", 1);
@@ -579,7 +564,7 @@ void FaceDetectionNode::personDetectionCallback(const dec_interfaces::msg::Perso
 
 // ── SixDrepNet ───────────────────────────────────────────────────────────────
 
-SixDrepNet::SixDrepNet(const FaceDetectionConfig& config) : FaceDetectionNode(config) {}
+SixDrepNet::SixDrepNet() : FaceDetectionNode() {}
 
 SixDrepNet::CallbackReturn SixDrepNet::on_configure(const rclcpp_lifecycle::State& state) {
     auto ret = FaceDetectionNode::on_configure(state);

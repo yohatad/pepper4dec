@@ -1,31 +1,38 @@
-# =============================================================================
-# Camera Settings
-# =============================================================================
+# Person Detection Configuration File
+# ROS2 parameters for the person_detection node (loaded via the launch file's
+# `parameters=[...]`). Run `ros2 param get/set /person_detection <name>` to
+# inspect or override these at runtime.
 
-camera: pepper
-useCompressed: false
-imageTimeout: 2.0
-verboseMode: false
+person_detection:
+  ros__parameters:
 
-# =============================================================================
-# Detection Settings
-# =============================================================================
+    # =========================================================================
+    # Camera Settings
+    # =========================================================================
+    camera: "pepper"
+    use_compressed: false
+    image_timeout: 2.0
+    verbose_mode: false
 
-# Minimum confidence threshold for detections (0.0 - 1.0)
-confidenceThreshold: 0.6
-targetClasses:
-  - person
+    # =========================================================================
+    # Detection Settings
+    # =========================================================================
 
-# =============================================================================
-# ByteTrack Tracking Parameters (supervision package)
-# =============================================================================
-trackThreshold: 0.45
+    # Minimum confidence threshold for detections (0.0 - 1.0)
+    confidence_threshold: 0.6
+    target_classes:
+      - person
 
-# Number of frames to keep lost tracks before removing (integer)
-trackBuffer: 30
+    # =========================================================================
+    # ByteTrack Tracking Parameters (supervision package)
+    # =========================================================================
+    track_threshold: 0.45
 
-# IoU threshold for matching detections to tracks (0.0 - 1.0)
-matchThreshold: 0.8
+    # Number of frames to keep lost tracks before removing (integer)
+    track_buffer: 30
 
-# Expected frame rate of the video stream (fps)
-frameRate: 30
+    # IoU threshold for matching detections to tracks (0.0 - 1.0)
+    match_threshold: 0.8
+
+    # Expected frame rate of the video stream (fps)
+    frame_rate: 30

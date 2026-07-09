@@ -15,6 +15,7 @@
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <cv_bridge/cv_bridge.h>
+#include <dec_common/param_loader.h>
 #include <yaml-cpp/yaml.h>
 
 #include <rmw/qos_profiles.h>
@@ -41,38 +42,23 @@ const std::array<std::string, 80> COCO_CLASSES = {
     "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier",
     "toothbrush"};
 
-PersonDetectionConfig loadConfiguration() {
+PersonDetectionConfig loadConfiguration(rclcpp_lifecycle::LifecycleNode* node) {
     PersonDetectionConfig config;
-    try {
-        std::string package_path = ament_index_cpp::get_package_share_directory("person_detection");
-        std::string config_file = package_path + "/config/person_detection_configuration.yaml";
-        if (std::filesystem::exists(config_file)) {
-            YAML::Node yaml = YAML::LoadFile(config_file);
-            if (yaml["camera"]) config.camera = yaml["camera"].as<std::string>();
-            if (yaml["useCompressed"]) config.use_compressed = yaml["useCompressed"].as<bool>();
-            if (yaml["imageTimeout"]) config.image_timeout = yaml["imageTimeout"].as<double>();
-            if (yaml["verboseMode"]) config.verbose_mode = yaml["verboseMode"].as<bool>();
-            if (yaml["confidenceThreshold"]) config.confidence_threshold = yaml["confidenceThreshold"].as<double>();
-            if (yaml["trackThreshold"]) config.track_threshold = yaml["trackThreshold"].as<float>();
-            if (yaml["trackBuffer"]) config.track_buffer = yaml["trackBuffer"].as<int>();
-            if (yaml["matchThreshold"]) config.match_threshold = yaml["matchThreshold"].as<float>();
-            if (yaml["frameRate"]) config.frame_rate = yaml["frameRate"].as<int>();
-            if (yaml["targetClasses"]) {
-                config.target_classes.clear();
-                for (const auto& c : yaml["targetClasses"]) config.target_classes.push_back(c.as<std::string>());
-            }
-        } else {
-            std::cout << "Warning: Configuration file not found at " << config_file << ", using defaults"
-                      << std::endl;
-        }
-    } catch (const std::exception& e) {
-        std::cout << "Error reading configuration file: " << e.what() << std::endl;
-        std::cout << "Using default configuration values" << std::endl;
-    }
+    config.camera = dec_common::declareAndGetParameter(node, "camera", config.camera);
+    config.use_compressed = dec_common::declareAndGetParameter(node, "use_compressed", config.use_compressed);
+    config.image_timeout = dec_common::declareAndGetParameter(node, "image_timeout", config.image_timeout);
+    config.verbose_mode = dec_common::declareAndGetParameter(node, "verbose_mode", config.verbose_mode);
+    config.confidence_threshold =
+        dec_common::declareAndGetParameter(node, "confidence_threshold", config.confidence_threshold);
+    config.track_threshold = dec_common::declareAndGetParameter(node, "track_threshold", config.track_threshold);
+    config.track_buffer = dec_common::declareAndGetParameter(node, "track_buffer", config.track_buffer);
+    config.match_threshold = dec_common::declareAndGetParameter(node, "match_threshold", config.match_threshold);
+    config.frame_rate = dec_common::declareAndGetParameter(node, "frame_rate", config.frame_rate);
+    config.target_classes = dec_common::declareAndGetParameter(node, "target_classes", config.target_classes);
     return config;
 }
 
-std::set<int> getClassIndices(const std::vector<std::string>& target_classes) {
+std::set<int> getClassIndices(const std::vector<std::string>& target_classes, const rclcpp::Logger& logger) {
     if (target_classes.empty() ||
         std::find(target_classes.begin(), target_classes.end(), "all") != target_classes.end()) {
         std::set<int> all;
@@ -91,7 +77,7 @@ std::set<int> getClassIndices(const std::vector<std::string>& target_classes) {
             if (idx >= 0 && idx < static_cast<int>(COCO_CLASSES.size())) {
                 indices.insert(idx);
             } else {
-                std::cout << "Warning: Class index " << idx << " out of range" << std::endl;
+                RCLCPP_WARN(logger, "Class index %d out of range", idx);
             }
             continue;
         }
@@ -105,7 +91,7 @@ std::set<int> getClassIndices(const std::vector<std::string>& target_classes) {
         if (it != COCO_CLASSES.end()) {
             indices.insert(static_cast<int>(std::distance(COCO_CLASSES.begin(), it)));
         } else {
-            std::cout << "Warning: Class name '" << cls << "' not found in COCO classes" << std::endl;
+            RCLCPP_WARN(logger, "Class name '%s' not found in COCO classes", cls.c_str());
         }
     }
     return indices;
@@ -113,10 +99,12 @@ std::set<int> getClassIndices(const std::vector<std::string>& target_classes) {
 
 // ── PersonDetectionNode ──────────────────────────────────────────────────────
 
-PersonDetectionNode::PersonDetectionNode(const PersonDetectionConfig& config, const std::string& node_name)
-    : rclcpp_lifecycle::LifecycleNode(node_name), config_(config) {}
+PersonDetectionNode::PersonDetectionNode(const std::string& node_name)
+    : rclcpp_lifecycle::LifecycleNode(node_name) {}
 
 PersonDetectionNode::CallbackReturn PersonDetectionNode::on_configure(const rclcpp_lifecycle::State&) {
+    config_ = loadConfiguration(this);
+
     pub_objects_ = create_publisher<dec_interfaces::msg::PersonDetection>("/person_detection/data", 10);
     debug_pub_ = create_publisher<sensor_msgs::msg::Image>("/person_detection/debug", 1);
     depth_debug_pub_ = create_publisher<sensor_msgs::msg::Image>("/person_detection/depth_debug", 1);
@@ -128,7 +116,7 @@ PersonDetectionNode::CallbackReturn PersonDetectionNode::on_configure(const rclc
     camera_type_ = config_.camera;
     verbose_mode_ = config_.verbose_mode;
     image_timeout_ = config_.image_timeout;
-    target_class_indices_ = getClassIndices(config_.target_classes);
+    target_class_indices_ = getClassIndices(config_.target_classes, get_logger());
 
     if (verbose_mode_) {
         std::string names;
@@ -617,7 +605,7 @@ cv::Mat PersonDetectionNode::drawTrackedObjects(const cv::Mat& frame, const byte
 
 // ── Yolov11Node ──────────────────────────────────────────────────────────────
 
-Yolov11Node::Yolov11Node(const PersonDetectionConfig& config) : PersonDetectionNode(config) {}
+Yolov11Node::Yolov11Node() : PersonDetectionNode() {}
 
 Yolov11Node::CallbackReturn Yolov11Node::on_configure(const rclcpp_lifecycle::State& state) {
     auto ret = PersonDetectionNode::on_configure(state);

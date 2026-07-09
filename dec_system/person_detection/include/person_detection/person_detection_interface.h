@@ -23,9 +23,10 @@
  *   /person_detection/depth_debug (sensor_msgs/Image)
  *     Colorized visualization of the raw depth image.
  *
- * Parameters (loaded from person_detection_configuration.yaml):
- *   camera, useCompressed, imageTimeout, verboseMode, confidenceThreshold,
- *   targetClasses, trackThreshold, trackBuffer, matchThreshold, frameRate.
+ * Parameters (ROS2 parameters, loaded from person_detection_configuration.yaml
+ * via the launch file):
+ *   camera, use_compressed, image_timeout, verbose_mode, confidence_threshold,
+ *   target_classes, track_threshold, track_buffer, match_threshold, frame_rate.
  *
  * Lifecycle:
  *   configure  -> create lifecycle publishers, load camera/config settings
@@ -95,13 +96,14 @@ struct PersonDetectionConfig {
     std::vector<std::string> target_classes = {"person"};
 };
 
-// Loads person_detection_configuration.yaml, falling back to the defaults above
-// for any missing key.
-PersonDetectionConfig loadConfiguration();
+// Declares and reads this node's ROS2 parameters (see dec_common/param_loader.h),
+// falling back to the PersonDetectionConfig defaults above for any parameter
+// not set by the launch file's YAML.
+PersonDetectionConfig loadConfiguration(rclcpp_lifecycle::LifecycleNode* node);
 
 // Resolves target_classes (names or numeric-string indices) to a set of COCO
 // class indices. Empty or {"all"} means "track everything".
-std::set<int> getClassIndices(const std::vector<std::string>& target_classes);
+std::set<int> getClassIndices(const std::vector<std::string>& target_classes, const rclcpp::Logger& logger);
 
 // One finalized tracked-object record, ready to publish/draw.
 struct TrackingDatum {
@@ -123,7 +125,7 @@ public:
     using CallbackReturn =
         rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
-    explicit PersonDetectionNode(const PersonDetectionConfig& config, const std::string& node_name = "personDetection");
+    explicit PersonDetectionNode(const std::string& node_name = "personDetection");
 
     // ── Lifecycle callbacks ─────────────────────────────────────────────────
     CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;
@@ -235,7 +237,7 @@ protected:
 
 class Yolov11Node : public PersonDetectionNode {
 public:
-    explicit Yolov11Node(const PersonDetectionConfig& config);
+    Yolov11Node();
 
     CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;
     CallbackReturn on_activate  (const rclcpp_lifecycle::State& state) override;
