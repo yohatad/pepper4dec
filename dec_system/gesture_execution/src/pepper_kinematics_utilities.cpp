@@ -17,6 +17,29 @@
 
 namespace pepper_kinematics {
 
+namespace {
+// Pepper arm kinematic parameters (DH-style link offsets), ported verbatim
+// from pepper_kinematics_utilities.py. All lengths are millimeters EXCEPT
+// kElbowOffsetXM, which the reference implementation genuinely expresses in
+// meters (0.13, not 130.0) — do not "fix" that to match the mm-scale
+// constants around it.
+constexpr double kShoulderOffsetXMm = -57.0;      // l_1
+constexpr double kShoulderOffsetYMagMm = 149.74;  // l_2 magnitude; sign flips per arm
+constexpr double kShoulderOffsetZMm = 86.82;      // l_3
+constexpr double kUpperArmLengthMm = 181.2;       // l_4 (getElbowPosition/getArmShoulderAngles); == d_3 elsewhere
+constexpr double kElbowOffsetYMagMm = 15.0;       // l_5 magnitude; sign flips per arm
+constexpr double kElbowOffsetXM = 0.13;           // l_6 / z_3 — meters, see note above
+constexpr double kForearmLengthMm = 150.0;        // l_4 (getArmElbowRollAngle) / d_5 (getArmElbowYawAngle)
+constexpr double kWristOffsetYMagMm = 15.0;       // a_3 magnitude; sign flips per arm (opposite of l_5's)
+constexpr double kElbowRollAxisAngleDeg = 9.0;    // alpha
+
+// Pepper head kinematic parameters (mm), DH-style offsets.
+constexpr double kHeadOffsetXMm = -38.0;   // l_1
+constexpr double kHeadOffsetZMm = 169.9;   // l_2
+constexpr double kCameraOffsetZMm = 93.6;  // l_3
+constexpr double kCameraOffsetXMm = 61.6;  // l_4
+}  // namespace
+
 double degreesToRadians(double degrees) {
     return degrees * M_PI / 180.0;
 }
@@ -27,12 +50,12 @@ double radiansToDegrees(double radians) {
 
 std::array<double, 3> getElbowPosition(int arm, double theta_1, double theta_2) {
     // Arm segment lengths
-    double l_1 = -57.0;
-    double l_2 = (arm == RIGHT_ARM) ? -149.74 : 149.74;
-    double l_3 = 86.82;
-    double l_4 = 181.2;
-    double l_5 = (arm == RIGHT_ARM) ? -15.0 : 15.0;
-    double l_6 = 0.13;
+    double l_1 = kShoulderOffsetXMm;
+    double l_2 = (arm == RIGHT_ARM) ? -kShoulderOffsetYMagMm : kShoulderOffsetYMagMm;
+    double l_3 = kShoulderOffsetZMm;
+    double l_4 = kUpperArmLengthMm;
+    double l_5 = (arm == RIGHT_ARM) ? -kElbowOffsetYMagMm : kElbowOffsetYMagMm;
+    double l_6 = kElbowOffsetXM;
 
     double sin_theta_1 = std::sin(theta_1);
     double cos_theta_1 = std::cos(theta_1);
@@ -63,12 +86,12 @@ std::array<double, 3> getWristPosition(int arm, double theta_1, double theta_2) 
 }
 
 std::array<double, 2> getArmShoulderAngles(int arm, double elbow_x, double elbow_y, double elbow_z) {
-    double l_1 = -57.0;
-    double l_2 = (arm == RIGHT_ARM) ? -149.74 : 149.74;
-    double l_3 = 86.82;
-    double l_4 = 181.2;
-    double l_5 = (arm == RIGHT_ARM) ? -15.0 : 15.0;
-    double l_6 = 0.13;
+    double l_1 = kShoulderOffsetXMm;
+    double l_2 = (arm == RIGHT_ARM) ? -kShoulderOffsetYMagMm : kShoulderOffsetYMagMm;
+    double l_3 = kShoulderOffsetZMm;
+    double l_4 = kUpperArmLengthMm;
+    double l_5 = (arm == RIGHT_ARM) ? -kElbowOffsetYMagMm : kElbowOffsetYMagMm;
+    double l_6 = kElbowOffsetXM;
 
     // Shoulder roll (theta_2)
     double f_1 = elbow_y - l_2;
@@ -144,13 +167,13 @@ std::array<double, 2> getArmShoulderAngles(int arm, double elbow_x, double elbow
 
 double getArmElbowRollAngle(int arm, double shoulder_pitch, double shoulder_roll,
                              double wrist_x, double wrist_y, double wrist_z) {
-    double l_1 = -57.0;
-    double l_2 = (arm == RIGHT_ARM) ? -149.74 : 149.74;
-    double l_3 = 86.82;
-    double l_4 = 150.0;
-    double d_3 = 181.2;
-    double z_3 = 0.13;
-    double alpha = degreesToRadians(9.0);
+    double l_1 = kShoulderOffsetXMm;
+    double l_2 = (arm == RIGHT_ARM) ? -kShoulderOffsetYMagMm : kShoulderOffsetYMagMm;
+    double l_3 = kShoulderOffsetZMm;
+    double l_4 = kForearmLengthMm;
+    double d_3 = kUpperArmLengthMm;
+    double z_3 = kElbowOffsetXM;
+    double alpha = degreesToRadians(kElbowRollAxisAngleDeg);
 
     double t_2 = shoulder_roll - M_PI / 2.0;
     double term_3 = ((wrist_x - l_1) * std::sin(shoulder_pitch)) +
@@ -183,13 +206,13 @@ double getArmElbowRollAngle(int arm, double shoulder_pitch, double shoulder_roll
 
 double getArmElbowYawAngle(int arm, double shoulder_pitch, double shoulder_roll, double elbow_roll,
                             double wrist_x, double wrist_y, double wrist_z) {
-    double l_1 = -57.0;
-    double l_2 = (arm == RIGHT_ARM) ? -149.74 : 149.74;
-    double l_3 = 86.82;
-    double a_3 = (arm == RIGHT_ARM) ? 15.0 : -15.0;
-    double d_3 = 181.2;
-    double d_5 = 150.0;
-    double alpha = degreesToRadians(9.0);
+    double l_1 = kShoulderOffsetXMm;
+    double l_2 = (arm == RIGHT_ARM) ? -kShoulderOffsetYMagMm : kShoulderOffsetYMagMm;
+    double l_3 = kShoulderOffsetZMm;
+    double a_3 = (arm == RIGHT_ARM) ? kWristOffsetYMagMm : -kWristOffsetYMagMm;
+    double d_3 = kUpperArmLengthMm;
+    double d_5 = kForearmLengthMm;
+    double alpha = degreesToRadians(kElbowRollAxisAngleDeg);
 
     double t_2 = shoulder_roll - M_PI / 2.0;
 
@@ -230,10 +253,10 @@ std::array<double, 4> getArmAngles(int arm, double elbow_x, double elbow_y, doub
 }
 
 std::array<double, 2> getHeadAngles(double camera_x, double camera_y, double camera_z) {
-    double l_1 = -38.0;
-    double l_2 = 169.9;
-    double l_3 = 93.6;
-    double l_4 = 61.6;
+    double l_1 = kHeadOffsetXMm;
+    double l_2 = kHeadOffsetZMm;
+    double l_3 = kCameraOffsetZMm;
+    double l_4 = kCameraOffsetXMm;
 
     double head_yaw = std::atan2(camera_y, (camera_x - l_1));
     double head_pitch = std::asin((l_2 - camera_z) / std::sqrt(l_4 * l_4 + l_3 * l_3)) + std::atan(l_4 / l_3);
