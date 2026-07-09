@@ -28,7 +28,8 @@ def launch_setup(context, *args, **kwargs):
     with open(config_file, "r") as f:
         params = yaml.safe_load(f)
 
-    camera_value = params.get("camera", "realsense")  # default fallback
+    node_params = params.get("face_detection", {}).get("ros__parameters", {})
+    camera_value = node_params.get("camera", "realsense")  # default fallback
 
     actions = []
 
@@ -86,6 +87,7 @@ def launch_setup(context, *args, **kwargs):
             executable="face_detection",
             name="face_detection",
             output="screen",
+            parameters=[config_file],
         )
     )
 

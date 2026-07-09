@@ -13,17 +13,13 @@
 
 #include "face_detection/face_detection_interface.h"
 
-#include <iostream>
-
 int main(int argc, char** argv) {
     rclcpp::init(argc, argv);
 
-    std::cout << "face_detection v1.0\n"
-              << "\t\t\t    This program comes with ABSOLUTELY NO WARRANTY." << std::endl;
+    RCLCPP_INFO(rclcpp::get_logger("face_detection"), "face_detection v1.0 — "
+        "This program comes with ABSOLUTELY NO WARRANTY.");
 
-    FaceDetectionConfig config = loadConfiguration();
-
-    auto node = std::make_shared<SixDrepNet>(config);
+    auto node = std::make_shared<SixDrepNet>();
     rclcpp::spin(node->get_node_base_interface());
     node->cleanup();
     rclcpp::shutdown();

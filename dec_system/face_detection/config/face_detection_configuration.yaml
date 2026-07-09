@@ -1,15 +1,20 @@
 # Face Detection Configuration File
-# This file contains all configurable parameters for the face detection node
+# ROS2 parameters for the face_detection node (loaded via the launch file's
+# `parameters=[...]`). Run `ros2 param get/set /face_detection <name>` to
+# inspect or override these at runtime.
 
-# General Settings
-useCompressed: false         # Use compressed image topics
-camera: "pepper"          # Camera type: "realsense", "pepper", or "video"
-verboseMode: false           # Enable verbose logging and display
-imageTimeout: 2.0            # Timeout in seconds for image reception
+face_detection:
+  ros__parameters:
 
-# SixDrepNet Algorithm Settings
-sixdrepnetConfidence: 0.90   # Face detection confidence threshold (0.0-1.0)
-sixdrepnetHeadposeAngle: 10  # Head pose angle threshold for mutual gaze (degrees)
-requirePersonDetection: true  # Set to false to run face detection independently
+    # General Settings
+    use_compressed: false          # Use compressed image topics
+    camera: "pepper"               # Camera type: "realsense", "pepper", or "video"
+    verbose_mode: false            # Enable verbose logging and display
+    image_timeout: 2.0             # Timeout in seconds for image reception
 
-objectDetectionTimeout: 0.5   # Timeout in seconds for object detection messages
+    # SixDrepNet Algorithm Settings
+    sixdrepnet_confidence: 0.90        # Face detection confidence threshold (0.0-1.0)
+    sixdrepnet_headpose_angle: 10.0    # Head pose angle threshold for mutual gaze (degrees)
+    require_person_detection: true     # Set to false to run face detection independently
+    person_detection_timeout: 0.5      # Timeout in seconds for person detection messages
+    prioritize_face_depth: true        # Prefer face-region depth over person-region depth when both are available

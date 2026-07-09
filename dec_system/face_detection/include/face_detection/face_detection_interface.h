@@ -6,7 +6,7 @@
  * (face detector) and SixDrepNet (head pose) ONNX models and runs
  * head-pose/mutual-gaze inference on synchronized RGB-D camera frames. Faces
  * are matched to tracked persons (from /person_detection/data) via a
- * Hungarian-assignment cost function when requirePersonDetection is true;
+ * Hungarian-assignment cost function when require_person_detection is true;
  * otherwise faces are tracked directly with ByteTrack.
  *
  * Subscribers:
@@ -27,10 +27,11 @@
  *   /face_detection/depth_debug (sensor_msgs/Image)
  *     Colorized depth visualization for debugging.
  *
- * Parameters (loaded from face_detection_configuration.yaml):
- *   algorithm, useCompressed, camera, verboseMode, imageTimeout,
- *   sixdrepnetConfidence, sixdrepnetHeadposeAngle, requirePersonDetection,
- *   personDetectionTimeout, prioritizeFaceDepth.
+ * Parameters (ROS2 parameters, loaded from face_detection_configuration.yaml
+ * via the launch file):
+ *   use_compressed, camera, verbose_mode, image_timeout,
+ *   sixdrepnet_confidence, sixdrepnet_headpose_angle, require_person_detection,
+ *   person_detection_timeout, prioritize_face_depth.
  *
  * Lifecycle:
  *   configure  -> create lifecycle publishers and initialize state, incl. the
@@ -88,7 +89,6 @@
 constexpr double kImpossibleMatchCost = 1e6;
 
 struct FaceDetectionConfig {
-    std::string algorithm = "sixdrep";
     bool use_compressed = false;
     std::string camera = "realsense";
     bool verbose_mode = true;
@@ -100,7 +100,10 @@ struct FaceDetectionConfig {
     bool prioritize_face_depth = true;
 };
 
-FaceDetectionConfig loadConfiguration();
+// Declares and reads this node's ROS2 parameters (see param_loader.h),
+// falling back to the FaceDetectionConfig defaults above for any parameter
+// not set by the launch file's YAML.
+FaceDetectionConfig loadConfiguration(rclcpp_lifecycle::LifecycleNode* node);
 
 // Cached snapshot of the latest /person_detection/data message.
 struct PersonSnapshot {
@@ -159,7 +162,7 @@ public:
     using CallbackReturn =
         rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
-    explicit FaceDetectionNode(const FaceDetectionConfig& config, const std::string& node_name = "faceDetection");
+    explicit FaceDetectionNode(const std::string& node_name = "faceDetection");
 
     // ── Lifecycle callbacks ─────────────────────────────────────────────────
     CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;
@@ -260,7 +263,7 @@ protected:
 
 class SixDrepNet : public FaceDetectionNode {
 public:
-    explicit SixDrepNet(const FaceDetectionConfig& config);
+    SixDrepNet();
 
     CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;
     CallbackReturn on_activate  (const rclcpp_lifecycle::State& state) override;

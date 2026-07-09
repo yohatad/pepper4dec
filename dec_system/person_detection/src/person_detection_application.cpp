@@ -12,8 +12,6 @@
 
 #include "person_detection/person_detection_interface.h"
 
-#include <iostream>
-
 namespace {
 constexpr const char* kBanner = R"(
 ================================================================================
@@ -29,12 +27,11 @@ constexpr const char* kBanner = R"(
 }  // namespace
 
 int main(int argc, char** argv) {
-    std::cout << kBanner << std::endl;
-
-    PersonDetectionConfig config = loadConfiguration();
-
     rclcpp::init(argc, argv);
-    auto node = std::make_shared<Yolov11Node>(config);
+
+    RCLCPP_INFO(rclcpp::get_logger("person_detection"), "%s", kBanner);
+
+    auto node = std::make_shared<Yolov11Node>();
     rclcpp::spin(node->get_node_base_interface());
     rclcpp::shutdown();
     return 0;
