@@ -19,8 +19,7 @@ The **Face and Mutual Gaze Detection and Localization** package detects multiple
 
 ## ✅ Prerequisites
 - **ROS2 Humble** or newer
-- **Python 3.10** or compatible version
-- **CUDA-capable GPU** (recommended for optimal performance)
+- **CUDA-capable GPU** (recommended for optimal performance; falls back to CPU automatically)
 - **Intel RealSense camera** (if using RealSense) with USB 3.0 connection
 
 ## 🛠️ Installation
@@ -32,36 +31,34 @@ The **Face and Mutual Gaze Detection and Localization** package detects multiple
 cd ~/ros2_ws/src
 git clone https://github.com/yohatad/pepper4dec.git
 
-# Build the workspace
+# Build the workspace (pulls in the dec_interfaces/dec_common dependencies automatically)
 cd ~/ros2_ws
-colcon build --packages-select face_detection person_detection
+colcon build --packages-up-to face_detection person_detection
 source install/setup.bash
 ```
 
-### Python Dependencies
+### Model Files
 
-```bash
-# Install PyTorch with CUDA support (recommended)
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-
-# Install package requirements
-pip install -r ~/ros2_ws/src/pepper4dec/dec_system/face_detection/requirements.txt
-```
+Place the required ONNX model files in `models/`:
+- `face_detection_goldYOLO.onnx` - face detector weights
+- `face_detection_sixdrepnet360.onnx` - head-pose estimator weights
 
 ## 🔧 Configuration
 
-Configuration is managed via `config/face_detection_configuration.yaml`:
+Configuration is managed via ROS2 parameters, loaded from `config/face_detection_configuration.yaml`
+(`ros2 param get/set /face_detection <name>` also works at runtime):
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `useCompressed` | Use compressed ROS image topics | `False` |
-| `camera` | Camera type to use | `realsense` |
-| `sixdrepnetConfidence` | Confidence threshold for face detection | `0.90` |
-| `sixdrepnetHeadposeAngle` | Head pose angle threshold in degrees | `10` |
-| `imageTimeout` | Timeout for shutting down after video ends (s) | `2.0` |
-| `verboseMode` | Enable visualization and detailed logging | `False` |
-| `requirePersonDetection` | Require person detection before running face detection | `True` |
-| `objectDetectionTimeout` | Timeout for person detection messages (s) | `0.5` |
+| `use_compressed` | Use compressed ROS image topics | `false` |
+| `camera` | Camera type to use (`realsense`, `pepper`, or `video`) | `pepper` |
+| `sixdrepnet_confidence` | Confidence threshold for face detection | `0.90` |
+| `sixdrepnet_headpose_angle` | Head pose angle threshold in degrees | `10.0` |
+| `image_timeout` | Timeout for shutting down after video ends (s) | `2.0` |
+| `verbose_mode` | Enable visualization and detailed logging | `false` |
+| `require_person_detection` | Require person detection before running face detection | `true` |
+| `person_detection_timeout` | Timeout for person detection messages (s) | `0.5` |
+| `prioritize_face_depth` | Prefer face-region depth over person-region depth when both are available | `true` |
 
 ## 🚀 Running the Node
 
@@ -88,13 +85,17 @@ ros2 run realsense2_camera realsense2_camera_node \
   -p enable_sync:=true
 
 # Start Person Detection Node
-source ~/face_detection_env/bin/activate
 ros2 run person_detection person_detection
 
 # Start Face Detection Node
-source ~/face_detection_env/bin/activate
 ros2 run face_detection face_detection
 ```
+
+Both this and the launch file above start the node unconfigured. Transition it
+manually with `ros2 lifecycle set /face_detection configure` then
+`... activate`, or launch the whole stack via `dec_launch`'s
+`dec_system.launch.py`, which drives these transitions automatically through
+`nav2_lifecycle_manager`.
 
 ## 🖥️ ROS Interface
 
@@ -131,28 +132,23 @@ ros2 run face_detection face_detection
 ```
 face_detection/
 ├── config/
-│   └── face_detection_configuration.yaml     # ROS2 parameters
+│   └── face_detection_configuration.yaml           # ROS2 parameters
 ├── data/
-│   └── pepper_topics.yaml                    # topic name overrides
+│   └── pepper_topics.yaml                          # topic name overrides
 ├── launch/
 │   └── face_detection_launch_robot.launch.py
 ├── models/
-│   ├── face_detection_goldYOLO.onnx          # face detector weights
-│   └── face_detection_sixdrepnet360.onnx     # head-pose estimator weights
-├── scripts/
-│   ├── face_detection                        # venv launcher for `ros2 run`
-│   └── age_detection
-├── resource/
-│   └── face_detection
-├── face_detection/
-│   ├── __init__.py
-│   ├── age_gender_detection.py               # age/gender inference helper
-│   ├── face_detection_application.py         # node entry point, lifecycle node
-│   └── face_detection_implementation.py      # face detection + gaze estimation
+│   ├── face_detection_goldYOLO.onnx                # face detector weights
+│   └── face_detection_sixdrepnet360.onnx           # head-pose estimator weights
+├── include/face_detection/
+│   ├── byte_tracker.h
+│   └── face_detection_interface.h                  # node/class declarations
+├── src/
+│   ├── byte_tracker.cpp
+│   ├── face_detection_application.cpp              # node entry point (main)
+│   └── face_detection_implementation.cpp           # face detection + gaze estimation
+├── CMakeLists.txt
 ├── package.xml
-├── setup.py
-├── setup.cfg
-├── requirements.txt
 └── README.md
 ```
 

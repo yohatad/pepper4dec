@@ -19,10 +19,9 @@ The **Overt Visual Attention System** package implements a unified visual attent
 
 ## ✅ Prerequisites
 - **ROS2 Humble** or newer
-- **Python 3.10** or compatible version
-- **OpenCV** and **NumPy** for image processing
+- **OpenCV** (C++, via `find_package(OpenCV)`) and **yaml-cpp**
 - **Face Detection Node**: Requires the `face_detection` package
-- **Camera System**: RGB camera (RealSense, Pepper camera, or similar)
+- **Camera System**: RGB(-D) camera (RealSense, Pepper camera, or similar)
 
 ## 🛠️ Installation
 
@@ -35,36 +34,83 @@ git clone https://github.com/yohatad/pepper4dec.git
 
 # Build the workspace
 cd ~/ros2_ws
-colcon build --packages-select overt_attention dec_interfaces
+colcon build --packages-up-to overt_attention
 source install/setup.bash
-```
-
-### Python Dependencies
-
-```bash
-pip install opencv-python numpy scipy
 ```
 
 ## 🔧 Configuration
 
-Configuration is managed via `config/overt_attention_configuration.yaml`:
+Configuration is managed via ROS2 parameters, loaded from `config/overt_attention_configuration.yaml`
+(`ros2 param get/set <node> <name>` also works at runtime). The package has three nodes, each with
+its own parameter set; a shared `/**` block applies `use_compressed`/`camera_type` to all three.
+
+**Shared (`/**`, all nodes)**
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `use_compressed` | Use compressed ROS image topics | `False` |
-| `publish_map` | Publish saliency map visualization | `True` |
-| `engaged_priority_bonus` | Priority multiplier for engaged faces | `2.0` |
-| `face_timeout` | Time after losing faces before switching to saliency (s) | `2.0` |
-| `enable_ior` | Enable Inhibition of Return | `True` |
-| `ior_half_life` | Half-life for IOR decay (seconds) | `3.0` |
-| `face_yaw_lim` | Head yaw joint limit for face tracking (radians) | `1.8` |
-| `face_pitch_up` | Head pitch up limit for face tracking (radians) | `0.4` |
-| `face_pitch_dn` | Head pitch down limit for face tracking (radians) | `-0.7` |
-| `saliency_yaw_lim` | Head yaw joint limit for saliency (radians) | `1.2` |
-| `saliency_pitch_up` | Head pitch up limit for saliency (radians) | `0.3` |
-| `saliency_pitch_dn` | Head pitch down limit for saliency (radians) | `-0.3` |
+| `use_compressed` | Use compressed ROS image topics | `false` |
+| `camera_type` | Camera to use: `"pepper"` or `"realsense"` | `pepper` |
 
-Topic names (face detection, saliency, camera, joint angles, target angles) are configured separately via `data/pepper_topics.yaml`.
+**`saliency_node`**
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `publish_map` | Publish saliency map visualization | `true` |
+| `down_w` / `down_h` | Downsampled width/height used for saliency computation (px) | `160` / `120` |
+| `use_depth_weighting` | Weight saliency by depth proximity | `true` |
+| `depth_min_m` / `depth_max_m` | Depth range considered for weighting (m) | `0.3` / `10.0` |
+| `depth_weight_min` | Minimum depth weight applied outside range | `0.2` |
+| `min_peak` | Minimum saliency score to count as a peak | `0.5` |
+| `overlay_alpha` | Blend alpha for the saliency overlay | `0.4` |
+| `num_peaks` | Max number of saliency peaks to report | `5` |
+| `peak_min_distance_px` | Minimum pixel distance between reported peaks | `50` |
+| `process_hz` | Saliency computation rate (Hz) | `1.0` |
+
+**`unified_attention_node`**
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `start_enabled` | Whether attention is active on startup | `true` |
+| `move_to_default_on_disable` | Move head to default pose when disabled | `true` |
+| `default_yaw` / `default_pitch` | Default head pose (radians) | `0.0` / `-0.2` |
+| `default_move_speed` | ALMotion speed used moving to default pose | `0.1` |
+| `face_yaw_lim` | Head yaw joint limit for face tracking (radians) | `1.8` |
+| `face_pitch_up` / `face_pitch_dn` | Head pitch limits for face tracking (radians) | `0.4` / `-0.7` |
+| `saliency_yaw_lim` | Head yaw joint limit for saliency (radians) | `1.2` |
+| `saliency_pitch_up` / `saliency_pitch_dn` | Head pitch limits for saliency (radians) | `0.3` / `-0.3` |
+| `face_timeout` | Time after losing faces before switching to saliency (s) | `2.0` |
+| `engaged_priority_bonus` | Priority multiplier for engaged (mutual-gaze) faces | `2.0` |
+| `face_switch_cooldown` | Minimum time between switching tracked faces (s) | `1.0` |
+| `same_face_threshold_deg` | Angular threshold to treat a face as "the same" target | `8.0` |
+| `prefer_closer_faces` | Prefer nearer faces when scoring candidates | `true` |
+| `max_face_distance` | Max face depth considered for tracking (m) | `5.0` |
+| `min_angular_change_deg` | Dead-zone: skip a head command if already this close (deg) | `2.0` |
+| `target_smoothing_alpha` | EMA weight for new target (0=frozen, 1=raw) | `0.4` |
+| `saliency_min_score` | Minimum saliency score to consider switching to it | `0.30` |
+| `saliency_min_cooldown` | Minimum dwell before switching saliency targets (s) | `1.5` |
+| `saliency_max_dwell` | Max time to stay on one saliency target (s) | `3.0` |
+| `switch_score_ratio` | Required score ratio to switch saliency targets | `1.4` |
+| `same_target_threshold_deg` | Angular threshold to treat a saliency peak as "the same" | `5.0` |
+| `enable_ior` | Enable Inhibition of Return | `true` |
+| `ior_max_suppression` | Max suppression strength for a visited location | `0.9` |
+| `ior_half_life` | Half-life for IOR decay (s) | `3.0` |
+| `ior_radius_deg` | Angular radius of an IOR-suppressed region (deg) | `15.0` |
+| `ior_cleanup_threshold` | Suppression value below which an IOR entry is dropped | `0.05` |
+| `ior_max_locations` | Max number of IOR-suppressed locations tracked | `20` |
+
+**`attention_visualization`**
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `publish_overlay` | Publish the annotated visualization image | `true` |
+| `publish_markers` | Publish RViz markers | `true` |
+| `show_metrics` | Draw metrics text on the overlay | `true` |
+| `show_face_ids` | Draw face IDs on the overlay | `true` |
+| `show_depth` | Draw per-face depth on the overlay | `true` |
+| `show_engagement` | Draw engagement/mutual-gaze status on the overlay | `true` |
+
+Topic names (face detection, saliency, camera, joint angles, target angles) are configured separately
+via `data/pepper_topics.yaml`, keyed by `camera_type` (`pepper` vs `realsense`).
 
 ## 🚀 Running the Node
 
@@ -107,12 +153,20 @@ ros2 run overt_attention overt_attention_visualization \
 
 ### Subscribed Topics
 
+Camera/depth/camera-info topics are resolved from `data/pepper_topics.yaml` based on the
+`camera_type` parameter. With the default `camera_type: "pepper"`:
+
 | Topic | Type | Description |
 |-------|------|-------------|
-| `/face_detection/data` | `dec_interfaces/msg/FaceDetection` | Face detection messages |
-| `/camera/color/image_raw_custom` | `sensor_msgs/Image` | RGB image from camera |
-| `/camera/color/camera_info` | `sensor_msgs/CameraInfo` | Camera intrinsics |
-| `/joint_states` | `sensor_msgs/JointState` | Current head position |
+| `/face_detection/data` | `dec_interfaces/msg/FaceDetection` | Face detection messages (`unified_attention_node`) |
+| `/pepper/front/image_raw` | `sensor_msgs/Image` | RGB image from camera (`saliency_node`, `attention_visualization`) |
+| `/naoqi_driver/camera/depth/image_raw` | `sensor_msgs/Image` | Depth image (`saliency_node`, if `use_depth_weighting`) |
+| `/pepper/front/camera_info` | `sensor_msgs/CameraInfo` | Camera intrinsics (`attention_visualization`) |
+| `/joint_states` | `sensor_msgs/JointState` | Current head position (`unified_attention_node`) |
+
+With `camera_type: "realsense"`, these resolve instead to `/camera/color/image_raw_custom`,
+`/camera/aligned_depth_to_color/image_raw_custom`, and `/camera/color/camera_info`. When
+`use_compressed: true`, the image/depth subscriptions switch to `sensor_msgs/CompressedImage`.
 
 ### Published Topics
 

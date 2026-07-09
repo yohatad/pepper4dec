@@ -45,10 +45,10 @@ Managed via `config/behavior_controller_configuration.yaml`:
 
 | Parameter | Description | Default Value |
 |-----------|-------------|---------------|
-| `scenario_specification` | XML behavior tree file name (without `.xml`) in `data/` | `lab_tour` |
+| `scenario_specification` | XML behavior tree file name (without `.xml`) in `data/` | `asr_cm_tts_pipeline` |
 | `culture_knowledge_base` | YAML file with utility phrases | `cultureKnowledgeBase.yaml` |
-| `environment_knowledge_base` | YAML file with locations, tour stops, and gesture targets | `labEnvironmentKnowledgeBase.yaml` |
-| `verbose_mode` | Print per-tick action goals, feedback, and results | `false` |
+| `environment_knowledge_base` | YAML file with locations, tour stops, and gesture targets | `decEnvironmentKnowledgeBase_short.yaml` |
+| `verbose_mode` | Print per-tick action goals, feedback, and results | `true` |
 
 # 🚀 Running the Node
 
@@ -157,9 +157,9 @@ XML files are in the `data/` folder. The active scenario is set via `scenario_sp
 
 | File | Description |
 |------|-------------|
-| `lab_tour.xml` | Default scenario (`scenario_specification` default) — guided tour of the lab environment |
+| `lab_tour.xml` | Guided tour of the lab environment |
 | `dec_Tour.xml` | Guided tour of the DEC environment |
-| `asr_cm_tts_pipeline.xml` | Intent-routed ASR → ConversationManager → TTS pipeline |
+| `asr_cm_tts_pipeline.xml` | Default scenario (`scenario_specification` default) — intent-routed ASR → ConversationManager → TTS pipeline |
 | `listen_cm_tts_pipeline.xml` | Standalone ASR → ConversationManager → TTS pipeline |
 | `dec_DeicticTest.xml` | Test tree for the exhibit-loop / deictic gesture nodes |
 | `dec_GestureNavTest.xml` | Test tree for gesture and navigation nodes |

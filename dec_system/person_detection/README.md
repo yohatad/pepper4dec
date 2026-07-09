@@ -19,8 +19,7 @@ The **Person Detection and Tracking** package is a ROS2 package designed to dete
 
 ## ✅ Prerequisites
 - **ROS2 Humble** or newer
-- **Python 3.10** or compatible version
-- **CUDA-capable GPU** (recommended for optimal performance)
+- **CUDA-capable GPU** (recommended for optimal performance; falls back to CPU automatically)
 - **Intel RealSense camera** (if using RealSense) with USB 3.0 connection
 
 ## 🛠️ Installation
@@ -32,20 +31,10 @@ The **Person Detection and Tracking** package is a ROS2 package designed to dete
 cd ~/ros2_ws/src
 git clone https://github.com/yohatad/pepper4dec.git
 
-# Build the workspace
+# Build the workspace (pulls in the dec_interfaces/dec_common dependencies automatically)
 cd ~/ros2_ws
-colcon build --packages-select person_detection
+colcon build --packages-up-to person_detection
 source install/setup.bash
-```
-
-### Python Dependencies
-
-```bash
-# Install PyTorch with CUDA support (recommended)
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-
-# Install package requirements
-pip install -r ~/ros2_ws/src/pepper4dec/dec_system/person_detection/requirements.txt
 ```
 
 ### Model Files
@@ -55,22 +44,23 @@ Download the required ONNX model files to the `models/` directory:
 
 ## 🔧 Configuration
 
-Configuration is managed via `config/person_detection_configuration.yaml`:
+Configuration is managed via ROS2 parameters, loaded from `config/person_detection_configuration.yaml`
+(`ros2 param get/set /person_detection <name>` also works at runtime):
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `camera` | Camera type to use | `realsense` |
-| `useCompressed` | Use compressed ROS image topics | `False` |
-| `confidenceThreshold` | Confidence threshold for person detection | `0.6` |
-| `targetClasses` | List of target classes to detect (or `all`) | `[person]` |
-| `trackThreshold` | Confidence threshold for tracking (ByteTrack) | `0.45` |
-| `trackBuffer` | Number of frames to keep lost tracks before removing | `30` |
-| `matchThreshold` | IoU threshold for matching detections to tracks | `0.8` |
-| `frameRate` | Expected frame rate of the video stream (fps) | `30` |
-| `imageTimeout` | Timeout for shutting down after video ends (s) | `2.0` |
-| `verboseMode` | Enable visualization and detailed logging | `False` |
+| `camera` | Camera type to use (`realsense`, `pepper`, or `video`) | `pepper` |
+| `use_compressed` | Use compressed ROS image topics | `false` |
+| `confidence_threshold` | Confidence threshold for person detection | `0.6` |
+| `target_classes` | List of target classes to detect (or `all`) | `[person]` |
+| `track_threshold` | Confidence threshold for tracking (ByteTrack) | `0.45` |
+| `track_buffer` | Number of frames to keep lost tracks before removing | `30` |
+| `match_threshold` | IoU threshold for matching detections to tracks | `0.8` |
+| `frame_rate` | Expected frame rate of the video stream (fps) | `30` |
+| `image_timeout` | Timeout for shutting down after video ends (s) | `2.0` |
+| `verbose_mode` | Enable visualization and detailed logging | `false` |
 
-> **Note:** Enabling `verboseMode` (`True`) activates real-time visualization via OpenCV windows.
+> **Note:** Enabling `verbose_mode` (`true`) activates real-time visualization via OpenCV windows.
 
 ## 🚀 Running the Node
 
@@ -97,9 +87,14 @@ ros2 run realsense2_camera realsense2_camera_node \
   -p enable_sync:=true
 
 # Start Person Detection Node
-source ~/person_detection_env/bin/activate
 ros2 run person_detection person_detection
 ```
+
+Both this and the launch file above start the node unconfigured. Transition it
+manually with `ros2 lifecycle set /person_detection configure` then
+`... activate`, or launch the whole stack via `dec_launch`'s
+`dec_system.launch.py`, which drives these transitions automatically through
+`nav2_lifecycle_manager`.
 
 ## 🖥️ ROS Interface
 
@@ -137,23 +132,22 @@ ros2 run person_detection person_detection
 ```
 person_detection/
 ├── config/
-│   └── person_detection_configuration.yaml   # ROS2 parameters
+│   └── person_detection_configuration.yaml         # ROS2 parameters
 ├── data/
-│   └── pepper_topics.yaml                    # topic name overrides
+│   └── pepper_topics.yaml                          # topic name overrides
 ├── launch/
 │   └── person_detection_launch_robot.launch.py
 ├── models/
-│   └── person_detection_yolov11m.onnx        # YOLOv11m detector weights
-├── resource/
-│   └── person_detection
-├── person_detection/
-│   ├── __init__.py
-│   ├── person_detection_application.py       # node entry point, lifecycle node
-│   └── person_detection_implementation.py    # YOLO inference + ByteTrack
+│   └── person_detection_yolov11m.onnx              # YOLOv11m detector weights
+├── include/person_detection/
+│   ├── byte_tracker.h
+│   └── person_detection_interface.h                # node/class declarations
+├── src/
+│   ├── byte_tracker.cpp
+│   ├── person_detection_application.cpp            # node entry point (main)
+│   └── person_detection_implementation.cpp         # YOLO inference + ByteTrack
+├── CMakeLists.txt
 ├── package.xml
-├── setup.py
-├── setup.cfg
-├── requirements.txt
 └── README.md
 ```
 

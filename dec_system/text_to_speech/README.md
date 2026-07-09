@@ -238,13 +238,13 @@ ros2 action send_goal /text_to_speech dec_interfaces/action/TTS "{text: 'Hello, 
 cd ~/ros2_ws/src/pepper4dec/dec_system/text_to_speech
 
 # Stream mode (robot speakers)
-/home/yoha/tts_kokoro/bin/python3 tests/test_play_audio.py "Hello." --method stream
+~/ros2_ws/.venvs/tts_virtual_env/bin/python3 tests/test_play_audio.py "Hello." --method stream
 
 # File mode (robot speakers, requires SSH key)
-/home/yoha/tts_kokoro/bin/python3 tests/test_play_audio.py "Hello." --method file
+~/ros2_ws/.venvs/tts_virtual_env/bin/python3 tests/test_play_audio.py "Hello." --method file
 
 # Local speakers only
-/home/yoha/tts_kokoro/bin/python3 tests/test_play_audio.py "Hello." --local
+~/ros2_ws/.venvs/tts_virtual_env/bin/python3 tests/test_play_audio.py "Hello." --local
 ```
 
 ## 📁 Package Structure
@@ -271,7 +271,6 @@ text_to_speech/
 ├── setup.py
 ├── setup.cfg
 ├── requirements.txt
-├── text_to_speech_requirements_x86.txt       # x86-specific pip pins
 └── README.md
 ```
 
