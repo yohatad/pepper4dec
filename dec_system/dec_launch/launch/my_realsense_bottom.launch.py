@@ -11,7 +11,7 @@ def generate_launch_description():
     return LaunchDescription([
 
         # ------------------------------------------------------------
-        # 1) Launch RealSense (WITH publish_tf := false)
+        # 1) Launch RealSense
         # ------------------------------------------------------------
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource([
@@ -24,53 +24,45 @@ def generate_launch_description():
             launch_arguments={
                 'camera_namespace': '',
                 'camera_name': 'camera',
-                # Must match the mount TF child frame (l2lidar_frame -> camera_camera_link)
-                # and the sibling my_realsense_with_staticframes.launch.py.
-                'base_frame_id': 'camera_camera_link',
+                'base_frame_id': 'camera_link',
 
-                # Alignment and sync
                 'align_depth.enable': 'true',
                 'enable_sync': 'true',
-                'accelerate_gpu_with_glsl': 'false',
+                'accelerate_gpu_with_glsl': 'true',
 
-                # IMPORTANT: We now publish ALL TFs manually
                 'publish_tf': 'true',
                 'tf_publish_rate': '0.0',
 
-                # Streams
                 'enable_color': 'true',
                 'enable_depth': 'true',
-                'enable_infra1': 'true',
-                'enable_infra2': 'true',
+                'enable_infra1': 'false',
+                'enable_infra2': 'false',            # <-- disabled, redundant for VIO
                 'enable_accel': 'true',
                 'enable_gyro': 'true',
                 'unite_imu_method': '2',
-                'hold_back_imu_for_frames': 'true',
 
-                'rgb_camera.color_profile': '640x480x15',
-                'depth_module.depth_profile': '640x480x15',
+                'rgb_camera.color_profile': '640x480x30',
+                'depth_module.depth_profile': '640x480x30',
+                'depth_module.infra_profile': '640x480x30',
 
-                # ---------------- QoS (Wi-Fi SAFE) ----------------
-                # Publish depth point cloud (needed for lidar_depth_calibrator)
-                'pointcloud.enable': 'true',
+                'pointcloud.enable': 'false',        # <-- disable during recording
 
-                'color_qos': 'SENSOR_DATA',
-                'color_info_qos': 'SENSOR_DATA',
-
-                'depth_qos': 'SENSOR_DATA',
-                'depth_info_qos': 'SENSOR_DATA',
-
-                'infra1_qos': 'SENSOR_DATA',
-                'infra1_info_qos': 'SENSOR_DATA',
-
-                'infra2_qos': 'SENSOR_DATA',
-                'infra2_info_qos': 'SENSOR_DATA',
-
-                'accel_qos': 'SENSOR_DATA',
-                'accel_info_qos': 'SENSOR_DATA',
-
-                'gyro_qos': 'SENSOR_DATA',
-                'gyro_info_qos': 'SENSOR_DATA',
+                # NOTE: hold_back_imu_for_frames and all *_qos/*_info_qos
+                # launch arguments were removed here -- neither is a
+                # declared argument in the installed rs_launch.py (checked
+                # against realsense2_camera's configurable_parameters list),
+                # so they were silently no-ops. If real per-topic QoS
+                # control is needed (e.g. BEST_EFFORT on the image topics
+                # under load), use ROS2's generic qos_overrides parameter
+                # file mechanism instead -- it works regardless of what this
+                # launch file exposes:
+                #
+                #   /**:
+                #     ros__parameters:
+                #       qos_overrides:
+                #         /camera/color/image_raw:
+                #           publisher:
+                #             reliability: best_effort
             }.items(),
         ),
 
@@ -114,7 +106,18 @@ def generate_launch_description():
         ),
 
         # ------------------------------------------------------------
-        # 3) RealSense Internal TF Tree (from measured values)
+        # 3) RealSense Internal TF Tree -- NOT needed, kept only as a
+        #    reference of the measured values. publish_tf:=true above
+        #    already makes realsense2_camera broadcast this exact chain
+        #    (camera_camera_link -> color/depth/imu frames -> optical
+        #    frames) internally from the device's own factory calibration.
+        #    Uncommenting this block would double-publish the same frames
+        #    and fight the internal broadcaster. If you ever do need it
+        #    standalone, note it uses the OLD positional argument form
+        #    ('x','y','z',...,'frame_id','child_frame_id') which this
+        #    Humble static_transform_publisher does NOT accept -- it would
+        #    need converting to --x/--y/--z/.../--frame-id/--child-frame-id
+        #    first (see the tf published in section 2 for the syntax).
         # ------------------------------------------------------------
 
         # # CAMERA COLOR FRAME
