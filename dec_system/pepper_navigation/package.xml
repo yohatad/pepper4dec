@@ -26,6 +26,9 @@
   <depend>std_srvs</depend>
   <depend>nav2_msgs</depend>
 
+  <!-- launched by inclusion (pepper_nav2_bringup.launch.py), not linked -->
+  <exec_depend>fast_lio</exec_depend>
+
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
 
