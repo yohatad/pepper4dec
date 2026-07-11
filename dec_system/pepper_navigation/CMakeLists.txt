@@ -76,12 +76,6 @@ install(DIRECTORY
   FILES_MATCHING PATTERN "*.rviz"
 )
 
-# Display-rate image relay used by the mapping rviz config
-install(PROGRAMS
-  scripts/image_throttle.py
-  DESTINATION lib/${PROJECT_NAME}
-)
-
 # Install config files
 install(DIRECTORY
   config/
