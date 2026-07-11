@@ -29,3 +29,32 @@
 5. **Config defaults duplicated in code and YAML.** Threshold defaults (e.g. `confidenceThreshold=0.5`, `trackThreshold=0.45` in `person_detection_implementation.py`'s `on_configure`) are hardcoded inline as `config.get('key', <magic default>)` rather than sourced solely from `person_detection_configuration.yaml` — YAML and code can silently disagree.
 
 **Recommended order on `main`:** extract the shared camera-node base (#1) before adding tests (#2) — testing the current duplicated version means writing every test twice.
+
+## SLAM / Mapping (`pepper_navigation`, Unitree L2 + FAST-LIO)
+
+1. **Uncommitted work from the 2026-07-11 benchmarking/fix session, sitting in three repos.** Risk given WSL has already crashed once mid-session:
+   - `FAST_LIO`: `config/l2.yaml`, `src/IMU_Processing.hpp` (static-init window fix), `src/laserMapping.cpp` (twist/velocity publishing + stale-covariance fix)
+   - `fastlio_lc_pgo`: `CMakeLists.txt`, `package.xml`, `src/laserPosegraphOptimization.cpp` (new `/pgo_batch_optimize` service), `launch/fastlio_lc_l2.launch.py` (new, includes the GTSAM-version `LD_LIBRARY_PATH` fix)
+   - `pepper4dec`: `dec_system/pepper_navigation/CMakeLists.txt` + 4 new launch/rviz files (`rtabmap_bag_test.launch.py`, `rtabmap_fastlio_bag_test.launch.py`, `rtabmap_l2_bag_test.launch.py`, `rtabmap_fastlio_mapping.rviz`)
+
+2. **`image_throttle.py` source file is missing from the repo.** It runs today from `install/pepper_navigation/lib/pepper_navigation/image_throttle.py`, but `dec_system/pepper_navigation/scripts/` doesn't exist in source — `CMakeLists.txt` already references installing it. If `install/` is ever wiped and rebuilt from source, this node silently disappears. Needs recreating from the working install copy.
+
+3. **Camera-lidar extrinsic calibration is still a placeholder (biggest open accuracy question).** FAST-LIVO2 (`~/ros2_ws/src/FAST-LIVO2/config/unitree_l2_pepper.yaml`) runs on a placeholder `Rcl`/`Pcl`, so its 0.16m closure benchmark isn't fully trustworthy. `calib_spot1-3` bags lack `/camera/color/image_raw`+`camera_info`, so they can't feed `direct_visual_lidar_calibration`. Needs a re-record with camera topics, then a real calibration run.
+
+4. **RTAB-Map RGB-D mode never got a fair test.** No `/camera/aligned_depth_to_color/image_raw` in any recorded bag (IR emitter dot pattern also breaks visual loop verification on the infra1 workaround used instead). Needs a re-record with `align_depth.enable:=true` on the robot.
+
+5. **EKF sensor fusion layer (wheel twist + L2 gyro + FAST-LIO differential pose) not started.** Needs `ros-humble-robot-localization` installed and `lio_map_odom_bridge.py` extended to publish an actual odometry topic (not just TF) at `base_footprint`. FAST-LIO's `/Odometry` now has real twist+covariance (item 1's `laserMapping.cpp` fix) so this integration has one less blocker than before.
+
+6. **Physical vibration isolation mount for the L2, now evidence-backed rather than assumed.** Allan/PSD analysis of `imu_static_both_15min` showed the 13.0/17.4/21.8/26.0 Hz comb appears on *both* the L2 and the co-mounted RealSense IMU — genuinely structural, transmitted through the shared bracket, not internal to the L2 as originally assumed. A damping mount between the L2 and the bracket is a legitimate hardware fix for the noise floor itself. Hardware work, not software.
+
+7. **Map crispness / offline RTS smoother** — a backward (non-causal) smoothing pass over the full recorded trajectory would tighten the ~1-2cm odometry jitter's visible effect on wall thickness, on top of what the `RGBD/NeighborLinkRefining` reprocess trick already fixed. Real implementation work (not a config flag); only worth it if map crispness becomes a concrete blocker.
+
+8. **`l2lidar_node` driver is markgol's V0.3.x.** Upstream v0.5.0 has breaking frame renames — migrate deliberately, not urgent.
+
+9. **Nav2 integration / localization mode not started.** Everything built so far (`l2_hybrid_map_refined.pgm`, 5cm/Nav2-ready) is the *mapping* half — costmaps, planners, and running RTAB-Map/FAST-LIO in localization-against-a-saved-map mode haven't been touched.
+
+10. **Jetson Orin Nano Super deployment is still conceptual.** SHM transport (Fast DDS vs Cyclone+iceoryx), `nvpmodel`/`jetson_clocks`, node composition, and Isaac ROS/NITROS were discussed but nothing has been run on the actual hardware yet.
+
+11. **Consider splitting SLAM (mapping) out of `pepper_navigation` into its own package.** It currently holds both mapping experiments (rtabmap/slam_toolbox variants, today's bag-test launch files) and actual navigation (`pepper_navigation.launch.py`) — different lifecycles (build-the-map-once vs. run-continuously) and dependency footprints (GTSAM/PCL/Scan-Context vs. Nav2). Not urgent; better done once as a deliberate refactor after the SLAM architecture (FAST-LIO + RTAB-Map hybrid) is settled rather than mid-tuning.
+
+**Recommended order:** commit item 1 → restore item 2 → item 3 (calibration) before trusting any FAST-LIVO2 number → item 5 (EKF) once 3/4 are unblocked. Items 6-11 are lower urgency (hardware, polish, or "not yet needed").
