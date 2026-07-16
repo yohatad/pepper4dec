@@ -191,17 +191,14 @@ flowchart LR
 
         subgraph TM["Track Management"]
             UM["Confirmation\nMatching"]
-            UM -- "cost ≤ 0.7\n(2nd hit confirms)" --> MT3["Confirmed Tracks"]
-            UM --> UD2["Remaining Detections"]
-            UM --> UT3["Failed Unconfirmed"]
-
-            TI["Track Initialization"] --> UC["Unconfirmed Tracks"]
-            UC --> UM
-            UD2 -- "score > track_threshold\n+ 0.1" --> TI
-            UT3 --> TD["Track Delete"]
-
-            AT["Array of Tracks"] --> OC["Output Conditions"]
+            UC["Unconfirmed Tracks"]
+            AT["Array of Tracks"]
             LT["Lost Tracks"]
+            TD["Track Delete"]
+
+            UC --> UM
+            UM -- "new track:\nscore > track_threshold + 0.1" --> UC
+            UM -- "unmatched track" --> TD
         end
     end
 
@@ -211,8 +208,8 @@ flowchart LR
     SP --> FA
     MT1 --> KFU
     MT2 --> KFU
-    MT3 --> KFU
     UD1 --> UM
+    UM -- "matched: cost ≤ 0.7\n(2nd hit confirms)" --> KFU
     UT1 -- "was Lost" --> LT
     UT2 --> LT
     KFU --> AT
@@ -220,7 +217,7 @@ flowchart LR
     LT --> PS
     LT -- "lost > track_buffer" --> TD
 
-    OC -- "confirmed only" --> OUT["Output\nboxes, width, height,\ntrack IDs"]
+    AT -- "confirmed only" --> OUT["Output\nboxes, width, height,\ntrack IDs"]
 ```
 
 Each frame, the previous frame's tracks (Array of Tracks plus Lost Tracks) are KF-predicted forward and associated against the new YOLO detections; every match becomes a KF update back into the array, and only confirmed tracks are published. Edge labels carry the gate for each transition; the matching cost is `1 − IoU` (score-fused in the first association and confirmation matching).
