@@ -42,7 +42,7 @@ source install/setup.bash
 
 2. **Install Python Dependencies**
 ```bash
-pip install -r ~/ros2_ws/src/pepper4dec/dec_system/conversation_manager/requirements.txt
+pip install -r ~/ros2_ws/src/pepper4dec/conversation_manager/requirements.txt
 ```
 
 # 🔧 Configuration Parameters
