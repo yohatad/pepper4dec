@@ -36,7 +36,7 @@ jobs:
 
       - name: Clone sibling ROS2 dependencies
         run: |
-          git clone https://github.com/yohatad/naoqi_driver_bridge_msgs2.git src/naoqi_bridge_msgs
+          git clone https://github.com/yohatad/naoqi_bridge_msgs2.git src/naoqi_bridge_msgs
           git clone https://github.com/yohatad/naoqi_driver2.git src/naoqi_driver2
           git clone https://github.com/ros-naoqi/libqi.git -b ros2 src/naoqi_libqi
           git clone https://github.com/ros-naoqi/libqicore.git -b ros2 src/naoqi_libqicore
