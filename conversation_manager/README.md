@@ -252,12 +252,6 @@ ros2 action send_goal /conversation_manager dec_interfaces/action/ConversationMa
   "{prompt: 'Tell me about the Digital Experience Center.'}"
 ```
 
-# 💡 Support
-
-For issues or questions:
-- Create an issue on the [pepper4dec GitHub repository](https://github.com/yohatad/pepper4dec/issues)
-- Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a>, <a href="mailto:mahadanso79@gmail.com">mahadanso79@gmail.com</a>
-
 ## Package Structure
 
 ```
@@ -279,6 +273,12 @@ conversation_manager/
 ├── requirements.txt
 └── README.md
 ```
+
+# 💡 Support
+
+For issues or questions:
+- Create an issue on the [pepper4dec GitHub repository](https://github.com/yohatad/pepper4dec/issues)
+- Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a>, <a href="mailto:mahadanso79@gmail.com">mahadanso79@gmail.com</a>
 
 # 📜 License
 Copyright (C) 2026 Upanzi Network  
