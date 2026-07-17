@@ -48,7 +48,7 @@ from naoqi_bridge_msgs.srv import LoadAudioFile, UnloadAudioFile, SendAudioBuffe
 # ── Pull helpers from the package under test ──────────────────────────────────
 sys.path.insert(
     0,
-    "/home/yoha/ros2_ws/src/pepper4dec/dec_system/text_to_speech",
+    "/home/yoha/ros2_ws/src/pepper4dec/text_to_speech",
 )
 from text_to_speech.text_to_speech_implementation import (
     AudioPlayer,
