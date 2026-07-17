@@ -10,7 +10,7 @@ jobs:
   build-and-lint:
     runs-on: ubuntu-22.04
     container:
-      image: ros:humble-perceptive-jammy
+      image: ros:humble-perception-jammy
     steps:
       - uses: actions/checkout@v4
         with:
