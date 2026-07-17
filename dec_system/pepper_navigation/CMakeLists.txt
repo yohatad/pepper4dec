@@ -78,7 +78,13 @@ if(BUILD_TESTING)
   # comment the line when this package is in a git repo and when
   # a copyright and license is added to all source files
   set(ament_cmake_cpplint_FOUND TRUE)
+  # flake8 is run manually below so rtabmap_realsense.launch.py (vendored
+  # from an upstream rtabmap_ros example, not our style) can be excluded
+  set(ament_cmake_flake8_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
+
+  find_package(ament_cmake_flake8 REQUIRED)
+  ament_flake8(EXCLUDE launch/rtabmap_realsense.launch.py)
 endif()
 
 ament_package()
