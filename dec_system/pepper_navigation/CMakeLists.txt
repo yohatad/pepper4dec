@@ -107,7 +107,7 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 
   find_package(ament_cmake_flake8 REQUIRED)
-  ament_flake8(EXCLUDE launch/rtabmap_realsense.launch.py)
+  ament_flake8(CONFIG_FILE "${CMAKE_CURRENT_SOURCE_DIR}/ament_flake8.ini")
 endif()
 
 ament_package()
