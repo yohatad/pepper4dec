@@ -36,6 +36,7 @@ import argparse
 import io
 import sys
 import time
+from pathlib import Path
 
 import numpy as np
 import rclpy
@@ -46,10 +47,7 @@ from naoqi_bridge_msgs.action import PlayAudio
 from naoqi_bridge_msgs.srv import LoadAudioFile, UnloadAudioFile, SendAudioBuffer
 
 # ── Pull helpers from the package under test ──────────────────────────────────
-sys.path.insert(
-    0,
-    "/home/yoha/ros2_ws/src/pepper4dec/text_to_speech",
-)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from text_to_speech.text_to_speech_implementation import (
     AudioPlayer,
     audio_to_wav_bytes,
