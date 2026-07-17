@@ -204,6 +204,33 @@ upanzi_data.json
 └── projects      – Detailed project descriptions with metadata
 ```
 
+### Node Lifecycle
+
+`ConversationManagerNode` is a `LifecycleNode`; `dec_launch`'s `nav2_lifecycle_manager` drives it through these transitions on startup.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Unconfigured
+
+    Unconfigured --> Inactive: configure
+    Inactive --> Active: activate
+    Active --> Inactive: deactivate
+    Inactive --> Unconfigured: cleanup
+
+    Unconfigured --> Finalized: shutdown
+    Inactive --> Finalized: shutdown
+    Active --> Finalized: shutdown
+    Finalized --> [*]
+```
+
+| Transition | What happens |
+|---|---|
+| `configure` | Load YAML config; initialize the ChromaDB collection (`rag` mode only — skipped for `full_context`); create the `/conversation_manager` action server |
+| `activate` | Mark the node ready to answer queries (no additional resources created) |
+| `deactivate` | No explicit teardown beyond the default lifecycle transition |
+| `cleanup` | Destroy the action server; clear the collection reference and conversation history |
+| `shutdown` | Log shutdown and exit (reachable from any state) |
+
 # 🧪 Testing
 
 ```bash
