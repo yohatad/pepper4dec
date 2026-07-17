@@ -252,21 +252,26 @@ ros2 action send_goal /conversation_manager dec_interfaces/action/ConversationMa
   "{prompt: 'Tell me about the Digital Experience Center.'}"
 ```
 
-## Package Structure
+## 📁 Package Structure
 
 ```
 conversation_manager/
 ├── config/
-│   └── converation_manager_configuration.yaml
+│   └── converation_manager_configuration.yaml  # RAG/LLM parameters
 ├── data/
-│   ├── upanzi_data.json
-│   └── system_prompt.txt
+│   ├── upanzi_data.json                        # knowledge base source
+│   └── system_prompt.txt                       # LLM system prompt
 ├── launch/
+│   └── conversation_manager.launch.py
+├── scripts/
+│   └── conversation_manager                    # venv launcher for `ros2 run`
+├── resource/
+│   └── conversation_manager
 ├── conversation_manager/
 │   ├── __init__.py
-│   ├── conversation_manager_application.py
-│   ├── conversation_manager_implementation.py
-│   └── conversation_manager_utilities.py
+│   ├── conversation_manager_application.py     # node entry point, lifecycle node + action server
+│   ├── conversation_manager_implementation.py  # RAG pipeline (ChromaDB + LLM)
+│   └── conversation_manager_utilities.py       # prompt/intent/speech-tag helpers
 ├── package.xml
 ├── setup.py
 ├── setup.cfg
