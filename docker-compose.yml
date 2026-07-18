@@ -1,62 +1,78 @@
-version: '3.8'
+# Pepper4DEC - see Dockerfile for the per-node venv rationale.
+#
+#   docker compose build
+#   docker compose up pepper4dec
+#   docker compose --profile viz up          # adds rviz2
+#   docker compose --profile dev up          # live-mounts source over the image
+#
+# `version:` is intentionally absent -- obsolete and ignored by Compose v2+.
+
+x-common: &common
+  image: pepper4dec:latest
+  # ROS2 DDS discovery uses multicast, which a bridge network drops. Host
+  # networking also makes an explicit `ports:` block unnecessary.
+  network_mode: host
+  # privileged already exposes all of /dev (ttyUSB*, snd). Listing devices
+  # explicitly makes the container fail to start whenever one is unplugged.
+  privileged: true
+  environment: &common-env
+    DISPLAY: ${DISPLAY}
+    ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-42}
+    LANG: C.UTF-8
+    LC_ALL: C.UTF-8
+    NVIDIA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-all}
+    NVIDIA_DRIVER_CAPABILITIES: compute,utility,video,graphics
+
+x-gpu: &gpu
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
 
 services:
   pepper4dec:
+    <<: [*common, *gpu]
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        USE_CUDA: ${USE_CUDA:-0}
-    image: pepper4dec:latest
+      target: runtime
+      # Forwards your SSH agent so the private naoqi_bridge_msgs2 fork can be
+      # cloned. Requires a loaded agent (ssh-add -l) with access to it.
+      ssh:
+        - default
     container_name: pepper4dec
-    hostname: pepper4dec
-    privileged: true
-    environment:
-      - DISPLAY=${DISPLAY}
-      - ROS_DOMAIN_ID=42
-      - LANG=C.UTF-8
-      - LC_ALL=C.UTF-8
-      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
     volumes:
-      - ./:/home/pepper/ros2_ws/src/pepper4dec
-      - pepper4dec-models:/home/pepper/ros2_ws/src/pepper4dec/dec_system/*/models
-      - pepper4dec-data:/home/pepper/ros2_ws/src/pepper4dec/dec_system/*/data
-    networks:
-      - pepper4dec-net
-    devices:
-      - /dev/ttyUSB0:/dev/ttyUSB0
-      - /dev/ttyUSB1:/dev/ttyUSB1
-    ports:
-      - "6080:6080"  # NoVNC (if needed)
-      - "8888:8888"  # Jupyter (if needed)
-    command: /bin/bash -c "source /opt/pepper4dec_setup.sh && ros2 launch dec_launch rtabmap_realsense.launch.py"
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /dev/shm:/dev/shm
+      - pepper4dec-models:/home/pepper/models
+      - pepper4dec-data:/home/pepper/data
+    command: >
+      /bin/bash -c "source /opt/pepper4dec_setup.sh &&
+                    ros2 launch dec_launch rtabmap_realsense.launch.py"
 
-  # Optional: RViz2 visualization container
+  # Live-edit source without rebuilding. Python nodes resolve from install/,
+  # so re-run colcon build inside the container after changing C++ or entry points.
+  pepper4dec-dev:
+    <<: [*common, *gpu]
+    profiles: [dev]
+    container_name: pepper4dec-dev
+    volumes:
+      - ./:/home/pepper/ros2_ws/src/pepper4dec:rw
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /dev/shm:/dev/shm
+    command: /bin/bash
+
   pepper4dec-viz:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: pepper4dec:latest
+    <<: *common
+    profiles: [viz]
     container_name: pepper4dec-viz
-    hostname: pepper4dec-viz
-    privileged: true
-    environment:
-      - DISPLAY=${DISPLAY}
-      - ROS_DOMAIN_ID=42
-      - LANG=C.UTF-8
-      - LC_ALL=C.UTF-8
     volumes:
-      - ./:/home/pepper/ros2_ws/src/pepper4dec
-      - /tmp/.X11-unix:/tmp/.X11-unix
-    networks:
-      - pepper4dec-net
-    depends_on:
-      - pepper4dec
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /dev/shm:/dev/shm
     command: /bin/bash -c "source /opt/pepper4dec_setup.sh && rviz2"
-
-networks:
-  pepper4dec-net:
-    driver: bridge
 
 volumes:
   pepper4dec-models:
