@@ -71,8 +71,8 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
-#include <rclcpp/executors/multi_threaded_executor.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
+#include "dec_common/node_runner.h"
 #include <behaviortree_cpp/bt_factory.h>
 #include <behaviortree_cpp/loggers/groot2_publisher.h>
 
@@ -234,19 +234,13 @@ BehaviorControllerLifecycleNode::on_shutdown(const rclcpp_lifecycle::State& /*st
 
 int main(int argc, char* argv[])
 {
-    rclcpp::init(argc, argv);
-
-    auto lc_node = std::make_shared<BehaviorControllerLifecycleNode>();
-
-    // Spin both nodes concurrently:
-    //   lc_node   → lifecycle service callbacks, 50 Hz tick timer
-    //   bt_node_  → BT action/service/subscription callbacks
-    rclcpp::executors::MultiThreadedExecutor executor(
-        rclcpp::ExecutorOptions{}, 4u);
-    executor.add_node(lc_node->get_node_base_interface());
-    executor.add_node(lc_node->get_bt_node());
-    executor.spin();
-
-    rclcpp::shutdown();
-    return 0;
+    // Spin both nodes concurrently on 4 executor threads:
+    //   the lifecycle node    → lifecycle service callbacks, 50 Hz tick timer
+    //   the companion BT node → BT action/service/subscription callbacks
+    return dec_common::runNode<BehaviorControllerLifecycleNode>(
+        argc, argv, {nullptr, "behavior_controller", 4},
+        [](BehaviorControllerLifecycleNode& node) {
+            return std::vector<rclcpp::node_interfaces::NodeBaseInterface::SharedPtr>{
+                node.get_bt_node()->get_node_base_interface()};
+        });
 }

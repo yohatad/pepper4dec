@@ -14,17 +14,10 @@
 
 #include "animate_behavior/animate_behavior_interface.h"
 
+#include "dec_common/node_runner.h"
+
 int main(int argc, char** argv) {
-    rclcpp::init(argc, argv);
-
-    auto node = std::make_shared<AnimateBehaviorNode>();
-
-    // MultiThreadedExecutor lets the action server, timers, and
-    // lifecycle state-machine callbacks run concurrently.
-    rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions{}, 4u);
-    executor.add_node(node->get_node_base_interface());
-    executor.spin();
-
-    rclcpp::shutdown();
-    return 0;
+    // 4 executor threads: the action server, timers, and lifecycle
+    // state-machine callbacks run concurrently.
+    return dec_common::runNode<AnimateBehaviorNode>(argc, argv, {nullptr, "animate_behavior", 4});
 }

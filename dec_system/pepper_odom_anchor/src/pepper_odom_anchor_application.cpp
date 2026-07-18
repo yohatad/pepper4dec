@@ -13,10 +13,8 @@
 
 #include "pepper_odom_anchor/pepper_odom_anchor_interface.h"
 
+#include "dec_common/node_runner.h"
+
 int main(int argc, char** argv) {
-    rclcpp::init(argc, argv);
-    auto node = std::make_shared<RobotLocalization>();
-    rclcpp::spin(node->get_node_base_interface());
-    rclcpp::shutdown();
-    return 0;
+    return dec_common::runNode<RobotLocalization>(argc, argv);
 }

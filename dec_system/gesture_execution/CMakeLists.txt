@@ -13,6 +13,7 @@ endif()
 # Find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(dec_common REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(std_msgs REQUIRED)
@@ -49,7 +50,7 @@ target_link_libraries(${PROJECT_NAME}_lib yaml-cpp)
 
 # Executables — inherit all deps from ${PROJECT_NAME}_lib
 add_executable(gesture_execution src/gesture_execution_application.cpp)
-target_link_libraries(gesture_execution ${PROJECT_NAME}_lib)
+target_link_libraries(gesture_execution ${PROJECT_NAME}_lib dec_common::dec_common_runner)
 
 add_executable(test_visualization src/gesture_test_visualization.cpp)
 ament_target_dependencies(test_visualization rclcpp visualization_msgs geometry_msgs)

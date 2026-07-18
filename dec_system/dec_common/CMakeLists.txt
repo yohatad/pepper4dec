@@ -33,8 +33,18 @@ ament_target_dependencies(${PROJECT_NAME} PUBLIC
   rclcpp_lifecycle sensor_msgs message_filters cv_bridge ament_index_cpp)
 target_link_libraries(${PROJECT_NAME} PUBLIC Eigen3::Eigen yaml-cpp ${OpenCV_LIBS})
 
+# Light header-only target for node_runner.h — needs only rclcpp, so the
+# non-perception packages can use the shared main() without inheriting the
+# OpenCV/cv_bridge dependencies of the full dec_common library.
+add_library(${PROJECT_NAME}_runner INTERFACE)
+target_include_directories(${PROJECT_NAME}_runner INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+ament_target_dependencies(${PROJECT_NAME}_runner INTERFACE rclcpp)
+
 install(DIRECTORY include/ DESTINATION include/)
-install(TARGETS ${PROJECT_NAME}
+install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_runner
   EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
