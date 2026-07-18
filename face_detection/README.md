@@ -45,7 +45,7 @@ source install/setup.bash
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
 # Install package requirements
-pip install -r ~/ros2_ws/src/pepper4dec/face_detection/requirements.txt
+pip install -r ~/ros2_ws/src/pepper4dec/dec_system/face_detection/requirements.txt
 ```
 
 ## 🔧 Configuration

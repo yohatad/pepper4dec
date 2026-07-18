@@ -235,7 +235,7 @@ ros2 action send_goal /text_to_speech dec_interfaces/action/TTS "{text: 'Hello, 
 ### Testing Audio Playback Directly
 
 ```bash
-cd ~/ros2_ws/src/pepper4dec/text_to_speech
+cd ~/ros2_ws/src/pepper4dec/dec_system/text_to_speech
 
 # Stream mode (robot speakers)
 /home/yoha/tts_kokoro/bin/python3 tests/test_play_audio.py "Hello." --method stream
