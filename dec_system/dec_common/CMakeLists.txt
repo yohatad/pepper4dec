@@ -12,18 +12,26 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(message_filters REQUIRED)
+find_package(cv_bridge REQUIRED)
+find_package(ament_index_cpp REQUIRED)
+find_package(yaml-cpp REQUIRED)
+find_package(OpenCV REQUIRED)
 
-# Compiled library: byte_tracker.cpp plus the param_loader.h header-only
-# utilities. Was header-only (INTERFACE) before the ByteTracker moved here.
+# Compiled library: the shared ByteTracker, the CameraLifecycleNode base for
+# the perception nodes, and the param_loader.h header-only utilities.
 add_library(${PROJECT_NAME}
   src/byte_tracker.cpp
+  src/camera_lifecycle_node.cpp
 )
 target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
-ament_target_dependencies(${PROJECT_NAME} PUBLIC rclcpp_lifecycle)
-target_link_libraries(${PROJECT_NAME} PUBLIC Eigen3::Eigen)
+ament_target_dependencies(${PROJECT_NAME} PUBLIC
+  rclcpp_lifecycle sensor_msgs message_filters cv_bridge ament_index_cpp)
+target_link_libraries(${PROJECT_NAME} PUBLIC Eigen3::Eigen yaml-cpp ${OpenCV_LIBS})
 
 install(DIRECTORY include/ DESTINATION include/)
 install(TARGETS ${PROJECT_NAME}
@@ -34,7 +42,8 @@ install(TARGETS ${PROJECT_NAME}
 )
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
-ament_export_dependencies(rclcpp_lifecycle Eigen3)
+ament_export_dependencies(rclcpp_lifecycle Eigen3 sensor_msgs message_filters
+  cv_bridge ament_index_cpp yaml-cpp OpenCV)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

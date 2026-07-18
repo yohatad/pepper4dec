@@ -67,10 +67,6 @@
 #include <dec_interfaces/msg/face_detection.hpp>
 #include <dec_interfaces/msg/person_detection.hpp>
 
-#include <message_filters/subscriber.h>
-#include <message_filters/synchronizer.h>
-#include <message_filters/sync_policies/approximate_time.h>
-
 #include <onnxruntime_cxx_api.h>
 #include <opencv2/opencv.hpp>
 
@@ -82,6 +78,7 @@
 #include <vector>
 
 #include "dec_common/byte_tracker.h"
+#include "dec_common/camera_lifecycle_node.h"
 
 // Sentinel cost for impossible face-person matches. A large finite value
 // (rather than infinity) keeps the cost matrix feasible for the Hungarian
@@ -157,11 +154,12 @@ private:
 // FaceDetectionNode
 //=============================================================================
 
-class FaceDetectionNode : public rclcpp_lifecycle::LifecycleNode {
+// Camera plumbing (topic resolution, subscriptions, depth decode, debug
+// visualization, timeout monitor) is inherited from
+// dec_common::CameraLifecycleNode; this class adds the face publishers and
+// the person-detection subscription used for face-person matching.
+class FaceDetectionNode : public dec_common::CameraLifecycleNode {
 public:
-    using CallbackReturn =
-        rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
-
     explicit FaceDetectionNode(const std::string& node_name = "faceDetection");
 
     // ── Lifecycle callbacks ─────────────────────────────────────────────────
@@ -174,59 +172,16 @@ public:
     void cleanup();
 
 protected:
-    void updateLatestFrame(const cv::Mat& frame);
-    void visualizationCallback();
-
-    std::pair<std::string, std::string> getTopicNames();
-    std::optional<std::string> extractTopic(const std::string& image_topic_key);
-
-    void synchronizedCallback(const sensor_msgs::msg::Image::ConstSharedPtr& color_data,
-                              const sensor_msgs::msg::Image::ConstSharedPtr& depth_data);
-    void synchronizedCallbackCompressed(const sensor_msgs::msg::CompressedImage::ConstSharedPtr& color_data,
-                                        const sensor_msgs::msg::CompressedImage::ConstSharedPtr& depth_data);
-    void rgbOnlyCallback(const sensor_msgs::msg::Image::ConstSharedPtr& color_data);
-    void rgbOnlyCallbackCompressed(const sensor_msgs::msg::CompressedImage::ConstSharedPtr& color_data);
-
-    std::optional<cv::Mat> processDepthImageMsg(const sensor_msgs::msg::Image::ConstSharedPtr& msg);
-    std::optional<cv::Mat> processDepthCompressedMsg(const sensor_msgs::msg::CompressedImage::ConstSharedPtr& msg);
-
-    void startTimeoutMonitor();
-    void checkTimeout();
-    bool checkCameraResolution(const cv::Mat& color_image, const cv::Mat& depth_image) const;
-    std::optional<cv::Mat> makeDepthVis(const cv::Mat& depth) const;
-    std::optional<float> getDepthInRegion(double centroid_x, double centroid_y, double box_width,
-                                          double box_height, double region_scale = 0.1) const;
-    cv::Scalar generateDarkColor();
-
     void publishFaceDetection(const std::vector<FaceTrackingDatum>& tracking_data);
     void personDetectionCallback(const dec_interfaces::msg::PersonDetection& msg);
 
-    virtual void processImages() = 0;
-
     FaceDetectionConfig config_;
-    std::string node_name_;
 
     rclcpp_lifecycle::LifecyclePublisher<dec_interfaces::msg::FaceDetection>::SharedPtr pub_gaze_;
-    rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Image>::SharedPtr debug_pub_;
-    rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Image>::SharedPtr depth_debug_pub_;
 
-    cv::Mat color_image_;
-    cv::Mat depth_image_;
-
-    bool use_compressed_ = false;
-    std::string camera_type_ = "realsense";
-    bool verbose_mode_ = true;
-    double image_timeout_ = 2.0;
     bool require_person_detection_ = true;
     double person_detection_timeout_ = 0.5;
     bool prioritize_face_depth_ = true;
-
-    rclcpp::Time timer_start_;
-    std::optional<double> last_image_time_;
-
-    std::mutex frame_mutex_;
-    cv::Mat latest_frame_;
-    cv::Mat latest_depth_;
 
     std::mutex person_detections_mutex_;
     std::optional<PersonSnapshot> latest_person_detections_;
@@ -236,25 +191,6 @@ protected:
     byte_tracker::ByteTrack face_tracker_;
 
     rclcpp::Subscription<dec_interfaces::msg::PersonDetection>::SharedPtr person_detection_sub_;
-    rclcpp::TimerBase::SharedPtr vis_timer_;
-    rclcpp::TimerBase::SharedPtr timeout_timer_;
-
-    using ApproxSync = message_filters::sync_policies::ApproximateTime<
-        sensor_msgs::msg::Image, sensor_msgs::msg::Image>;
-    std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::Image, rclcpp_lifecycle::LifecycleNode>> color_sub_;
-    std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::Image, rclcpp_lifecycle::LifecycleNode>> depth_sub_;
-    std::shared_ptr<message_filters::Synchronizer<ApproxSync>> sync_;
-
-    using ApproxSyncCompressed = message_filters::sync_policies::ApproximateTime<
-        sensor_msgs::msg::CompressedImage, sensor_msgs::msg::CompressedImage>;
-    std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::CompressedImage, rclcpp_lifecycle::LifecycleNode>>
-        color_sub_compressed_;
-    std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::CompressedImage, rclcpp_lifecycle::LifecycleNode>>
-        depth_sub_compressed_;
-    std::shared_ptr<message_filters::Synchronizer<ApproxSyncCompressed>> sync_compressed_;
-
-    rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr color_sub_plain_;
-    rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr color_sub_plain_compressed_;
 };
 
 //=============================================================================
@@ -274,8 +210,6 @@ protected:
     void processImages() override;
 
 private:
-    bool createCameraSubscriptions();
-
     void drawAxis(cv::Mat& img, double yaw, double pitch, double roll, double tdx, double tdy, double size = 100.0);
 
     struct FaceCandidate {
