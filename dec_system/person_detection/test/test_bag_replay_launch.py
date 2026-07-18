@@ -80,7 +80,7 @@ def generate_test_description():
 
 
 def load_bag_frames():
-    """Reads the mini-bag and returns decoded bgr8 Image messages."""
+    """Read the mini-bag and return decoded bgr8 Image messages."""
     reader = rosbag2_py.SequentialReader()
     reader.open(
         rosbag2_py.StorageOptions(uri=BAG_PATH, storage_id='sqlite3'),
