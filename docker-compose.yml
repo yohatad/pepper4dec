@@ -19,8 +19,8 @@ services:
       - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
     volumes:
       - ./:/home/pepper/ros2_ws/src/pepper4dec
-      - pepper4dec-models:/home/pepper/ros2_ws/src/pepper4dec/*/models
-      - pepper4dec-data:/home/pepper/ros2_ws/src/pepper4dec/*/data
+      - pepper4dec-models:/home/pepper/ros2_ws/src/pepper4dec/dec_system/*/models
+      - pepper4dec-data:/home/pepper/ros2_ws/src/pepper4dec/dec_system/*/data
     networks:
       - pepper4dec-net
     devices:

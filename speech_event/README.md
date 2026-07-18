@@ -45,7 +45,7 @@ source install/setup.bash
 pip install torch==2.5.1+cu121 torchaudio==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121
 
 # Install remaining packages
-pip install -r ~/ros2_ws/src/pepper4dec/speech_event/requirements.txt
+pip install -r ~/ros2_ws/src/pepper4dec/dec_system/speech_event/requirements.txt
 ```
 
 ## 🔧 Configuration

@@ -2,7 +2,7 @@
 
 # Pepper Robot Tour – Digital Experience Center (DEC)
 
-<img src="upanzi-logo.svg" alt="Upanzi Logo" width="800px">
+<img src="dec_system/upanzi-logo.svg" alt="Upanzi Logo" width="800px">
 
 </div>
 
@@ -17,7 +17,7 @@ Beyond automation, the project serves as a real-world testbed for **culturally a
 ## 🏗️ System Architecture
 
 <div align="center">
-<img src="System_arch.png" alt="System Architecture" width="1200px">
+<img src="dec_system/System_arch.png" alt="System Architecture" width="1200px">
 </div>
 
 The system is built on **ROS2 (Humble)** and follows a modular architecture with specialized packages handling different aspects of robot behavior and perception:
@@ -47,7 +47,7 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 ## 🖥️ Hardware Diagram
 
 <div align="center">
-<img src="Hardware Diagram.png" alt="Hardware Diagram" width="1200px">
+<img src="dec_system/Hardware Diagram.png" alt="Hardware Diagram" width="1200px">
 </div>
 
 ## 🚀 Quick Start
@@ -79,7 +79,7 @@ Most perception/actuation packages (`animate_behavior`, `behavior_controller`, `
 
 3. **Download Model Files**
    - Place required ONNX model files in their respective `models/` directories
-   - Ensure face detection models are in `face_detection/models/`
+   - Ensure face detection models are in `dec_system/face_detection/models/`
 
 ## 🚀 Running the Tour System
 
@@ -133,14 +133,14 @@ Each package contains configuration files in their `config/` directories:
 
 ### **Navigation System**
 - **Localization**: Adaptive Monte Carlo Localization (AMCL), RTAB-MAP, or the `robot_localization` EKF node
-- **Mapping**: Uses pre-built maps (`map.pgm`)
+- **Mapping**: Uses pre-built maps (`dec_system/map.pgm`)
 - **Path Planning**: Nav2 stack for safe navigation
 - **Integration**: Full coordination with behavior controller
 
 ## 🔧 Development
 
 ### Adding New Features
-1. Create new package in the repo root
+1. Create new package in `dec_system/` directory
 2. Follow ROS2 package structure conventions
 3. Define interfaces in `dec_interfaces` if needed
 4. Update `dec_launch` launch files
