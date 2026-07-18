@@ -1,0 +1,18 @@
+# Test fixture: INVALID environment KB — the tour references location
+# "ghost", which is not defined under locations. The validator must
+# reject this file.
+tour_specification: [1, ghost]
+
+locations:
+  1:
+    robot_location_description: "Only defined location"
+    robot_location_pose:
+      x: 0.0
+      y: 0.0
+      theta: 0.0
+    gesture_target:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+    gesture_message_english: "Hi"
+    cultural_knowledge: ["TestNorm"]
