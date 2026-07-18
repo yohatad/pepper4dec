@@ -1,0 +1,6 @@
+# Test fixture: minimal culture knowledge base with two utility phrases,
+# one integer-keyed (like the shipped KB) and one string-keyed.
+utility_phrases:
+  english:
+    1: "Hello from the test fixture"
+    greeting: "Welcome to the test lab"

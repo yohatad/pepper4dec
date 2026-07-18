@@ -1,0 +1,32 @@
+# Test fixture: minimal valid environment knowledge base.
+# Two locations — one integer-keyed (like the shipped KB) and one
+# string-keyed — both referenced by the tour, exercising the YAML
+# key-coercion path in the loader and validator.
+tour_specification: [1, booth]
+
+locations:
+  1:
+    robot_location_description: "Test starting location"
+    robot_location_pose:
+      x: 4.0
+      y: 0.5
+      theta: 90.0
+    gesture_target:
+      x: 1.0
+      y: 2.0
+      z: 0.75
+    gesture_message_english: "This is the test start."
+    cultural_knowledge: ["TestNorm"]
+
+  booth:
+    robot_location_description: "Test booth"
+    robot_location_pose:
+      x: -1.5
+      y: 8.0
+      theta: 180.0
+    gesture_target:
+      x: 6.0
+      y: 8.0
+      z: 0.0
+    gesture_message_english: ""
+    cultural_knowledge: ["TestNorm", "OtherNorm"]

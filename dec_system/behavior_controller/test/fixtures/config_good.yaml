@@ -1,0 +1,7 @@
+# Test fixture: a fully-populated behavior_controller configuration.
+# Values are deliberately distinct from the shipped defaults so tests can
+# detect that they were actually read (not silently defaulted).
+scenario_specification: "test_tour"
+culture_knowledge_base: "testCultureKB.yaml"
+environment_knowledge_base: "testEnvKB.yaml"
+verbose_mode: false

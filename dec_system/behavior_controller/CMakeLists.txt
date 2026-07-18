@@ -87,4 +87,17 @@ ament_export_dependencies(
   ament_index_cpp
 )
 
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_behavior_controller_utilities
+    test/test_behavior_controller_utilities.cpp
+  )
+  target_link_libraries(test_behavior_controller_utilities ${PROJECT_NAME}_lib)
+  # Absolute path to the YAML fixtures, resolved at compile time so the test
+  # binary can run from any working directory.
+  target_compile_definitions(test_behavior_controller_utilities PRIVATE
+    TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures"
+  )
+endif()
+
 ament_package()
