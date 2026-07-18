@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""
-dummy_localization.launch.py
-
-Launch file for dummy robot localization with configurable initial position
-"""
+"""Launch file for dummy robot localization with configurable initial position."""
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
