@@ -55,7 +55,10 @@ jobs:
           . /opt/ros/humble/setup.sh
           colcon build --symlink-install
 
-      - name: colcon test (lint)
+      # Runs linters, gtest unit tests (kinematics, behavior utilities,
+      # ByteTracker), and launch tests (lifecycle, bag replay). The bag-replay
+      # test self-skips here: the ONNX model is git-ignored and absent in CI.
+      - name: colcon test (lint + unit + launch tests)
         run: |
           . /opt/ros/humble/setup.sh
           . install/setup.sh
