@@ -29,7 +29,6 @@ find_package(onnxruntime_vendor REQUIRED)
 
 # Library
 add_library(${PROJECT_NAME}_lib
-  src/byte_tracker.cpp
   src/person_detection_implementation.cpp
 )
 target_include_directories(${PROJECT_NAME}_lib PUBLIC

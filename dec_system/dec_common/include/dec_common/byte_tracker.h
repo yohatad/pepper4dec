@@ -1,9 +1,9 @@
 /* byte_tracker.h
  *
  * C++ port of the ByteTrack multi-object tracker from the `supervision`
- * Python package (supervision.tracker.byte_tracker). Used here for the
- * standalone (no person-detection) face-tracking mode, to assign
- * persistent track IDs to per-frame face detections. Reproduces the
+ * Python package (supervision.tracker.byte_tracker). Shared by the face_detection
+ * and person_detection nodes to assign persistent track IDs to per-frame
+ * detections. Reproduces the
  * two-stage (high/low confidence) IoU association, the 8-state
  * constant-velocity Kalman filter, and the Hungarian (Kuhn-Munkres)
  * assignment used for both detection-to-track matching and duplicate-track
@@ -17,8 +17,8 @@
  * Copyright (C) 2025 Carnegie Mellon University Africa
  */
 
-#ifndef FACE_DETECTION_BYTE_TRACKER_H
-#define FACE_DETECTION_BYTE_TRACKER_H
+#ifndef DEC_COMMON_BYTE_TRACKER_H
+#define DEC_COMMON_BYTE_TRACKER_H
 
 #include <Eigen/Dense>
 
@@ -170,4 +170,4 @@ private:
 
 }  // namespace byte_tracker
 
-#endif  // FACE_DETECTION_BYTE_TRACKER_H
+#endif  // DEC_COMMON_BYTE_TRACKER_H
