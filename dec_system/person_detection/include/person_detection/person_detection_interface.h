@@ -74,7 +74,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "person_detection/byte_tracker.h"
+#include "dec_common/byte_tracker.h"
 
 // The 80 COCO class names, in model-output order.
 extern const std::array<std::string, 80> COCO_CLASSES;

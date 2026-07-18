@@ -81,7 +81,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "face_detection/byte_tracker.h"
+#include "dec_common/byte_tracker.h"
 
 // Sentinel cost for impossible face-person matches. A large finite value
 // (rather than infinity) keeps the cost matrix feasible for the Hungarian

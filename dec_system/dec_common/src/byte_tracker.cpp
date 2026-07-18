@@ -9,7 +9,7 @@
  * Version: v1.0 - C++ port of supervision.tracker.byte_tracker (Python)
  */
 
-#include "person_detection/byte_tracker.h"
+#include "dec_common/byte_tracker.h"
 
 #include <algorithm>
 #include <limits>
