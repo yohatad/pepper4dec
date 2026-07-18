@@ -58,16 +58,11 @@
 #include <geometry_msgs/msg/point.hpp>
 #include <dec_interfaces/msg/person_detection.hpp>
 
-#include <message_filters/subscriber.h>
-#include <message_filters/synchronizer.h>
-#include <message_filters/sync_policies/approximate_time.h>
-
 #include <onnxruntime_cxx_api.h>
 #include <opencv2/opencv.hpp>
 
 #include <array>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <set>
 #include <string>
@@ -75,6 +70,7 @@
 #include <vector>
 
 #include "dec_common/byte_tracker.h"
+#include "dec_common/camera_lifecycle_node.h"
 
 // The 80 COCO class names, in model-output order.
 extern const std::array<std::string, 80> COCO_CLASSES;
@@ -120,11 +116,12 @@ struct TrackingDatum {
 // PersonDetectionNode
 //=============================================================================
 
-class PersonDetectionNode : public rclcpp_lifecycle::LifecycleNode {
+// Camera plumbing (topic resolution, subscriptions, depth decode, debug
+// visualization, timeout monitor) is inherited from
+// dec_common::CameraLifecycleNode; this class adds the detection publishers,
+// class filtering, and tracking post-processing.
+class PersonDetectionNode : public dec_common::CameraLifecycleNode {
 public:
-    using CallbackReturn =
-        rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
-
     explicit PersonDetectionNode(const std::string& node_name = "personDetection");
 
     // ── Lifecycle callbacks ─────────────────────────────────────────────────
@@ -136,35 +133,11 @@ public:
 
 protected:
     void statusCallback();
-    void updateLatestFrame(const cv::Mat& frame);
-    void visualizationCallback();
-
-    // Resolves the RGB/depth topic names for the configured camera type.
-    std::pair<std::string, std::string> getTopicNames();
-    std::optional<std::string> extractTopic(const std::string& image_topic_key);
-
-    void synchronizedCallback(const sensor_msgs::msg::Image::ConstSharedPtr& color_data,
-                              const sensor_msgs::msg::Image::ConstSharedPtr& depth_data);
-    void synchronizedCallbackCompressed(const sensor_msgs::msg::CompressedImage::ConstSharedPtr& color_data,
-                                        const sensor_msgs::msg::CompressedImage::ConstSharedPtr& depth_data);
-    void rgbOnlyCallback(const sensor_msgs::msg::Image::ConstSharedPtr& color_data);
-    void rgbOnlyCallbackCompressed(const sensor_msgs::msg::CompressedImage::ConstSharedPtr& color_data);
-
-    std::optional<cv::Mat> processDepthImageMsg(const sensor_msgs::msg::Image::ConstSharedPtr& msg);
-    std::optional<cv::Mat> processDepthCompressedMsg(const sensor_msgs::msg::CompressedImage::ConstSharedPtr& msg);
-
-    void startTimeoutMonitor();
-    void checkTimeout();
-    bool checkCameraResolution(const cv::Mat& color_image, const cv::Mat& depth_image) const;
-    std::optional<cv::Mat> makeDepthVis(const cv::Mat& depth) const;
-    std::optional<float> getDepthInRegion(double centroid_x, double centroid_y, double box_width,
-                                          double box_height, double region_scale = 0.1) const;
-    cv::Scalar generateDarkColor();
 
     // Runs detection + tracking on the current color/depth frame. Subclasses
     // implement detectObject(); this drives the shared post-processing
     // (class filtering, tracking, publishing, visualization).
-    void processImages();
+    void processImages() override;
     virtual bool detectObject(const cv::Mat& image, std::vector<Eigen::Vector4d>& boxes,
                               std::vector<float>& scores, std::vector<int>& class_ids) = 0;
     virtual byte_tracker::Detections updateTracker(const std::vector<Eigen::Vector4d>& boxes,
@@ -177,52 +150,13 @@ protected:
                               const std::vector<TrackingDatum>& tracking_data);
 
     PersonDetectionConfig config_;
-    std::string node_name_;
 
     rclcpp_lifecycle::LifecyclePublisher<dec_interfaces::msg::PersonDetection>::SharedPtr pub_objects_;
-    rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Image>::SharedPtr debug_pub_;
-    rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Image>::SharedPtr depth_debug_pub_;
 
-    cv::Mat color_image_;
-    cv::Mat depth_image_;
-
-    bool use_compressed_ = false;
-    std::string camera_type_ = "realsense";
-    bool verbose_mode_ = true;
-    double image_timeout_ = 2.0;
     std::set<int> target_class_indices_;
-
-    rclcpp::Time timer_start_;
-    std::optional<double> last_image_time_;
-
-    std::mutex frame_mutex_;
-    cv::Mat latest_frame_;
-
     std::unordered_map<int, cv::Scalar> object_colors_;
 
-    rclcpp::TimerBase::SharedPtr vis_timer_;
     rclcpp::TimerBase::SharedPtr status_timer_;
-    rclcpp::TimerBase::SharedPtr timeout_timer_;
-
-    // Synchronized (uncompressed) subscription pair.
-    using ApproxSync = message_filters::sync_policies::ApproximateTime<
-        sensor_msgs::msg::Image, sensor_msgs::msg::Image>;
-    std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::Image, rclcpp_lifecycle::LifecycleNode>> color_sub_;
-    std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::Image, rclcpp_lifecycle::LifecycleNode>> depth_sub_;
-    std::shared_ptr<message_filters::Synchronizer<ApproxSync>> sync_;
-
-    // Synchronized (compressed) subscription pair.
-    using ApproxSyncCompressed = message_filters::sync_policies::ApproximateTime<
-        sensor_msgs::msg::CompressedImage, sensor_msgs::msg::CompressedImage>;
-    std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::CompressedImage, rclcpp_lifecycle::LifecycleNode>>
-        color_sub_compressed_;
-    std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::CompressedImage, rclcpp_lifecycle::LifecycleNode>>
-        depth_sub_compressed_;
-    std::shared_ptr<message_filters::Synchronizer<ApproxSyncCompressed>> sync_compressed_;
-
-    // Pepper RGB-only subscription (plain, not message_filters-wrapped).
-    rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr color_sub_plain_;
-    rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr color_sub_plain_compressed_;
 };
 
 //=============================================================================
@@ -252,7 +186,6 @@ protected:
                                            const std::vector<int>& class_ids) override;
 
 private:
-    bool createCameraSubscriptions();
     bool initModel();
 
     Ort::Value prepareInput(const cv::Mat& image);
