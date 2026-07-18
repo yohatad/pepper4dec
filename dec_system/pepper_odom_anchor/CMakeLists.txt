@@ -13,6 +13,7 @@ endif()
 # Find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(dec_common REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
@@ -32,6 +33,7 @@ ament_target_dependencies(pepper_odom_anchor
   nav_msgs
   geometry_msgs
 )
+target_link_libraries(pepper_odom_anchor dec_common::dec_common_runner)
 
 # Install
 install(TARGETS pepper_odom_anchor

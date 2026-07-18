@@ -13,14 +13,10 @@
 
 #include "gesture_execution/gesture_execution_interface.h"
 
+#include "dec_common/node_runner.h"
+
 int main(int argc, char** argv) {
-    rclcpp::init(argc, argv);
-
-    RCLCPP_INFO(rclcpp::get_logger("gesture_execution"), "gesture_execution v1.0 — "
-        "This program comes with ABSOLUTELY NO WARRANTY.");
-
-    auto node = std::make_shared<GestureExecutionSystem>();
-    rclcpp::spin(node->get_node_base_interface());
-    rclcpp::shutdown();
-    return 0;
+    return dec_common::runNode<GestureExecutionSystem>(
+        argc, argv,
+        {"gesture_execution v1.0 — This program comes with ABSOLUTELY NO WARRANTY.", "gesture_execution"});
 }

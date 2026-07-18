@@ -13,6 +13,7 @@ endif()
 # Find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(dec_common REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(std_msgs REQUIRED)
@@ -42,6 +43,7 @@ ament_target_dependencies(animate_behavior
   dec_interfaces
   naoqi_bridge_msgs
 )
+target_link_libraries(animate_behavior dec_common::dec_common_runner)
 
 # Install
 install(TARGETS animate_behavior

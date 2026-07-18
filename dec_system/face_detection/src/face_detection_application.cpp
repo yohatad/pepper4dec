@@ -13,15 +13,12 @@
 
 #include "face_detection/face_detection_interface.h"
 
+#include "dec_common/node_runner.h"
+
 int main(int argc, char** argv) {
-    rclcpp::init(argc, argv);
-
-    RCLCPP_INFO(rclcpp::get_logger("face_detection"), "face_detection v1.0 — "
-        "This program comes with ABSOLUTELY NO WARRANTY.");
-
-    auto node = std::make_shared<SixDrepNet>();
-    rclcpp::spin(node->get_node_base_interface());
-    node->cleanup();
-    rclcpp::shutdown();
-    return 0;
+    return dec_common::runNode<SixDrepNet>(
+        argc, argv,
+        {"face_detection v1.0 — This program comes with ABSOLUTELY NO WARRANTY.", "face_detection"},
+        nullptr,
+        [](SixDrepNet& node) { node.cleanup(); });
 }

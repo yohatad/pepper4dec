@@ -13,6 +13,7 @@ endif()
 # Find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(dec_common REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(std_msgs REQUIRED)
@@ -53,7 +54,7 @@ target_link_libraries(${PROJECT_NAME}_lib yaml-cpp)
 
 # Executable — inherits all deps from ${PROJECT_NAME}_lib
 add_executable(behavior_controller src/behavior_controller_application.cpp)
-target_link_libraries(behavior_controller ${PROJECT_NAME}_lib)
+target_link_libraries(behavior_controller ${PROJECT_NAME}_lib dec_common::dec_common_runner)
 
 # Install
 install(TARGETS behavior_controller ${PROJECT_NAME}_lib
