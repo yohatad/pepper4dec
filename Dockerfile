@@ -32,7 +32,16 @@ ARG WS
 ENV DEBIAN_FRONTEND=noninteractive \
     ROS_DISTRO=humble \
     LANG=C.UTF-8 \
-    LC_ALL=C.UTF-8
+    LC_ALL=C.UTF-8 \
+    # The torch/CUDA wheels are 300-800MB each and the connection drops
+    # mid-stream often enough to fail a build. --retries only covers
+    # establishing a connection, so it does NOT help with a truncated
+    # response (IncompleteRead); --resume-retries is what resumes a partial
+    # download. Set as env vars so all three venv stages inherit them;
+    # the venv's bundled older pip ignores names it does not recognise.
+    PIP_RESUME_RETRIES=5 \
+    PIP_RETRIES=10 \
+    PIP_DEFAULT_TIMEOUT=60
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential cmake git wget curl vim tmux htop \
@@ -123,9 +132,19 @@ RUN apt-get update && \
     rosdep install --from-paths src --ignore-src -r -y --skip-keys "python3-pip" && \
     rm -rf /var/lib/apt/lists/*
 
+# Parallelism is capped deliberately. naoqi_libqi is boost template-heavy and
+# each cc1plus can peak past 1GB; uncapped colcon fans out to nproc (28 here)
+# while the venv stages are concurrently resolving multi-GB torch wheels, which
+# exhausts RAM and gets the desktop OOM-killed. --parallel-workers caps
+# concurrent *packages*; MAKEFLAGS is needed as well to cap make's fan-out
+# within each. BUILD_TESTING=OFF skips naoqi_libqi's test suite, whose
+# translation units are the largest in the tree and are not needed in the image.
+ARG COLCON_JOBS=4
 RUN . /opt/ros/humble/setup.sh && \
     I_AGREE_TO_NAO_MESHES_LICENSE=1 I_AGREE_TO_PEPPER_MESHES_LICENSE=1 \
-    colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
+    MAKEFLAGS="-j${COLCON_JOBS}" \
+    colcon build --parallel-workers ${COLCON_JOBS} \
+      --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
 
 # -----------------------------------------------------------------------------
 # runtime - workspace + all three venvs
