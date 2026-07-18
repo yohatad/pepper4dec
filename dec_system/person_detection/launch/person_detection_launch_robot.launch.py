@@ -1,15 +1,10 @@
 #!/usr/bin/env python3
 
-"""
-person_detection_launch_robot.launch.py
-ROS2 Launch file for Person Detection Robot
-"""
+"""Launch the person_detection node, optionally with the RealSense camera driver."""
 
 from launch import LaunchDescription
-from launch.actions import GroupAction, OpaqueFunction
+from launch.actions import OpaqueFunction
 from launch_ros.actions import Node
-from launch.substitutions import PathJoinSubstitution
-from launch_ros.substitutions import FindPackageShare
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 import yaml
@@ -24,7 +19,8 @@ def launch_setup(context, *args, **kwargs):
     # Load the camera type from the YAML file
     config_file = os.path.join(
         os.getenv("COLCON_PREFIX_PATH").split(":")[0],  # first install dir
-        "person_detection", "share", "person_detection", "config", "person_detection_configuration.yaml"
+        "person_detection", "share", "person_detection", "config",
+        "person_detection_configuration.yaml"
     )
     with open(config_file, "r") as f:
         params = yaml.safe_load(f)
@@ -69,16 +65,20 @@ def launch_setup(context, *args, **kwargs):
                         "enable_gyro": True,
 
                         # Set QoS to BEST_EFFORT
-                        'qos_overrides./camera.aligned_depth_to_color.image_raw.publisher.reliability': 'best_effort',
-                        'qos_overrides./camera.color.image_raw.publisher.reliability': 'best_effort',
-                        'qos_overrides./camera.depth.image_rect_raw.publisher.reliability': 'best_effort',
+                        'qos_overrides./camera.aligned_depth_to_color.image_raw'
+                        '.publisher.reliability': 'best_effort',
+                        'qos_overrides./camera.color.image_raw.publisher.reliability':
+                        'best_effort',
+                        'qos_overrides./camera.depth.image_rect_raw.publisher.reliability':
+                        'best_effort',
                     }],
                     output="screen",
                 )
             )
     else:
         # Log that camera launch is skipped
-        print("Camera launch is disabled (launch_camera=false). Assuming topics are available from ROS2 bag or other source.")
+        print("Camera launch is disabled (launch_camera=false). "
+              "Assuming topics are available from ROS2 bag or other source.")
 
     # Add person detection node
     actions.append(
