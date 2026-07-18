@@ -77,7 +77,18 @@ if(BUILD_TESTING)
   # comment the line when this package is in a git repo and when
   # a copyright and license is added to all source files
   set(ament_cmake_cpplint_FOUND TRUE)
+  # skip uncrustify: repo predates it and follows its own consistent style
+  set(ament_cmake_uncrustify_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
+
+  find_package(ament_cmake_gtest REQUIRED)
+  # The kinematics helpers are pure math with no ROS dependencies, so the
+  # test compiles the source directly instead of linking ${PROJECT_NAME}_lib.
+  ament_add_gtest(test_pepper_kinematics
+    test/test_pepper_kinematics.cpp
+    src/pepper_kinematics_utilities.cpp
+  )
+  target_include_directories(test_pepper_kinematics PRIVATE include)
 endif()
 
 ament_package()
