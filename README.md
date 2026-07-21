@@ -107,7 +107,7 @@ ros2 run behavior_controller behavior_controller
 
 3. **Launch SLAM Toolbox (2D Mapping)**
 ```bash
-ros2 launch pepper_navigation slam_toolbox.launch.py
+ros2 launch pepper_slam slam_toolbox.launch.py
 ```
 
 ### Configuration
