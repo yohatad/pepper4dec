@@ -34,6 +34,8 @@ from nav2_common.launch import RewrittenYaml
 
 def generate_launch_description():
     pkg_share = get_package_share_directory('pepper_navigation')
+    slam_launch_dir = os.path.join(
+        get_package_share_directory('pepper_slam'), 'launch')
     fast_lio_launch_dir = os.path.join(
         get_package_share_directory('fast_lio'), 'launch')
 
@@ -60,7 +62,7 @@ def generate_launch_description():
 
     rtabmap_localization = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(pkg_share, 'launch', 'rtabmap_realsense.launch.py')),
+            os.path.join(slam_launch_dir, 'rtabmap_realsense.launch.py')),
         launch_arguments={
             'use_sim_time': use_sim_time,
             'frame_id': 'base_footprint',
@@ -84,7 +86,8 @@ def generate_launch_description():
             'localization': 'true',
             'database_path': database_path,
             # Same ICP/grid tuning validated for mapping (see
-            # rtabmap_fastlio_bag_test.launch.py); dropped --delete_db_on_start
+            # pepper_slam's rtabmap_fastlio_bag_test.launch.py); dropped
+            # --delete_db_on_start
             # (would erase the map!) and the NeighborLinkRefining/Proximity
             # params (those govern adding NEW loop-closure links, moot with
             # Mem/IncrementalMemory=false).

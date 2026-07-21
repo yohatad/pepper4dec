@@ -26,7 +26,11 @@
   <depend>std_srvs</depend>
   <depend>nav2_msgs</depend>
 
-  <!-- launched by inclusion (pepper_nav2_bringup.launch.py), not linked -->
+  <!-- launched by inclusion (pepper_nav2_bringup.launch.py), not linked.
+       pepper_slam supplies rtabmap_realsense.launch.py, which this package
+       runs in localization mode to get map -> odom_level and /map. The
+       dependency is one-way: pepper_slam never depends on pepper_navigation. -->
+  <exec_depend>pepper_slam</exec_depend>
   <exec_depend>fast_lio</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
