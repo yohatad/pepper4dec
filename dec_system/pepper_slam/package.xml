@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>pepper_slam</name>
+  <version>0.0.0</version>
+  <description>SLAM and mapping for Pepper: RTAB-Map (RGB-D / lidar), FAST-LIO
+  odometry integration, and SLAM Toolbox. Produces the map frame and /map that
+  pepper_navigation consumes.</description>
+  <maintainer email="yohatad000@gmail.com">yoha</maintainer>
+  <license>TODO: License declaration</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- All launched by name, not linked against: this package ships launch
+       files and params only, no compiled nodes. -->
+  <exec_depend>rtabmap_slam</exec_depend>
+  <exec_depend>rtabmap_odom</exec_depend>
+  <exec_depend>rtabmap_sync</exec_depend>
+  <exec_depend>rtabmap_util</exec_depend>
+  <exec_depend>rtabmap_viz</exec_depend>
+  <exec_depend>slam_toolbox</exec_depend>
+  <exec_depend>image_transport</exec_depend>
+  <exec_depend>fast_lio</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+  <!-- rtabmap_fused_bag_test: RealSense /camera/imu has no orientation, so it is
+       fused to /imu/filtered before rtabmap consumes it -->
+  <exec_depend>imu_filter_madgwick</exec_depend>
+  <!-- pepper_sensor_tf: republishes the rig extrinsics missing from bag /tf_static -->
+  <exec_depend>tf2_ros</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

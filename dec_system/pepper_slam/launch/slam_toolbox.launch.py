@@ -13,7 +13,7 @@ def generate_launch_description():
     declare_slam_params_file_cmd = DeclareLaunchArgument(
         'slam_params_file',
         default_value=os.path.join(
-            get_package_share_directory('pepper_navigation'),
+            get_package_share_directory('pepper_slam'),
             'config',
             'mapper_params_online_async.yaml'
         ),
