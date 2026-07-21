@@ -75,6 +75,16 @@ RUN useradd -m -s /bin/bash pepper && mkdir -p ${WS} && chown -R pepper:pepper /
 # -----------------------------------------------------------------------------
 FROM base AS venv-sound
 ARG WS
+
+# PyAudio publishes no wheel, so pip compiles it and needs portaudio.h.
+# base carries only libportaudio2, the runtime library. Kept in this stage
+# rather than base so it does not invalidate the workspace build cache; the
+# compiled _portaudio.so links against libportaudio2, which base already has,
+# so the headers are not needed in the final image.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      portaudio19-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY docker/requirements/sound.lock.txt /tmp/
 # torch 2.9.1+cu126 / torchvision 0.24.1+cu126 are not on PyPI.
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
