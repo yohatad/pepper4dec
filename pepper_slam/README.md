@@ -3,7 +3,7 @@
 </div>
 
 <div align="center">
-  <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
+  <img src="../images/upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
 The **Pepper SLAM** package builds and localizes against maps of the Pepper

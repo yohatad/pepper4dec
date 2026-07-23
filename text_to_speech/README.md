@@ -3,7 +3,7 @@
 </div>
 
 <div align="center">
-  <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
+  <img src="../images/upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
 The **Text-to-Speech (TTS)** package is a ROS2 package designed to synthesize and play speech on the Pepper robot. It receives text sentences on `/text_to_speech/input` and speaks them as they arrive — enabling Pepper to start talking before the LLM has finished generating the full response. The package supports multiple synthesis backends including naoqi_ros, Kokoro-82M, and ElevenLabs with both streaming and file-based playback methods.

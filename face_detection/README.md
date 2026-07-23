@@ -3,7 +3,7 @@
 </div>
 
 <div align="center">
-  <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
+  <img src="../images/upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
 The **Face and Mutual Gaze Detection and Localization** package detects multiple faces and evaluates their mutual gaze in real-time by subscribing to image topics. It publishes an array of detected faces and their mutual gaze status to the `/face_detection/data` topic. Each entry includes the label ID, centroid coordinates, bounding box dimensions, and mutual gaze status.
