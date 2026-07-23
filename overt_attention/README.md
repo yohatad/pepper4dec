@@ -3,7 +3,7 @@
 </div>
 
 <div align="center">
-  <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
+  <img src="../images/upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
 The **Overt Visual Attention System** package implements a unified visual attention controller for robot heads. It integrates multiple attention cues including face detection with engagement awareness, bottom-up visual saliency, and optional audio localization to generate natural, human-like head movements. The system prioritizes engaged faces, then detected faces, and finally saliency peaks with inhibition of return (IOR) to prevent repetitive scanning.

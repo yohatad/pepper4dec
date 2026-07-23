@@ -3,7 +3,7 @@
 </div>
 
 <div align="center">
-  <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
+  <img src="../images/upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
 The **Animate Behavior** package is a ROS2 action server that provides natural, lifelike animation for the Pepper humanoid robot during idle periods or social interactions. It generates smooth, randomized gestural movements across various body parts (arms, hands, legs, and base rotation) to enhance the robot's expressiveness and engagement during human-robot interaction. The module uses high-frequency motion updates (30Hz) with exponential smoothing to achieve natural, fluid movements that avoid mechanical or jerky appearance. A synchronized LED cascade wave on the face LEDs runs in parallel with body animation to further enhance expressiveness.
