@@ -177,7 +177,7 @@ ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
 ### Saving a New Map (SLAM Toolbox)
 
 ```bash
-ros2 run nav2_map_server map_saver_cli -f ~/ros2_ws/src/pepper4dec/dec_system/pepper_navigation/map/my_new_map
+ros2 run nav2_map_server map_saver_cli -f ~/ros2_ws/src/pepper4dec/pepper_navigation/map/my_new_map
 ```
 
 ## Package Structure
