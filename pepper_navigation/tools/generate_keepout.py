@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-""" generate_keepout.py
+"""
+generate_keepout.py.
 
 Generates a Nav2-compatible keepout zone mask (PGM image + YAML metadata) from
 a list of rectangle and circle exclusion zones defined in pixel coordinates.
@@ -15,9 +16,7 @@ Version: v1.0
 """
 
 import numpy as np
-import struct
 import os
-import math
 
 # ─────────────────────────────────────────────
 #  CONFIG — Edit this section
@@ -51,7 +50,8 @@ CIRCLES = [
 
 def create_keepout_image(width, height, rectangles, circles):
     """
-    Creates keepout mask as numpy array.
+    Create keepout mask as numpy array.
+
     White (255) = free space
     Black (0)   = keepout zone
     """
@@ -122,18 +122,18 @@ def pixels_to_meters(col, row, origin, resolution, height):
 
 def main():
     cfg = MAP_CONFIG
-    width    = cfg["width"]
-    height   = cfg["height"]
-    out_dir  = cfg["output_dir"]
+    width = cfg["width"]
+    height = cfg["height"]
+    out_dir = cfg["output_dir"]
     out_name = cfg["output_name"]
 
     os.makedirs(out_dir, exist_ok=True)
 
-    pgm_path  = os.path.join(out_dir, f"{out_name}.pgm")
+    pgm_path = os.path.join(out_dir, f"{out_name}.pgm")
     yaml_path = os.path.join(out_dir, f"{out_name}.yaml")
 
     print(f"\n{'='*50}")
-    print(f"  Nav2 Keepout Zone Generator")
+    print("  Nav2 Keepout Zone Generator")
     print(f"{'='*50}")
     print(f"  Map size : {width} x {height} px")
     print(f"  Resolution: {cfg['resolution']} m/px")
@@ -144,18 +144,18 @@ def main():
     img = create_keepout_image(width, height, RECTANGLES, CIRCLES)
 
     # Stats
-    total_px   = width * height
+    total_px = width * height
     keepout_px = int(np.sum(img == 0))
-    free_px    = total_px - keepout_px
+    free_px = total_px - keepout_px
     keepout_m2 = keepout_px * (cfg["resolution"] ** 2)
 
-    print(f"\nStats:")
+    print("\nStats:")
     print(f"  Total pixels   : {total_px}")
     print(f"  Keepout pixels : {keepout_px} ({100*keepout_px/total_px:.1f}%)")
     print(f"  Free pixels    : {free_px} ({100*free_px/total_px:.1f}%)")
     print(f"  Keepout area   : {keepout_m2:.2f} m²")
 
-    print(f"\nSaving files...")
+    print("\nSaving files...")
     save_pgm(img, pgm_path)
     save_yaml(cfg, f"{out_name}.pgm", yaml_path)
 
