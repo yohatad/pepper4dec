@@ -27,6 +27,7 @@ Copyright (C) 2025 Carnegie Mellon University Africa
 """
 
 import os
+import signal
 import time
 import unittest
 from collections import Counter
@@ -211,4 +212,11 @@ class TestBagReplay(unittest.TestCase):
 class TestProcessOutcome(unittest.TestCase):
 
     def test_exit_code(self, proc_info, detection_node):
-        launch_testing.asserts.assertExitCodes(proc_info, process=detection_node)
+        # In CI (no model -> immediate skip) the harness sends SIGINT within
+        # ~0.1s of process start, often before rclcpp's own signal handler is
+        # installed, so the process dies to the *default* SIGINT disposition
+        # (-signal.SIGINT) instead of exiting 0 via a caught, graceful
+        # rclcpp::shutdown(). Both are the harness's normal shutdown path, not
+        # a crash.
+        launch_testing.asserts.assertExitCodes(
+            proc_info, allowable_exit_codes=[0, -signal.SIGINT], process=detection_node)
