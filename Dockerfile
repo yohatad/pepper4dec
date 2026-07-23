@@ -127,14 +127,11 @@ RUN git clone --depth 1 https://github.com/yohatad/naoqi_driver2.git src/naoqi_d
     git clone --depth 1 https://github.com/BehaviorTree/BehaviorTree.CPP.git src/BehaviorTree.CPP && \
     git clone --depth 1 https://github.com/BehaviorTree/BehaviorTree.ROS2.git src/BehaviorTree.ROS2
 
-# naoqi_bridge_msgs2 is a PRIVATE fork carrying the custom srv definitions
+# naoqi_bridge_msgs2 is a fork carrying the custom srv definitions
 # (SetAudioVolume, StopAudio, UnloadAudioFile) that dec_system depends on;
-# ros-naoqi upstream does not have them. Cloned over a forwarded SSH agent so
-# no credential is baked into a layer. Requires: docker build --ssh default
-RUN --mount=type=ssh \
-    mkdir -p -m 0700 ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null && \
-    git clone --depth 1 git@github.com:yohatad/naoqi_bridge_msgs2.git src/naoqi_bridge_msgs && \
-    rm -rf ~/.ssh
+# ros-naoqi upstream does not have them. Public, so a plain HTTPS clone works
+# with no credentials or forwarded SSH agent needed.
+RUN git clone --depth 1 https://github.com/yohatad/naoqi_bridge_msgs2.git src/naoqi_bridge_msgs
 
 COPY . src/pepper4dec
 
