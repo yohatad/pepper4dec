@@ -44,7 +44,6 @@ import os
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
-from launch.conditions import LaunchConfigurationEquals
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
@@ -61,7 +60,8 @@ def generate_launch_description():
     declare_args = [
         DeclareLaunchArgument(
             'odom_source', default_value='wheel', choices=['wheel', 'icp'],
-            description='wheel = bag /pepper_odom (smoothest); icp = rtabmap icp_odometry on the L2',
+            description='wheel = bag /pepper_odom (smoothest); '
+                        'icp = rtabmap icp_odometry on the L2',
         ),
         DeclareLaunchArgument('rviz', default_value='true'),
         DeclareLaunchArgument('rtabmap_viz', default_value='true'),

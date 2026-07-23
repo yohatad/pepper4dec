@@ -5,11 +5,12 @@ from launch.substitutions import LaunchConfiguration
 import os
 from ament_index_python.packages import get_package_share_directory
 
+
 def generate_launch_description():
-    
+
     # Path to SLAM Toolbox config
     slam_params_file = LaunchConfiguration('slam_params_file')
-    
+
     declare_slam_params_file_cmd = DeclareLaunchArgument(
         'slam_params_file',
         default_value=os.path.join(
@@ -19,7 +20,7 @@ def generate_launch_description():
         ),
         description='Full path to SLAM Toolbox parameters'
     )
-    
+
     # SLAM Toolbox Node
     slam_toolbox_node = Node(
         package='slam_toolbox',
@@ -31,7 +32,7 @@ def generate_launch_description():
             ('/scan', '/scan')  # Your YDLidar topic
         ]
     )
-    
+
     return LaunchDescription([
         declare_slam_params_file_cmd,
         slam_toolbox_node

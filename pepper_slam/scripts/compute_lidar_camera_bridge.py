@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""Compute the l2lidar_frame -> camera_camera_link static transform to publish
-(or put in the URDF) from a direct_visual_lidar_calibration result.
+r"""
+Compute the l2lidar_frame -> camera_camera_link static transform.
+
+To publish (or put in the URDF) from a direct_visual_lidar_calibration result.
 
 WHY THIS EXISTS
 ---------------
@@ -113,8 +115,11 @@ def quat_to_rpy(x, y, z, w):
 
 
 def read_static_tree(bag_path):
-    """Read every /tf_static transform into an undirected adjacency map:
-    frame -> [(neighbor, 4x4 T_this_to_neighbor)]."""
+    """
+    Read every /tf_static transform into an undirected adjacency map.
+
+    frame -> [(neighbor, 4x4 T_this_to_neighbor)].
+    """
     from rosidl_runtime_py.utilities import get_message
     from rclpy.serialization import deserialize_message
 
