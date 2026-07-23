@@ -212,7 +212,7 @@ Note: the wheel-odometry covariance node that `ekf_nav.yaml`'s `odom0` expects
 (`/pepper_odom_filtered`) lives in a separate top-level package, `pepper_odom_covariance`
 (`~/ros2_ws/src/pepper_odom_covariance/`) — not inside this package. It's
 infrastructure-tier (reusable, dependency-light), not navigation-specific, so
-it sits alongside `naoqi_driver2` rather than under `dec_system`.
+it sits alongside `naoqi_driver2` rather than inside this repository.
 
 ## 🏗️ Architecture
 
@@ -221,7 +221,7 @@ The navigation stack integrates four main subsystems:
 1. **Odometry Layer** (upstream, separate package):
    - `naoqi_driver2` publishes raw wheel+IMU odometry on `/pepper_odom`, with a
      flat, non-growing covariance
-   - `pepper_odom_covariance` (top-level package, not under `dec_system`)
+   - `pepper_odom_covariance` (top-level package, not part of this repository)
      republishes it as `/pepper_odom_filtered` with a covariance that grows
      with distance/rotation traveled - this is what `ekf_nav.yaml`'s `odom0`
      and `nav2_params.yaml`'s `bt_navigator.odom_topic` expect as input

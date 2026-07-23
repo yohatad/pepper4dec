@@ -13,7 +13,7 @@ Pepper's wheel odometry uses distinct names to avoid conflicts with SLAM/VIO/LIO
 
 `pepper_odom_covariance` is a separate top-level package
 (`~/ros2_ws/src/pepper_odom_covariance/`), not part of `pepper_navigation` or
-`dec_system` - it's infrastructure-tier, alongside `naoqi_driver2`, not
+this repository (`pepper4dec`) - it's infrastructure-tier, alongside `naoqi_driver2`, not
 navigation-specific.
 
 ## How it maps to these config files
