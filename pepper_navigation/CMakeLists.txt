@@ -101,6 +101,8 @@ if(BUILD_TESTING)
   # comment the line when this package is in a git repo and when
   # a copyright and license is added to all source files
   set(ament_cmake_cpplint_FOUND TRUE)
+  # skip uncrustify: repo predates it and follows its own consistent style
+  set(ament_cmake_uncrustify_FOUND TRUE)
   # flake8 is run manually below so it picks up ament_flake8.ini (the shared
   # extend-ignore list). ament_cmake_flake8_FOUND doesn't suppress the
   # auto-discovered hook here (its extension gets registered before that

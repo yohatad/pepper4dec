@@ -33,7 +33,7 @@ def generate_launch_description():
     l2lidar_share = get_package_share_directory("l2lidar_node")
 
     lio_sam_params = os.path.join(lio_sam_share, "config", "params.yaml")
-    rviz_config   = os.path.join(lio_sam_share, "config", "rviz2.rviz")
+    rviz_config = os.path.join(lio_sam_share, "config", "rviz2.rviz")
 
     return LaunchDescription([
 

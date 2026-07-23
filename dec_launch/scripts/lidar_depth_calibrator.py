@@ -126,7 +126,8 @@ def preprocess(pcd, voxel=0.05, normal_radius=0.15):
 
 
 def crop_lidar_to_fov(pcd_lidar, M_init, fx, fy, cx, cy, width, height, margin=20):
-    """Remove LiDAR points that don't project into the camera image.
+    """
+    Remove LiDAR points that don't project into the camera image.
 
     Out-of-FOV LiDAR points have no depth correspondences, which confuses ICP
     and inflates RMSE.  We use M_init (current TF estimate) to project each
