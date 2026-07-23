@@ -1,28 +1,34 @@
 <div align="center">
-<h1>Pepper Navigation and Mapping</h1>
+<h1>Pepper Navigation</h1>
 </div>
 
 <div align="center">
   <img src="../upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
-The **Pepper Navigation and Mapping** package provides autonomous localization, mapping, and navigation capabilities for the Pepper robot. It integrates RTAB-Map for 3D SLAM using an Intel RealSense depth camera, SLAM Toolbox for 2D LiDAR-based mapping, and Nav2 for path planning, obstacle avoidance, and goal navigation. The package also supports keepout zones and provides a utility node for programmatically sending navigation goals.
+The **Pepper Navigation** package provides autonomous navigation for the Pepper
+robot: Nav2 path planning, obstacle avoidance, goal execution, keepout zones,
+and the saved maps those consume.
+
+> **SLAM and mapping live in a separate package: [`pepper_slam`](../pepper_slam/).**
+> RTAB-Map, SLAM Toolbox and the FAST-LIO integration were split out so that
+> mapping and bag-replay work doesn't pull in the Nav2 dependency tree. This
+> package `exec_depend`s on `pepper_slam`; the reverse is never true. See
+> `pepper_slam/README.md` for the `pepper_odom → odom → odom_level → map`
+> frame contract between them.
 
 ## ✨ Key Features
 - **ROS2 Native**: Built for ROS2 Humble
-- **RTAB-Map Integration**: 3D SLAM using RealSense RGB-D camera
-- **SLAM Toolbox Integration**: 2D LiDAR-based online asynchronous SLAM with loop closure
 - **Nav2 Stack**: Full autonomous navigation with path planning and obstacle avoidance
 - **Keepout Zones**: Configurable restricted areas using costmap filter masks
 - **Goal Navigation API**: C++ utility for programmatic navigation goal sending
-- **Pre-built Maps**: Includes saved maps for localization-only deployments
+- **Pre-built Maps**: Saved maps and filter masks for localization-only deployments
 
 ## ✅ Prerequisites
 - **ROS2 Humble** or newer
 - **Python 3.10** or compatible version
-- **Intel RealSense D-series camera** (for RTAB-Map)
-- **YDLidar or compatible 2D LiDAR** (for SLAM Toolbox)
 - **Pepper robot** with ROS2 driver configured
+- **`pepper_slam`** built in the same workspace (supplies the `map` frame and `/map`)
 
 ## 🛠️ Installation
 
@@ -38,11 +44,11 @@ sudo apt install \
   ros-humble-nav2-behaviors \
   ros-humble-nav2-bt-navigator \
   ros-humble-nav2-lifecycle-manager \
-  ros-humble-nav2-costmap-2d \
-  ros-humble-slam-toolbox \
-  ros-humble-rtabmap-ros \
-  ros-humble-realsense2-camera
+  ros-humble-nav2-costmap-2d
 ```
+
+SLAM dependencies (`slam-toolbox`, `rtabmap-ros`, `realsense2-camera`) are
+declared by `pepper_slam` — see that package's README.
 
 ### Package Installation
 
@@ -53,22 +59,11 @@ git clone https://github.com/yohatad/pepper4dec.git
 
 # Build the workspace
 cd ~/ros2_ws
-colcon build --packages-select pepper_navigation
+colcon build --packages-select pepper_slam pepper_navigation
 source install/setup.bash
 ```
 
 ## 🔧 Configuration
-
-### SLAM Toolbox (`config/mapper_params_online_async.yaml`)
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `mode` | Operation mode (`mapping` or `localization`) | `mapping` |
-| `scan_topic` | LiDAR scan topic | `/scan` |
-| `base_frame` | Robot base frame | `base_footprint` |
-| `max_laser_range` | Maximum laser range (m) | `12.0` |
-| `resolution` | Map resolution (m/cell) | `0.05` |
-| `do_loop_closing` | Enable loop closure | `true` |
 
 ### Nav2 Components
 
@@ -88,28 +83,31 @@ source install/setup.bash
 source ~/ros2_ws/install/setup.bash
 ```
 
-### Option 1: Nav2 Navigation with Pre-built Map
+### Option 1: Nav2 with a static pre-built map (AMCL)
 
 ```bash
 ros2 launch pepper_navigation pepper_navigation.launch.py
 ```
 
-### Option 2: RTAB-Map SLAM (3D Mapping with RealSense)
+### Option 2: Nav2 on FAST-LIO + RTAB-Map localization
+
+The current best-validated stack. Brings up FAST-LIO and RTAB-Map (in
+localization mode, from `pepper_slam`) alongside the Nav2 servers:
 
 ```bash
-ros2 launch pepper_navigation rtabmap_realsense.launch.py
+ros2 launch pepper_navigation pepper_nav2_bringup.launch.py
 
-# Localization only (no new mapping)
-ros2 launch pepper_navigation rtabmap_realsense.launch.py localization:=true
-
-# With RViz visualization
-ros2 launch pepper_navigation rtabmap_realsense.launch.py rviz:=true
+# against a bag instead of the robot
+ros2 launch pepper_navigation pepper_nav2_bringup.launch.py use_sim_time:=true
 ```
 
-### Option 3: SLAM Toolbox (2D Mapping with LiDAR)
+### Building a map first
+
+Mapping is `pepper_slam`'s job:
 
 ```bash
-ros2 launch pepper_navigation slam_toolbox.launch.py
+ros2 launch pepper_slam rtabmap_realsense.launch.py   # RTAB-Map, RealSense
+ros2 launch pepper_slam slam_toolbox.launch.py        # SLAM Toolbox, 2D LiDAR
 ```
 
 ## 🖥️ ROS Interface
@@ -119,10 +117,12 @@ ros2 launch pepper_navigation slam_toolbox.launch.py
 | Topic | Type | Description |
 |-------|------|-------------|
 | `/scan` | `sensor_msgs/LaserScan` | 2D LiDAR scan |
+| `/points` | `sensor_msgs/PointCloud2` | Lidar cloud, consumed directly by the Nav2 costmaps |
 | `/pepper_odom_filtered` | `nav_msgs/Odometry` | Covariance-corrected wheel odometry |
+| `/map` | `nav_msgs/OccupancyGrid` | Occupancy grid, from `pepper_slam` or the map server |
 | `/tf` | `tf2_msgs/TFMessage` | Transform tree |
-| `/camera/color/image_raw_custom` | `sensor_msgs/Image` | RGB image (RTAB-Map) |
-| `/camera/aligned_depth_to_color/image_raw_custom` | `sensor_msgs/Image` | Depth image (RTAB-Map) |
+
+Camera topics are subscribed by the SLAM nodes in `pepper_slam`, not here.
 
 ### Published Topics
 
@@ -175,7 +175,10 @@ ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
 | `my_map.yaml` | Alternative saved map |
 | `keepout_zone.yaml` | Keepout zone filter mask |
 
-### Saving a New Map (SLAM Toolbox)
+### Saving a New Map
+
+With a `pepper_slam` mapping session running, save the grid into this package's
+`map/` directory (that's where Nav2 expects to find it):
 
 ```bash
 ros2 run nav2_map_server map_saver_cli -f ~/ros2_ws/src/pepper4dec/pepper_navigation/map/my_new_map
@@ -189,14 +192,13 @@ Pure C++ (`ament_cmake`), aside from one standalone, non-ROS utility script
 ```
 pepper_navigation/
 ├── config/
-│   ├── mapper_params_online_async.yaml       # SLAM Toolbox parameters
-│   ├── nav2_params.yaml                      # Nav2 stack parameters
+│   ├── nav2_params.yaml                      # Nav2 stack parameters (AMCL + static map)
+│   ├── nav2_params_rtabmap_loc.yaml          # Nav2 params for the RTAB-Map localization stack
 │   ├── ekf_nav.yaml.yaml                     # robot_localization EKF parameters (not yet launched)
 │   └── README.md
 ├── launch/
-│   ├── pepper_navigation.launch.py
-│   ├── rtabmap_realsense.launch.py
-│   ├── slam_toolbox.launch.py
+│   ├── pepper_navigation.launch.py           # Nav2 + AMCL against a static map
+│   ├── pepper_nav2_bringup.launch.py         # Nav2 + FAST-LIO + RTAB-Map localization
 │   └── odom_test.launch.py
 ├── map/
 │   ├── rtabmap_march_28.yaml     # default RTAB-Map map (used by Nav2); .pgm alongside
@@ -216,6 +218,10 @@ pepper_navigation/
 └── README.md
 ```
 
+SLAM launch files, `mapper_params_online_async.yaml` and
+`rtabmap_fastlio_mapping.rviz` now live in `pepper_slam/`. Maps stay here
+because Nav2's map server and costmap filters are their runtime consumers.
+
 Note: the wheel-odometry covariance node that `ekf_nav.yaml`'s `odom0` expects
 (`/pepper_odom_filtered`) lives in a separate top-level package, `pepper_odom_covariance`
 (`~/ros2_ws/src/pepper_odom_covariance/`) — not inside this package. It's
@@ -234,9 +240,10 @@ The navigation stack integrates four main subsystems:
      with distance/rotation traveled - this is what `ekf_nav.yaml`'s `odom0`
      and `nav2_params.yaml`'s `bt_navigator.odom_topic` expect as input
 
-2. **Mapping Layer** (choose one):
-   - **RTAB-Map**: RGB-D SLAM using RealSense
+2. **Mapping Layer** (separate package, `pepper_slam`):
+   - **RTAB-Map**: RGB-D / lidar SLAM, optionally on FAST-LIO odometry
    - **SLAM Toolbox**: 2D LiDAR SLAM with loop closure
+   - Publishes the `map` frame and `/map` that this package consumes
 
 3. **Localization Layer**:
    - RTAB-Map provides continuous localization

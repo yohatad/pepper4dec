@@ -6,7 +6,7 @@
 # Wraps rtabmap_realsense.launch.py (unchanged), like rtabmap_bag_test.launch.py.
 #
 # Usage:
-#   ros2 launch pepper_navigation rtabmap_l2_bag_test.launch.py
+#   ros2 launch pepper_slam rtabmap_l2_bag_test.launch.py
 #   ros2 bag play <bag> --clock --topics /points /imu/data /tf /tf_static
 
 import os
@@ -19,7 +19,7 @@ from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
     pkg_launch_dir = os.path.join(
-        get_package_share_directory('pepper_navigation'), 'launch')
+        get_package_share_directory('pepper_slam'), 'launch')
 
     rtabmap = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
