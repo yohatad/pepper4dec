@@ -9,7 +9,7 @@
 # frame is Z-up, which the 2D occupancy projection requires.
 #
 # Usage:
-#   ros2 launch pepper_navigation rtabmap_fastlio_bag_test.launch.py
+#   ros2 launch pepper_slam rtabmap_fastlio_bag_test.launch.py
 #   ros2 bag play <bag> --clock --topics /points /imu/data /tf_static
 #
 # NOTE: do NOT replay /tf -- the bag's wheel-odometry TF (pepper_odom ->
@@ -20,13 +20,12 @@ import os
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
     pkg_launch_dir = os.path.join(
-        get_package_share_directory('pepper_navigation'), 'launch')
+        get_package_share_directory('pepper_slam'), 'launch')
     fast_lio_launch_dir = os.path.join(
         get_package_share_directory('fast_lio'), 'launch')
 
@@ -95,19 +94,9 @@ def generate_launch_description():
             'rtabmap_viz': 'true',
             'rviz': 'true',
             'rviz_cfg': os.path.join(
-                get_package_share_directory('pepper_navigation'),
+                get_package_share_directory('pepper_slam'),
                 'rviz', 'rtabmap_fastlio_mapping.rviz'),
         }.items(),
     )
 
-    # 5 Hz display copy of the camera stream so the RViz image panel doesn't
-    # compete with the SLAM subscribers for the full 30 fps raw stream
-    image_throttle = Node(
-        package='pepper_navigation',
-        executable='image_throttle.py',
-        name='image_throttle',
-        output='screen',
-        parameters=[{'use_sim_time': True}],
-    )
-
-    return LaunchDescription([fast_lio, rtabmap, image_throttle])
+    return LaunchDescription([fast_lio, rtabmap])

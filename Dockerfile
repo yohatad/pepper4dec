@@ -1,251 +1,200 @@
-+# =============================================================================
+# syntax=docker/dockerfile:1.7
+# =============================================================================
 # Pepper4DEC Docker Image
 # Digital Experience Center - Autonomous Pepper Robot Tour System
 # =============================================================================
 #
-# This Dockerfile builds a complete ROS2 Humble environment with all packages
-# needed for the Pepper robot tour system at the Upanzi Digital Experience Center.
+# The dec_system nodes CANNOT share one Python environment: speech_event needs
+# numpy 2.2.6 while conversation_manager needs numpy 1.24.4, and each pulls a
+# different torch/CUDA build. Each node therefore gets its own venv, built in
+# its own stage from a lockfile, and they are assembled into the final image.
+#
+# The venvs land at $HOME/ros2_ws/.venvs -- the same layout as the host -- so
+# the */scripts/ launchers, which source
+# "$HOME/ros2_ws/.venvs/venv_map.sh", work unchanged in both places.
 #
 # Usage:
-#   docker build -t pepper4dec:latest .
-#   docker run -it --privileged pepper4dec:latest
-#
-# For GPU support (NVIDIA):
-#   docker build -t pepper4dec:latest --build-arg USE_CUDA=1 .
-#   docker run -it --gpus all --privileged pepper4dec:latest
-#
+#   docker compose build && docker compose up
+#   docker build -t pepper4dec:latest .            # full image
+#   docker build --target venv-sound -t x .        # single-venv slim image
 # =============================================================================
 
-# -----------------------------------------------------------------------------
-# Base Image - ROS2 Humble
-# -----------------------------------------------------------------------------
-FROM ros:humble-perceptive-jammy AS base
-
-# Set environment variables
-ENV DEBIAN_FRONTEND=noninteractive
-ENV ROS_DISTRO=humble
-ENV LANG=C.UTF-8
-ENV LC_ALL=C.UTF-8
-
-# -----------------------------------------------------------------------------
-# Build Arguments
-# -----------------------------------------------------------------------------
-ARG USE_CUDA=0
+ARG ROS_DISTRO=humble
 ARG PYTHON_VERSION=3.10
+ARG WS=/home/pepper/ros2_ws
 
 # -----------------------------------------------------------------------------
-# System Dependencies
+# base - system deps shared by every stage
 # -----------------------------------------------------------------------------
+FROM ros:humble-perception-jammy AS base
+
+ARG WS
+ENV DEBIAN_FRONTEND=noninteractive \
+    ROS_DISTRO=humble \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    # The torch/CUDA wheels are 300-800MB each and the connection drops
+    # mid-stream often enough to fail a build. --retries only covers
+    # establishing a connection, so it does NOT help with a truncated
+    # response (IncompleteRead); --resume-retries is what resumes a partial
+    # download. Set as env vars so all three venv stages inherit them;
+    # the venv's bundled older pip ignores names it does not recognise.
+    PIP_RESUME_RETRIES=5 \
+    PIP_RETRIES=10 \
+    PIP_DEFAULT_TIMEOUT=60
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # Build tools
-    build-essential \
-    cmake \
-    git \
-    wget \
-    curl \
-    vim \
-    tmux \
-    htop \
-    \
-    # ROS2 build tools
-    python3-colcon-common-extensions \
-    python3-vcstool \
-    python3-rosdep \
-    python3-pip \
-    \
-    # ROS2 Humble packages
-    ros-humble-nav2-bringup \
-    ros-humble-nav2-map-server \
-    ros-humble-nav2-amcl \
-    ros-humble-nav2-controller \
-    ros-humble-nav2-planner \
-    ros-humble-nav2-behaviors \
-    ros-humble-nav2-bt-navigator \
-    ros-humble-nav2-lifecycle-manager \
-    ros-humble-nav2-costmap-2d \
-    ros-humble-slam-toolbox \
-    ros-humble-rtabmap-ros \
-    ros-humble-realsense2-camera \
-    ros-humble-yolo-v8 \
-    ros-humble-message-filters \
-    ros-humble-cv-bridge \
-    ros-humble-image-transport \
-    ros-humble-nav2-msgs \
-    ros-humble-geometry-msgs \
-    ros-humble-sensor-msgs \
-    ros-humble-std-msgs \
-    ros-humble-std-srvs \
-    ros-humble-robot-state-publisher \
-    ros-humble-joint-state-publisher \
-    ros-humble-naoqi-libqi \
-    ros-humble-naoqi-libqicore \
-    ros-humble-pepper-meshes \
-    ros-humble-nao-meshes \
-    \
-    # Additional libraries
-    libyaml-cpp-dev \
-    libopencv-dev \
-    libomp-dev \
-    libeigen3-dev \
-    libboost-all-dev \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    libudev-dev \
-    libusb-1.0-0 \
-    \
-    # Python development
-    python3-dev \
-    python3-venv \
-    python3-pip \
-    python3-setuptools \
-    \
-    # Cleanup
+      build-essential cmake git wget curl vim tmux htop \
+      python3-colcon-common-extensions python3-vcstool python3-rosdep python3-pip \
+      python3-dev python3-venv python3-setuptools \
+      ros-humble-nav2-bringup ros-humble-nav2-map-server ros-humble-nav2-amcl \
+      ros-humble-nav2-controller ros-humble-nav2-planner ros-humble-nav2-behaviors \
+      ros-humble-nav2-bt-navigator ros-humble-nav2-lifecycle-manager \
+      ros-humble-nav2-costmap-2d ros-humble-nav2-msgs \
+      ros-humble-slam-toolbox ros-humble-rtabmap-ros ros-humble-realsense2-camera \
+      ros-humble-message-filters ros-humble-cv-bridge ros-humble-image-transport \
+      ros-humble-geometry-msgs ros-humble-sensor-msgs ros-humble-std-msgs \
+      ros-humble-std-srvs ros-humble-robot-state-publisher \
+      ros-humble-joint-state-publisher \
+      ros-humble-naoqi-libqi ros-humble-naoqi-libqicore \
+      ros-humble-pepper-meshes ros-humble-nao-meshes \
+      libyaml-cpp-dev libopencv-dev libomp-dev libeigen3-dev libboost-all-dev \
+      libgl1-mesa-glx libglib2.0-0 libudev-dev libusb-1.0-0 \
+      libportaudio2 libsndfile1 espeak-ng \
     && rm -rf /var/lib/apt/lists/*
 
-# -----------------------------------------------------------------------------
-# Python Virtual Environment Setup
-# -----------------------------------------------------------------------------
-RUN python3 -m venv /opt/pepper4dec-venv
-ENV VIRTUAL_ENV=/opt/pepper4dec-venv
-ENV PATH=$VIRTUAL_ENV/bin:$PATH
-
-# Upgrade pip
-RUN pip install --upgrade pip setuptools wheel
+# Create the user early: the launcher scripts resolve venvs via $HOME, so the
+# venv paths baked in below must match the runtime user's home.
+RUN useradd -m -s /bin/bash pepper && mkdir -p ${WS} && chown -R pepper:pepper /home/pepper
 
 # -----------------------------------------------------------------------------
-# Install PyTorch (Conditional - for GPU support)
+# venv stages - one per node, built in parallel, each from its own lockfile.
+# Locks were frozen from the known-good host venvs; the per-package
+# requirements.txt files are NOT used (they under-specify torch and list two
+# conflicting onnxruntime distributions).
 # -----------------------------------------------------------------------------
-# Note: PyTorch installation depends on CUDA version
-# Uncomment the appropriate version for your GPU
+FROM base AS venv-sound
+ARG WS
 
-# For CUDA 12.1 (default)
-RUN pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121
+# PyAudio publishes no wheel, so pip compiles it and needs portaudio.h.
+# base carries only libportaudio2, the runtime library. Kept in this stage
+# rather than base so it does not invalidate the workspace build cache; the
+# compiled _portaudio.so links against libportaudio2, which base already has,
+# so the headers are not needed in the final image.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      portaudio19-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# For CPU only (uncomment if not using GPU)
-# RUN pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+COPY docker/requirements/sound.lock.txt /tmp/
+# torch 2.9.1+cu126 / torchvision 0.24.1+cu126 are not on PyPI.
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    python3 -m venv ${WS}/.venvs/sound && \
+    ${WS}/.venvs/sound/bin/pip install --upgrade pip setuptools wheel && \
+    ${WS}/.venvs/sound/bin/pip install \
+      --extra-index-url https://download.pytorch.org/whl/cu126 \
+      -r /tmp/sound.lock.txt
 
-# -----------------------------------------------------------------------------
-# Install Python Dependencies
-# -----------------------------------------------------------------------------
-RUN pip install \
-    # Core ML/AI dependencies
-    numpy==1.26.3 \
-    scipy==1.14.1 \
-    opencv-python==4.10.0.84 \
-    onnxruntime-gpu==1.19.0 \
-    onnx \
-    pillow \
-    scikit-learn \
-    \
-    # Sentence transformers for embeddings
-    sentence-transformers \
-    \
-    # ChromaDB for vector database
-    chromadb \
-    \
-    # OpenAI client (for LLM integration)
-    openai \
-    \
-    # YAML parsing
-    pyyaml \
-    \
-    # Additional utilities
-    lap==0.5.12 \
-    sounddevice \
-    soundfile \
-    kokoro \
-    \
-    # ROS2 Python dependencies
-    rclpy \
-    std_msgs \
-    geometry_msgs \
-    sensor_msgs \
-    nav_msgs \
-    action_msgs \
-    \
-    # Cleanup
-    && pip cache purge
+FROM base AS venv-conversation
+ARG WS
+COPY docker/requirements/conversation.lock.txt /tmp/
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    python3 -m venv ${WS}/.venvs/conversation && \
+    ${WS}/.venvs/conversation/bin/pip install --upgrade pip setuptools wheel && \
+    ${WS}/.venvs/conversation/bin/pip install -r /tmp/conversation.lock.txt
+
+FROM base AS venv-tts
+ARG WS
+COPY docker/requirements/tts.lock.txt /tmp/
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    python3 -m venv ${WS}/.venvs/tts_virtual_env && \
+    ${WS}/.venvs/tts_virtual_env/bin/pip install --upgrade pip setuptools wheel && \
+    ${WS}/.venvs/tts_virtual_env/bin/pip install -r /tmp/tts.lock.txt
 
 # -----------------------------------------------------------------------------
-# Create workspace and clone repositories
+# workspace - clone third-party sources and colcon build.
+# Runs in parallel with the venv stages; pepper4dec itself is COPYed from the
+# build context (not cloned) so the image matches the checked-out branch.
 # -----------------------------------------------------------------------------
-RUN mkdir -p /home/pepper/ros2_ws/src
-WORKDIR /home/pepper/ros2_ws
+FROM base AS workspace
+ARG WS
+WORKDIR ${WS}
 
-# Clone NAOqi driver repositories
-# User's fork for naoqi_bridge_msgs
-RUN git clone https://github.com/yohatad/naoqi_driver_bridge_msgs2.git src/naoqi_bridge_msgs
+RUN git clone --depth 1 https://github.com/yohatad/naoqi_driver2.git src/naoqi_driver2 && \
+    git clone --depth 1 -b ros2 https://github.com/ros-naoqi/libqi.git src/naoqi_libqi && \
+    git clone --depth 1 -b ros2 https://github.com/ros-naoqi/libqicore.git src/naoqi_libqicore && \
+    git clone --depth 1 https://github.com/ros-naoqi/nao_meshes2.git src/nao_meshes && \
+    git clone --depth 1 https://github.com/ros-naoqi/pepper_meshes2.git src/pepper_meshes && \
+    git clone --depth 1 https://github.com/BehaviorTree/BehaviorTree.CPP.git src/BehaviorTree.CPP && \
+    git clone --depth 1 https://github.com/BehaviorTree/BehaviorTree.ROS2.git src/BehaviorTree.ROS2
 
-# Clone naoqi_driver2 (user's fork)
-RUN git clone https://github.com/yohatad/naoqi_driver2.git src/naoqi_driver2
+# naoqi_bridge_msgs2 is a PRIVATE fork carrying the custom srv definitions
+# (SetAudioVolume, StopAudio, UnloadAudioFile) that dec_system depends on;
+# ros-naoqi upstream does not have them. Cloned over a forwarded SSH agent so
+# no credential is baked into a layer. Requires: docker build --ssh default
+RUN --mount=type=ssh \
+    mkdir -p -m 0700 ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null && \
+    git clone --depth 1 git@github.com:yohatad/naoqi_bridge_msgs2.git src/naoqi_bridge_msgs && \
+    rm -rf ~/.ssh
 
-# Clone other NAOqi dependencies from ros-naoqi
-RUN git clone https://github.com/ros-naoqi/libqi.git -b ros2 src/naoqi_libqi && \
-    git clone https://github.com/ros-naoqi/libqicore.git -b ros2 src/naoqi_libqicore && \
-    git clone https://github.com/ros-naoqi/nao_meshes2.git src/nao_meshes && \
-    git clone https://github.com/ros-naoqi/pepper_meshes2.git src/pepper_meshes
+COPY . src/pepper4dec
 
-# Clone BehaviorTree.CPP and BehaviorTree.ROS2
-RUN git clone https://github.com/BehaviorTree/BehaviorTree.CPP.git src/BehaviorTree.CPP && \
-    git clone https://github.com/BehaviorTree/BehaviorTree.ROS2.git src/BehaviorTree.ROS2
+RUN apt-get update && \
+    rosdep install --from-paths src --ignore-src -r -y --skip-keys "python3-pip" && \
+    rm -rf /var/lib/apt/lists/*
 
-# Clone the main repository
-RUN git clone https://github.com/yohatad/pepper4dec.git src/pepper4dec
-
-# -----------------------------------------------------------------------------
-# Install ROS2 package dependencies
-# -----------------------------------------------------------------------------
-RUN cd /home/pepper/ros2_ws && \
-    rosdep install --from-paths src --ignore-src -r -y
-
-# -----------------------------------------------------------------------------
-# Build ROS2 packages
-# -----------------------------------------------------------------------------
-RUN cd /home/pepper/ros2_ws && \
-    I_AGREE_TO_NAO_MESHES_LICENSE=1 I_AGREE_TO_PEPPER_MESHES_LICENSE=1 colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
-
-# -----------------------------------------------------------------------------
-# Install package-specific Python requirements
-# -----------------------------------------------------------------------------
-RUN pip install --no-deps -r /home/pepper/ros2_ws/src/pepper4dec/face_detection/requirements.txt && \
-    pip install --no-deps -r /home/pepper/ros2_ws/src/pepper4dec/conversation_manager/requirements.txt && \
-    pip install --no-deps -r /home/pepper/ros2_ws/src/pepper4dec/text_to_speech/requirements.txt
-
-# -----------------------------------------------------------------------------
-# Download Model Files (Optional - for face detection)
-# -----------------------------------------------------------------------------
-# Note: Model files should be placed in the respective models/ directories
-# - face_detection/models/face_detection_goldYOLO.onnx
-# - face_detection/models/face_detection_sixdrepnet360.onnx
-# - person_detection/models/yolov8n.onnx
+# Parallelism is capped deliberately. naoqi_libqi is boost template-heavy and
+# each cc1plus can peak past 1GB; uncapped colcon fans out to nproc (28 here)
+# while the venv stages are concurrently resolving multi-GB torch wheels, which
+# exhausts RAM and gets the desktop OOM-killed. --parallel-workers caps
+# concurrent *packages*; MAKEFLAGS is needed as well to cap make's fan-out
+# within each. BUILD_TESTING=OFF skips naoqi_libqi's test suite, whose
+# translation units are the largest in the tree and are not needed in the image.
+ARG COLCON_JOBS=4
+RUN . /opt/ros/humble/setup.sh && \
+    I_AGREE_TO_NAO_MESHES_LICENSE=1 I_AGREE_TO_PEPPER_MESHES_LICENSE=1 \
+    MAKEFLAGS="-j${COLCON_JOBS}" \
+    colcon build --parallel-workers ${COLCON_JOBS} \
+      --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
 
 # -----------------------------------------------------------------------------
-# Environment Setup Script
+# runtime - workspace + all three venvs
 # -----------------------------------------------------------------------------
-RUN echo '#!/bin/bash' > /opt/pepper4dec_setup.sh && \
-    echo 'source /opt/ros/humble/setup.bash' >> /opt/pepper4dec_setup.sh && \
-    echo 'source /home/pepper/ros2_ws/install/setup.bash' >> /opt/pepper4dec_setup.sh && \
-    echo 'source /opt/pepper4dec-venv/bin/activate' >> /opt/pepper4dec_setup.sh && \
-    echo 'export LANG=C.UTF-8' >> /opt/pepper4dec_setup.sh && \
-    echo 'export LC_ALL=C.UTF-8' >> /opt/pepper4dec_setup.sh && \
-    echo 'export ROS_DOMAIN_ID=42' >> /opt/pepper4dec_setup.sh && \
-    chmod +x /opt/pepper4dec_setup.sh
+FROM workspace AS runtime
+ARG WS
 
-# -----------------------------------------------------------------------------
-# Create non-root user (optional)
-# -----------------------------------------------------------------------------
-RUN useradd -m -s /bin/bash pepper && \
-    chown -R pepper:pepper /home/pepper
+COPY --from=venv-sound        ${WS}/.venvs/sound           ${WS}/.venvs/sound
+COPY --from=venv-conversation ${WS}/.venvs/conversation    ${WS}/.venvs/conversation
+COPY --from=venv-tts          ${WS}/.venvs/tts_virtual_env ${WS}/.venvs/tts_virtual_env
+COPY docker/venv_map.sh ${WS}/.venvs/venv_map.sh
 
-# -----------------------------------------------------------------------------
-# Final Configuration
-# -----------------------------------------------------------------------------
-WORKDIR /home/pepper/ros2_ws
+# Put ROS2 + the built workspace on each venv's path. The host venvs achieve
+# this with editable installs into the colcon build tree; a .pth is the
+# container-appropriate equivalent and does not depend on inherited PYTHONPATH.
+RUN set -eux; \
+    for v in sound conversation tts_virtual_env; do \
+      sp="${WS}/.venvs/${v}/lib/python3.10/site-packages"; \
+      { echo /opt/ros/humble/lib/python3.10/site-packages; \
+        echo /opt/ros/humble/local/lib/python3.10/dist-packages; \
+        for d in ${WS}/install/*/local/lib/python3.10/dist-packages; do \
+          [ -d "$d" ] && echo "$d"; \
+        done; \
+      } > "${sp}/ros2_paths.pth"; \
+    done
 
-# Set default environment
+RUN printf '%s\n' \
+      '#!/bin/bash' \
+      'source /opt/ros/humble/setup.bash' \
+      "source ${WS}/install/setup.bash" \
+      'export LANG=C.UTF-8 LC_ALL=C.UTF-8' \
+      'export ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-42}' \
+      '# NOTE: no venv is activated here on purpose -- each node selects its own' \
+      '# interpreter through .venvs/venv_map.sh in its launcher script.' \
+      > /opt/pepper4dec_setup.sh && chmod +x /opt/pepper4dec_setup.sh
+
+RUN chown -R pepper:pepper /home/pepper
+
+USER pepper
+ENV HOME=/home/pepper
+WORKDIR ${WS}
 ENV BASH_ENV=/opt/pepper4dec_setup.sh
-ENV ROS_ROOT=/home/pepper/ros2_ws
-ENV ROS_PACKAGE_PATH=/home/pepper/ros2_ws/src/pepper4dec:/opt/ros/humble/share
-
-# Default command
 CMD ["/bin/bash"]

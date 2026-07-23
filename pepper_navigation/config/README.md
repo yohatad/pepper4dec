@@ -28,8 +28,11 @@ navigation-specific.
 - `odom_frame: pepper_odom` / `world_frame: pepper_odom` — EKF output frame (deliberately not `odom` - that name is reserved for a future SLAM/LIO source, see below)
 - `base_link_frame: base_footprint` — must match the driver's actual child_frame_id (`base_footprint`); a previous `base_footprint_nav` typo here meant the EKF would have published a transform to a frame disconnected from the rest of the TF tree
 
-**`mapper_params_online_async.yaml`**
-- `odom_frame: pepper_odom` — slam_toolbox looks for `pepper_odom → base_footprint` TF
+**`mapper_params_online_async.yaml`** — moved to the `pepper_slam` package
+(`pepper_slam/config/`) along with the rest of the SLAM stack. It follows the
+same convention: `odom_frame: pepper_odom`, i.e. slam_toolbox looks for the
+`pepper_odom → base_footprint` TF. The naming rules on this page apply to both
+packages.
 
 ## Do not change these back to "odom"
 

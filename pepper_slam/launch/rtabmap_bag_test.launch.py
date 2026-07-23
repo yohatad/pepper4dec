@@ -9,7 +9,7 @@
 #   - a throwaway database so recorded maps (rtabmap_march_28.db, ...) are safe
 #
 # Usage:
-#   ros2 launch pepper_navigation rtabmap_bag_test.launch.py
+#   ros2 launch pepper_slam rtabmap_bag_test.launch.py
 #   ros2 bag play <bag> --clock --topics /camera/color/image_raw \
 #       /camera/aligned_depth_to_color/image_raw /camera/color/camera_info \
 #       /tf /tf_static
@@ -24,7 +24,7 @@ from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
     pkg_launch_dir = os.path.join(
-        get_package_share_directory('pepper_navigation'), 'launch')
+        get_package_share_directory('pepper_slam'), 'launch')
 
     rtabmap = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
