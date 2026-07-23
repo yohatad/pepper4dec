@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-dec_system.launch.py
 Top-level launch file for the Pepper4DEC system.
+
+dec_system.launch.py
 
 Brings up every dec_system package (each with its own launch file, some of
 which nest further launch files for their dependencies, e.g.
@@ -32,7 +33,8 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'enable_navigation',
             default_value='true',
-            description='Whether to bring up pepper_navigation (Nav2 navigation/localization stack)'
+            description='Whether to bring up pepper_navigation '
+                        '(Nav2 navigation/localization stack)'
         ),
 
         # Perception: shared camera + person/face detection + overt attention

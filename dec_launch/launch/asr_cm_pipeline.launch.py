@@ -1,6 +1,7 @@
 """
-asr_cm_pipeline.launch.py
 Launch the ASR → ConversationManager → SpeechWithFeedback pipeline.
+
+asr_cm_pipeline.launch.py
 
 Nodes started:
   1. speech_event        – microphone capture, VAD, and ASR
@@ -49,7 +50,8 @@ def generate_launch_description():
     # ── Config file paths ─────────────────────────────────────────────────────
 
     # speech_event uses a ROS2-format params file — pass via parameters=
-    speech_event_config = os.path.join(speech_event_share, 'config', 'speech_event_configuration.yaml')
+    speech_event_config = os.path.join(
+        speech_event_share, 'config', 'speech_event_configuration.yaml')
 
     # conversation_manager and behavior_controller load their own config files
     # internally at startup — do NOT pass them via parameters= here.

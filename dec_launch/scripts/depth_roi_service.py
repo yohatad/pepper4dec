@@ -78,6 +78,7 @@ class DepthROIService(Node):
     def get_depth_at_point(self, depth_image, x, y, window_size=3):
         """
         Get depth at a point with small window average to handle noise.
+
         Uses median of surrounding pixels.
         """
         h, w = depth_image.shape
