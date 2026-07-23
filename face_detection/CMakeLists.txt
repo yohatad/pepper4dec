@@ -67,7 +67,12 @@ install(TARGETS
 install(DIRECTORY include/  DESTINATION include/)
 install(DIRECTORY config/   DESTINATION share/${PROJECT_NAME}/config)
 install(DIRECTORY data/     DESTINATION share/${PROJECT_NAME}/data)
-install(DIRECTORY models/   DESTINATION share/${PROJECT_NAME}/models)
+# models/ is git-ignored (large ONNX weights, not checked in) and so is
+# absent on a fresh clone (e.g. CI) until manually downloaded - guard the
+# install so that absence doesn't hard-fail the build.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/models")
+  install(DIRECTORY models/ DESTINATION share/${PROJECT_NAME}/models)
+endif()
 install(DIRECTORY launch/   DESTINATION share/${PROJECT_NAME}/launch)
 
 if(BUILD_TESTING)
