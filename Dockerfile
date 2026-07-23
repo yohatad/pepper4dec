@@ -207,9 +207,9 @@ RUN cd /home/pepper/ros2_ws && \
 # -----------------------------------------------------------------------------
 # Install package-specific Python requirements
 # -----------------------------------------------------------------------------
-RUN pip install --no-deps -r /home/pepper/ros2_ws/src/pepper4dec/dec_system/face_detection/requirements.txt && \
-    pip install --no-deps -r /home/pepper/ros2_ws/src/pepper4dec/dec_system/conversation_manager/requirements.txt && \
-    pip install --no-deps -r /home/pepper/ros2_ws/src/pepper4dec/dec_system/text_to_speech/requirements.txt
+RUN pip install --no-deps -r /home/pepper/ros2_ws/src/pepper4dec/face_detection/requirements.txt && \
+    pip install --no-deps -r /home/pepper/ros2_ws/src/pepper4dec/conversation_manager/requirements.txt && \
+    pip install --no-deps -r /home/pepper/ros2_ws/src/pepper4dec/text_to_speech/requirements.txt
 
 # -----------------------------------------------------------------------------
 # Download Model Files (Optional - for face detection)
@@ -245,7 +245,7 @@ WORKDIR /home/pepper/ros2_ws
 # Set default environment
 ENV BASH_ENV=/opt/pepper4dec_setup.sh
 ENV ROS_ROOT=/home/pepper/ros2_ws
-ENV ROS_PACKAGE_PATH=/home/pepper/ros2_ws/src/pepper4dec/dec_system:/opt/ros/humble/share
+ENV ROS_PACKAGE_PATH=/home/pepper/ros2_ws/src/pepper4dec:/opt/ros/humble/share
 
 # Default command
 CMD ["/bin/bash"]
