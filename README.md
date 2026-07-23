@@ -2,7 +2,7 @@
 
 # Pepper Robot Tour – Digital Experience Center (DEC)
 
-<img src="upanzi-logo.svg" alt="Upanzi Logo" width="800px">
+<img src="images/upanzi-logo.svg" alt="Upanzi Logo" width="800px">
 
 </div>
 
@@ -17,7 +17,7 @@ Beyond automation, the project serves as a real-world testbed for **culturally a
 ## 🏗️ System Architecture
 
 <div align="center">
-<img src="System_arch.png" alt="System Architecture" width="1200px">
+<img src="images/System_arch.png" alt="System Architecture" width="1200px">
 </div>
 
 The system is built on **ROS2 (Humble)** and follows a modular architecture with specialized packages handling different aspects of robot behavior and perception:
@@ -46,7 +46,7 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 ## 🖥️ Hardware Diagram
 
 <div align="center">
-<img src="Hardware Diagram.png" alt="Hardware Diagram" width="1200px">
+<img src="images/Hardware Diagram.png" alt="Hardware Diagram" width="1200px">
 </div>
 
 ## 🚀 Quick Start
