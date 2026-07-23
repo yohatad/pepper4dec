@@ -14,5 +14,5 @@ conflict with the improved-covariance pipeline if consumed directly.
 ## Related
 
 - Covariance pipeline: `pepper_odom_covariance` package (top-level,
-  `~/ros2_ws/src/pepper_odom_covariance/` - not under `dec_system`)
+  `~/ros2_ws/src/pepper_odom_covariance/` - not part of this repository)
 - Frame convention: `pepper_navigation/config/README.md`
