@@ -57,15 +57,15 @@ Managed via `config/behavior_controller_configuration.yaml`:
 source ~/ros2_ws/install/setup.bash
 ```
 
-2. **Launch the robot** (if using physical Pepper):
+2. **Bring up the full system** (recommended; this already starts the
+   behavior controller as part of the system):
 ```bash
-ros2 launch dec_system decSystemLaunchRobot.launch.py \
-  robot_ip:=<robot_ip> \
-  roscore_ip:=<roscore_ip> \
-  network_interface:=<network_interface>
+ros2 launch dec_launch dec_system.launch.py
 ```
+> Set `enable_navigation:=false` to skip the Nav2 navigation/localization stack.
 
-3. **Run the behavior controller**:
+3. **Or run the behavior controller on its own** (for development, once its
+   required action servers/topics below are already up):
 ```bash
 ros2 run behavior_controller behavior_controller
 ```
