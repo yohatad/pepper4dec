@@ -17,6 +17,7 @@ find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(rclcpp_lifecycle REQUIRED)
 find_package(dec_interfaces REQUIRED)
 find_package(naoqi_bridge_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
@@ -35,6 +36,7 @@ target_include_directories(${PROJECT_NAME}_lib PUBLIC
 )
 ament_target_dependencies(${PROJECT_NAME}_lib
   rclcpp
+  rclcpp_lifecycle
   sensor_msgs
   std_msgs
   std_srvs

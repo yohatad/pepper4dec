@@ -33,15 +33,14 @@ def generate_launch_description():
             )
         ),
 
-        # Person detection (nested dependency)
+        # Person detection (nested dependency; camera feed shared from above)
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(
                     get_package_share_directory('person_detection'),
                     'launch', 'person_detection_launch_robot.launch.py'
                 )
-            ),
-            launch_arguments={'launch_camera': 'false'}.items()
+            )
         ),
 
         # Face detection (nested dependency, requires person detection)

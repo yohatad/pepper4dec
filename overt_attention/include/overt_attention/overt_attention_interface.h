@@ -12,6 +12,8 @@
 
 // ROS includes
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp_lifecycle/lifecycle_node.hpp>
+#include <rclcpp_lifecycle/lifecycle_publisher.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <builtin_interfaces/msg/time.hpp>
 
@@ -224,9 +226,20 @@ private:
 
 // Improved attention controller for robot overt attention.
 // Priority 1: Engaged faces | Priority 2: Detected faces | Priority 3: Saliency (with cooldown + IOR)
-class UnifiedAttentionNode : public rclcpp::Node {
+class UnifiedAttentionNode : public rclcpp_lifecycle::LifecycleNode {
 public:
+    using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
+
     UnifiedAttentionNode();
+
+    // Lifecycle transitions. Parameters are declared once in the constructor;
+    // subscriptions/publishers/service are created in on_configure, the
+    // publishers are (de)activated in on_activate/on_deactivate, and everything
+    // is torn down in on_cleanup.
+    CallbackReturn on_configure(const rclcpp_lifecycle::State& state) override;
+    CallbackReturn on_activate(const rclcpp_lifecycle::State& state) override;
+    CallbackReturn on_deactivate(const rclcpp_lifecycle::State& state) override;
+    CallbackReturn on_cleanup(const rclcpp_lifecycle::State& state) override;
 
 private:
     struct FaceCandidate {
@@ -337,8 +350,8 @@ private:
     rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr sub_caminfo_;
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr sub_joint_states_;
 
-    rclcpp::Publisher<naoqi_bridge_msgs::msg::JointAnglesWithSpeed>::SharedPtr pub_head_;
-    rclcpp::Publisher<geometry_msgs::msg::Vector3>::SharedPtr pub_target_;
+    rclcpp_lifecycle::LifecyclePublisher<naoqi_bridge_msgs::msg::JointAnglesWithSpeed>::SharedPtr pub_head_;
+    rclcpp_lifecycle::LifecyclePublisher<geometry_msgs::msg::Vector3>::SharedPtr pub_target_;
 
     rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr srv_enable_;
 };

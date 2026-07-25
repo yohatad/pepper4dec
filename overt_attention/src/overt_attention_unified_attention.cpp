@@ -10,7 +10,7 @@ Priority 1: Engaged Faces | Priority 2: Detected Faces | Priority 3: Saliency (w
 
 #include "overt_attention/overt_attention_interface.h"
 
-UnifiedAttentionNode::UnifiedAttentionNode() : Node("simple_attention") {
+UnifiedAttentionNode::UnifiedAttentionNode() : LifecycleNode("simple_attention") {
     try {
         topics_config_ = loadTopicsConfig("overt_attention", "data/pepper_topics.yaml");
         RCLCPP_INFO(get_logger(), "Loaded topics configuration from overt_attention package");
@@ -63,7 +63,10 @@ UnifiedAttentionNode::UnifiedAttentionNode() : Node("simple_attention") {
     declare_parameter("ior_radius_deg", 15.0);
     declare_parameter("ior_cleanup_threshold", 0.05);
     declare_parameter("ior_max_locations", 20);
+}
 
+UnifiedAttentionNode::CallbackReturn
+UnifiedAttentionNode::on_configure(const rclcpp_lifecycle::State&) {
     // Load topics from YAML config
     std::string camera_type = get_parameter("camera_type").as_string();
     std::string face_topic = topics_config_.face;
@@ -139,6 +142,32 @@ UnifiedAttentionNode::UnifiedAttentionNode() : Node("simple_attention") {
     RCLCPP_INFO(get_logger(), "Service: /overt_attention/set_enabled (std_srvs/SetBool)");
     RCLCPP_INFO(get_logger(), "Disable mode: %s (yaw=%.1f\xc2\xb0, pitch=%.1f\xc2\xb0)",
                 default_mode.c_str(), default_yaw_ * 180.0 / M_PI, default_pitch_ * 180.0 / M_PI);
+    return CallbackReturn::SUCCESS;
+}
+
+UnifiedAttentionNode::CallbackReturn
+UnifiedAttentionNode::on_activate(const rclcpp_lifecycle::State& state) {
+    // Base activates the lifecycle publishers (pub_head_, pub_target_).
+    LifecycleNode::on_activate(state);
+    return CallbackReturn::SUCCESS;
+}
+
+UnifiedAttentionNode::CallbackReturn
+UnifiedAttentionNode::on_deactivate(const rclcpp_lifecycle::State& state) {
+    LifecycleNode::on_deactivate(state);
+    return CallbackReturn::SUCCESS;
+}
+
+UnifiedAttentionNode::CallbackReturn
+UnifiedAttentionNode::on_cleanup(const rclcpp_lifecycle::State&) {
+    sub_faces_.reset();
+    sub_saliency_.reset();
+    sub_caminfo_.reset();
+    sub_joint_states_.reset();
+    pub_head_.reset();
+    pub_target_.reset();
+    srv_enable_.reset();
+    return CallbackReturn::SUCCESS;
 }
 
 void UnifiedAttentionNode::handleSetEnabled(const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
@@ -629,7 +658,7 @@ int main(int argc, char* argv[]) {
     rclcpp::init(argc, argv);
     try {
         auto node = std::make_shared<UnifiedAttentionNode>();
-        rclcpp::spin(node);
+        rclcpp::spin(node->get_node_base_interface());
     } catch (const std::exception& e) {
         RCLCPP_ERROR(rclcpp::get_logger("simple_attention"), "Exception: %s", e.what());
     }
