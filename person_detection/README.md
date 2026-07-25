@@ -68,12 +68,25 @@ Configuration is managed via ROS2 parameters, loaded from `config/person_detecti
 # Source the workspace
 source ~/ros2_ws/install/setup.bash
 
-# Launch with default configuration (RealSense camera)
+# Launch the person_detection node
 ros2 launch person_detection person_detection_launch_robot.launch.py
-
-# Using ROS2 bag data (disable camera launch)
-ros2 launch person_detection person_detection_launch_robot.launch.py launch_camera:=false
 ```
+
+> This launch starts **only** the person_detection node. It expects the camera
+> images to already be published — from a shared camera brought up by the
+> `overt_attention` system (`attention_system.launch.py`), a standalone camera
+> driver, or a `ros2 bag`.
+>
+> The exact topics it subscribes to depend on the `camera` parameter and are
+> resolved from [`data/pepper_topics.yaml`](data/pepper_topics.yaml):
+>
+> | `camera` | RGB topic | Depth topic |
+> |----------|-----------|-------------|
+> | `pepper` (default) | `PepperFrontCamera` → `/pepper/front/image_raw` | depth disabled for Pepper |
+> | `realsense` / `video` | `RealSenseCameraRGB` → `/camera/color/image_raw_custom` | `RealSenseCameraDepth` → `/camera/aligned_depth_to_color/image_raw_custom` |
+>
+> Edit `pepper_topics.yaml` to point these at whatever your camera source
+> actually publishes.
 
 ### Manual Node Execution
 
@@ -100,10 +113,13 @@ manually with `ros2 lifecycle set /person_detection configure` then
 
 ### Subscribed Topics
 
-| Topic | Type | Description |
+Topic names are resolved from [`data/pepper_topics.yaml`](data/pepper_topics.yaml)
+according to the `camera` parameter (see the table under *Running the Node*).
+
+| Topic (key in `pepper_topics.yaml`) | Type | Description |
 |-------|------|-------------|
-| `/camera/color/image_raw` | `sensor_msgs/Image` | Color image from camera |
-| `/camera/aligned_depth_to_color/image_raw` | `sensor_msgs/Image` | Depth image |
+| RGB (`pepper`: `/pepper/front/image_raw`, `realsense`: `/camera/color/image_raw_custom`) | `sensor_msgs/Image` | Color image from camera |
+| Depth (`realsense` only: `/camera/aligned_depth_to_color/image_raw_custom`) | `sensor_msgs/Image` | Depth image (disabled for Pepper) |
 
 ### Published Topics
 

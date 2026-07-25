@@ -1,105 +1,32 @@
 #!/usr/bin/env python3
 
-"""Launch the person_detection node, optionally with the RealSense camera driver."""
+"""Launch the person_detection node only.
 
-from launch import LaunchDescription
-from launch.actions import OpaqueFunction
-from launch_ros.actions import Node
-from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
-import yaml
+The camera feed is provided separately — a shared camera brought up by the
+overt_attention system (``attention_system.launch.py``) or a ROS 2 bag — so
+this launch starts nothing but the person_detection node itself. It subscribes
+to ``/camera/color/image_raw`` and ``/camera/aligned_depth_to_color/image_raw``.
+"""
+
 import os
 
-
-def launch_setup(context, *args, **kwargs):
-    # Get launch argument value
-    launch_camera = LaunchConfiguration('launch_camera').perform(context)
-    launch_camera_bool = launch_camera.lower() in ['true', '1', 'yes', 'on']
-
-    # Load the camera type from the YAML file
-    config_file = os.path.join(
-        os.getenv("COLCON_PREFIX_PATH").split(":")[0],  # first install dir
-        "person_detection", "share", "person_detection", "config",
-        "person_detection_configuration.yaml"
-    )
-    with open(config_file, "r") as f:
-        params = yaml.safe_load(f)
-
-    node_params = params.get("person_detection", {}).get("ros__parameters", {})
-    camera_value = node_params.get("camera", "realsense")  # default fallback
-
-    actions = []
-
-    # Only launch camera if launch_camera argument is true
-    if launch_camera_bool:
-        if camera_value == "pepper":
-            actions.append(
-                Node(
-                    package="naoqi_driver",
-                    executable="naoqi_driver_node",
-                    namespace="naoqi_driver",
-                    arguments=[
-                        "--qi-url=tcp://172.29.111.230:9559",
-                        "--roscore_ip=127.0.0.1",
-                        "--network_interface=wlp0s20f3",
-                        "--namespace=naoqi_driver",
-                    ],
-                    output="screen",
-                )
-            )
-        elif camera_value == "realsense":
-            actions.append(
-                Node(
-                    package="realsense2_camera",
-                    executable="realsense2_camera_node",
-                    namespace="",
-                    parameters=[{
-                        "camera_name": "",
-                        "rgb_camera.color_profile": "640x480x15",
-                        "depth_module.depth_profile": "640x480x15",
-                        "align_depth.enable": True,
-                        "enable_sync": True,
-                        "enable_infra1": False,
-                        "enable_infra2": False,
-                        "enable_accel": True,
-                        "enable_gyro": True,
-
-                        # Set QoS to BEST_EFFORT
-                        'qos_overrides./camera.aligned_depth_to_color.image_raw'
-                        '.publisher.reliability': 'best_effort',
-                        'qos_overrides./camera.color.image_raw.publisher.reliability':
-                        'best_effort',
-                        'qos_overrides./camera.depth.image_rect_raw.publisher.reliability':
-                        'best_effort',
-                    }],
-                    output="screen",
-                )
-            )
-    else:
-        # Log that camera launch is skipped
-        print("Camera launch is disabled (launch_camera=false). "
-              "Assuming topics are available from ROS2 bag or other source.")
-
-    # Add person detection node
-    actions.append(
-        Node(
-            package="person_detection",
-            executable="person_detection",
-            name="person_detection",
-            output="screen",
-            parameters=[config_file],
-        )
-    )
-
-    return actions
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch_ros.actions import Node
 
 
 def generate_launch_description():
+    config_file = os.path.join(
+        get_package_share_directory('person_detection'),
+        'config', 'person_detection_configuration.yaml'
+    )
+
     return LaunchDescription([
-        DeclareLaunchArgument(
-            'launch_camera',
-            default_value='false',
-            description='Whether to launch the camera driver (set to false when using ROS2 bags)'
-        ),
-        OpaqueFunction(function=launch_setup)
+        Node(
+            package='person_detection',
+            executable='person_detection',
+            name='person_detection',
+            output='screen',
+            parameters=[config_file],
+        )
     ])
