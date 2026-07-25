@@ -149,11 +149,14 @@ local_costmap:
     ros__parameters:
       update_frequency: 15.0
       publish_frequency: 2.0
-      # odom_level: FAST-LIO's gravity-leveled continuous frame (see
-      # lio_map_odom_bridge.py) -- NOT pepper_odom (wheel odom's own TF is
-      # deliberately not part of this session's active TF chain; replaying
-      # it alongside the bridge causes competing base_footprint parents).
-      global_frame: odom_level
+      # odom: FAST-LIO's continuous odometry frame. transform_fusion
+      # (fast_lio_localization) owns map -> odom, and the lio bridge owns
+      # odom -> base_footprint, so odom is the correct rolling-window frame.
+      # (The gravity-leveled odom_level is NOT used here: bridge_level_frame is
+      # off so odom keeps a single parent under map. FAST-LIO's IMU keeps odom
+      # near gravity-aligned; the residual ~1.5deg tilt is absorbed by the
+      # height-band margin over the 3 m local window.)
+      global_frame: odom
       robot_base_frame: base_footprint
       use_sim_time: False
       rolling_window: true
@@ -316,7 +319,7 @@ collision_monitor:
   ros__parameters:
     use_sim_time: False
     base_frame_id: "base_footprint"
-    odom_frame_id: "odom_level"
+    odom_frame_id: "odom"
     cmd_vel_in_topic: "cmd_vel_raw"
     cmd_vel_out_topic: "cmd_vel"
     state_topic: "collision_monitor_state"

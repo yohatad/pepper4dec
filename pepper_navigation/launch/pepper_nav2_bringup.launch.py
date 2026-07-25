@@ -122,6 +122,9 @@ def generate_launch_description():
         name='controller_server',
         output='screen',
         parameters=[configured_params],
+        # Route velocity through the collision monitor: controller -> cmd_vel_raw
+        # -> collision_monitor -> cmd_vel (what Pepper drives on).
+        remappings=[('cmd_vel', 'cmd_vel_raw')],
     )
     planner_server = Node(
         package='nav2_planner',
@@ -134,6 +137,32 @@ def generate_launch_description():
         package='nav2_behaviors',
         executable='behavior_server',
         name='behavior_server',
+        output='screen',
+        parameters=[configured_params],
+        # Recovery motions (spin/backup) also go through the collision monitor.
+        remappings=[('cmd_vel', 'cmd_vel_raw')],
+    )
+
+    # Self-hit filter feeding the safety layer: strip Pepper's own body (< 0.8 m)
+    # from the raw L2 /points so the collision monitor doesn't freeze on it.
+    points_safety_filter = Node(
+        package='fast_lio',
+        executable='cloud_range_filter.py',
+        name='points_safety_filter',
+        output='screen',
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'input_topic': '/points',
+            'output_topic': '/points_safety',
+            'min_range': 0.8,
+            'ror_min_neighbors': 0,   # ROR off (see cloud_range_filter notes)
+        }],
+    )
+
+    collision_monitor = Node(
+        package='nav2_collision_monitor',
+        executable='collision_monitor',
+        name='collision_monitor',
         output='screen',
         parameters=[configured_params],
     )
@@ -158,7 +187,24 @@ def generate_launch_description():
                 'planner_server',
                 'behavior_server',
                 'bt_navigator',
+                'collision_monitor',
             ],
+        }],
+    )
+    # Separate lifecycle manager for collision_monitor -- Nav2's own
+    # convention (see nav2_collision_monitor's example bringup), kept out of
+    # the navigation group above so a costmap/planner failure and a collision
+    # monitor failure don't take each other's bond down.
+    lifecycle_manager_collision_monitor = Node(
+        package='nav2_lifecycle_manager',
+        executable='lifecycle_manager',
+        name='lifecycle_manager_collision_monitor',
+        output='screen',
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'autostart': True,
+            'bond_timeout': 4.0,
+            'node_names': ['collision_monitor'],
         }],
     )
 
@@ -171,5 +217,8 @@ def generate_launch_description():
         planner_server,
         behavior_server,
         bt_navigator,
+        points_safety_filter,
+        collision_monitor,
         lifecycle_manager,
+        lifecycle_manager_collision_monitor,
     ])

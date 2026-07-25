@@ -1,0 +1,189 @@
+# Nav2 bringup for Pepper on FAST-LIO + fast_lio_localization (prior-map ICP).
+#
+# This is the RTAB-Map-free localization path: instead of RTAB-Map providing
+# both map->odom and /map, we use
+#   * fast_lio_localization (C++/PCL): registers FAST-LIO's /cloud_registered
+#     against a saved .pcd (map_pcd) and owns map -> odom (via transform_fusion);
+#   * nav2_map_server: serves the matching 2D occupancy grid (map) as /map for
+#     the global costmap's static layer.
+# No Open3D, no RTAB-Map, no PGO at runtime -- the lightest localization stack
+# (see the Jetson CPU-budget discussion).
+#
+# Frames:  map --(transform_fusion)--> odom --(lio_map_odom_bridge)-->
+#          base_footprint --(pepper_sensor_tf, static)--> l2lidar_imu / cams
+# The local costmap rolls in 'odom'; the global costmap and map_server in 'map'.
+#
+# Usage (real robot):
+#   ros2 launch pepper_navigation pepper_nav2_fastlio_loc.launch.py \
+#       map_pcd:=/home/yoha/Lidar/run_l2_lc/pgo_output/map_batch.pcd \
+#       map:=/home/yoha/maps/pepper_clean.yaml
+#   Then set the initial pose in RViz (2D Pose Estimate) so ICP locks on.
+#
+# Usage (bag replay sanity-check):
+#   ros2 launch pepper_navigation pepper_nav2_fastlio_loc.launch.py use_sim_time:=true ...
+#   ros2 bag play <bag> --clock
+
+import os
+
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.substitutions import LaunchConfiguration
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch_ros.actions import Node
+from ament_index_python.packages import get_package_share_directory
+from nav2_common.launch import RewrittenYaml
+
+
+def generate_launch_description():
+    pkg_share = get_package_share_directory('pepper_navigation')
+    loc_launch_dir = os.path.join(
+        get_package_share_directory('fast_lio_localization'), 'launch')
+
+    use_sim_time = LaunchConfiguration('use_sim_time')
+    map_pcd = LaunchConfiguration('map_pcd')
+    map_yaml = LaunchConfiguration('map')
+    localization_th = LaunchConfiguration('localization_th')
+
+    declare_use_sim_time_cmd = DeclareLaunchArgument(
+        'use_sim_time', default_value='false',
+        description='Use bag/simulation clock instead of wall time.')
+    declare_map_pcd_cmd = DeclareLaunchArgument(
+        'map_pcd',
+        default_value='/home/yoha/Lidar/run_l2_lc/pgo_output/map_batch.pcd',
+        description='Prior 3D .pcd map that fast_lio_localization registers against.')
+    declare_map_cmd = DeclareLaunchArgument(
+        'map',
+        default_value='/home/yoha/maps/pepper_clean.yaml',
+        description='2D occupancy grid (the projection of the same environment as '
+                    'map_pcd) served as /map for the global costmap static layer.')
+    declare_localization_th_cmd = DeclareLaunchArgument(
+        'localization_th', default_value='0.90',
+        description='Min ICP inlier-ratio fitness to accept (lower for partial '
+                    'L2 overlap; 0.6-0.9 typical).')
+
+    # FAST-LIO (odometry, no PGO) + sensor TF + global_localization +
+    # transform_fusion. This owns odom -> base_footprint and map -> odom.
+    fast_lio_localization = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(loc_launch_dir, 'fastlio_localization_l2.launch.py')),
+        launch_arguments={
+            'use_sim_time': use_sim_time,
+            'map_pcd': map_pcd,
+            'localization_th': localization_th,
+            'rviz': 'false',
+        }.items(),
+    )
+
+    nav2_params_file = os.path.join(
+        pkg_share, 'config', 'nav2_params_fastlio_loc.yaml')
+    configured_params = RewrittenYaml(
+        source_file=nav2_params_file,
+        root_key='',
+        param_rewrites={'use_sim_time': use_sim_time},
+        convert_types=True)
+
+    # Serves the 2D grid as /map for the global costmap static layer.
+    map_server = Node(
+        package='nav2_map_server',
+        executable='map_server',
+        name='map_server',
+        output='screen',
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'yaml_filename': map_yaml,
+            'frame_id': 'map',
+        }],
+    )
+
+    controller_server = Node(
+        package='nav2_controller',
+        executable='controller_server',
+        name='controller_server',
+        output='screen',
+        parameters=[configured_params],
+        # Route velocity through the collision monitor: controller -> cmd_vel_raw
+        # -> collision_monitor -> cmd_vel (what Pepper drives on).
+        remappings=[('cmd_vel', 'cmd_vel_raw')],
+    )
+    planner_server = Node(
+        package='nav2_planner',
+        executable='planner_server',
+        name='planner_server',
+        output='screen',
+        parameters=[configured_params],
+    )
+    behavior_server = Node(
+        package='nav2_behaviors',
+        executable='behavior_server',
+        name='behavior_server',
+        output='screen',
+        parameters=[configured_params],
+        remappings=[('cmd_vel', 'cmd_vel_raw')],
+    )
+
+    # Self-hit filter feeding the safety layer: strip Pepper's own body (< 0.8 m)
+    # from the raw L2 /points so the collision monitor doesn't freeze on it.
+    points_safety_filter = Node(
+        package='fast_lio',
+        executable='cloud_range_filter.py',
+        name='points_safety_filter',
+        output='screen',
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'input_topic': '/points',
+            'output_topic': '/points_safety',
+            'min_range': 0.8,
+            'ror_min_neighbors': 0,   # ROR off (see cloud_range_filter notes)
+        }],
+    )
+
+    collision_monitor = Node(
+        package='nav2_collision_monitor',
+        executable='collision_monitor',
+        name='collision_monitor',
+        output='screen',
+        parameters=[configured_params],
+    )
+    bt_navigator = Node(
+        package='nav2_bt_navigator',
+        executable='bt_navigator',
+        name='bt_navigator',
+        output='screen',
+        parameters=[configured_params],
+    )
+    lifecycle_manager = Node(
+        package='nav2_lifecycle_manager',
+        executable='lifecycle_manager',
+        name='lifecycle_manager_navigation',
+        output='screen',
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'autostart': True,
+            'bond_timeout': 4.0,
+            # map_server first so /map is up before the global costmap activates.
+            'node_names': [
+                'map_server',
+                'controller_server',
+                'planner_server',
+                'behavior_server',
+                'bt_navigator',
+                'collision_monitor',
+            ],
+        }],
+    )
+
+    return LaunchDescription([
+        declare_use_sim_time_cmd,
+        declare_map_pcd_cmd,
+        declare_map_cmd,
+        declare_localization_th_cmd,
+        fast_lio_localization,
+        map_server,
+        controller_server,
+        planner_server,
+        behavior_server,
+        bt_navigator,
+        points_safety_filter,
+        collision_monitor,
+        lifecycle_manager,
+    ])

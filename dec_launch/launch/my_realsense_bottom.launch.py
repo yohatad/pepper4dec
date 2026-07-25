@@ -45,7 +45,16 @@ def generate_launch_description():
                 'depth_module.depth_profile': '640x480x30',
                 'depth_module.infra_profile': '640x480x30',
 
-                'pointcloud.enable': 'false',        # <-- disable during recording
+                'pointcloud.enable': 'true',        # <-- disable during recording
+
+                # Decimation post-processing: downsamples the depth image (and
+                # therefore /camera/depth/color/points) before it is published.
+                # magnitude N -> ~1/N^2 the points; 2 gives 1/4, which is plenty
+                # for the Nav2 VoxelLayer + collision monitor and keeps their CPU
+                # sane. Both args are declared in rs_launch.py. Raise magnitude to
+                # 3-4 if you want the cloud even lighter (coarser obstacles).
+                'decimation_filter.enable': 'true',
+                'decimation_filter.filter_magnitude': '2',
 
                 # NOTE: hold_back_imu_for_frames and all *_qos/*_info_qos
                 # launch arguments were removed here -- neither is a

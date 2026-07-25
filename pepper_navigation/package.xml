@@ -18,6 +18,7 @@
   <depend>nav2_bt_navigator</depend>
   <depend>nav2_lifecycle_manager</depend>
   <depend>nav2_costmap_2d</depend>
+  <depend>nav2_collision_monitor</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_action</depend>
   <depend>nav_msgs</depend>
