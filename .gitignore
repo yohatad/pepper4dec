@@ -10,3 +10,17 @@ __pycache__/
 **/dec_virtual_envs/**
 **/BehaviorTree.CPP/**
 **/chroma.sqlite3
+
+# Stray build artifacts: stale build/<pkg> dirs left over from packages that
+# used to be ament_python (setup.py + <pkg>/<pkg>/ module layout) can make
+# CMake's linker write a compiled executable straight into the source tree
+# at <pkg>/<pkg> once the package is re-pointed at CMakeLists.txt/ament_cmake
+# (see face_detection/face_detection, added by mistake in 6c978d7). Ignore
+# that exact self-named path per already-ported package so a `git add -A`
+# can't recommit one.
+/face_detection/face_detection
+/person_detection/person_detection
+/animate_behavior/animate_behavior
+/gesture_execution/gesture_execution
+/overt_attention/overt_attention
+/pepper_odom_anchor/pepper_odom_anchor
