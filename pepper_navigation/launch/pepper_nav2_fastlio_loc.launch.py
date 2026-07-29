@@ -22,11 +22,17 @@
 # Usage (bag replay sanity-check):
 #   ros2 launch pepper_navigation pepper_nav2_fastlio_loc.launch.py use_sim_time:=true ...
 #   ros2 bag play <bag> --clock
+#
+# RViz2 (rviz/nav2_fastlio_loc.rviz) opens by default -- map, both costmaps,
+# global/local plans, the L2 pointcloud, and the collision monitor's stop/slow
+# zones, plus the 2D Pose Estimate and Nav2 Goal tools. Pass rviz:=false to
+# skip it (e.g. running headless on the robot with RViz on a remote machine).
 
 import os
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
@@ -43,6 +49,7 @@ def generate_launch_description():
     map_pcd = LaunchConfiguration('map_pcd')
     map_yaml = LaunchConfiguration('map')
     localization_th = LaunchConfiguration('localization_th')
+    rviz = LaunchConfiguration('rviz')
 
     declare_use_sim_time_cmd = DeclareLaunchArgument(
         'use_sim_time', default_value='false',
@@ -60,6 +67,10 @@ def generate_launch_description():
         'localization_th', default_value='0.90',
         description='Min ICP inlier-ratio fitness to accept (lower for partial '
                     'L2 overlap; 0.6-0.9 typical).')
+    declare_rviz_cmd = DeclareLaunchArgument(
+        'rviz', default_value='true',
+        description='Open RViz2 pre-configured for this nav stack (map, costmaps, '
+                    'plans, safety zones, 2D Pose Estimate / Nav2 Goal tools).')
 
     # FAST-LIO (odometry, no PGO) + sensor TF + global_localization +
     # transform_fusion. This owns odom -> base_footprint and map -> odom.
@@ -144,6 +155,18 @@ def generate_launch_description():
         output='screen',
         parameters=[configured_params],
     )
+
+    rviz_config = os.path.join(pkg_share, 'rviz', 'nav2_fastlio_loc.rviz')
+    rviz_node = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz2',
+        output='screen',
+        arguments=['-d', rviz_config],
+        parameters=[{'use_sim_time': use_sim_time}],
+        condition=IfCondition(rviz),
+    )
+
     bt_navigator = Node(
         package='nav2_bt_navigator',
         executable='bt_navigator',
@@ -177,6 +200,7 @@ def generate_launch_description():
         declare_map_pcd_cmd,
         declare_map_cmd,
         declare_localization_th_cmd,
+        declare_rviz_cmd,
         fast_lio_localization,
         map_server,
         controller_server,
@@ -185,5 +209,6 @@ def generate_launch_description():
         bt_navigator,
         points_safety_filter,
         collision_monitor,
+        rviz_node,
         lifecycle_manager,
     ])
