@@ -56,10 +56,40 @@ target_link_libraries(${PROJECT_NAME}_lib yaml-cpp ${OpenCV_LIBS})
 add_executable(face_detection src/face_detection_application.cpp)
 target_link_libraries(face_detection ${PROJECT_NAME}_lib)
 
+# age_gender_detection: separate library/executable in the same package
+# (mirrors the two standalone scripts of the Python package — face_detection
+# and age_detection — sharing models/ and config/ but otherwise independent).
+add_library(${PROJECT_NAME}_age_gender_lib
+  src/age_gender_detection_implementation.cpp
+)
+target_include_directories(${PROJECT_NAME}_age_gender_lib PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+  ${OpenCV_INCLUDE_DIRS}
+)
+ament_target_dependencies(${PROJECT_NAME}_age_gender_lib
+  rclcpp
+  rclcpp_lifecycle
+  std_msgs
+  geometry_msgs
+  sensor_msgs
+  dec_interfaces
+  dec_common
+  cv_bridge
+  ament_index_cpp
+  onnxruntime_vendor
+)
+target_link_libraries(${PROJECT_NAME}_age_gender_lib ${OpenCV_LIBS})
+
+add_executable(age_gender_detection src/age_gender_detection_application.cpp)
+target_link_libraries(age_gender_detection ${PROJECT_NAME}_age_gender_lib)
+
 # Install
 install(TARGETS
   face_detection
+  age_gender_detection
   ${PROJECT_NAME}_lib
+  ${PROJECT_NAME}_age_gender_lib
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}

@@ -1,0 +1,25 @@
+# Age/Gender Detection Configuration File
+# ROS2 parameters for the age_gender_detection node (loaded via the launch
+# file's `parameters=[...]`). Run `ros2 param get/set /age_gender_detection
+# <name>` to inspect or override these at runtime.
+
+age_gender_detection:
+  ros__parameters:
+
+    # MiVOLO model settings
+    # mivolo_model_path defaults to <face_detection share dir>/models/face_detection_mivolo_agegender.onnx
+    device: "cuda"                     # "cuda" or "cpu"
+    face_only: false                   # packaged model requires face+body (6 channels)
+
+    # Topics
+    face_topic: "/face_detection/data"
+    person_topic: "/person_detection/data"
+    image_topic: "/camera/color/image_raw"
+    output_topic: "/face_detection/age_gender_results"
+
+    # Timing / gating
+    max_cache_age_sec: 2.0             # max allowed gap between image and bbox timestamps
+    min_estimate_interval_sec: 0.5     # rate limit between estimates for the same person
+    re_estimate_interval_sec: 30.0     # re-estimate a person after this many seconds
+    person_class_name: "person"
+    max_depth_m: 4.0                   # only trigger estimation within this depth
