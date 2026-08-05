@@ -8,14 +8,14 @@
 # Nav2's costmaps take /points (PointCloud2) directly.
 #
 # Frames: FAST-LIO's odom -> lio_map_odom_bridge's gravity-leveled
-# odom_level -> RTAB-Map's map. See nav2_params_rtabmap_loc.yaml for why
-# local_costmap uses odom_level (not pepper_odom) as its global_frame.
+# odom -> RTAB-Map's map. See nav2_params_rtabmap_loc.yaml for why
+# local_costmap uses odom (not pepper_odom) as its global_frame.
 #
 # Usage (real robot):
-#   ros2 launch pepper_navigation pepper_nav2_bringup.launch.py
+#   ros2 launch pepper_navigation pepper_nav2_rtabmap_loc.launch.py
 #
 # Usage (bag replay, to sanity-check localization/costmaps without driving):
-#   ros2 launch pepper_navigation pepper_nav2_bringup.launch.py use_sim_time:=true
+#   ros2 launch pepper_navigation pepper_nav2_rtabmap_loc.launch.py use_sim_time:=true
 #   ros2 bag play <bag> --clock --topics /points /imu/data /tf_static \
 #       /camera/color/image_raw /camera/color/camera_info
 #   (Nav2 will localize and build costmaps, but a bag can't react to cmd_vel
@@ -62,11 +62,11 @@ def generate_launch_description():
 
     rtabmap_localization = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(slam_launch_dir, 'rtabmap_realsense.launch.py')),
+            os.path.join(slam_launch_dir, 'rtabmap_base.launch.py')),
         launch_arguments={
             'use_sim_time': use_sim_time,
             'frame_id': 'base_footprint',
-            'odom_frame_id': 'odom_level',
+            'odom_frame_id': 'odom',
 
             'visual_odometry': 'false',
             'icp_odometry': 'false',

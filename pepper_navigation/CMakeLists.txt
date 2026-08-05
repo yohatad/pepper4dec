@@ -58,9 +58,9 @@ install(TARGETS send_goal
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
-# Note: tools/generate_keepout.py is a standalone map-editing utility, not a
-# ROS2 node - run manually with `python3 tools/generate_keepout.py`, not
-# installed here.
+# Note: generate_keepout.py moved to ros2_ws/utils/ -- it is an offline
+# map-editing utility (no rclpy), so it does not belong in a ROS package.
+# Run it manually: python3 utils/generate_keepout.py
 
 # Install launch files
 install(DIRECTORY

@@ -1,8 +1,8 @@
-# Nav2 bringup for Pepper on FAST-LIO + fast_lio_localization (prior-map ICP).
+# Nav2 bringup for Pepper on FAST-LIO + lio_localization (prior-map ICP).
 #
 # This is the RTAB-Map-free localization path: instead of RTAB-Map providing
 # both map->odom and /map, we use
-#   * fast_lio_localization (C++/PCL): registers FAST-LIO's /cloud_registered
+#   * lio_localization (C++/PCL): registers FAST-LIO's /cloud_registered
 #     against a saved .pcd (map_pcd) and owns map -> odom (via transform_fusion);
 #   * nav2_map_server: serves the matching 2D occupancy grid (map) as /map for
 #     the global costmap's static layer.
@@ -10,7 +10,7 @@
 # (see the Jetson CPU-budget discussion).
 #
 # Frames:  map --(transform_fusion)--> odom --(lio_map_odom_bridge)-->
-#          base_footprint --(pepper_sensor_tf, static)--> l2lidar_imu / cams
+#          base_footprint --(pepper_sensor_tf, static)--> l2lidar_frame_imu / cams
 # The local costmap rolls in 'odom'; the global costmap and map_server in 'map'.
 #
 # Usage (real robot):
@@ -31,7 +31,7 @@
 import os
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -43,7 +43,7 @@ from nav2_common.launch import RewrittenYaml
 def generate_launch_description():
     pkg_share = get_package_share_directory('pepper_navigation')
     loc_launch_dir = os.path.join(
-        get_package_share_directory('fast_lio_localization'), 'launch')
+        get_package_share_directory('lio_localization'), 'launch')
 
     use_sim_time = LaunchConfiguration('use_sim_time')
     map_pcd = LaunchConfiguration('map_pcd')
@@ -57,16 +57,29 @@ def generate_launch_description():
     declare_map_pcd_cmd = DeclareLaunchArgument(
         'map_pcd',
         default_value='/home/yoha/Lidar/run_l2_lc/pgo_output/map_batch.pcd',
-        description='Prior 3D .pcd map that fast_lio_localization registers against.')
+        description='Prior 3D .pcd map that lio_localization registers against. '
+                    'Matches fastlio_localization_l2.launch.py\'s own default: the '
+                    'loop-closed map PGO writes when /pgo_batch_optimize is called '
+                    'after a fastlio_lc_l2.launch.py run. That launch file checks the '
+                    'path exists and fails with instructions if not.')
     declare_map_cmd = DeclareLaunchArgument(
         'map',
-        default_value='/home/yoha/maps/pepper_clean.yaml',
+        default_value=os.path.join(pkg_share, 'map', 'pepper_map_lc_clean.yaml'),
         description='2D occupancy grid (the projection of the same environment as '
-                    'map_pcd) served as /map for the global costmap static layer.')
+                    'map_pcd) served as /map for the global costmap static layer. '
+                    'Defaults to the copy shipped in this package (map/). MUST '
+                    'exist, or the lifecycle manager aborts the whole bringup.')
     declare_localization_th_cmd = DeclareLaunchArgument(
         'localization_th', default_value='0.90',
         description='Min ICP inlier-ratio fitness to accept (lower for partial '
                     'L2 overlap; 0.6-0.9 typical).')
+    declare_rviz_config_cmd = DeclareLaunchArgument(
+        'rviz_config',
+        default_value=os.path.join(pkg_share, 'rviz', 'nav2_fastlio_loc.rviz'),
+        description='RViz config. Default is the standard view; pass '
+                    'nav2_fastlio_loc_voxel.rviz for the 3D voxel-map view '
+                    '(needs the voxel marker converters this file launches, '
+                    'and z_voxels <= 16 in the nav2 params).')
     declare_rviz_cmd = DeclareLaunchArgument(
         'rviz', default_value='true',
         description='Open RViz2 pre-configured for this nav stack (map, costmaps, '
@@ -74,16 +87,22 @@ def generate_launch_description():
 
     # FAST-LIO (odometry, no PGO) + sensor TF + global_localization +
     # transform_fusion. This owns odom -> base_footprint and map -> odom.
-    fast_lio_localization = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(loc_launch_dir, 'fastlio_localization_l2.launch.py')),
-        launch_arguments={
-            'use_sim_time': use_sim_time,
-            'map_pcd': map_pcd,
-            'localization_th': localization_th,
-            'rviz': 'false',
-        }.items(),
-    )
+    # GroupAction (scoped by default) is REQUIRED here: IncludeLaunchDescription
+    # emits its launch_arguments as SetLaunchConfiguration into the CURRENT
+    # context, so 'rviz': 'false' would otherwise overwrite this file's own
+    # 'rviz' argument and silently suppress rviz_node below.
+    lio_localization = GroupAction([
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                os.path.join(loc_launch_dir, 'fastlio_localization_l2.launch.py')),
+            launch_arguments={
+                'use_sim_time': use_sim_time,
+                'map_pcd': map_pcd,
+                'localization_th': localization_th,
+                'rviz': 'false',
+            }.items(),
+        ),
+    ])
 
     nav2_params_file = os.path.join(
         pkg_share, 'config', 'nav2_params_fastlio_loc.yaml')
@@ -156,7 +175,30 @@ def generate_launch_description():
         parameters=[configured_params],
     )
 
-    rviz_config = os.path.join(pkg_share, 'rviz', 'nav2_fastlio_loc.rviz')
+
+    # VoxelLayer publishes nav2_msgs/VoxelGrid, which RViz cannot draw --
+    # these converters turn it into a MarkerArray it can. See the equivalent
+    # block in pepper_nav2_amcl.launch.py.
+    local_voxel_markers = Node(
+        package='nav2_costmap_2d',
+        executable='nav2_costmap_2d_markers',
+        name='local_voxel_markers',
+        output='log',
+        parameters=[{'use_sim_time': use_sim_time}],
+        remappings=[('voxel_grid', '/local_costmap/voxel_grid'),
+                    ('visualization_marker', '/local_costmap/voxel_markers')],
+    )
+    global_voxel_markers = Node(
+        package='nav2_costmap_2d',
+        executable='nav2_costmap_2d_markers',
+        name='global_voxel_markers',
+        output='log',
+        parameters=[{'use_sim_time': use_sim_time}],
+        remappings=[('voxel_grid', '/global_costmap/voxel_grid'),
+                    ('visualization_marker', '/global_costmap/voxel_markers')],
+    )
+
+    rviz_config = LaunchConfiguration('rviz_config')
     rviz_node = Node(
         package='rviz2',
         executable='rviz2',
@@ -201,7 +243,8 @@ def generate_launch_description():
         declare_map_cmd,
         declare_localization_th_cmd,
         declare_rviz_cmd,
-        fast_lio_localization,
+        declare_rviz_config_cmd,
+        lio_localization,
         map_server,
         controller_server,
         planner_server,
@@ -209,6 +252,8 @@ def generate_launch_description():
         bt_navigator,
         points_safety_filter,
         collision_monitor,
+        local_voxel_markers,
+        global_voxel_markers,
         rviz_node,
         lifecycle_manager,
     ])
