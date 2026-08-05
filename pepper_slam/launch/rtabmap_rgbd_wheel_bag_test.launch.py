@@ -1,7 +1,7 @@
 # RTAB-Map on a recorded bag (slam_session_*): RGB-D SLAM on Pepper's wheel
 # odometry, everything read from the bag instead of the live robot.
 #
-# Wraps rtabmap_realsense.launch.py (unchanged) with bag-specific overrides:
+# Wraps rtabmap_base.launch.py (unchanged) with bag-specific overrides:
 #   - bag topic names (the robot launch defaults to the *_custom republished ones)
 #   - odometry from the bag's TF tree (pepper_odom -> base_footprint), so no
 #     visual/icp odometry node is started
@@ -9,7 +9,7 @@
 #   - a throwaway database so recorded maps (rtabmap_march_28.db, ...) are safe
 #
 # Usage:
-#   ros2 launch pepper_slam rtabmap_bag_test.launch.py
+#   ros2 launch pepper_slam rtabmap_rgbd_wheel_bag_test.launch.py
 #   ros2 bag play <bag> --clock --topics /camera/color/image_raw \
 #       /camera/aligned_depth_to_color/image_raw /camera/color/camera_info \
 #       /tf /tf_static
@@ -28,7 +28,7 @@ def generate_launch_description():
 
     rtabmap = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(pkg_launch_dir, 'rtabmap_realsense.launch.py')),
+            os.path.join(pkg_launch_dir, 'rtabmap_base.launch.py')),
         launch_arguments={
             'use_sim_time': 'true',
             'frame_id': 'base_footprint',

@@ -34,4 +34,7 @@
   <export>
     <build_type>ament_cmake</build_type>
   </export>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>joint_state_publisher_gui</exec_depend>
+  <exec_depend>xacro</exec_depend>
 </package>

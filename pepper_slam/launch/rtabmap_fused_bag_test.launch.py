@@ -71,7 +71,13 @@ def generate_launch_description():
     sensor_tf = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_launch_dir, 'pepper_sensor_tf.launch.py')),
-        launch_arguments={'use_sim_time': 'true'}.items(),
+        # scope=all, NOT the 'mount' default: this replays bags/slam_recording,
+        # whose /tf_static is EMPTY (recorded volatile, so the latched message
+        # was missed). Nothing in the bag supplies the RealSense's internal
+        # extrinsics, so camera_color_optical_frame would not exist and rtabmap
+        # would refuse to start. Bags recorded with config/record_qos.yaml carry
+        # their own /tf_static and do not need this.
+        launch_arguments={'use_sim_time': 'true', 'scope': 'all'}.items(),
     )
 
     # RealSense publishes no orientation; fuse accel+gyro so rtabmap gets gravity.
@@ -89,7 +95,7 @@ def generate_launch_description():
 
     rtabmap = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(pkg_launch_dir, 'rtabmap_realsense.launch.py')),
+            os.path.join(pkg_launch_dir, 'rtabmap_base.launch.py')),
         launch_arguments={
             'use_sim_time': 'true',
             'frame_id': 'base_footprint',

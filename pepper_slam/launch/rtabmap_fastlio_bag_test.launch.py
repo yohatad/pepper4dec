@@ -5,7 +5,7 @@
 #
 # Frames: FAST-LIO's own odom frame is IMU-aligned (tilted ~90 deg on Pepper's
 # mount). lio_map_odom_bridge publishes odom -> base_footprint plus a one-time
-# gravity-leveled odom_level -> odom. RTAB-Map anchors on odom_level so its map
+# gravity-leveled odom -> odom_lidar. RTAB-Map anchors on odom so its map
 # frame is Z-up, which the 2D occupancy projection requires.
 #
 # Usage:
@@ -41,11 +41,11 @@ def generate_launch_description():
 
     rtabmap = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(pkg_launch_dir, 'rtabmap_realsense.launch.py')),
+            os.path.join(pkg_launch_dir, 'rtabmap_base.launch.py')),
         launch_arguments={
             'use_sim_time': 'true',
             'frame_id': 'base_footprint',
-            'odom_frame_id': 'odom_level',   # gravity-leveled parent from the bridge
+            'odom_frame_id': 'odom',   # gravity-leveled parent from the bridge
 
             # odometry comes from FAST-LIO via TF; no rtabmap odometry nodes
             'visual_odometry': 'false',
@@ -70,7 +70,7 @@ def generate_launch_description():
             'database_path': '~/.ros/rtabmap_fastlio_bag_test.db',
             # Reg/Strategy 1: ICP refinement + proximity loop closures on scans.
             # Grid/Sensor 0: occupancy from the scan cloud (not a camera).
-            # Ground/obstacle split assumes Z-up map frame (hence odom_level).
+            # Ground/obstacle split assumes Z-up map frame (hence odom).
             # NeighborLinkRefining + dense proximity closures: without them the
             # residual odometry drift between passes printed walls twice in the
             # 2D grid (validated via rtabmap-reprocess on the first run's db:
