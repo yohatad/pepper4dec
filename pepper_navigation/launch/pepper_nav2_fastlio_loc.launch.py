@@ -175,7 +175,6 @@ def generate_launch_description():
         parameters=[configured_params],
     )
 
-
     # VoxelLayer publishes nav2_msgs/VoxelGrid, which RViz cannot draw --
     # these converters turn it into a MarkerArray it can. See the equivalent
     # block in pepper_nav2_amcl.launch.py.

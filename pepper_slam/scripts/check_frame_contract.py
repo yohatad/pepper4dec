@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Asserts the LIO frame contract holds, whichever backend is running.
+"""
+Asserts the LIO frame contract holds, whichever backend is running.
 
 THE CONTRACT
   * odom          -- backend-native, OPAQUE. FAST-LIO leaves it at the IMU
@@ -49,7 +50,9 @@ class Check(Node):
         self.declare_parameter('tol_floor', 0.10)       # m
         self.declare_parameter('duration', 25.0)
 
-        g = lambda n: self.get_parameter(n).value
+        def g(n):
+            return self.get_parameter(n).value
+
         self.level, self.base = g('level_frame'), g('base_frame')
         self.imu_frame = g('lidar_imu_frame')
         self.expect, self.tol_o = g('expect_offset'), g('tol_offset')
@@ -121,7 +124,7 @@ class Check(Node):
             if not ok:
                 fails.append("floor not at z=0 (level frame is not floor-referenced)")
         else:
-            fails.append(f"no cloud samples -- is the cloud topic publishing?")
+            fails.append("no cloud samples -- is the cloud topic publishing?")
 
         print("=====", "PASS" if not fails else "FAIL: " + "; ".join(fails), "=====\n",
               flush=True)

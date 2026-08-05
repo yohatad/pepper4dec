@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Republishes a raw LIO odometry topic (FAST-LIO's /Odometry, Point-LIO's
-/aft_mapped_to_init, or any backend routed through lio_map_odom_bridge.py),
-rotated into the gravity-level odom frame, as a full nav_msgs/Odometry
--- for feeding into an EKF (see ekf_lio_wheel.yaml) alongside wheel odometry.
+Republish a raw LIO odometry topic, rotated into the gravity-level odom frame.
+
+Takes FAST-LIO's /Odometry, Point-LIO's /aft_mapped_to_init, or any backend
+routed through lio_map_odom_bridge.py, and emits a full nav_msgs/Odometry for
+feeding into an EKF (see ekf_lio_wheel.yaml) alongside wheel odometry.
 
 Position-only leveling isn't enough for a state estimator: the ORIENTATION
 also needs to be expressed in odom, not raw odom, or roll/pitch fusion
@@ -88,8 +89,8 @@ class LeveledOdometryPublisher(Node):
         q = t.transform.rotation
         self.R = quat_to_matrix(q.x, q.y, q.z, q.w)
         self.Tr = np.array([t.transform.translation.x,
-                             t.transform.translation.y,
-                             t.transform.translation.z])
+                            t.transform.translation.y,
+                            t.transform.translation.z])
         self.get_logger().info(f"Got odom->odom transform: R diag={np.diag(self.R)}")
         return True
 

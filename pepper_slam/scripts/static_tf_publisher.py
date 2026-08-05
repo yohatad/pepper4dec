@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Publishes a whole static TF chain from ONE node.
+"""
+Publishes a whole static TF chain from ONE node.
 
 Replaces N separate tf2_ros/static_transform_publisher processes with a single
 node that emits every transform in one latched /tf_static message.

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Republishes /pepper_odom with header.frame_id overridden to odom, for
-EKF fusion alongside leveled_odometry_publisher.py's output.
+Republish /pepper_odom with header.frame_id overridden to odom.
+
+For EKF fusion alongside leveled_odometry_publisher.py's output.
 
 /pepper_odom lives on a TF tree (pepper_odom -> base_footprint) that is
 deliberately disconnected from odom -> odom_lidar -> base_footprint (see

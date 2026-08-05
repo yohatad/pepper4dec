@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-"""Launch the age_gender_detection node.
+"""
+Launch the age_gender_detection node.
 
 Assumes /camera/color/image_raw, /face_detection/data, and
 /person_detection/data are already being published (e.g. by
