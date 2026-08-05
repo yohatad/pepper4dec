@@ -29,10 +29,12 @@
 
   <!-- launched by inclusion (pepper_nav2_rtabmap_loc.launch.py), not linked.
        pepper_slam supplies rtabmap_base.launch.py, which this package
-       runs in localization mode to get map -> odom_level and /map. The
+       runs in localization mode to get map -> odom and /map. The
        dependency is one-way: pepper_slam never depends on pepper_navigation. -->
   <exec_depend>pepper_slam</exec_depend>
   <exec_depend>fast_lio</exec_depend>
+  <!-- pepper_nav2_fastlio_loc.launch.py includes its localization launch. -->
+  <exec_depend>lio_localization</exec_depend>
   <!-- pepper_nav2_amcl.launch.py only: flattens the L2's 360 deg /points into
        the LaserScan amcl requires. Not a Nav2 dependency, so it is NOT pulled
        in by nav2_bringup above; install it with
