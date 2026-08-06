@@ -31,18 +31,19 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 - **`text_to_speech`** - Converts text to speech with language adaptation
 
 ### **Perception & Attention Packages**
-- **`face_detection`** - Real-time face detection, head pose estimation, and mutual gaze detection using SixDrepNet algorithm
-- **`person_detection`** - YOLO-based person detection for scene understanding
+- **`face_detection`** - Real-time face detection, head pose estimation, and mutual gaze detection (SixDrepNet), plus age/gender estimation (MiVOLO) for persons exhibiting mutual gaze — two lifecycle nodes, `face_detection` and `age_gender_detection`, in one package
+- **`person_detection`** - YOLO-based person detection and ByteTrack multi-person tracking for scene understanding
 - **`overt_attention`** - Controls robot's attention mechanism based on visitor presence
 
 ### **Navigation & Localization**
-- **`pepper_navigation`** - RTAB-Map/SLAM Toolbox for mapping and Nav2 for navigation
+- **`pepper_slam`** - Mapping and localization backends: RTAB-Map (RGB-D), SLAM Toolbox (2D lidar), and FAST-LIO (lidar-inertial odometry via the Unitree L2) with prior-map ICP localization; produces the `map` frame and `/map` consumed by `pepper_navigation`
+- **`pepper_navigation`** - Nav2 stack (path planning, obstacle avoidance, keepout zones, collision-monitor safety layer) for autonomous navigation, with interchangeable RTAB-Map- or FAST-LIO-based localization profiles
 - **`pepper_odom_anchor`** - Anchors Pepper's relative wheel odometry to an absolute starting pose
 
 ### **Infrastructure & Utilities**
 - **`dec_launch`** - System launch files and startup configurations
 - **`dec_interfaces`** - Custom ROS2 message and service definitions
-- **`dec_common`** - Shared header-only C++ utilities for `dec_system` nodes
+- **`dec_common`** - Shared C++ utilities for `dec_system` nodes: the camera lifecycle node base class, the ByteTrack multi-object tracker, and ROS2 parameter-loading helpers
 
 ## 🖥️ Hardware Diagram
 
@@ -57,7 +58,8 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 - **Python 3.10+**
 - **Pepper Robot** (or simulation environment)
 - **Intel RealSense Camera** (for perception modules)
-- **Unitree L2 Lidar** (for localization and Navigation)
+- **Unitree L2 Lidar** (for FAST-LIO localization and navigation)
+- **NVIDIA GPU (CUDA)** - optional; accelerates the ONNX-based perception nodes (`face_detection`, `age_gender_detection`, `person_detection`), which fall back to CPU automatically if unavailable
 
 ### Installation
 
@@ -110,6 +112,11 @@ ros2 run behavior_controller behavior_controller
 ros2 launch pepper_slam slam_toolbox.launch.py
 ```
 
+4. **Launch Nav2 on FAST-LIO Localization** (lidar-only, RTAB-Map-free path)
+```bash
+ros2 launch pepper_navigation pepper_nav2_fastlio_loc.launch.py
+```
+
 ### Configuration
 Each package contains configuration files in their `config/` directories:
 - `behavior_controller/config/behavior_controller_configuration.yaml` - Mission parameters
@@ -119,10 +126,10 @@ Each package contains configuration files in their `config/` directories:
 ## 📊 Package Details
 
 ### **Face Detection System**
-- **Algorithm**: SixDrepNet for head pose estimation
-- **Features**: Multi-face detection, mutual gaze evaluation, age/gender estimation
+- **Algorithms**: SixDrepNet for head pose estimation, MiVOLO for age/gender estimation
+- **Features**: Multi-face detection, mutual gaze evaluation; age/gender estimation is triggered for tracked persons exhibiting mutual gaze within range, with temporal smoothing across repeated estimates
 - **Input**: RGB-D streams from RealSense or Pepper cameras
-- **Output**: `/face_detection/data` topic with face centroids, gaze status, demographics
+- **Output**: `/face_detection/data` (face centroids, dimensions, gaze status) from the `face_detection` node; `/face_detection/age_gender_results` (per-person age/gender JSON) from the separate `age_gender_detection` node
 - **Performance**: Real-time processing with GPU acceleration support
 
 ### **Behavior Controller**
@@ -132,9 +139,10 @@ Each package contains configuration files in their `config/` directories:
 - **Adaptation**: Culturally-aware behavior selection based on context
 
 ### **Navigation System**
-- **Localization**: Adaptive Monte Carlo Localization (AMCL), RTAB-MAP, or the `robot_localization` EKF node
-- **Mapping**: Uses pre-built maps (`map.pgm`)
-- **Path Planning**: Nav2 stack for safe navigation
+- **Mapping/Localization** (`pepper_slam`): RTAB-Map (RGB-D) or SLAM Toolbox (2D lidar) for mapping; FAST-LIO + prior-map ICP (via the Unitree L2) as a lighter-weight, RTAB-Map-free localization alternative
+- **Mapping**: Uses pre-built maps (`map.pgm`/`.yaml`) and RTAB-Map databases
+- **Path Planning** (`pepper_navigation`): Nav2 stack with voxel costmaps and a collision-monitor safety layer
+- **Odometry**: Wheel odometry anchored via `pepper_odom_anchor`, or the `robot_localization` EKF node
 - **Integration**: Full coordination with behavior controller
 
 ## 🔧 Development
