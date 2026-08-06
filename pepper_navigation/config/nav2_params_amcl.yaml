@@ -1,20 +1,131 @@
-# Nav2 params for the FAST-LIO + RTAB-Map (localization mode) stack.
-# Separate from nav2_params.yaml (the AMCL + map_server config already in
-# this package) -- that one is left untouched in case it's still in use
-# elsewhere; this is the new RTAB-Map-localization-based path.
+# Nav2 params for the AMCL + map_server stack on FAST-LIO odometry.
 #
-# No amcl / map_server / filter_mask_server / costmap_filter_info_server
-# here -- RTAB-Map itself publishes /map (transient_local) in localization
-# mode, same as it does while mapping, so the global costmap's static_layer
-# subscribes to it directly. Controller/planner/behavior tuning below is
-# carried over unchanged from nav2_params.yaml (already tuned against the
-# real robot); only frames and the costmap observation source changed
-# (PointCloud2 on /points, replacing the LaserScan/AMCL-era 2D scan
-# requirement -- no pointcloud_to_laserscan flattening step needed).
+# The baseline localization path, for comparison against the two LIO
+# stacks (nav2_params_fastlio_loc.yaml = lio_localization ICP,
+# nav2_params_rtabmap_loc.yaml = RTAB-Map). Everything below except the
+# amcl block is byte-identical to nav2_params_fastlio_loc.yaml, so a
+# difference in behaviour between the two is a difference in localization
+# only -- not in tuning.
+#
+# WHO OWNS WHICH TRANSFORM
+#   map -> odom        amcl (tf_broadcast: true)
+#   odom -> odom_lidar lio_map_odom_bridge, static one-time leveling
+#   odom -> base_footprint   lio_map_odom_bridge (from FAST-LIO's /Odometry)
+# FAST-LIO replaces the wheel odometry AMCL would normally correct, so this is
+# a LIO dead-reckoning chain -- NOT pepper_odom (what the older nav2_params.yaml
+# uses; see config/README.md on the naming split). Every frame still has exactly
+# one parent, so the tree is valid.
+#
+# AMCL CORRECTS odom, NOT odom_lidar -- this is the critical bit.
+# FAST-LIO publishes in the raw initial-IMU frame, and on Pepper's mount the L2
+# IMU reads gravity along +X, so 'odom' is tilted ~90deg (see pepper_slam's
+# README frame contract). amcl's motion model takes (x, y, yaw) out of
+# odom_frame_id -> base_frame_id and assumes that frame is level and planar. In
+# the raw frame the robot's forward travel lands almost entirely on the ignored
+# Z axis and the yaw is measured about a horizontal axis, so the filter gets a
+# nonsense motion update, fails to track, and the pose visibly JUMPS on every
+# scan update. odom is the bridge's gravity-aligned frame and is the only
+# correct choice -- the same reason RTAB-Map anchors on odom in
+# nav2_params_rtabmap_loc.yaml. mapping.launch.py must therefore run with
+# bridge_level_frame:=true so odom exists.
+#
+# AMCL EATS A LaserScan, THE L2 IS A PointCloud2. The launch file runs
+# pointcloud_to_laserscan to flatten /points -> /scan; the costmaps below
+# still consume the full 3D /points directly, so the flattened scan is used
+# for localization only. Its height band and range limits are the main
+# knobs if AMCL fails to converge -- see the launch file.
 #
 # NOT carried over: the keepout_filter zone. keepout_zone.yaml's mask was
 # authored against map/rtabmap_march_28.yaml's map frame -- re-generate it
 # against the current map before re-enabling that layer.
+
+# ---------------------------------------------------------------------------
+# AMCL -- particle filter over the flattened /scan against map_server's grid.
+# Alpha/z_*/beam params carried over unchanged from nav2_params.yaml (tuned
+# against the real robot); frames, ranges and the initial-pose policy changed.
+# ---------------------------------------------------------------------------
+amcl:
+  ros__parameters:
+    use_sim_time: False
+    # Motion model noise. nav2_params.yaml's 0.2 describes WHEEL odometry;
+    # FAST-LIO is roughly an order of magnitude better, so 0.2 sprays the
+    # particle cloud far wider than the real dead-reckoning error. That is
+    # worst in a CORRIDOR, where along-corridor position is unobservable
+    # (parallel walls give an identical scan wherever you slide) so nothing
+    # in the measurement pulls the spread back -- the filter then random-walks
+    # and the map -> odom correction visibly jumps. 0.05 keeps a real
+    # proposal distribution while matching FAST-LIO's actual accuracy.
+    # Raise again if the filter struggles to RE-converge after being lost.
+    alpha1: 0.05
+    alpha2: 0.05
+    alpha3: 0.05
+    alpha4: 0.05
+    alpha5: 0.05
+    base_frame_id: "base_footprint"
+    global_frame_id: "map"
+    # odom (the LEVELED frame), not odom_lidar and not pepper_odom. The raw FAST-LIO odom frame is
+    # tilted ~90deg and breaks the planar motion model -- see the header.
+    odom_frame_id: "odom"
+    beam_skip_distance: 0.5
+    beam_skip_error_threshold: 0.9
+    beam_skip_threshold: 0.3
+    do_beamskip: false
+    lambda_short: 0.1
+    laser_likelihood_max_dist: 2.0
+    laser_model_type: "likelihood_field"
+    # Must bracket pointcloud_to_laserscan's range_min/range_max. laser_min_range
+    # 0.8 m drops the L2 self-hits (Pepper's own body sits ~0.3-0.6 m from the
+    # low-mounted lidar) -- with -1.0 (sensor default) the filter would match
+    # the robot's own structure against the map and never converge.
+    laser_min_range: 0.8
+    laser_max_range: 20.0
+    # Beams subsampled from the 720-beam flattened scan. 60 is thin for a
+    # corridor: most beams land on the two uninformative parallel walls, and
+    # the few that actually constrain along-corridor position (doorways, the
+    # corridor end, alcoves) are the ones a sparse subsample tends to miss.
+    max_beams: 180
+    max_particles: 2000
+    min_particles: 500
+    pf_err: 0.05
+    pf_z: 0.99
+    # Random-particle recovery off, as in nav2_params.yaml: with FAST-LIO
+    # odometry the filter should not need to re-scatter, and injecting
+    # particles would hide genuine divergence during this test.
+    recovery_alpha_fast: 0.0
+    recovery_alpha_slow: 0.0
+    # Resample every Nth update. 2 was tried to counter particle depletion in
+    # the corridor's degenerate direction, and MEASURED WORSE on the July_22
+    # bag: it halves the number of corrections, so each one carries ~2x the
+    # accumulated error (mean jump 5.6 cm vs 3.4 cm, 48% of updates over 5 cm
+    # vs 15%). Fewer-but-bigger corrections are exactly what reads as
+    # "jumping". Keep 1 -- the tightened z_hit/sigma_hit/alphas above are what
+    # actually fixed the instability.
+    resample_interval: 1
+    # Pepper drives holonomically; the DWB config below still samples vy=0, but
+    # AMCL's motion model should allow lateral motion (e.g. behaviour_server
+    # recoveries, teleop nudges) rather than treat it as impossible.
+    robot_model_type: "nav2_amcl::OmniMotionModel"
+    save_pose_rate: 0.5
+    # Measurement model (likelihood_field uses z_hit/z_rand/sigma_hit only;
+    # z_max/z_short belong to the unused beam model). z_rand 0.5 put half the
+    # likelihood on uniform noise, flattening the weight distribution so
+    # particles became hard to tell apart -- again worst in a corridor, where
+    # the geometry already fails to separate them. 0.9/0.1 with a tighter
+    # sigma_hit makes a good scan match count for much more.
+    sigma_hit: 0.1
+    tf_broadcast: true
+    transform_tolerance: 1.0
+    update_min_a: 0.2
+    update_min_d: 0.25
+    z_hit: 0.9
+    z_max: 0.05
+    z_rand: 0.1
+    z_short: 0.05
+    scan_topic: scan  # no leading slash; pointcloud_to_laserscan publishes /scan
+    # Unlike nav2_params.yaml (which seeds the origin), start UNLOCALIZED and
+    # wait for RViz's 2D Pose Estimate -- same workflow as the ICP stack, and
+    # the map origin [-19.5, -28.5] is nowhere near where Pepper starts.
+    set_initial_pose: false
 
 bt_navigator:
   ros__parameters:
@@ -149,13 +260,15 @@ local_costmap:
     ros__parameters:
       update_frequency: 15.0
       publish_frequency: 2.0
-      # odom (the LEVELED frame), not raw odom_lidar. odom_lidar is backend-native: FAST-LIO leaves
-      # it at the IMU mount orientation (~90 deg off gravity here) while
-      # Point-LIO gravity-aligns it, so the SAME name means different geometry
-      # per backend and the height bands below would slice the cloud along the
-      # wrong axis. odom is gravity-aligned and floor-referenced on every
-      # backend (lio_map_odom_bridge, level_source=calibration), published as a
-      # child of odom here since transform_fusion owns map -> odom.
+      # odom: the gravity-leveled parent of FAST-LIO's odom. It is the
+      # correct rolling-window frame -- it moves smoothly while map jumps on each
+      # AMCL update -- AND it is level, which the height bands below require: in
+      # the raw tilted odom frame, min/max_obstacle_height would slice the cloud
+      # along a horizontal axis and mark walls as floor.
+      # (pepper_nav2_amcl.launch.py runs mapping.launch.py with
+      # bridge_level_frame:=true precisely so this frame exists. amcl owns
+      # map -> odom, the bridge owns the static odom -> odom_lidar, so
+      # every frame still has exactly one parent.)
       global_frame: odom
       robot_base_frame: base_footprint
       use_sim_time: False
@@ -168,7 +281,7 @@ local_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 4.0
-        inflation_radius: 0.30
+        inflation_radius: 0.40
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -177,12 +290,32 @@ local_costmap:
         # (people) clear reliably without leaving stale marks behind. The voxel
         # grid spans the obstacle band: origin_z .. origin_z + z_voxels*z_res.
         publish_voxel_map: True
-        # FLOOR-referenced now (global_frame is odom): plain heights
-        # above the ground. Old raw-odom values +0.30. z_voxels max is 16 --
-        # nav2's VoxelGrid packs a column into a 32-bit word.
-        origin_z: -0.30            # 0.30 m BELOW the floor: keeps the sensor
-                                   # origin (L2 ~0.25 m up, plus drift) inside
-                                   # the grid so VoxelLayer can raytrace-clear.
+        # HEIGHT DATUM: odom is FLOOR-referenced -- its z=0 is the ground
+        # plane, not the LiDAR start height (level_frame_on_floor in
+        # lio_map_odom_bridge.py). Every height here is therefore simply
+        # "metres above the floor". These were previously expressed against a
+        # floor sitting at z ~= -0.30, so each band is the old value + 0.30.
+        #
+        # origin_z governs TWO things: (1) the height band that used to be the
+        # only floor exclusion, now superseded by points_costmap_filter's
+        # per-scan ground-plane removal (see pepper_nav2_amcl.launch.py), and
+        # (2) the voxel grid's own Z bounds, which the sensor's ORIGIN must
+        # fall inside for VoxelLayer to raytrace-clear anything at all --
+        # "Sensor origin at (x, y, z) is out of map bounds ... cannot
+        # raytrace for it". When the origin falls outside
+        # [origin_z, origin_z+z_voxels*z_res] that scan clears nothing -- marks
+        # land but never get removed, a one-way ratchet that looks exactly like
+        # "the floor stays marked forever". The L2 sits ~0.25 m above the floor,
+        # so on the floor datum the sensor origin now rides near +0.25 with the
+        # leveling snapshot's residual tilt drifting it a few cm either way --
+        # far inside the grid, where it used to sit at -0.20..-0.23 with only
+        # ~0.07 m to spare. origin_z stays below 0 purely for that headroom.
+        origin_z: -0.30            # bottom of grid, i.e. 0.30 m BELOW the floor
+        # z_voxels MAX IS 16 -- nav2's VoxelGrid packs a column into a 32-bit
+        # word (2 bits x 16). Above it the layer logs "can only support up to
+        # 16 z values" and never builds the grid, so NOTHING is published and
+        # the RViz voxel displays stay empty. 0.125 * 16 = 2.0 m spans
+        # -0.30 .. 1.70, i.e. exactly origin_z .. max_obstacle_height.
         z_resolution: 0.125        # voxel height
         z_voxels: 16               # 16 * 0.125 = 2.0 m -> covers -0.30 .. 1.70
         max_obstacle_height: 1.70
@@ -195,16 +328,21 @@ local_costmap:
         # notes below -- the low-mounted L2 sees Pepper's own body up close.
         observation_sources: points realsense
         points:
-          topic: /points
+          # Self-hit + adaptive ground-plane-filtered /points (see
+          # points_costmap_filter in pepper_nav2_amcl.launch.py), NOT raw
+          # /points -- ground removal happens upstream now instead of via
+          # this fixed height band.
+          topic: /points_costmap
           data_type: "PointCloud2"
           clearing: True
           marking: True
-          # Height band is in odom, which is FLOOR-referenced (z=0 IS
-          # the ground plane), so these read directly as height above the
-          # floor. min_obstacle_height MUST stay above the floor or the floor
-          # is marked as an obstacle; keep it low enough (0.10 m) to still
-          # catch low objects/chair legs.
-          min_obstacle_height: 0.10
+          # Height band is in odom, which is FLOOR-referenced (z=0 IS the
+          # ground plane), so these read directly as height above the floor.
+          # min_obstacle_height MUST stay above the floor or the floor is
+          # marked as an obstacle. 0.30 m of clearance: the leveling snapshot
+          # is taken once at t=0, so residual tilt drifts the apparent floor
+          # height the longer/farther the run goes, and 0.10 m was not enough.
+          min_obstacle_height: 0.30
           max_obstacle_height: 1.70
           raytrace_max_range: 3.0
           # Skip the near field: the L2 is mounted low (~0.26 m up) and sees
@@ -223,12 +361,13 @@ local_costmap:
           data_type: "PointCloud2"
           clearing: True
           marking: True
-          min_obstacle_height: 0.10
+          # Floor-referenced, same as the points source above.
+          min_obstacle_height: 0.30
           max_obstacle_height: 1.70
           # D435i reliable depth ~0.3-3 m; below 0.3 m it is blind.
-          raytrace_max_range: 3.0
+          raytrace_max_range: 5.0
           raytrace_min_range: 0.3
-          obstacle_max_range: 3.0
+          obstacle_max_range: 5.0
           obstacle_min_range: 0.3
       always_send_full_costmap: True
 
@@ -249,8 +388,17 @@ global_costmap:
         enabled: True
         # VoxelLayer for the same per-voxel 3D clearing as the local costmap.
         publish_voxel_map: True
-        origin_z: -0.30            # floor-referenced, see local costmap
-        z_resolution: 0.125
+        # See the local costmap's voxel_layer comment. Heights here are metres
+        # above the FLOOR: map inherits odom's floor-referenced datum
+        # (amcl's map -> odom correction is planar, z=0). origin_z stays
+        # below the floor so the sensor origin (L2 ~0.25 m up, plus leveling
+        # drift) is always inside the grid's Z bounds -- otherwise VoxelLayer
+        # cannot raytrace-clear that scan at all ("Sensor origin ... out of map
+        # bounds ... cannot raytrace") and marks accumulate with nothing ever
+        # removing them. Floor exclusion itself is points_costmap_filter's job
+        # (ground-plane removal upstream), not this band.
+        origin_z: -0.30
+        z_resolution: 0.125        # see local costmap: z_voxels max is 16
         z_voxels: 16               # 16 * 0.125 = 2.0 m -> covers -0.30 .. 1.70
         max_obstacle_height: 1.70
         mark_threshold: 0
@@ -258,25 +406,31 @@ global_costmap:
         combination_method: 1
         observation_sources: points
         points:
-          topic: /points
+          # Same filtered topic as the local costmap -- see
+          # points_costmap_filter in pepper_nav2_amcl.launch.py.
+          topic: /points_costmap
           data_type: "PointCloud2"
           clearing: True
           marking: True
-          min_obstacle_height: 0.10
+          # Floor-referenced (see the voxel_layer comment above): 0.80 m above
+          # the floor. Higher than the local costmap's 0.30 on purpose -- the
+          # global map is persistent, so only confidently-tall structure should
+          # be burned into it.
+          min_obstacle_height: 0.80
           max_obstacle_height: 1.70
-          raytrace_max_range: 3.0
+          raytrace_max_range: 5.0
           # Same as the local costmap: skip the L2 self-hits (Pepper's own body
           # ~0.3-0.6 m from the low lidar) so the robot doesn't mark itself.
-          raytrace_min_range: 0.8
+          raytrace_min_range: 0.2
           obstacle_max_range: 2.5
-          obstacle_min_range: 0.8
+          obstacle_min_range: 0.2
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 4.0
-        inflation_radius: 0.20
+        inflation_radius: 0.30
       always_send_full_costmap: True
 
 planner_server:
@@ -323,6 +477,8 @@ collision_monitor:
   ros__parameters:
     use_sim_time: False
     base_frame_id: "base_footprint"
+    # odom, matching the local costmap: base_shift_correction extrapolates
+    # the robot's motion in this frame, so it must be the level one.
     odom_frame_id: "odom"
     cmd_vel_in_topic: "cmd_vel_raw"
     cmd_vel_out_topic: "cmd_vel"

@@ -3,7 +3,7 @@
 # point cloud (IMU used for gravity/initialization) and the SLAM node uses
 # the scan cloud for proximity loop closures and map assembly.
 #
-# Wraps rtabmap_realsense.launch.py (unchanged), like rtabmap_bag_test.launch.py.
+# Wraps rtabmap_base.launch.py (unchanged), like rtabmap_rgbd_wheel_bag_test.launch.py.
 #
 # Usage:
 #   ros2 launch pepper_slam rtabmap_l2_bag_test.launch.py
@@ -23,7 +23,7 @@ def generate_launch_description():
 
     rtabmap = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(pkg_launch_dir, 'rtabmap_realsense.launch.py')),
+            os.path.join(pkg_launch_dir, 'rtabmap_base.launch.py')),
         launch_arguments={
             'use_sim_time': 'true',
             'frame_id': 'base_footprint',   # bag static TF: base_footprint -> l2lidar_frame

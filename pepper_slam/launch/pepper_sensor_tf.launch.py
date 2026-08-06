@@ -18,66 +18,116 @@
 # here, back-composed through camera_camera_link -> camera_color_frame ->
 # camera_color_optical_frame so the rest of the recorded chain still applies.
 #
+# TWO WAYS TO PUBLISH THE SAME 10 TRANSFORMS, pick with publisher:=
+#   urdf (default) -- robot_state_publisher over urdf/pepper_sensor_rig.urdf.xacro.
+#                     Conventional, and gives an RViz RobotModel so a wrong
+#                     mount is visible as geometry rather than bare axes.
+#   yaml           -- static_tf_publisher over config/sensor_tf.yaml.
+# The URDF is GENERATED from the YAML (quaternion to rpy, verified lossless),
+# so both publish identical geometry. The YAML remains the calibration source
+# of truth; regenerate the URDF after editing it.
+#
+# The URDF is the sensor rig ONLY, rooted at base_footprint. It deliberately
+# does not extend naoqi's pepper.urdf: that description roots at base_link with
+# base_footprint hanging off the leg chain, so publishing it here would give
+# base_footprint two parents and split the tree. See the URDF header.
+#
+# ONE NODE, NOT TEN: the geometry now lives in config/sensor_tf.yaml and is
+# published by a single static_tf_publisher (pepper_slam). This used to spawn
+# 10 tf2_ros/static_transform_publisher processes -- one per edge, each a full
+# ROS node with its own executor, DDS participant and discovery traffic, to
+# publish seven constants. tf2 concatenates all /tf_static publishers anyway,
+# so one message carrying the whole chain is equivalent at a tenth the cost.
+# To change the rig geometry, edit config/sensor_tf.yaml -- not this file.
+#
 # Usage (include from another launch file, or run standalone):
 #   ros2 launch pepper_slam pepper_sensor_tf.launch.py
 #
 # Play the bag WITH /tf if you want wheel odometry (pepper_odom -> base_footprint
 # lives in /tf, not /tf_static).
 
+import os
+
+from ament_index_python.packages import get_package_share_directory
+
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.conditions import IfCondition
+from launch.substitutions import Command, LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
-
-# (parent, child, x, y, z, qx, qy, qz, qw)
-STATIC_TF = [
-    # --- rig mount (recorded) ---
-    ('base_footprint', 'l2lidar_frame',
-     0.133000, 0.000000, 0.258200, 0.693130, -0.147438, 0.690138, -0.146770),
-
-    # --- lidar -> camera body: REFINED, not the recorded CAD guess (see header) ---
-    ('l2lidar_frame', 'camera_camera_link',
-     0.021773, -0.025287, 0.016240, 0.680074, -0.159976, 0.698370, 0.155516),
-
-    # --- RealSense internals (recorded) ---
-    ('camera_camera_link', 'camera_color_frame',
-     -0.000237, 0.014846, 0.000083, 0.004190, 0.000544, 0.001321, 0.999990),
-    ('camera_color_frame', 'camera_color_optical_frame',
-     0.0, 0.0, 0.0, -0.5, 0.5, -0.5, 0.5),
-    ('camera_camera_link', 'camera_depth_frame',
-     0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-    ('camera_depth_frame', 'camera_depth_optical_frame',
-     0.0, 0.0, 0.0, -0.5, 0.5, -0.5, 0.5),
-    ('camera_camera_link', 'camera_gyro_frame',
-     -0.011740, -0.005520, 0.005100, 0.0, 0.0, 0.0, 1.0),
-    ('camera_gyro_frame', 'camera_imu_frame',
-     0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-    ('camera_imu_frame', 'camera_imu_optical_frame',
-     0.0, 0.0, 0.0, -0.5, 0.5, -0.5, 0.5),
-
-    # --- L2 internal IMU (recorded). Published for completeness; note its
-    #     timestamps carry a ~17 ms sawtooth from l2_sync_rate_ms:30, so prefer
-    #     /camera/imu for anything timing-sensitive. ---
-    ('l2lidar_frame', 'l2lidar_imu',
-     -0.007698, -0.014655, 0.006670, 0.0, 0.0, 0.0, 1.0),
-]
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
+    pkg_share = get_package_share_directory('pepper_slam')
+
     use_sim_time = LaunchConfiguration('use_sim_time')
+    scope = LaunchConfiguration('scope')
+    publisher = LaunchConfiguration('publisher')
+    transforms_file = LaunchConfiguration('transforms_file')
+    urdf_file = LaunchConfiguration('urdf_file')
+
+    use_urdf = PythonExpression(["'", publisher, "' == 'urdf'"])
+    use_yaml = PythonExpression(["'", publisher, "' == 'yaml'"])
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),
-        *[
-            Node(
-                package='tf2_ros', executable='static_transform_publisher',
-                name=f'stf_{child}', output='log',
-                parameters=[{'use_sim_time': use_sim_time}],
-                arguments=['--x', str(x), '--y', str(y), '--z', str(z),
-                           '--qx', str(qx), '--qy', str(qy),
-                           '--qz', str(qz), '--qw', str(qw),
-                           '--frame-id', parent, '--child-frame-id', child],
-            )
-            for (parent, child, x, y, z, qx, qy, qz, qw) in STATIC_TF
-        ],
+        DeclareLaunchArgument(
+            'publisher', default_value='urdf',
+            description="'urdf' (robot_state_publisher, gives an RViz "
+                        "RobotModel) or 'yaml' (static_tf_publisher). Both "
+                        "publish identical geometry."),
+        DeclareLaunchArgument(
+            'transforms_file',
+            default_value=os.path.join(pkg_share, 'config', 'sensor_tf.yaml'),
+            description='YAML transform list, used when publisher:=yaml. This '
+                        'is the calibration source of truth.'),
+        DeclareLaunchArgument(
+            'scope', default_value='mount', choices=['mount', 'all'],
+            description="'mount' (default) publishes only the rig transforms "
+                        "nothing else provides. The RealSense driver publishes "
+                        "its own internal extrinsics; duplicating them here "
+                        "gives those edges two publishers and the last one "
+                        "silently wins. Use 'all' only for bags recorded "
+                        "without /tf_static (slam_recording*, slam_bench_run*)."),
+        DeclareLaunchArgument(
+            'urdf_file',
+            default_value=os.path.join(pkg_share, 'urdf', 'pepper_sensor_rig.urdf.xacro'),
+            description='Sensor-rig xacro, used when publisher:=urdf. Expanded with '
+                        '`xacro` at launch. Rooted at '
+                        'base_footprint so it never competes for that frame.'),
+
+        # robot_description is namespaced so it cannot clash with a Pepper body
+        # description published by the naoqi driver.
+        Node(
+            package='robot_state_publisher',
+            executable='robot_state_publisher',
+            name='pepper_sensor_tf',
+            namespace='sensor_rig',
+            output='screen',
+            condition=IfCondition(use_urdf),
+            parameters=[{
+                'use_sim_time': use_sim_time,
+                # scope reaches the description through xacro, not as a node
+                # parameter -- robot_state_publisher has no such parameter.
+                'robot_description': ParameterValue(
+                    Command(['xacro ', urdf_file, ' scope:=', scope]), value_type=str),
+                # Every joint is fixed, so nothing needs /joint_states and
+                # nothing is published on /tf -- only /tf_static.
+                'publish_frequency': 0.0,
+            }],
+        ),
+
+        Node(
+            package='pepper_slam',
+            executable='static_tf_publisher.py',
+            name='pepper_sensor_tf',
+            output='screen',
+            condition=IfCondition(use_yaml),
+            parameters=[{
+                'use_sim_time': use_sim_time,
+                'transforms_file': transforms_file,
+                'scope': scope,
+            }],
+        ),
     ])

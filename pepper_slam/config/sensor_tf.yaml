@@ -1,0 +1,101 @@
+# Static TF chain for the Pepper sensor rig, published by ONE
+# static_tf_publisher node (was 10 static_transform_publisher processes).
+#
+# Geometry lives here as DATA -- the provenance notes below are the
+# original launch-file header and still apply to these numbers.
+#
+# Static TF tree for the Pepper sensor rig: Unitree L2 + RealSense (colour,
+# depth, IMU).
+#
+# WHY THIS EXISTS: bags/slam_recording, slam_recording2 and slam_bench_run* were
+# all recorded with /tf_static containing ZERO messages, so the RealSense driver's
+# internal extrinsics (camera_link -> color/depth/gyro/accel) and the rig mount
+# transforms were never captured. Without them RTAB-Map (or any multi-sensor SLAM)
+# cannot relate the camera to the lidar and refuses to start.
+#
+# The values below were recovered from bags/lidar_cam_calib2, which is one of the
+# few bags whose /tf_static was captured (4 messages).
+#
+# l2lidar_frame -> camera_camera_link: TRANSLATION IS MEASURED, ROTATION IS NOT.
+#
+# TRANSLATION (2026-08-04, tape measure, Yohannes): from the centre of the L2's
+# mounting plate to the centre of the RealSense's BACK face (the one opposite
+# the lenses):
+#     X forward   +0.62 mm
+#     Y lateral    0    mm   (camera sits directly above the lidar)
+#     Z up        +50.85 mm
+# The xyz below is that measurement expressed in l2lidar_frame, offset to
+# camera_camera_link -- which is NOT a surface: Intel puts it at mid-depth,
+# mid-height and 17.5 mm off the width-centre (realsense2_description
+# _d435.urdf.xacro:54-56). Re-derive, do not re-measure to this point directly.
+#
+# ROTATION is inherited from the previous value, NOT measured. Every automated
+# calibration run agreed on rotation to within 0.6-1.8 deg while disagreeing on
+# translation by up to 60 mm, so orientation is the one quantity those runs
+# determined well. A tape measure cannot check it.
+#
+# WHY THE PREVIOUS VALUE WAS REPLACED. It came from one
+# direct_visual_lidar_calibration run (koide3, NID) on lidar_cam_calib2 and was
+# never verified. It is wrong:
+#   * it placed camera_camera_link 33.4 mm from the L2 axis where the L2 body is
+#     36.1 mm -- the camera's reference point inside the lidar housing;
+#   * its back face sat 31.5 mm from the plate against 50.85 mm measured;
+#   * it is not reproducible -- same bag, same seed, same tool re-run on
+#     2026-08-04 returned 31.5 mm instead of 44.5 mm.
+# Its 6.16 cm "refinement" over the CAD guess put 71% of the correction along
+# the camera's depth axis, which a STATIC capture cannot constrain (no parallax).
+# Seeded reruns spread 29.9 mm (1 bag), 58.6 mm (2 views), 97.2 mm (3 views).
+#
+# STILL UNVERIFIED. No calibration agrees with this measurement -- the closest
+# is 13.9 mm away, the rest 20-61 mm. Rotation is assumed. Y=0 is inferred from
+# the total distance, not measured directly. A target-based calibration
+# (velo2cam_calibration or similar, which finds features geometrically rather
+# than from lidar intensity) would settle all six DOF at once; NID-based direct
+# registration cannot, because the L2's panorama is ~77% empty in the camera's
+# direction and gives the objective too little to lock onto.
+#
+# Usage (include from another launch file, or run standalone):
+#   ros2 launch pepper_slam pepper_sensor_tf.launch.py
+#
+# Play the bag WITH /tf if you want wheel odometry (pepper_odom -> base_footprint
+# lives in /tf, not /tf_static).
+
+transforms:
+  - {parent: base_footprint, child: l2lidar_frame,
+     xyz: [0.133, 0.0, 0.2582],
+     qxyzw: [0.69313, -0.147438, 0.690138, -0.14677]}
+  - {parent: l2lidar_frame, child: camera_camera_link,
+     xyz: [0.038508, -0.036458, 0.012712],
+     qxyzw: [0.680074, -0.159976, 0.69837, 0.155516]}
+  - {parent: camera_camera_link, child: camera_color_frame, owner: driver,
+     xyz: [-0.000237, 0.014846, 8.3e-05],
+     qxyzw: [0.00419, 0.000544, 0.001321, 0.99999]}
+  - {parent: camera_color_frame, child: camera_color_optical_frame, owner: driver,
+     xyz: [0.0, 0.0, 0.0],
+     qxyzw: [-0.5, 0.5, -0.5, 0.5]}
+  - {parent: camera_camera_link, child: camera_depth_frame, owner: driver,
+     xyz: [0.0, 0.0, 0.0],
+     qxyzw: [0.0, 0.0, 0.0, 1.0]}
+  - {parent: camera_depth_frame, child: camera_depth_optical_frame, owner: driver,
+     xyz: [0.0, 0.0, 0.0],
+     qxyzw: [-0.5, 0.5, -0.5, 0.5]}
+  - {parent: camera_camera_link, child: camera_gyro_frame, owner: driver,
+     xyz: [-0.01174, -0.00552, 0.0051],
+     qxyzw: [0.0, 0.0, 0.0, 1.0]}
+  - {parent: camera_gyro_frame, child: camera_imu_frame, owner: driver,
+     xyz: [0.0, 0.0, 0.0],
+     qxyzw: [0.0, 0.0, 0.0, 1.0]}
+  - {parent: camera_imu_frame, child: camera_imu_optical_frame, owner: driver,
+     xyz: [0.0, 0.0, 0.0],
+     qxyzw: [-0.5, 0.5, -0.5, 0.5]}
+  # NOT owner:driver, even though l2lidar_node publishes this too
+  # (publish_tf: true). Bag replay runs no driver, and the LIO bridge
+  # needs base_footprint -> l2lidar_frame_imu to close
+  # odom -> base_footprint, so dropping it under scope:=mount breaks
+  # every bag-replay launch. The duplicate is harmless here because
+  # both sources carry the IDENTICAL Unitree spec value
+  # (l2lidar_node.cpp:719-727) -- unlike the camera edges, where the
+  # driver's device-read values and these recovered ones can differ.
+  - {parent: l2lidar_frame, child: l2lidar_frame_imu,
+     xyz: [-0.007698, -0.014655, 0.00667],
+     qxyzw: [0.0, 0.0, 0.0, 1.0]}

@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<!--
+  Pepper SENSOR RIG only: Unitree L2 + RealSense D435i, rooted at
+  base_footprint. This is what runs ON THE ROBOT.
+
+  The geometry itself lives in sensor_rig.xacro, shared with
+  pepper_display_with_rig.urdf.xacro. This file only supplies the root.
+
+  WHY THIS IS NOT AN EXTENSION OF naoqi's pepper.urdf
+  naoqi_driver2/share/urdf/pepper.urdf has the OPPOSITE kinematic root:
+  base_link is its root and base_footprint hangs off the leg chain
+  (base_link, torso, Hip, Pelvis, Tibia, then base_footprint). Feeding that to
+  robot_state_publisher alongside this stack would publish
+  Tibia to base_footprint while lio_map_odom_bridge publishes
+  odom_lidar to base_footprint. Two parents, split tree. Rooting the rig at
+  base_footprint instead composes with whatever owns the Pepper body, because
+  this description never claims base_footprint as a child.
+-->
+<robot name="pepper_sensor_rig" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:arg name="scope" default="mount"/>
+  <xacro:include filename="$(find pepper_slam)/urdf/sensor_rig.xacro"/>
+
+  <!-- Declared here, not in the macro: the rig alone needs a root, but when
+       the macro is composed onto a full Pepper description that frame already
+       exists and must not be declared twice. -->
+  <link name="base_footprint"/>
+
+  <xacro:pepper_sensor_rig scope="$(arg scope)"/>
+
+</robot>

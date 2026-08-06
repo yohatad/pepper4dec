@@ -1,0 +1,33 @@
+# QoS overrides for `ros2 bag record`.
+#
+# WHY THIS EXISTS: /tf_static is published ONCE and latched (transient_local).
+# ros2 bag record subscribes VOLATILE by default, so it only receives messages
+# sent after it subscribes -- i.e. capturing /tf_static is a race between the
+# recorder and whatever publishes the transforms.
+#
+# That race is why bags/slam_recording, slam_recording2 and slam_bench_run1..3
+# all contain ZERO /tf_static messages, while lidar_cam_calib* (started before
+# the publishers) contain 4. Without them nothing downstream can relate the
+# camera to the lidar, which is the entire reason config/sensor_tf.yaml had to
+# republish the rig by hand.
+#
+# Subscribing transient_local makes the recorder receive the already-latched
+# message regardless of start order, so the race disappears.
+#
+# Usage:
+#   ros2 bag record -a \
+#     --qos-profile-overrides-path $(ros2 pkg prefix pepper_slam)/share/pepper_slam/config/record_qos.yaml \
+#     -o <bag_name>
+#
+# On replay `ros2 bag play` re-offers /tf_static with the durability recorded
+# here, so late-joining subscribers (RViz, RTAB-Map) still get it. With a bag
+# recorded this way you do NOT need pepper_sensor_tf.launch.py at all -- the
+# rig transforms come from the bag. Launch it only for the older bags, with
+# scope:=all.
+
+/tf_static:
+  durability: transient_local
+  history: keep_all
+  reliability: reliable
+
+# /tf is volatile by nature (continuously republished), left at the default.

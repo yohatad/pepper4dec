@@ -7,86 +7,148 @@
 </div>
 
 The **Pepper SLAM** package builds and localizes against maps of the Pepper
-robot's environment. It ships launch files and parameters only — every SLAM
-component (RTAB-Map, SLAM Toolbox, FAST-LIO) is an upstream package launched by
-name, so this package compiles no nodes of its own.
-
-It was split out of `pepper_navigation` so that mapping and bag-replay
-experiments no longer drag in the whole Nav2 dependency tree, and so the
-frequently-retuned SLAM configs are isolated from the comparatively stable
-navigation params.
-
-## Relationship to `pepper_navigation`
-
-The dependency is **one-way**:
-
-```
-pepper_slam  ──produces──>  map frame + /map  ──consumed by──>  pepper_navigation
-```
-
-`pepper_navigation` `exec_depend`s on `pepper_slam` (its
-`pepper_nav2_bringup.launch.py` includes `rtabmap_realsense.launch.py` in
-localization mode). `pepper_slam` never depends on `pepper_navigation`.
-
-Saved maps (`.pgm`/`.yaml`) and keepout masks stay in `pepper_navigation/map/`,
-because Nav2's map server and costmap filters are their runtime consumers.
-RTAB-Map databases (`.db`) live in `~/.ros/` and are not version-controlled.
-
-## The frame contract
-
-This is the interface between the two packages, and the thing most likely to
-bite you:
-
-| Frame | Published by | Notes |
-|-------|--------------|-------|
-| `pepper_odom` | `naoqi_driver2` | wheel odometry; **not** named `odom` on purpose |
-| `odom` | FAST-LIO | IMU-aligned, tilted ~90° on Pepper's mount — **not** gravity-aligned |
-| `odom_level` | `lio_map_odom_bridge` | one-time gravity-leveled parent of `odom`; Z-up |
-| `map` | RTAB-Map | anchored on `odom_level`, which the 2D occupancy projection requires |
-
-RTAB-Map must anchor on `odom_level`, not `odom` — projecting a 2D occupancy
-grid out of a tilted frame silently produces garbage ground/obstacle splits.
-See `config/README.md` in `pepper_navigation` for the odometry naming rules.
-
-## 🚀 Running
+robot's environment. It ships launch files and parameters only — RTAB-Map, SLAM
+Toolbox and FAST-LIO are all upstream packages launched by name, so nothing here
+compiles. The rig carries a RealSense (RGB + aligned depth + IMU) and a Unitree
+L2 lidar (`/points` + `/imu/data`); odometry is wheel (`/pepper_odom`), RTAB-Map
+`icp_odometry`, or FAST-LIO.
 
 ```bash
 source ~/ros2_ws/install/setup.bash
 ```
 
-### RTAB-Map SLAM (3D mapping with RealSense)
+## Frames
+
+| Frame | Published by | Notes |
+|-------|--------------|-------|
+| `pepper_odom` | `naoqi_driver2` | wheel odometry; **not** named `odom` on purpose |
+| `odom` | FAST-LIO | IMU-aligned, tilted ~90° on Pepper's mount — **not** gravity-aligned |
+| `odom` | `lio_map_odom_bridge` | one-time gravity-leveled parent of `odom`; Z-up |
+| `map` | RTAB-Map / PGO / `transform_fusion` | whichever layer owns the loop-closure or prior-map correction |
+
+**Only one node may publish a given frame's parent** — that constraint is what
+the FAST-LIO options below are choosing between. RTAB-Map must anchor on
+`odom`, not `odom`: projecting a 2D grid out of a tilted frame silently
+produces garbage ground/obstacle splits. See `config/README.md` in
+`pepper_navigation` for the odometry naming rules.
+
+## FAST-LIO options
+
+Always launched through `fast_lio mapping.launch.py`, which starts
+`fastlio_mapping` plus `lio_map_odom_bridge`. Pass `config_file:=l2.yaml` — the
+other profiles in `fast_lio/config/` are upstream defaults for other lidars — and
+`use_sim_time:=true` for bag replay.
+
+| Stack | Launch | Loop closure | Owns `map` | `bridge_level_frame` |
+|-------|--------|--------------|-----------|----------------------|
+| Odometry only | `fast_lio mapping.launch.py config_file:=l2.yaml` | none | nobody | `true` (unused) |
+| + RTAB-Map | `pepper_slam rtabmap_fastlio_bag_test.launch.py` | RTAB-Map ICP + visual BoW | RTAB-Map | `true` |
+| + Scan-Context PGO | `fastlio_lc_pgo fastlio_lc_l2.launch.py` | GTSAM/ISAM2 on Scan Context | `pgo_map_odom_bridge` | `false` |
+| + prior-map ICP | `lio_localization fastlio_localization_l2.launch.py` | n/a (localization) | `transform_fusion` | `false` |
+
+Odometry alone has no drift correction. RTAB-Map on top is the validated mapping
+configuration (best measured closure 0.19 m). PGO adds pose-graph loop closure
+plus a ray-traced `/projected_map`. Prior-map ICP is the lightest runtime stack,
+wrapped for Nav2 by `pepper_nav2_fastlio_loc.launch.py`.
+
+**`bridge_level_frame` is the one that bites.** FAST-LIO publishes in the raw
+initial-IMU frame — the L2 IMU reads gravity along +X, so `odom` looks tilted
+~90° — and `odom` is the bridge's one-time fix. Set it `false` whenever a
+higher layer owns `odom`'s parent, or `odom` gets two parents and the TF tree
+breaks.
+
+## 🚀 Running
 
 ```bash
-ros2 launch pepper_slam rtabmap_realsense.launch.py
+# RTAB-Map, RealSense (add localization:=true to stop mapping, rviz:=true for RViz)
+ros2 launch pepper_slam rtabmap_base.launch.py
 
-# Localization only (no new mapping)
-ros2 launch pepper_slam rtabmap_realsense.launch.py localization:=true
-
-# With RViz
-ros2 launch pepper_slam rtabmap_realsense.launch.py rviz:=true
-```
-
-### SLAM Toolbox (2D mapping with LiDAR)
-
-```bash
+# SLAM Toolbox, 2D LiDAR
 ros2 launch pepper_slam slam_toolbox.launch.py
+
+# Static sensor extrinsics (included by every bag-replay and FAST-LIO launch)
+ros2 launch pepper_slam pepper_sensor_tf.launch.py
 ```
+
+`pepper_sensor_tf.launch.py` exists because the older bags captured
+`/tf_static` **empty** — without the rig mount and RealSense internals RTAB-Map
+refuses to start. See *Recording bags* below for why, and for how to stop it
+happening again.
+
+It takes `scope:`:
+
+| `scope` | publishes | use for |
+|---------|-----------|---------|
+| `mount` (default) | only `base_footprint→l2lidar_frame`, `l2lidar_frame→camera_camera_link`, `l2lidar_frame→l2lidar_frame_imu` | the real robot, and any bag recorded with `/tf_static` |
+| `all` | the above **plus** the seven RealSense-internal edges | replaying `slam_recording*`, `slam_bench_run*` — the bags with no `/tf_static` |
+
+`mount` is the default because `realsense2_camera` publishes its own internal
+extrinsics, read off the device. Publishing them here too gives those edges two
+publishers, and since `/tf_static` is latched and tf2 keys its buffer on the
+child frame, **whichever message lands last silently wins** — which one that is
+varies between launches.
+
+## Recording bags
+
+**Record `/tf_static` with a transient-local QoS override, or you will lose it.**
+
+```bash
+ros2 bag record -a \
+  --qos-profile-overrides-path $(ros2 pkg prefix pepper_slam)/share/pepper_slam/config/record_qos.yaml \
+  -o my_bag
+```
+
+`/tf_static` is published **once** and latched (`transient_local`).
+`ros2 bag record` subscribes **volatile** by default, so it only receives
+messages sent *after* it subscribes — capturing the transforms is a race
+between the recorder and your launch files. That race is why:
+
+| bag | `/tf_static` |
+|-----|--------------|
+| `lidar_cam_calib`, `lidar_cam_calib2`, `lidar_cam_calib3` | 4 msgs (won the race) |
+| `slam_session_20260709_085909` | 4 msgs |
+| `July_22` | 11 msgs |
+| `slam_recording`, `slam_recording2`, `slam_bench_run1..3` | **0 msgs** |
+
+The override makes the recorder subscribe transient-local, so it receives the
+already-latched message regardless of start order. Verified: recorder started
+8 s *after* the publisher still captured it.
+
+**A bag recorded this way needs no `pepper_sensor_tf.launch.py` at all** — the
+transforms come from the bag, exactly as published, with no hand-maintained
+copy to drift from the device. `ros2 bag play` re-offers `/tf_static` with the
+recorded durability, so late-joining subscribers (RViz, RTAB-Map) still get it.
+
+Note `-a` records everything including 30 Hz colour; existing bags run 8–22 GB
+for 3–8 minutes. Name topics explicitly for long sessions.
+
+### Where the rig values come from
+
+`base_footprint→l2lidar_frame` and the camera internals were recovered from
+`bags/lidar_cam_calib2`. `l2lidar_frame→camera_camera_link` is **measured**
+(tape measure, 2026-08-04) — its rotation is inherited and **not** measured.
+See the header of `config/sensor_tf.yaml` for the full provenance, including
+why the previous `direct_visual_lidar_calibration` value was replaced.
 
 ### Bag-replay experiments
 
-Each of these wraps `rtabmap_realsense.launch.py` (unchanged) with
-bag-specific overrides and writes to a throwaway database, so recorded maps are
-never at risk. Playback commands are documented in each file's header.
+Each wraps `rtabmap_base.launch.py` unchanged and writes to a throwaway
+database, so recorded maps are never at risk. Playback commands are in each
+file's header.
 
 | Launch file | Sensor setup | Odometry source |
 |-------------|--------------|-----------------|
-| `rtabmap_bag_test.launch.py` | RealSense RGB-D (infra1 + depth) | bag TF (`pepper_odom`) |
-| `rtabmap_l2_bag_test.launch.py` | Unitree L2 lidar + IMU, no camera | RTAB-Map `icp_odometry` |
+| `rtabmap_rgbd_wheel_bag_test.launch.py` | RealSense RGB-D (infra1 + depth) | bag TF (`pepper_odom`) |
+| `rtabmap_l2_bag_test.launch.py` | L2 lidar + IMU, no camera | RTAB-Map `icp_odometry` |
 | `rtabmap_fastlio_bag_test.launch.py` | L2 lidar + RGB for loop closure | FAST-LIO (best measured: 0.19 m closure) |
+| `rtabmap_fused_bag_test.launch.py` | L2 + RGB + aligned depth + fused IMU | `odom_source:=wheel` (default) or `icp` |
 
-`rtabmap_fastlio_bag_test.launch.py` is the validated mapping configuration —
-`pepper_nav2_bringup.launch.py` reuses its exact ICP/grid tuning for
-localization.
+`rtabmap_fused_bag_test.launch.py` is the all-three-sensors variant: visual
+bag-of-words proposes the loop closure, lidar ICP refines it, and
+`imu_filter_madgwick` supplies the gravity constraint the orientation-less
+`/camera/imu` can't. Wheel odometry is the default because it is by far the
+smoothest measured (median step 0.35 cm vs 5.74 cm for `icp_odometry`) and its
+drift is what loop closure corrects.
 
 ## 📁 Package Structure
 
@@ -94,20 +156,25 @@ Launch and params only (`ament_cmake`, no compiled targets):
 
 ```
 pepper_slam/
-├── config/
-│   └── mapper_params_online_async.yaml   # SLAM Toolbox parameters
+├── config/mapper_params_online_async.yaml   # SLAM Toolbox parameters
 ├── launch/
-│   ├── rtabmap_realsense.launch.py       # vendored from upstream rtabmap_ros; excluded from flake8
+│   ├── rtabmap_base.launch.py                # vendored upstream; excluded from flake8
 │   ├── slam_toolbox.launch.py
-│   ├── rtabmap_bag_test.launch.py
+│   ├── pepper_sensor_tf.launch.py
+│   ├── rtabmap_rgbd_wheel_bag_test.launch.py
 │   ├── rtabmap_l2_bag_test.launch.py
-│   └── rtabmap_fastlio_bag_test.launch.py
-├── rviz/
-│   └── rtabmap_fastlio_mapping.rviz
+│   ├── rtabmap_fastlio_bag_test.launch.py
+│   └── rtabmap_fused_bag_test.launch.py
+├── rviz/{rtabmap_fastlio_mapping,rtabmap_fused_mapping}.rviz
+│   (compute_lidar_camera_bridge.py moved to ros2_ws/utils/)
 ├── ament_flake8.ini
-├── package.xml
-└── README.md
+├── CMakeLists.txt
+└── package.xml
 ```
+
+Saved maps and keepout masks live in `pepper_navigation/map/` (Nav2's map server
+and costmap filters consume them); RTAB-Map `.db` files in `~/.ros/`, not
+version-controlled.
 
 ## 📜 License
 Copyright (C) 2026 Upanzi Network

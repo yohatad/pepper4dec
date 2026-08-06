@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-"""Launch the person_detection node only.
+"""
+Launch the person_detection node only.
 
 The camera feed is provided separately — a shared camera brought up by the
 overt_attention system (``attention_system.launch.py``) or a ROS 2 bag — so

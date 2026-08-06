@@ -1,0 +1,137 @@
+<?xml version="1.0"?>
+<!--
+  THE sensor rig, as a xacro macro. This is the ONE definition of the L2 +
+  RealSense geometry; both pepper_sensor_rig.urdf.xacro (rig alone, for the
+  robot) and pepper_display_with_rig.urdf.xacro (rig + Pepper body, for
+  looking at) include it. Previously the block was duplicated verbatim in
+  those two files, and a visual fixed in one silently did not reach the other.
+
+  The macro deliberately does NOT declare base_footprint. It only ever
+  attaches TO that frame, so it composes onto any description that already
+  defines it (the display file gets it from Pepper's chain) without ever
+  claiming it as a child. See pepper_sensor_rig.urdf.xacro for why that
+  matters.
+
+  TRANSFORMS come from config/sensor_tf.yaml, which stays the calibration
+  source of truth. The rpy values here are its quaternions converted (verified
+  lossless, worst round trip 0.0 deg over all 10 joints). Change geometry
+  there, not here.
+
+  VISUALS are the vendors' own CAD, referenced across packages - nothing is
+  copied into pepper_slam. They exist so a wrong mount is obvious in RViz, not
+  for collision checking.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:macro name="pepper_sensor_rig" params="scope:=mount">
+  <material name="rig_dark"><color rgba="0.15 0.15 0.17 1.0"/></material>
+    <material name="rig_blue"><color rgba="0.10 0.35 0.70 1.0"/></material>
+
+
+    <!-- Unitree's own CAD, converted to STL by l2lidar_node. Already in METRES
+         (bbox 75 x 75 x 64 mm), so no scale factor. The mesh origin is the centre
+         of the bottom mounting surface, which is Unitree's cloud-frame datum -
+         and l2lidar_frame IS cloud_frame (l2lidar_node.yaml: cloud_frame:
+         "l2lidar_frame"), so it mounts at 0 0 0 with no offset. -->
+    <link name="l2lidar_frame">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="package://l2lidar_node/meshes/l2_lidar.stl"/>
+        </geometry>
+        <material name="rig_dark"/>
+      </visual>
+    </link>
+    <joint name="base_footprint__to__l2lidar_frame" type="fixed">
+      <parent link="base_footprint"/>
+      <child  link="l2lidar_frame"/>
+      <origin xyz="0.133 0.0 0.2582" rpy="-1.581448566 -1.151639968 -1.561109916"/>
+    </joint>
+    <!-- Intel's own D435 mesh, shipped with realsense2_description. Declares
+         METRES in its <unit> tag, so no scale factor (unlike the d455/d415 STLs
+         in that same directory, which are millimetres and DO need
+         scale="0.001 0.001 0.001"). D435i shares the D435 body; only the IMU
+         inside differs.
+         The rpy below re-seats Intel's mesh axes onto camera_camera_link's:
+         the mesh models the camera lying along its own X, while this link has the
+         long axis on Y (which is why the primitive it replaced was 0.025 x 0.090
+         x 0.025). VERIFY IN RVIZ and adjust here if it reads wrong - this is
+         cosmetic and does not affect any transform. -->
+    <link name="camera_camera_link">
+      <visual>
+        <origin xyz="0.0043 -0.0175 0" rpy="1.5707963 0 1.5707963"/>
+        <geometry>
+          <mesh filename="package://realsense2_description/meshes/d435.dae"/>
+        </geometry>
+        <material name="rig_blue"/>
+      </visual>
+    </link>
+    <joint name="l2lidar_frame__to__camera_camera_link" type="fixed">
+      <parent link="l2lidar_frame"/>
+      <child  link="camera_camera_link"/>
+      <origin xyz="0.038508 -0.036458 0.012712" rpy="-0.464105854 -1.544163393 -3.127486964"/>
+    </joint>
+    <!-- The RealSense's OWN internal extrinsics. realsense2_camera publishes
+         these itself, read off the device, so declaring them here as well
+         gives each edge two publishers and whichever lands last silently
+         wins. Included only when scope=all, for replaying bags whose
+         /tf_static is empty. -->
+    <xacro:if value="${scope == 'all'}">
+    <link name="camera_color_frame"/>
+    <joint name="camera_camera_link__to__camera_color_frame" type="fixed">
+      <parent link="camera_camera_link"/>
+      <child  link="camera_color_frame"/>
+      <origin xyz="-0.000237 0.014846 8.3e-05" rpy="0.008381460 0.001076920 0.002646538"/>
+    </joint>
+    <link name="camera_color_optical_frame"/>
+    <joint name="camera_color_frame__to__camera_color_optical_frame" type="fixed">
+      <parent link="camera_color_frame"/>
+      <child  link="camera_color_optical_frame"/>
+      <origin xyz="0.0 0.0 0.0" rpy="-1.570796327 -0.000000000 -1.570796327"/>
+    </joint>
+    <link name="camera_depth_frame"/>
+    <joint name="camera_camera_link__to__camera_depth_frame" type="fixed">
+      <parent link="camera_camera_link"/>
+      <child  link="camera_depth_frame"/>
+      <origin xyz="0.0 0.0 0.0" rpy="0.000000000 -0.000000000 0.000000000"/>
+    </joint>
+    <link name="camera_depth_optical_frame"/>
+    <joint name="camera_depth_frame__to__camera_depth_optical_frame" type="fixed">
+      <parent link="camera_depth_frame"/>
+      <child  link="camera_depth_optical_frame"/>
+      <origin xyz="0.0 0.0 0.0" rpy="-1.570796327 -0.000000000 -1.570796327"/>
+    </joint>
+    <link name="camera_gyro_frame"/>
+    <joint name="camera_camera_link__to__camera_gyro_frame" type="fixed">
+      <parent link="camera_camera_link"/>
+      <child  link="camera_gyro_frame"/>
+      <origin xyz="-0.01174 -0.00552 0.0051" rpy="0.000000000 -0.000000000 0.000000000"/>
+    </joint>
+    <link name="camera_imu_frame"/>
+    <joint name="camera_gyro_frame__to__camera_imu_frame" type="fixed">
+      <parent link="camera_gyro_frame"/>
+      <child  link="camera_imu_frame"/>
+      <origin xyz="0.0 0.0 0.0" rpy="0.000000000 -0.000000000 0.000000000"/>
+    </joint>
+    <link name="camera_imu_optical_frame"/>
+    <joint name="camera_imu_frame__to__camera_imu_optical_frame" type="fixed">
+      <parent link="camera_imu_frame"/>
+      <child  link="camera_imu_optical_frame"/>
+      <origin xyz="0.0 0.0 0.0" rpy="-1.570796327 -0.000000000 -1.570796327"/>
+    </joint>
+    </xacro:if>
+
+    <!-- Kept OUTSIDE the scope guard even though l2lidar_node publishes it too
+         (publish_tf: true): bag replay runs no driver, and the LIO bridge needs
+         this edge to close odom -> base_footprint. The duplicate is harmless -
+         both carry the identical Unitree spec value. -->
+    <link name="l2lidar_frame_imu"/>
+    <joint name="l2lidar_frame__to__l2lidar_frame_imu" type="fixed">
+      <parent link="l2lidar_frame"/>
+      <child  link="l2lidar_frame_imu"/>
+      <origin xyz="-0.007698 -0.014655 0.00667" rpy="0.000000000 -0.000000000 0.000000000"/>
+    </joint>
+
+  </xacro:macro>
+
+</robot>

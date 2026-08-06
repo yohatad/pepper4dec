@@ -400,6 +400,11 @@ def launch_setup(context, *args, **kwargs):
         Node(
             package='rviz2', executable='rviz2', name="rviz2", output='screen',
             condition=IfCondition(LaunchConfiguration("rviz")),
+            # On bag replay, without this RViz runs on the wall clock while the
+            # data carries bag time, and silently drops every cloud with
+            # "the timestamp on the message is earlier than all the data in the
+            # transform cache". Only the view is affected, not the SLAM.
+            parameters=[{'use_sim_time': LaunchConfiguration('use_sim_time')}],
             arguments=[["-d"], [LaunchConfiguration("rviz_cfg")]]),
         Node(
             package='rtabmap_util', executable='point_cloud_xyzrgb', name="point_cloud_xyzrgb", output='screen',

@@ -23,7 +23,7 @@ bt_navigator:
     robot_base_frame: base_footprint
     # FAST-LIO's own /Odometry now publishes real twist (not all-zero) --
     # see laserMapping.cpp's publish_odometry(). Frame_id is FAST-LIO's
-    # IMU-tilted "odom", not the gravity-leveled "odom_level" the rest of
+    # IMU-tilted "odom_lidar", not the gravity-leveled "odom" the rest of
     # this TF tree uses, but bt_navigator only reads this for velocity-based
     # BT conditions (is_stuck / distance_traveled), not pose lookups, so the
     # frame mismatch doesn't matter here.
@@ -149,11 +149,11 @@ local_costmap:
     ros__parameters:
       update_frequency: 15.0
       publish_frequency: 2.0
-      # odom_level: FAST-LIO's gravity-leveled continuous frame (see
+      # odom: FAST-LIO's gravity-leveled continuous frame (see
       # lio_map_odom_bridge.py) -- NOT pepper_odom (wheel odom's own TF is
       # deliberately not part of this session's active TF chain; replaying
       # it alongside the bridge causes competing base_footprint parents).
-      global_frame: odom_level
+      global_frame: odom
       robot_base_frame: base_footprint
       use_sim_time: False
       rolling_window: true
@@ -174,10 +174,20 @@ local_costmap:
         # (people) clear reliably without leaving stale marks behind. The voxel
         # grid spans the obstacle band: origin_z .. origin_z + z_voxels*z_res.
         publish_voxel_map: True
-        origin_z: -0.20            # bottom of grid in odom_level (just above floor ~-0.30)
-        z_resolution: 0.10         # voxel height
-        z_voxels: 16               # 16 * 0.10 = 1.6 m -> covers -0.20 .. 1.40
-        max_obstacle_height: 1.40
+        # HEIGHT DATUM: odom is FLOOR-referenced -- z=0 is the ground
+        # plane, not the LiDAR start height (level_frame_on_floor in
+        # lio_map_odom_bridge.py), so every height here is metres above the
+        # floor. These were previously written against a floor at z ~= -0.30,
+        # so each band is the old value + 0.30. origin_z stays below the floor
+        # so the sensor origin (L2 ~0.25 m up, plus leveling drift) is always
+        # inside the grid -- VoxelLayer cannot raytrace-clear a scan whose
+        # origin falls outside, and marks then accumulate with no clearing.
+        origin_z: -0.20            # bottom of grid, i.e. 0.20 m BELOW the floor
+        # z_voxels MAX IS 16 (nav2 VoxelGrid packs a column into 32 bits).
+        # Above it the layer never builds its grid and publishes nothing.
+        z_resolution: 0.125        # voxel height
+        z_voxels: 16               # 16 * 0.125 = 2.0 m -> covers -0.20 .. 1.80
+        max_obstacle_height: 1.70
         mark_threshold: 0          # marked voxels in a column to flag the 2D cell (0 = any)
         unknown_threshold: 15
         combination_method: 1
@@ -191,14 +201,15 @@ local_costmap:
           data_type: "PointCloud2"
           clearing: True
           marking: True
-          # Height band is in the odom_level (gravity-leveled) frame, whose
-          # origin sits at the sensor start pose -- the FLOOR is at z ~= -0.30 m
-          # there (measured by floor-plane fit). So "0.10 m above floor to 1.40 m
-          # above floor" maps to [-0.20, 1.40]. min_obstacle_height MUST stay
-          # above the floor or the floor is marked as an obstacle; keep it low
-          # enough (~0.10 m over floor) to still catch low objects/chair legs.
-          min_obstacle_height: -0.20
-          max_obstacle_height: 1.40
+          # Height band is in odom, which is FLOOR-referenced (z=0 IS the
+          # ground plane), so these read directly as height above the floor.
+          # min_obstacle_height MUST stay above the floor or the floor is
+          # marked as an obstacle; keep it low enough to still catch low
+          # objects/chair legs. Unlike the amcl config this source is raw
+          # /points with no upstream ground-plane removal, so 0.10 m is the
+          # only floor guard -- do not lower it.
+          min_obstacle_height: 0.10
+          max_obstacle_height: 1.70
           raytrace_max_range: 3.0
           # Skip the near field: the L2 is mounted low (~0.26 m up) and sees
           # Pepper's own body as a dense cluster ~0.3-0.6 m out. With min_range
@@ -216,8 +227,9 @@ local_costmap:
           data_type: "PointCloud2"
           clearing: True
           marking: True
-          min_obstacle_height: -0.20
-          max_obstacle_height: 1.40
+          # Floor-referenced, same as the points source above.
+          min_obstacle_height: 0.10
+          max_obstacle_height: 1.70
           # D435i reliable depth ~0.3-3 m; below 0.3 m it is blind.
           raytrace_max_range: 3.0
           raytrace_min_range: 0.3
@@ -242,10 +254,12 @@ global_costmap:
         enabled: True
         # VoxelLayer for the same per-voxel 3D clearing as the local costmap.
         publish_voxel_map: True
+        # Floor-referenced, same as the local costmap above (map inherits
+        # odom's datum through RTAB-Map's map -> odom correction).
         origin_z: -0.20
-        z_resolution: 0.10
-        z_voxels: 16
-        max_obstacle_height: 1.40
+        z_resolution: 0.125        # see local costmap: z_voxels max is 16
+        z_voxels: 16               # 16 * 0.125 = 2.0 m -> covers -0.20 .. 1.80
+        max_obstacle_height: 1.70
         mark_threshold: 0
         unknown_threshold: 15
         combination_method: 1
@@ -255,8 +269,8 @@ global_costmap:
           data_type: "PointCloud2"
           clearing: True
           marking: True
-          min_obstacle_height: -0.20
-          max_obstacle_height: 1.40
+          min_obstacle_height: 0.10
+          max_obstacle_height: 1.70
           raytrace_max_range: 3.0
           # Same as the local costmap: skip the L2 self-hits (Pepper's own body
           # ~0.3-0.6 m from the low lidar) so the robot doesn't mark itself.
@@ -316,7 +330,7 @@ collision_monitor:
   ros__parameters:
     use_sim_time: False
     base_frame_id: "base_footprint"
-    odom_frame_id: "odom_level"
+    odom_frame_id: "odom"
     cmd_vel_in_topic: "cmd_vel_raw"
     cmd_vel_out_topic: "cmd_vel"
     state_topic: "collision_monitor_state"

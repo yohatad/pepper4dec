@@ -1,0 +1,36 @@
+# EKF fusion of leveled LIO odometry (x, y, yaw) with wheel odometry's
+# implicit flat-floor assumption (z, roll, pitch) -- alternative to
+# lio_map_odom_bridge.py's flatten_base_frame hard clamp. Same practical
+# effect on this platform (wheel odometry always reports z=roll=pitch=0
+# exactly, confirmed against a real bag -- there's no extra signal in it),
+# but via genuine per-field sensor fusion instead of an assumption baked into
+# the bridge, so it's the one that improves automatically if a sensor that
+# actually measures tilt gets added later.
+#
+# Deliberately publish_tf: false -- this does not touch the existing
+# odom -> odom_lidar -> base_footprint TF chain at all. Consumers read the
+# corrected pose from /odometry/filtered instead. Purely additive/optional.
+ekf_filter_node:
+  ros__parameters:
+    frequency: 30.0
+    two_d_mode: false
+    publish_tf: false
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_footprint
+    world_frame: odom
+
+    odom0: /odometry/lio_leveled
+    # x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az
+    odom0_config: [true,  true,  false, false, false, true,
+                   false, false, false, false, false, false,
+                   false, false, false]
+    odom0_differential: false
+    odom0_relative: false
+
+    odom1: /odometry/pepper_odom_relabeled
+    odom1_config: [false, false, true,  true,  true,  false,
+                   false, false, false, false, false, false,
+                   false, false, false]
+    odom1_differential: false
+    odom1_relative: false

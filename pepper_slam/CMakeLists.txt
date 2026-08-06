@@ -19,6 +19,15 @@ install(DIRECTORY
   FILES_MATCHING PATTERN "*.yaml"
 )
 
+# Both patterns are needed: the top-level descriptions are *.urdf.xacro and the
+# shared macro they include is sensor_rig.xacro, so "*.urdf" alone installs
+# nothing and $(find pepper_slam)/urdf/... fails to resolve at launch.
+install(DIRECTORY
+  urdf/
+  DESTINATION share/${PROJECT_NAME}/urdf
+  FILES_MATCHING PATTERN "*.urdf" PATTERN "*.xacro"
+)
+
 install(DIRECTORY
   rviz/
   DESTINATION share/${PROJECT_NAME}/rviz
@@ -26,7 +35,10 @@ install(DIRECTORY
 )
 
 install(PROGRAMS
-  scripts/compute_lidar_camera_bridge.py
+  scripts/leveled_odometry_publisher.py
+  scripts/pepper_odom_relabel.py
+  scripts/check_frame_contract.py
+  scripts/static_tf_publisher.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -35,7 +47,7 @@ if(BUILD_TESTING)
   # the following line skips the linter which checks for copyrights
   # comment the line when a copyright and license is added to all source files
   set(ament_cmake_copyright_FOUND TRUE)
-  # flake8 is run manually below so rtabmap_realsense.launch.py (vendored
+  # flake8 is run manually below so rtabmap_base.launch.py (vendored
   # from an upstream rtabmap_ros example, not our style) can be excluded.
   # ament_cmake_flake8_FOUND doesn't suppress the auto-discovered hook here
   # (its extension gets registered before that variable takes effect) -
