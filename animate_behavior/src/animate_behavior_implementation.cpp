@@ -10,7 +10,7 @@
  * Affiliation: Carnegie Mellon University Africa
  * Email: yohatad123@gmail.com
  * Date: July 05, 2026
- * Version: v1.0 - C++ port of animate_behavior_implementation.py
+ * Version: v1.0
  */
 
 #include "animate_behavior/animate_behavior_interface.h"

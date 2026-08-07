@@ -6,7 +6,7 @@
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa
  * Date: Jul 06, 2026
- * Version: v1.0 - C++ port of supervision.tracker.byte_tracker (Python)
+ * Version: v1.0
  */
 
 #include "dec_common/byte_tracker.h"

@@ -8,7 +8,7 @@
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa
  * Date: Jul 06, 2026
- * Version: v1.0 - C++ port of person_detection_implementation.py
+ * Version: v1.0
  */
 
 #include "person_detection/person_detection_interface.h"

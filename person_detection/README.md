@@ -180,7 +180,7 @@ The person detection system consists of two main components:
 
 ### ByteTrack Tracker
 
-The tracker (`byte_tracker.cpp`) is a C++ port of `supervision`'s ByteTrack, built from three components: **data association** — ByteTrack's two-stage association (Hungarian assignment over IoU cost matrices); **Kalman filter estimation** — an 8-state constant-velocity filter per track over the bounding box center `(x, y)`, aspect ratio, height, and their velocities; and **track management** — the Unconfirmed → Tracked → Lost → Removed lifecycle, including the matching step that confirms or discards unconfirmed tracks.
+The tracker (`byte_tracker.cpp`) implements `supervision`'s ByteTrack algorithm, built from three components: **data association** — ByteTrack's two-stage association (Hungarian assignment over IoU cost matrices); **Kalman filter estimation** — an 8-state constant-velocity filter per track over the bounding box center `(x, y)`, aspect ratio, height, and their velocities; and **track management** — the Unconfirmed → Tracked → Lost → Removed lifecycle, including the matching step that confirms or discards unconfirmed tracks.
 
 ```mermaid
 flowchart LR

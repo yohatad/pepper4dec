@@ -7,7 +7,7 @@
  * Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
  * Email: yohatad123@gmail.com
  * Date: June 12, 2026
- * Version: v1.0 - C++ port of overt_attention_unified_attention.py
+ * Version: v1.0
  */
 
 #include "overt_attention/overt_attention_interface.h"

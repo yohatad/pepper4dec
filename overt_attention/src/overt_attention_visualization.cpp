@@ -2,7 +2,7 @@
 Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
 Email: yohatad123@gmail.com
 Date: June 12, 2026
-Version: v1.0 - C++ port of overt_attention_visualization.py
+Version: v1.0
 
 Improved Visualization for Overt Attention System
 Shows faces with tracking IDs, engagement status, depth, saliency peaks, and current head target

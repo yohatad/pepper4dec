@@ -7,7 +7,7 @@
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa
  * Date: Jul 05, 2026
- * Version: v1.0 - C++ port of pepper_kinematics_utilities.py
+ * Version: v1.0
  *
  * Copyright (C) 2025 Carnegie Mellon University Africa
  */

@@ -42,7 +42,7 @@
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa
  * Date: Jul 06, 2026
- * Version: v1.0 - C++ port of person_detection_implementation.py / person_detection_application.py
+ * Version: v1.0
  *
  * Copyright (C) 2025 Carnegie Mellon University Africa
  */

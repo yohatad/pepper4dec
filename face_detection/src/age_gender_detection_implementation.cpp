@@ -9,7 +9,7 @@
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa
  * Date: Jul 29, 2026
- * Version: v1.0 - C++ port of age_gender_detection.py
+ * Version: v1.0
  */
 
 #include "face_detection/age_gender_detection_interface.h"

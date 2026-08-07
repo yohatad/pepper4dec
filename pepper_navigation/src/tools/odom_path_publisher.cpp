@@ -9,7 +9,7 @@
  * Affiliation: Carnegie Mellon University Africa
  * Email: yohatad123@gmail.com
  * Date: July 05, 2026
- * Version: v1.0 - C++ port of odom_path_publisher.py
+ * Version: v1.0
  */
 
 #include <cmath>

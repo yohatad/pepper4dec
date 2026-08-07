@@ -39,7 +39,7 @@
  * Affiliation: Carnegie Mellon University Africa
  * Email: yohatad123@gmail.com
  * Date: Jul 05, 2026
- * Version: v1.0 - C++ port of gesture_execution_implementation.py / gesture_execution_application.py
+ * Version: v1.0
  *
  * Copyright (C) 2025 Carnegie Mellon University Africa
  */

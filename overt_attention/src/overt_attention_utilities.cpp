@@ -2,7 +2,7 @@
 Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
 Email: yohatad123@gmail.com
 Date: June 12, 2026
-Version: v1.0 - C++ port of the overt_attention package
+Version: v1.0
 */
 
 #include "overt_attention/overt_attention_interface.h"

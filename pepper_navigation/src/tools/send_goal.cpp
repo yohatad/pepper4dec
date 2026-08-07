@@ -15,7 +15,7 @@
  * Affiliation: Carnegie Mellon University Africa
  * Email: yohatad123@gmail.com
  * Date: July 05, 2026
- * Version: v1.0 - C++ port of send_goal.py
+ * Version: v1.0
  */
 
 #include <chrono>

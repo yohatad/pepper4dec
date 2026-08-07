@@ -2,7 +2,7 @@
 Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
 Email: yohatad123@gmail.com
 Date: June 12, 2026
-Version: v1.0 - C++ port of overt_attention_saliency.py
+Version: v1.0
 
 Saliency Node - Computes bottom-up visual attention using Boolean Map Saliency (BMS)
 */
