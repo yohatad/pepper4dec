@@ -7,7 +7,7 @@
   odometry integration, and SLAM Toolbox. Produces the map frame and /map that
   pepper_navigation consumes.</description>
   <maintainer email="yohatad000@gmail.com">yoha</maintainer>
-  <license>TODO: License declaration</license>
+  <license>BSD-3-Clause</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
