@@ -83,11 +83,11 @@ namespace behavior_controller {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BehaviorControllerLifecycleNode — constructor
+// BehaviorControllerNode — constructor
 // Lifecycle node that builds and ticks Pepper's BehaviorTree.CPP tour-guide tree.
 // ─────────────────────────────────────────────────────────────────────────────
 
-BehaviorControllerLifecycleNode::BehaviorControllerLifecycleNode()
+BehaviorControllerNode::BehaviorControllerNode()
     : rclcpp_lifecycle::LifecycleNode("behavior_controller")
 {
     // Create the companion BT node immediately so main() can add it to the
@@ -101,8 +101,8 @@ BehaviorControllerLifecycleNode::BehaviorControllerLifecycleNode()
 // on_configure — load config + knowledge base, build behavior tree
 // ─────────────────────────────────────────────────────────────────────────────
 
-BehaviorControllerLifecycleNode::CallbackReturn
-BehaviorControllerLifecycleNode::on_configure(const rclcpp_lifecycle::State& /*state*/)
+BehaviorControllerNode::CallbackReturn
+BehaviorControllerNode::on_configure(const rclcpp_lifecycle::State& /*state*/)
 {
     // ── Startup banner ──────────────────────────────────────────────────────
     RCLCPP_INFO(get_logger(),
@@ -155,8 +155,8 @@ BehaviorControllerLifecycleNode::on_configure(const rclcpp_lifecycle::State& /*s
 // on_activate — start 50 Hz tick timer
 // ─────────────────────────────────────────────────────────────────────────────
 
-BehaviorControllerLifecycleNode::CallbackReturn
-BehaviorControllerLifecycleNode::on_activate(const rclcpp_lifecycle::State& state)
+BehaviorControllerNode::CallbackReturn
+BehaviorControllerNode::on_activate(const rclcpp_lifecycle::State& state)
 {
     // Activate any managed publishers (none currently, but good practice).
     LifecycleNode::on_activate(state);
@@ -180,8 +180,8 @@ BehaviorControllerLifecycleNode::on_activate(const rclcpp_lifecycle::State& stat
 // on_deactivate — pause BT ticking (tree + config remain intact)
 // ─────────────────────────────────────────────────────────────────────────────
 
-BehaviorControllerLifecycleNode::CallbackReturn
-BehaviorControllerLifecycleNode::on_deactivate(const rclcpp_lifecycle::State& state)
+BehaviorControllerNode::CallbackReturn
+BehaviorControllerNode::on_deactivate(const rclcpp_lifecycle::State& state)
 {
     if (tick_timer_) {
         tick_timer_->cancel();
@@ -198,8 +198,8 @@ BehaviorControllerLifecycleNode::on_deactivate(const rclcpp_lifecycle::State& st
 // on_cleanup — halt and discard the BT tree
 // ─────────────────────────────────────────────────────────────────────────────
 
-BehaviorControllerLifecycleNode::CallbackReturn
-BehaviorControllerLifecycleNode::on_cleanup(const rclcpp_lifecycle::State& /*state*/)
+BehaviorControllerNode::CallbackReturn
+BehaviorControllerNode::on_cleanup(const rclcpp_lifecycle::State& /*state*/)
 {
     if (tree_initialized_) {
         tree_.haltTree();
@@ -213,8 +213,8 @@ BehaviorControllerLifecycleNode::on_cleanup(const rclcpp_lifecycle::State& /*sta
 // on_shutdown — cancel timer + halt tree regardless of current state
 // ─────────────────────────────────────────────────────────────────────────────
 
-BehaviorControllerLifecycleNode::CallbackReturn
-BehaviorControllerLifecycleNode::on_shutdown(const rclcpp_lifecycle::State& /*state*/)
+BehaviorControllerNode::CallbackReturn
+BehaviorControllerNode::on_shutdown(const rclcpp_lifecycle::State& /*state*/)
 {
     if (tick_timer_) {
         tick_timer_->cancel();
@@ -237,9 +237,9 @@ int main(int argc, char* argv[])
     // Spin both nodes concurrently on 4 executor threads:
     //   the lifecycle node    → lifecycle service callbacks, 50 Hz tick timer
     //   the companion BT node → BT action/service/subscription callbacks
-    return dec_common::runNode<BehaviorControllerLifecycleNode>(
+    return dec_common::runNode<BehaviorControllerNode>(
         argc, argv, {nullptr, "behavior_controller", 4},
-        [](BehaviorControllerLifecycleNode& node) {
+        [](BehaviorControllerNode& node) {
             return std::vector<rclcpp::node_interfaces::NodeBaseInterface::SharedPtr>{
                 node.get_bt_node()->get_node_base_interface()};
         });

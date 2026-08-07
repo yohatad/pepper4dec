@@ -706,7 +706,7 @@ std::string nodeStatusToString(BT::NodeStatus status);
 } // namespace behavior_controller
 
 //=============================================================================
-// BehaviorControllerLifecycleNode
+// BehaviorControllerNode
 //
 // Lifecycle state machine:
 //   UNCONFIGURED → on_configure:  load config + knowledge base, build BT tree
@@ -723,13 +723,13 @@ std::string nodeStatusToString(BT::NodeStatus status);
 //   Both lc_node and bt_node_ are added to the MultiThreadedExecutor in main().
 //=============================================================================
 
-class BehaviorControllerLifecycleNode : public rclcpp_lifecycle::LifecycleNode
+class BehaviorControllerNode : public rclcpp_lifecycle::LifecycleNode
 {
 public:
     using CallbackReturn =
         rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
-    explicit BehaviorControllerLifecycleNode();
+    explicit BehaviorControllerNode();
 
     /// Expose the companion node so main() can add it to the executor.
     rclcpp::Node::SharedPtr get_bt_node() const { return bt_node_; }
