@@ -18,6 +18,7 @@
   <depend>dec_interfaces</depend>
   <depend>naoqi_bridge_msgs</depend>
   <depend>cv_bridge</depend>
+  <depend>opencv</depend>
   <depend>yaml-cpp</depend>
   <depend>ament_index_cpp</depend>
 

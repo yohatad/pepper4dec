@@ -1,19 +1,20 @@
-/*
-Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
-Email: yohatad123@gmail.com
-Date: June 12, 2026
-Version: v1.0
-
-Improved Visualization for Overt Attention System
-Shows faces with tracking IDs, engagement status, depth, saliency peaks, and current head target
-*/
+/* overt_attention_visualization.cpp
+ *
+ * Visualization for the overt attention system: shows faces with tracking
+ * IDs, engagement status, depth, saliency peaks, and current head target.
+ *
+ * Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
+ * Email: yohatad123@gmail.com
+ * Date: June 12, 2026
+ * Version: v1.0
+ */
 
 #include "overt_attention/overt_attention_interface.h"
 #include <iomanip>
 #include <limits>
 #include <sstream>
 
-VisualizationNode::VisualizationNode() : Node("visualization_node") {
+VisualizationNode::VisualizationNode() : Node("attention_visualization") {
     try {
         topics_config_ = loadTopicsConfig("overt_attention", "data/pepper_topics.yaml");
         RCLCPP_INFO(get_logger(), "Loaded topics configuration from overt_attention package");
@@ -479,7 +480,7 @@ int main(int argc, char* argv[]) {
         auto node = std::make_shared<VisualizationNode>();
         rclcpp::spin(node);
     } catch (const std::exception& e) {
-        RCLCPP_ERROR(rclcpp::get_logger("visualization_node"), "Exception: %s", e.what());
+        RCLCPP_ERROR(rclcpp::get_logger("attention_visualization"), "Exception: %s", e.what());
     }
     rclcpp::shutdown();
     return 0;

@@ -1,11 +1,12 @@
-/*
-Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
-Email: yohatad123@gmail.com
-Date: June 12, 2026
-Version: v1.0
-
-Saliency Node - Computes bottom-up visual attention using Boolean Map Saliency (BMS)
-*/
+/* overt_attention_saliency.cpp
+ *
+ * Computes bottom-up visual attention using Boolean Map Saliency (BMS).
+ *
+ * Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
+ * Email: yohatad123@gmail.com
+ * Date: June 12, 2026
+ * Version: v1.0
+ */
 
 #include "overt_attention/overt_attention_interface.h"
 #include <iomanip>

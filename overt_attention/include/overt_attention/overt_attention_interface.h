@@ -1,6 +1,14 @@
 /* overt_attention_interface.h
  *
+ * Shared declarations for the overt_attention package's three nodes:
+ * SaliencyNode (bottom-up visual saliency via Boolean Map Saliency),
+ * OvertAttentionNode (the attention controller — engaged faces, then
+ * detected faces, then saliency, with cooldown + IOR), and
+ * VisualizationNode. Also declares TopicsConfig and the shared
+ * topic-loading/pixel-angle/QoS helpers used across all three.
+ *
  * Author: Yohannes Tadesse Haile
+ * Affiliation: Carnegie Mellon University Africa
  * Date: Jun 12, 2026
  * Version: v1.0
  *

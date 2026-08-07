@@ -1,9 +1,14 @@
-/*
-Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
-Email: yohatad123@gmail.com
-Date: June 12, 2026
-Version: v1.0
-*/
+/* overt_attention_utilities.cpp
+ *
+ * Shared helpers used across the overt_attention package's nodes: topics
+ * config loading, image QoS, topic-name compression-suffix handling, and
+ * a face-ID-to-color generator for visualization.
+ *
+ * Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
+ * Email: yohatad123@gmail.com
+ * Date: June 12, 2026
+ * Version: v1.0
+ */
 
 #include "overt_attention/overt_attention_interface.h"
 
