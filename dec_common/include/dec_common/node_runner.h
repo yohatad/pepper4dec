@@ -18,8 +18,7 @@
  * Copyright (C) 2025 Carnegie Mellon University Africa
  */
 
-#ifndef DEC_COMMON_NODE_RUNNER_H
-#define DEC_COMMON_NODE_RUNNER_H
+#pragma once
 
 #include <rclcpp/rclcpp.hpp>
 
@@ -96,4 +95,3 @@ int runNode(int argc, char** argv, const NodeRunOptions& options = {},
 
 }  // namespace dec_common
 
-#endif  // DEC_COMMON_NODE_RUNNER_H

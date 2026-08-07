@@ -47,8 +47,7 @@
  * Copyright (C) 2025 Carnegie Mellon University Africa
  */
 
-#ifndef PERSON_DETECTION_INTERFACE_H
-#define PERSON_DETECTION_INTERFACE_H
+#pragma once
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
@@ -219,4 +218,3 @@ private:
     std::unique_ptr<byte_tracker::ByteTrack> tracker_;
 };
 
-#endif  // PERSON_DETECTION_INTERFACE_H

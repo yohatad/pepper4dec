@@ -15,8 +15,7 @@
  * Copyright (C) 2025 Carnegie Mellon University Africa
  */
 
-#ifndef OVERT_ATTENTION_INTERFACE_H
-#define OVERT_ATTENTION_INTERFACE_H
+#pragma once
 
 // ROS includes
 #include <rclcpp/rclcpp.hpp>
@@ -443,4 +442,3 @@ private:
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr pub_overlay_;
 };
 
-#endif // OVERT_ATTENTION_INTERFACE_H

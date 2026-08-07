@@ -7,8 +7,7 @@
  * Copyright (C) 2025 Carnegie Mellon University Africa
  */
 
-#ifndef BEHAVIOR_CONTROLLER_INTERFACE_H
-#define BEHAVIOR_CONTROLLER_INTERFACE_H
+#pragma once
 
 // ROS includes
 #include <rclcpp/rclcpp.hpp>
@@ -756,4 +755,3 @@ private:
     bool tree_initialized_ = false;
 };
 
-#endif // BEHAVIOR_CONTROLLER_INTERFACE_H

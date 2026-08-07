@@ -36,8 +36,7 @@
  * Copyright (C) 2025 Carnegie Mellon University Africa
  */
 
-#ifndef DEC_COMMON_CAMERA_LIFECYCLE_NODE_H
-#define DEC_COMMON_CAMERA_LIFECYCLE_NODE_H
+#pragma once
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
@@ -165,4 +164,3 @@ protected:
 
 }  // namespace dec_common
 
-#endif  // DEC_COMMON_CAMERA_LIFECYCLE_NODE_H

@@ -45,8 +45,7 @@
  * Copyright (C) 2025 Carnegie Mellon University Africa
  */
 
-#ifndef FACE_DETECTION_AGE_GENDER_DETECTION_INTERFACE_H
-#define FACE_DETECTION_AGE_GENDER_DETECTION_INTERFACE_H
+#pragma once
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
@@ -251,4 +250,3 @@ private:
     rclcpp::TimerBase::SharedPtr debug_timer_;
 };
 
-#endif  // FACE_DETECTION_AGE_GENDER_DETECTION_INTERFACE_H

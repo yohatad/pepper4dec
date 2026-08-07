@@ -44,8 +44,7 @@
  * Copyright (C) 2025 Carnegie Mellon University Africa
  */
 
-#ifndef GESTURE_EXECUTION_INTERFACE_H
-#define GESTURE_EXECUTION_INTERFACE_H
+#pragma once
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
@@ -245,4 +244,3 @@ private:
     rclcpp_action::Server<GestureAction>::SharedPtr action_server_;
 };
 
-#endif  // GESTURE_EXECUTION_INTERFACE_H

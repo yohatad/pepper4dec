@@ -47,8 +47,7 @@
  * Copyright (C) 2025 Carnegie Mellon University Africa
  */
 
-#ifndef ANIMATE_BEHAVIOR_INTERFACE_H
-#define ANIMATE_BEHAVIOR_INTERFACE_H
+#pragma once
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
@@ -212,4 +211,3 @@ private:
     std::vector<rclcpp::TimerBase::SharedPtr> led_scheduled_timers_;
 };
 
-#endif  // ANIMATE_BEHAVIOR_INTERFACE_H

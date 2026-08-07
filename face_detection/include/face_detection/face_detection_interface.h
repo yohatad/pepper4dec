@@ -55,8 +55,7 @@
  * Copyright (C) 2025 Carnegie Mellon University Africa
  */
 
-#ifndef FACE_DETECTION_INTERFACE_H
-#define FACE_DETECTION_INTERFACE_H
+#pragma once
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
@@ -249,4 +248,3 @@ private:
     cv::Scalar std_{0.229, 0.224, 0.225};
 };
 
-#endif  // FACE_DETECTION_INTERFACE_H

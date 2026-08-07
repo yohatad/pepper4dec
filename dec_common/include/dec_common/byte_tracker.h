@@ -17,8 +17,7 @@
  * Copyright (C) 2025 Carnegie Mellon University Africa
  */
 
-#ifndef DEC_COMMON_BYTE_TRACKER_H
-#define DEC_COMMON_BYTE_TRACKER_H
+#pragma once
 
 #include <Eigen/Dense>
 
@@ -170,4 +169,3 @@ private:
 
 }  // namespace byte_tracker
 
-#endif  // DEC_COMMON_BYTE_TRACKER_H

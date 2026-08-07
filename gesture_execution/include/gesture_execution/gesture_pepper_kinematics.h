@@ -12,8 +12,7 @@
  * Copyright (C) 2025 Carnegie Mellon University Africa
  */
 
-#ifndef GESTURE_EXECUTION_GESTURE_PEPPER_KINEMATICS_H
-#define GESTURE_EXECUTION_GESTURE_PEPPER_KINEMATICS_H
+#pragma once
 
 #include <array>
 
@@ -124,4 +123,3 @@ std::array<double, 2> getHeadAngles(double camera_x, double camera_y, double cam
 
 }  // namespace pepper_kinematics
 
-#endif  // GESTURE_EXECUTION_GESTURE_PEPPER_KINEMATICS_H

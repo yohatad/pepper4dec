@@ -15,8 +15,7 @@
  * Affiliation: Carnegie Mellon University Africa
  */
 
-#ifndef DEC_COMMON_PARAM_LOADER_H
-#define DEC_COMMON_PARAM_LOADER_H
+#pragma once
 
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 
@@ -35,4 +34,3 @@ T declareAndGetParameter(rclcpp_lifecycle::LifecycleNode* node, const std::strin
 
 }  // namespace dec_common
 
-#endif  // DEC_COMMON_PARAM_LOADER_H
