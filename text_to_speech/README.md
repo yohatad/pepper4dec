@@ -53,7 +53,9 @@ sudo apt-get install espeak-ng
 
 ## 🔧 Configuration
 
-Configuration is managed via `config/text_to_speech_configuration.yaml`.
+Configuration is managed via ROS2 parameters, loaded from
+`config/text_to_speech_configuration.yaml` (`ros2 param get/set /text_to_speech <name>`
+also works at runtime; changes take effect on the next `configure`).
 
 ### Backend Selection
 

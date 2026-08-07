@@ -13,7 +13,7 @@ are queued and drained sequentially by a background playback thread, which
 ensures strict ordering even while new sentences keep arriving.
 
 Synthesis/playback is handled by one of several interchangeable backends,
-selected via the 'engine' config key: 'naoqi_ros' (Pepper's on-board
+selected via the 'engine' parameter: 'naoqi_ros' (Pepper's on-board
 ALTextToSpeech via naoqi_bridge), 'kokoro_local' / 'kokoro_pepper' (Kokoro-82M
 synthesised locally and played on the laptop or on Pepper's speakers), and
 'elevenlabs_local' / 'elevenlabs_pepper' (ElevenLabs streaming TTS played
@@ -46,7 +46,8 @@ Actions:
     /text_to_speech (dec_interfaces/action/TTS)
         Server that accepts text, queues it for speech, and reports completion.
 
-Parameters (loaded from text_to_speech_configuration.yaml):
+Parameters (declared as ROS2 parameters below; overridable via
+text_to_speech_configuration.yaml at launch or `ros2 param set` at runtime):
     engine (str, default: "naoqi_ros")
     naoqi_speech_topic (str, default: "/speech")
     chars_per_second (float, default: 12.0)
@@ -71,6 +72,7 @@ Date: April 2025
 Version: v1.0
 """
 
+import os
 import queue
 import sys
 import threading
@@ -95,7 +97,6 @@ from .text_to_speech_implementation import (
     collect_and_resample,
     estimate_duration,
     iter_robot_chunks,
-    load_configuration,
     prepare_stream_audio,
     resample_chunks,
     split_into_sentences,
@@ -113,17 +114,57 @@ SOFTWARE_VERSION = "v1.0"
 class TextToSpeechNode(LifecycleNode):
     """Lifecycle node that converts text to speech and plays it on Pepper's speakers."""
 
-    def __init__(self, config: dict):
+    def __init__(self):
         super().__init__("text_to_speech")
-        # Store config — heavy initialisation deferred to on_configure
-        self.config    = config
         self.node_name = self.get_name()
-        self.engine    = config["engine"]
+
+        # Parameters — declared once here so they survive repeated
+        # configure/cleanup cycles; on_configure re-reads current values on
+        # every configure, so `ros2 param set` + reconfigure picks up changes.
+        self.declare_parameter("engine", "naoqi_ros")
+        self.declare_parameter("naoqi_speech_topic", "/speech")
+        self.declare_parameter("chars_per_second", 12.0)
+        self.declare_parameter("speech_padding_s", 0.5)
+        self.declare_parameter("voice", "af_bella")
+        self.declare_parameter("sample_rate", 24000)
+        self.declare_parameter("output_device", -1)
+        self.declare_parameter("playback_method", "stream")
+        self.declare_parameter("stream_volume", 1.0)
+        self.declare_parameter("elevenlabs_api_key", "")
+        self.declare_parameter("elevenlabs_voice_id", "21m00Tcm4TlvDq8ikWAM")
+        self.declare_parameter("elevenlabs_model", "eleven_turbo_v2_5")
+        self.declare_parameter("elevenlabs_stability", 0.5)
+        self.declare_parameter("elevenlabs_similarity_boost", 0.75)
+        self.declare_parameter("elevenlabs_style", 0.0)
+        self.declare_parameter("elevenlabs_speed", 1.0)
 
     # ── Lifecycle callbacks ─────────────────────────────────────────────────────
 
     def on_configure(self, _state) -> TransitionCallbackReturn:
         """Initialize the TTS backend and create publishers, service clients, and the action server."""
+        self.engine = self.get_parameter("engine").value
+        self.naoqi_speech_topic = self.get_parameter("naoqi_speech_topic").value
+        self.chars_per_second = float(self.get_parameter("chars_per_second").value)
+        self.speech_padding_s = float(self.get_parameter("speech_padding_s").value)
+        self.voice = self.get_parameter("voice").value
+        self.sample_rate = int(self.get_parameter("sample_rate").value)
+        self.output_device = int(self.get_parameter("output_device").value)
+        self.playback_method = self.get_parameter("playback_method").value
+        self.stream_volume = float(self.get_parameter("stream_volume").value)
+        self.elevenlabs_api_key = self.get_parameter("elevenlabs_api_key").value
+        self.elevenlabs_voice_id = self.get_parameter("elevenlabs_voice_id").value
+        self.elevenlabs_model = self.get_parameter("elevenlabs_model").value
+        self.elevenlabs_stability = float(self.get_parameter("elevenlabs_stability").value)
+        self.elevenlabs_similarity_boost = float(self.get_parameter("elevenlabs_similarity_boost").value)
+        self.elevenlabs_style = float(self.get_parameter("elevenlabs_style").value)
+        self.elevenlabs_speed = float(self.get_parameter("elevenlabs_speed").value)
+
+        # Allow overriding the ElevenLabs key via environment variable, so it
+        # never has to be committed to the params YAML.
+        env_key = os.environ.get("ELEVENLABS_API_KEY", "")
+        if env_key:
+            self.elevenlabs_api_key = env_key
+
         self.get_logger().info(
             f"{self.node_name}: configuring — engine={self.engine}"
         )
@@ -144,8 +185,8 @@ class TextToSpeechNode(LifecycleNode):
 
         if self.engine in ("kokoro_local", "elevenlabs_local"):
             self.audio_player = AudioPlayer(
-                sample_rate=self.config["sample_rate"],
-                output_device=self.config["output_device"],
+                sample_rate=self.sample_rate,
+                output_device=self.output_device,
             )
 
         # Managed publishers
@@ -153,11 +194,11 @@ class TextToSpeechNode(LifecycleNode):
 
         if self.engine == "naoqi_ros":
             self.naoqi_pub = self.create_lifecycle_publisher(
-                String, self.config["naoqi_speech_topic"], 10
+                String, self.naoqi_speech_topic, 10
             )
             self.get_logger().info(
                 f"{self.node_name}: naoqi_ros backend — "
-                f"publishing to '{self.config['naoqi_speech_topic']}'"
+                f"publishing to '{self.naoqi_speech_topic}'"
             )
 
         # Service clients
@@ -241,7 +282,7 @@ class TextToSpeechNode(LifecycleNode):
         """Synthesise a short dummy phrase to pre-load the Kokoro model."""
         self.get_logger().info(f"{self.node_name}: warming up Kokoro model…")
         try:
-            synthesize_kokoro("Hello.", self.config["voice"], self.config["sample_rate"])
+            synthesize_kokoro("Hello.", self.voice, self.sample_rate)
             self.get_logger().info(f"{self.node_name}: Kokoro warm-up complete.")
         except Exception as e:
             self.get_logger().warn(
@@ -369,8 +410,8 @@ class TextToSpeechNode(LifecycleNode):
 
         duration = estimate_duration(
             sentence,
-            self.config["chars_per_second"],
-            self.config["speech_padding_s"],
+            self.chars_per_second,
+            self.speech_padding_s,
         )
         deadline = time.monotonic() + duration
         while time.monotonic() < deadline:
@@ -388,7 +429,7 @@ class TextToSpeechNode(LifecycleNode):
         )
         try:
             audio = synthesize_kokoro(
-                sentence, self.config["voice"], self.config["sample_rate"]
+                sentence, self.voice, self.sample_rate
             )
         except RuntimeError as e:
             self.get_logger().error(str(e))
@@ -396,7 +437,7 @@ class TextToSpeechNode(LifecycleNode):
 
         self.set_mic_enabled(False)
         try:
-            duration_s = len(audio) / self.config["sample_rate"]
+            duration_s = len(audio) / self.sample_rate
             self.get_logger().info(
                 f"{self.node_name}: [kokoro_local] playing {duration_s:.2f}s"
             )
@@ -418,7 +459,7 @@ class TextToSpeechNode(LifecycleNode):
           "file"   - load_audio_file + play_audio action (default, supports long audio)
           "stream" - send_audio_buffer service (low-latency, max ~170ms per call)
         """
-        playback_method = self.config.get("playback_method", "file")
+        playback_method = self.playback_method
         
         self.get_logger().info(
             f"{self.node_name}: [kokoro_pepper] synthesising: '{sentence}' "
@@ -428,14 +469,14 @@ class TextToSpeechNode(LifecycleNode):
         # 1. Synthesise
         try:
             audio = synthesize_kokoro(
-                sentence, self.config["voice"], self.config["sample_rate"]
+                sentence, self.voice, self.sample_rate
             )
         except RuntimeError as e:
             self.get_logger().error(str(e))
             return
 
         # 2. Encode to WAV bytes in memory
-        wav_bytes = audio_to_wav_bytes(audio, self.config["sample_rate"])
+        wav_bytes = audio_to_wav_bytes(audio, self.sample_rate)
 
         # 3. Play based on configured method
         if playback_method == "stream":
@@ -457,17 +498,17 @@ class TextToSpeechNode(LifecycleNode):
         try:
             gen, api_rate = stream_elevenlabs(
                 sentence,
-                voice_id=self.config["elevenlabs_voice_id"],
-                api_key=self.config["elevenlabs_api_key"],
-                model_id=self.config.get("elevenlabs_model", "eleven_turbo_v2_5"),
-                sample_rate=self.config["sample_rate"],
-                stability=self.config.get("elevenlabs_stability", 0.5),
-                similarity_boost=self.config.get("elevenlabs_similarity_boost", 0.75),
-                style=self.config.get("elevenlabs_style", 0.0),
-                speed=self.config.get("elevenlabs_speed", 1.0),
+                voice_id=self.elevenlabs_voice_id,
+                api_key=self.elevenlabs_api_key,
+                model_id=self.elevenlabs_model,
+                sample_rate=self.sample_rate,
+                stability=self.elevenlabs_stability,
+                similarity_boost=self.elevenlabs_similarity_boost,
+                style=self.elevenlabs_style,
+                speed=self.elevenlabs_speed,
             )
             completed = self.audio_player.play_chunks(
-                resample_chunks(gen, api_rate, self.config["sample_rate"])
+                resample_chunks(gen, api_rate, self.sample_rate)
             )
             if not completed:
                 self.get_logger().info(
@@ -489,7 +530,7 @@ class TextToSpeechNode(LifecycleNode):
                      avoiding click artifacts from resampling tiny API chunks.
         file mode:   Collects full audio then uses SCP + ALAudioPlayer (fallback).
         """
-        playback_method = self.config.get("playback_method", "stream")
+        playback_method = self.playback_method
         self.get_logger().info(
             f"{self.node_name}: [elevenlabs_pepper] streaming: '{sentence}' "
             f"(method={playback_method})"
@@ -498,14 +539,14 @@ class TextToSpeechNode(LifecycleNode):
         try:
             gen, api_rate = stream_elevenlabs(
                 sentence,
-                voice_id=self.config["elevenlabs_voice_id"],
-                api_key=self.config["elevenlabs_api_key"],
-                model_id=self.config.get("elevenlabs_model", "eleven_turbo_v2_5"),
-                sample_rate=self.config["sample_rate"],
-                stability=self.config.get("elevenlabs_stability", 0.5),
-                similarity_boost=self.config.get("elevenlabs_similarity_boost", 0.75),
-                style=self.config.get("elevenlabs_style", 0.0),
-                speed=self.config.get("elevenlabs_speed", 1.0),
+                voice_id=self.elevenlabs_voice_id,
+                api_key=self.elevenlabs_api_key,
+                model_id=self.elevenlabs_model,
+                sample_rate=self.sample_rate,
+                stability=self.elevenlabs_stability,
+                similarity_boost=self.elevenlabs_similarity_boost,
+                style=self.elevenlabs_style,
+                speed=self.elevenlabs_speed,
             )
         except RuntimeError as e:
             self.get_logger().error(str(e))
@@ -515,17 +556,17 @@ class TextToSpeechNode(LifecycleNode):
             self.stream_elevenlabs_to_robot(gen, api_rate)
         else:
             # file mode: collect full audio → WAV bytes → play via action
-            audio = collect_and_resample(gen, api_rate, self.config["sample_rate"])
+            audio = collect_and_resample(gen, api_rate, self.sample_rate)
             if len(audio) == 0:
                 return
-            self.play_via_file(audio_to_wav_bytes(audio, self.config["sample_rate"]))
+            self.play_via_file(audio_to_wav_bytes(audio, self.sample_rate))
 
     def stream_elevenlabs_to_robot(self, gen, api_rate: int):
         """
         Accumulate streaming float32 chunks into aligned robot buffers,
         resample to 48 kHz stereo, and send via send_audio_buffer.
         """
-        volume = float(self.config.get("stream_volume", 1.0))
+        volume = float(self.stream_volume)
         self.set_mic_enabled(False)
         try:
             for audio_list, wait_time in iter_robot_chunks(gen, api_rate, volume):
@@ -566,7 +607,7 @@ class TextToSpeechNode(LifecycleNode):
 
     def play_via_stream(self, wav_bytes: bytes):
         """Play audio via send_audio_buffer service (low-latency streaming)."""
-        volume = float(self.config.get("stream_volume", 1.0))
+        volume = float(self.stream_volume)
         self.set_mic_enabled(False)
         try:
             for audio_list, wait_time in prepare_stream_audio(wav_bytes, volume):
@@ -745,8 +786,7 @@ def main(args=None):
     node = None
 
     try:
-        config = load_configuration()
-        node = TextToSpeechNode(config)
+        node = TextToSpeechNode()
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass

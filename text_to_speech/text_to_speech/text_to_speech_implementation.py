@@ -4,9 +4,10 @@ Implements the synthesis, audio-conversion, and playback helpers used by the
 text_to_speech_application LifecycleNode.
 
 The module-level helpers cover sentence splitting, duration estimation,
-configuration loading, Kokoro-82M and ElevenLabs speech synthesis, WAV/PCM
-audio conversion and resampling for Pepper's onboard speakers, and local
-playback via sounddevice (AudioPlayer).
+Kokoro-82M and ElevenLabs speech synthesis, WAV/PCM audio conversion and
+resampling for Pepper's onboard speakers, and local playback via
+sounddevice (AudioPlayer). Configuration is declared as ROS2 parameters by
+TextToSpeechNode itself (see text_to_speech_application.py).
 
 Author: Yohannes Tadesse Haile
 Affiliation: Carnegie Mellon University Africa
@@ -17,7 +18,6 @@ Version: v1.0
 
 import io
 import math
-import os
 import queue
 import re
 import threading
@@ -48,78 +48,6 @@ def split_into_sentences(text: str) -> list:
 def estimate_duration(text: str, chars_per_second: float, speech_padding_s: float) -> float:
     """Estimate how long Pepper will take to speak *text* (seconds)."""
     return max(1.0, len(text) / chars_per_second) + speech_padding_s
-
-
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-
-def load_configuration() -> dict:
-    """
-    Load configuration from the default YAML file location.
-
-    Returns:
-        dict: Configuration with defaults applied for any missing keys.
-    """
-    from ament_index_python.packages import get_package_share_directory
-    import yaml
-
-    config = {
-        # Backend selection
-        'engine': 'naoqi_ros',
-
-        # naoqi_ros backend
-        'naoqi_speech_topic': '/speech',
-        'chars_per_second': 12.0,
-        'speech_padding_s': 0.5,
-
-        # kokoro backends (kokoro_local / kokoro_pepper)
-        'voice': 'af_bella',
-        'sample_rate': 24000,
-        'output_device': -1,          # kokoro_local only; -1 = system default
-
-        # kokoro_pepper playback method: "file" or "stream"
-        #   "file"   - naoqi_driver SCPs WAV to robot, plays via ALAudioPlayer (full feedback)
-        #   "stream" - send_audio_buffer / ALAudioDevice (no SCP needed)
-        'playback_method': 'stream',
-
-        # Stream volume multiplier (kokoro_pepper / elevenlabs_pepper, stream mode)
-        # 1.0 = unity gain; 2.0 = double amplitude (clips at ±32767)
-        'stream_volume': 1.0,
-
-        # ElevenLabs backend
-        'elevenlabs_api_key': '',
-        'elevenlabs_voice_id': '21m00Tcm4TlvDq8ikWAM',  # Rachel
-        'elevenlabs_model': 'eleven_turbo_v2_5',
-        'elevenlabs_stability': 0.5,
-        'elevenlabs_similarity_boost': 0.75,
-        'elevenlabs_style': 0.0,
-        'elevenlabs_speed': 1.0,
-    }
-
-    try:
-        package_path = get_package_share_directory("text_to_speech")
-        config_file = os.path.join(
-            package_path, "config", "text_to_speech_configuration.yaml"
-        )
-        if os.path.exists(config_file):
-            with open(config_file, "r") as f:
-                file_config = yaml.safe_load(f) or {}
-            config.update(file_config)
-            logger.info(f"Loaded TTS configuration from {config_file}")
-        else:
-            logger.warn(
-                f"Configuration file not found at {config_file}, using defaults"
-            )
-    except Exception as e:
-        logger.error(f"Error reading configuration: {e} — using defaults")
-
-    # Allow overriding the ElevenLabs key via environment variable
-    env_key = os.environ.get("ELEVENLABS_API_KEY", "")
-    if env_key:
-        config["elevenlabs_api_key"] = env_key
-
-    return config
 
 
 # ---------------------------------------------------------------------------
