@@ -14,8 +14,9 @@
  * Subscribers:
  *   /joint_states (sensor_msgs/JointState)
  *     Current joint positions, used to track the robot's arm/head/leg state.
- *   /robot_localization/pose (geometry_msgs/Pose2D)
- *     Current robot pose in the world frame, used to compute pointing direction.
+ *   /localization (nav_msgs/Odometry)
+ *     Fused map->base_footprint robot pose (from lio_localization's
+ *     transform_fusion), used to compute pointing direction.
  *
  * Publishers:
  *   /joint_angles_trajectory (naoqi_bridge_msgs/JointAnglesTrajectory)
@@ -51,7 +52,7 @@
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 
 #include <sensor_msgs/msg/joint_state.hpp>
-#include <geometry_msgs/msg/pose2_d.hpp>
+#include <nav_msgs/msg/odometry.hpp>
 #include <geometry_msgs/msg/point.hpp>
 #include <visualization_msgs/msg/marker.hpp>
 #include <naoqi_bridge_msgs/msg/joint_angles_trajectory.hpp>
@@ -139,7 +140,7 @@ std::unordered_map<std::string, GestureDescriptor> loadGestureDescriptors(const 
 // hardcoded defaults for any missing key, mirroring the Python ConfigManager).
 struct RobotTopics {
     std::string joint_states = "/joint_states";
-    std::string robot_pose = "/robot_localization/pose";
+    std::string robot_pose = "/localization";
 };
 
 /**
@@ -186,7 +187,7 @@ private:
 
     // ── Subscription callbacks ──────────────────────────────────────────────
     void jointStatesCallback(const sensor_msgs::msg::JointState::SharedPtr msg);
-    void robotPoseCallback(const geometry_msgs::msg::Pose2D::SharedPtr msg);
+    void robotPoseCallback(const nav_msgs::msg::Odometry::SharedPtr msg);
 
     // ── Action server callbacks ─────────────────────────────────────────────
     rclcpp_action::GoalResponse handleGoal(
@@ -240,7 +241,7 @@ private:
     rclcpp_lifecycle::LifecyclePublisher<naoqi_bridge_msgs::msg::JointAnglesTrajectory>::SharedPtr joint_traj_pub_;
     rclcpp_lifecycle::LifecyclePublisher<visualization_msgs::msg::Marker>::SharedPtr marker_pub_;
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_sub_;
-    rclcpp::Subscription<geometry_msgs::msg::Pose2D>::SharedPtr pose_sub_;
+    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr pose_sub_;
     rclcpp_action::Server<GestureAction>::SharedPtr action_server_;
 };
 

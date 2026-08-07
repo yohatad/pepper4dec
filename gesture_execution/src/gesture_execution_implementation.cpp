@@ -164,7 +164,7 @@ GestureExecutionSystem::CallbackReturn GestureExecutionSystem::on_activate(const
 
     joint_sub_ = create_subscription<sensor_msgs::msg::JointState>(
         topics_.joint_states, 10, std::bind(&GestureExecutionSystem::jointStatesCallback, this, std::placeholders::_1));
-    pose_sub_ = create_subscription<geometry_msgs::msg::Pose2D>(
+    pose_sub_ = create_subscription<nav_msgs::msg::Odometry>(
         topics_.robot_pose, 10, std::bind(&GestureExecutionSystem::robotPoseCallback, this, std::placeholders::_1));
 
     RCLCPP_INFO(get_logger(), "GestureExecutionSystem activated — ready for goals on /gesture_execution");
@@ -238,10 +238,13 @@ void GestureExecutionSystem::jointStatesCallback(const sensor_msgs::msg::JointSt
     }
 }
 
-void GestureExecutionSystem::robotPoseCallback(const geometry_msgs::msg::Pose2D::SharedPtr msg) {
-    robot_pose_.x = msg->x;
-    robot_pose_.y = msg->y;
-    robot_pose_.theta = msg->theta;
+void GestureExecutionSystem::robotPoseCallback(const nav_msgs::msg::Odometry::SharedPtr msg) {
+    const auto& p = msg->pose.pose;
+    robot_pose_.x = p.position.x;
+    robot_pose_.y = p.position.y;
+    // Yaw from quaternion (roll/pitch are ~0 for a ground robot).
+    const auto& q = p.orientation;
+    robot_pose_.theta = std::atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z));
 }
 
 // ── Action server callbacks ────────────────────────────────────────────────

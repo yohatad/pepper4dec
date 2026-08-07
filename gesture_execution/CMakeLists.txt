@@ -18,6 +18,7 @@ find_package(rclcpp_action REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(dec_interfaces REQUIRED)
@@ -40,6 +41,7 @@ ament_target_dependencies(${PROJECT_NAME}_lib
   rclcpp_lifecycle
   std_msgs
   geometry_msgs
+  nav_msgs
   sensor_msgs
   visualization_msgs
   dec_interfaces
