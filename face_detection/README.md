@@ -132,25 +132,33 @@ manually with `ros2 lifecycle set /face_detection configure` then
 ```
 face_detection/
 ├── config/
-│   └── face_detection_configuration.yaml           # ROS2 parameters
+│   ├── face_detection_configuration.yaml           # ROS2 parameters
+│   └── age_gender_detection_configuration.yaml     # ROS2 parameters (age/gender node)
 ├── data/
 │   └── pepper_topics.yaml                          # topic name overrides
 ├── launch/
-│   └── face_detection_launch_robot.launch.py
+│   ├── face_detection_launch_robot.launch.py
+│   └── age_gender_detection_launch_robot.launch.py
 ├── models/
 │   ├── face_detection_goldYOLO.onnx                # face detector weights
-│   └── face_detection_sixdrepnet360.onnx           # head-pose estimator weights
+│   ├── face_detection_sixdrepnet360.onnx           # head-pose estimator weights
+│   └── face_detection_mivolo_agegender.onnx        # age/gender estimator weights
 ├── include/face_detection/
-│   ├── byte_tracker.h
-│   └── face_detection_interface.h                  # node/class declarations
+│   ├── face_detection_interface.h                  # node/class declarations
+│   └── age_gender_detection_interface.h            # node/class declarations (age/gender node)
 ├── src/
-│   ├── byte_tracker.cpp
 │   ├── face_detection_application.cpp              # node entry point (main)
-│   └── face_detection_implementation.cpp           # face detection + gaze estimation
+│   ├── face_detection_implementation.cpp           # face detection + gaze estimation
+│   ├── age_gender_detection_application.cpp        # node entry point (main)
+│   └── age_gender_detection_implementation.cpp     # age/gender estimation
 ├── CMakeLists.txt
 ├── package.xml
 └── README.md
 ```
+
+The shared `ByteTrack` face tracker (`byte_tracker::ByteTrack`, used in standalone mode when
+`require_person_detection` is `false`) lives in `dec_common/include/dec_common/byte_tracker.h`,
+not in this package; it moved there once `person_detection` needed the identical implementation.
 
 ## 🏗️ Architecture
 
