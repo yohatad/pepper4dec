@@ -226,11 +226,11 @@ private:
 
 // Improved attention controller for robot overt attention.
 // Priority 1: Engaged faces | Priority 2: Detected faces | Priority 3: Saliency (with cooldown + IOR)
-class UnifiedAttentionNode : public rclcpp_lifecycle::LifecycleNode {
+class OvertAttentionNode : public rclcpp_lifecycle::LifecycleNode {
 public:
     using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
-    UnifiedAttentionNode();
+    OvertAttentionNode();
 
     // Lifecycle transitions. Parameters are declared once in the constructor;
     // subscriptions/publishers/service are created in on_configure, the

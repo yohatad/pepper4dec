@@ -208,7 +208,7 @@ overt_attention/
 │   ├── overt_attention_utilities.cpp         # shared helpers
 │   ├── overt_attention_saliency.cpp          # saliency node (BMS)
 │   ├── overt_attention_application.cpp       # attention controller entry point (main)
-│   ├── overt_attention_implementation.cpp    # attention controller node (UnifiedAttentionNode)
+│   ├── overt_attention_implementation.cpp    # attention controller node (OvertAttentionNode)
 │   └── overt_attention_visualization.cpp     # visualization node
 ├── CMakeLists.txt
 ├── package.xml

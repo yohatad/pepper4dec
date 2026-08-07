@@ -1,6 +1,6 @@
 /* overt_attention_implementation.cpp
  *
- * Implements UnifiedAttentionNode, the improved attention controller for
+ * Implements OvertAttentionNode, the improved attention controller for
  * Pepper's overt attention system: Priority 1: Engaged Faces | Priority 2:
  * Detected Faces | Priority 3: Saliency (with cooldown + IOR). See
  * overt_attention_interface.h for the full subscriber/publisher/parameter
@@ -14,7 +14,7 @@
 
 #include "overt_attention/overt_attention_interface.h"
 
-UnifiedAttentionNode::UnifiedAttentionNode() : LifecycleNode("simple_attention") {
+OvertAttentionNode::OvertAttentionNode() : LifecycleNode("overt_attention") {
     try {
         topics_config_ = loadTopicsConfig("overt_attention", "data/pepper_topics.yaml");
         RCLCPP_INFO(get_logger(), "Loaded topics configuration from overt_attention package");
@@ -69,8 +69,8 @@ UnifiedAttentionNode::UnifiedAttentionNode() : LifecycleNode("simple_attention")
     declare_parameter("ior_max_locations", 20);
 }
 
-UnifiedAttentionNode::CallbackReturn
-UnifiedAttentionNode::on_configure(const rclcpp_lifecycle::State&) {
+OvertAttentionNode::CallbackReturn
+OvertAttentionNode::on_configure(const rclcpp_lifecycle::State&) {
     // Load topics from YAML config
     std::string camera_type = get_parameter("camera_type").as_string();
     std::string face_topic = topics_config_.face;
@@ -123,13 +123,13 @@ UnifiedAttentionNode::on_configure(const rclcpp_lifecycle::State&) {
     // Subscriptions
     auto qos_img = getImageQoS();
     sub_faces_ = create_subscription<dec_interfaces::msg::FaceDetection>(
-        face_topic, 10, std::bind(&UnifiedAttentionNode::onFaces, this, std::placeholders::_1));
+        face_topic, 10, std::bind(&OvertAttentionNode::onFaces, this, std::placeholders::_1));
     sub_saliency_ = create_subscription<std_msgs::msg::Float32MultiArray>(
-        saliency_topic, 10, std::bind(&UnifiedAttentionNode::onSaliency, this, std::placeholders::_1));
+        saliency_topic, 10, std::bind(&OvertAttentionNode::onSaliency, this, std::placeholders::_1));
     sub_caminfo_ = create_subscription<sensor_msgs::msg::CameraInfo>(
-        camera_info_topic, qos_img, std::bind(&UnifiedAttentionNode::onCamInfo, this, std::placeholders::_1));
+        camera_info_topic, qos_img, std::bind(&OvertAttentionNode::onCamInfo, this, std::placeholders::_1));
     sub_joint_states_ = create_subscription<sensor_msgs::msg::JointState>(
-        "/joint_states", 10, std::bind(&UnifiedAttentionNode::onJointStates, this, std::placeholders::_1));
+        "/joint_states", 10, std::bind(&OvertAttentionNode::onJointStates, this, std::placeholders::_1));
 
     // Publishers
     pub_head_ = create_publisher<naoqi_bridge_msgs::msg::JointAnglesWithSpeed>(head_cmd_topic, 10);
@@ -138,7 +138,7 @@ UnifiedAttentionNode::on_configure(const rclcpp_lifecycle::State&) {
     // Services
     srv_enable_ = create_service<std_srvs::srv::SetBool>(
         "/overt_attention/set_enabled",
-        std::bind(&UnifiedAttentionNode::handleSetEnabled, this, std::placeholders::_1, std::placeholders::_2));
+        std::bind(&OvertAttentionNode::handleSetEnabled, this, std::placeholders::_1, std::placeholders::_2));
 
     std::string status = attention_enabled_ ? "ENABLED" : "DISABLED";
     std::string default_mode = move_to_default_on_disable_ ? "move to default" : "hold position";
@@ -149,21 +149,21 @@ UnifiedAttentionNode::on_configure(const rclcpp_lifecycle::State&) {
     return CallbackReturn::SUCCESS;
 }
 
-UnifiedAttentionNode::CallbackReturn
-UnifiedAttentionNode::on_activate(const rclcpp_lifecycle::State& state) {
+OvertAttentionNode::CallbackReturn
+OvertAttentionNode::on_activate(const rclcpp_lifecycle::State& state) {
     // Base activates the lifecycle publishers (pub_head_, pub_target_).
     LifecycleNode::on_activate(state);
     return CallbackReturn::SUCCESS;
 }
 
-UnifiedAttentionNode::CallbackReturn
-UnifiedAttentionNode::on_deactivate(const rclcpp_lifecycle::State& state) {
+OvertAttentionNode::CallbackReturn
+OvertAttentionNode::on_deactivate(const rclcpp_lifecycle::State& state) {
     LifecycleNode::on_deactivate(state);
     return CallbackReturn::SUCCESS;
 }
 
-UnifiedAttentionNode::CallbackReturn
-UnifiedAttentionNode::on_cleanup(const rclcpp_lifecycle::State&) {
+OvertAttentionNode::CallbackReturn
+OvertAttentionNode::on_cleanup(const rclcpp_lifecycle::State&) {
     sub_faces_.reset();
     sub_saliency_.reset();
     sub_caminfo_.reset();
@@ -174,7 +174,7 @@ UnifiedAttentionNode::on_cleanup(const rclcpp_lifecycle::State&) {
     return CallbackReturn::SUCCESS;
 }
 
-void UnifiedAttentionNode::handleSetEnabled(const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+void OvertAttentionNode::handleSetEnabled(const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
                                              std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
     bool old_state = attention_enabled_;
     attention_enabled_ = request->data;
@@ -221,7 +221,7 @@ void UnifiedAttentionNode::handleSetEnabled(const std::shared_ptr<std_srvs::srv:
     }
 }
 
-void UnifiedAttentionNode::onCamInfo(const sensor_msgs::msg::CameraInfo::SharedPtr msg) {
+void OvertAttentionNode::onCamInfo(const sensor_msgs::msg::CameraInfo::SharedPtr msg) {
     if (!fx_.has_value()) {
         fx_ = msg->k[0];
         fy_ = msg->k[4];
@@ -231,7 +231,7 @@ void UnifiedAttentionNode::onCamInfo(const sensor_msgs::msg::CameraInfo::SharedP
     }
 }
 
-void UnifiedAttentionNode::onJointStates(const sensor_msgs::msg::JointState::SharedPtr msg) {
+void OvertAttentionNode::onJointStates(const sensor_msgs::msg::JointState::SharedPtr msg) {
     auto yaw_it = std::find(msg->name.begin(), msg->name.end(), "HeadYaw");
     auto pitch_it = std::find(msg->name.begin(), msg->name.end(), "HeadPitch");
 
@@ -245,7 +245,7 @@ void UnifiedAttentionNode::onJointStates(const sensor_msgs::msg::JointState::Sha
     }
 }
 
-void UnifiedAttentionNode::moveHeadToDefault() {
+void OvertAttentionNode::moveHeadToDefault() {
     naoqi_bridge_msgs::msg::JointAnglesWithSpeed msg;
     msg.header.stamp = get_clock()->now();
     msg.joint_names = {"HeadYaw", "HeadPitch"};
@@ -262,7 +262,7 @@ void UnifiedAttentionNode::moveHeadToDefault() {
     pub_target_->publish(target_msg);
 }
 
-double UnifiedAttentionNode::calculateFacePriority(const geometry_msgs::msg::Point& centroid,
+double OvertAttentionNode::calculateFacePriority(const geometry_msgs::msg::Point& centroid,
                                                     bool mutual_gaze, bool is_current_face) {
     double score = 1.0;
 
@@ -300,7 +300,7 @@ double UnifiedAttentionNode::calculateFacePriority(const geometry_msgs::msg::Poi
     return score;
 }
 
-void UnifiedAttentionNode::onFaces(const dec_interfaces::msg::FaceDetection::SharedPtr msg) {
+void OvertAttentionNode::onFaces(const dec_interfaces::msg::FaceDetection::SharedPtr msg) {
     if (!attention_enabled_) {
         return;
     }
@@ -418,12 +418,12 @@ void UnifiedAttentionNode::onFaces(const dec_interfaces::msg::FaceDetection::Sha
     publishHead(yaw, pitch, best_face->priority, source);
 }
 
-double UnifiedAttentionNode::calculateIorSuppression(double age_seconds) {
+double OvertAttentionNode::calculateIorSuppression(double age_seconds) {
     double decay = std::log(2.0) / ior_half_life_;
     return ior_max_suppression_ * std::exp(-decay * age_seconds);
 }
 
-double UnifiedAttentionNode::applyIorFilter(double world_yaw, double world_pitch, double score) {
+double OvertAttentionNode::applyIorFilter(double world_yaw, double world_pitch, double score) {
     if (!enable_ior_ || visited_locations_.empty()) {
         return score;
     }
@@ -445,7 +445,7 @@ double UnifiedAttentionNode::applyIorFilter(double world_yaw, double world_pitch
     return score * (1.0 - max_suppression);
 }
 
-void UnifiedAttentionNode::cleanupWeakIor() {
+void OvertAttentionNode::cleanupWeakIor() {
     if (!enable_ior_) {
         return;
     }
@@ -463,7 +463,7 @@ void UnifiedAttentionNode::cleanupWeakIor() {
     visited_locations_ = std::move(kept);
 }
 
-void UnifiedAttentionNode::onSaliency(const std_msgs::msg::Float32MultiArray::SharedPtr msg) {
+void OvertAttentionNode::onSaliency(const std_msgs::msg::Float32MultiArray::SharedPtr msg) {
     if (!attention_enabled_) {
         return;
     }
@@ -601,7 +601,7 @@ void UnifiedAttentionNode::onSaliency(const std_msgs::msg::Float32MultiArray::Sh
     publishHead(yaw, pitch, best_score, "saliency(" + reason + ")");
 }
 
-void UnifiedAttentionNode::publishHead(double yaw, double pitch, double score,
+void OvertAttentionNode::publishHead(double yaw, double pitch, double score,
                                         const std::string& source, bool force) {
     if (force) {
         // Immediate move: reset smoothed target to destination and skip dead-zone
