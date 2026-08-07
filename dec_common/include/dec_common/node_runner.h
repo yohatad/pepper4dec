@@ -54,7 +54,25 @@ int runNode(int argc, char** argv, const NodeRunOptions& options = {},
         RCLCPP_INFO(rclcpp::get_logger(options.logger_name), "%s", options.banner);
     }
 
-    auto node = std::make_shared<NodeT>();
+    std::shared_ptr<NodeT> node;
+    try {
+        node = std::make_shared<NodeT>();
+    } catch (const std::exception&) {
+        // rclcpp::shutdown() (e.g. SIGINT arriving within the first few ms
+        // of process start, as launch_testing harnesses do) can race node
+        // construction: rclcpp_lifecycle::LifecycleNode's base constructor
+        // creates several built-in services (change_state, get_state, ...),
+        // and if shutdown lands mid-construction those calls throw against
+        // an already-invalidated context. That's not a real startup error --
+        // exit cleanly instead of letting the exception reach
+        // std::terminate() and abort the process. Genuine construction
+        // failures (e.g. a malformed config) still throw, since rclcpp::ok()
+        // is true for those.
+        if (!rclcpp::ok()) {
+            return 0;
+        }
+        throw;
+    }
 
     if (options.executor_threads <= 1 && !extra_nodes) {
         rclcpp::spin(node->get_node_base_interface());
