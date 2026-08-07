@@ -28,6 +28,7 @@ find_package(ament_index_cpp REQUIRED)
 # Library
 add_library(${PROJECT_NAME}_lib
   src/overt_attention_utilities.cpp
+  src/overt_attention_implementation.cpp
 )
 target_include_directories(${PROJECT_NAME}_lib PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -52,7 +53,7 @@ target_link_libraries(${PROJECT_NAME}_lib yaml-cpp ${OpenCV_LIBS})
 add_executable(overt_attention_saliency src/overt_attention_saliency.cpp)
 target_link_libraries(overt_attention_saliency ${PROJECT_NAME}_lib)
 
-add_executable(overt_attention_unified_attention src/overt_attention_unified_attention.cpp)
+add_executable(overt_attention_unified_attention src/overt_attention_application.cpp)
 target_link_libraries(overt_attention_unified_attention ${PROJECT_NAME}_lib)
 
 add_executable(overt_attention_visualization src/overt_attention_visualization.cpp)

@@ -1,12 +1,16 @@
-/*
-Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
-Email: yohatad123@gmail.com
-Date: June 12, 2026
-Version: v1.0 - C++ port of overt_attention_unified_attention.py
-
-Improved Attention Controller for Robot Overt Attention
-Priority 1: Engaged Faces | Priority 2: Detected Faces | Priority 3: Saliency (with cooldown + IOR)
-*/
+/* overt_attention_implementation.cpp
+ *
+ * Implements UnifiedAttentionNode, the improved attention controller for
+ * Pepper's overt attention system: Priority 1: Engaged Faces | Priority 2:
+ * Detected Faces | Priority 3: Saliency (with cooldown + IOR). See
+ * overt_attention_interface.h for the full subscriber/publisher/parameter
+ * reference.
+ *
+ * Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
+ * Email: yohatad123@gmail.com
+ * Date: June 12, 2026
+ * Version: v1.0 - C++ port of overt_attention_unified_attention.py
+ */
 
 #include "overt_attention/overt_attention_interface.h"
 
@@ -652,16 +656,4 @@ void UnifiedAttentionNode::publishHead(double yaw, double pitch, double score,
 
     RCLCPP_INFO(get_logger(), "[%s] \xe2\x86\x92 yaw=%.1f\xc2\xb0, pitch=%.1f\xc2\xb0, score=%.2f",
                 source.c_str(), yaw * 180.0 / M_PI, pitch * 180.0 / M_PI, score);
-}
-
-int main(int argc, char* argv[]) {
-    rclcpp::init(argc, argv);
-    try {
-        auto node = std::make_shared<UnifiedAttentionNode>();
-        rclcpp::spin(node->get_node_base_interface());
-    } catch (const std::exception& e) {
-        RCLCPP_ERROR(rclcpp::get_logger("simple_attention"), "Exception: %s", e.what());
-    }
-    rclcpp::shutdown();
-    return 0;
 }
