@@ -18,7 +18,13 @@ import os
 import numpy as np
 import scipy.ndimage
 import librosa
+import rclpy.logging
 from scipy.signal import butter, lfilter, iirnotch
+
+# Fallback logger for standalone use (no ROS node logger passed in) — the
+# only production call site (speech_event_implementation.py) always passes
+# its own node's logger.
+_fallback_logger = rclpy.logging.get_logger("speech_event_denoiser")
 
 
 def butter_bandpass(lowcut, highcut, fs, order=3):
@@ -166,4 +172,4 @@ class SpeechDenoiser:
         if self._log:
             self._log.info(msg)
         else:
-            print(msg)
+            _fallback_logger.info(msg)

@@ -68,8 +68,8 @@ Date: November 8, 2025
 Version: v1.0
 """
 
-import sys
 import rclpy
+import rclpy.logging
 from rclpy.executors import MultiThreadedExecutor
 from .speech_event_implementation import SpeechRecognitionNode
 
@@ -99,11 +99,11 @@ def main(args=None):
         pass
 
     except Exception as e:
-        # If node exists, use ROS logging; else print to stderr
+        # If node exists, use its logger; else fall back to a standalone ROS logger
         try:
             node.get_logger().error(f"Unhandled exception: {e}")
         except Exception:
-            print(f"[speech_event] Unhandled exception: {e}", file=sys.stderr)
+            rclpy.logging.get_logger("speech_recognition").error(f"Unhandled exception: {e}")
 
     finally:
         if rclpy_inited:

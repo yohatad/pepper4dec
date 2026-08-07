@@ -32,6 +32,7 @@ Version: v1.0
 """
 
 import rclpy
+import rclpy.logging
 from pathlib import Path
 from typing import List, Dict
 from rclpy.action import ActionServer
@@ -343,9 +344,16 @@ def main(args=None):
         node = ConversationManagerNode()
         rclpy.spin(node)
     except KeyboardInterrupt:
-        print("\nShutdown requested (Ctrl+C)...")
+        # If node exists, use its logger; else fall back to a standalone ROS logger
+        if node is not None:
+            node.get_logger().info("Shutdown requested (Ctrl+C)...")
+        else:
+            rclpy.logging.get_logger("conversation_manager").info("Shutdown requested (Ctrl+C)...")
     except Exception as e:
-        print(f"Error: {e}")
+        if node is not None:
+            node.get_logger().error(f"Error: {e}")
+        else:
+            rclpy.logging.get_logger("conversation_manager").error(f"Error: {e}")
     finally:
         if node:
             node.destroy_node()

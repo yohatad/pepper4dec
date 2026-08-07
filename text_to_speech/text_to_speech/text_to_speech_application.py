@@ -79,6 +79,7 @@ import threading
 import time
 
 import rclpy
+import rclpy.logging
 from rclpy.action import ActionServer, ActionClient
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
@@ -755,7 +756,7 @@ class TextToSpeechNode(LifecycleNode):
         try:
             self.get_logger().info(f"{self.node_name}: shutting down…")
         except Exception:
-            print("[text_to_speech] shutting down…")
+            rclpy.logging.get_logger("text_to_speech").info("shutting down…")
         self.shutdown = True
 
         # Signal any in-progress playback loop to stop
