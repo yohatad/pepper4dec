@@ -69,7 +69,7 @@ Configuration is managed via ROS2 parameters, loaded from `config/person_detecti
 source ~/ros2_ws/install/setup.bash
 
 # Launch the person_detection node
-ros2 launch person_detection person_detection_launch_robot.launch.py
+ros2 launch person_detection person_detection.launch.py
 ```
 
 > This launch starts **only** the person_detection node. It expects the camera
@@ -152,7 +152,7 @@ person_detection/
 ├── data/
 │   └── pepper_topics.yaml                          # topic name overrides
 ├── launch/
-│   └── person_detection_launch_robot.launch.py
+│   └── person_detection.launch.py
 ├── models/
 │   └── person_detection_yolov11m.onnx              # YOLOv11m detector weights
 ├── include/person_detection/

@@ -38,7 +38,7 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(
                 os.path.join(
                     get_package_share_directory('person_detection'),
-                    'launch', 'person_detection_launch_robot.launch.py'
+                    'launch', 'person_detection.launch.py'
                 )
             )
         ),
@@ -48,7 +48,7 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(
                 os.path.join(
                     get_package_share_directory('face_detection'),
-                    'launch', 'face_detection_launch_robot.launch.py'
+                    'launch', 'face_detection.launch.py'
                 )
             ),
             launch_arguments={'launch_camera': 'false'}.items()

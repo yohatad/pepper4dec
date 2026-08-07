@@ -67,10 +67,10 @@ Configuration is managed via ROS2 parameters, loaded from `config/face_detection
 source ~/ros2_ws/install/setup.bash
 
 # Launch with default configuration (RealSense camera)
-ros2 launch face_detection face_detection_launch_robot.launch.py
+ros2 launch face_detection face_detection.launch.py
 
 # Using ROS2 bag data (disable camera launch)
-ros2 launch face_detection face_detection_launch_robot.launch.py launch_camera:=false
+ros2 launch face_detection face_detection.launch.py launch_camera:=false
 ```
 
 ### Manual Node Execution
@@ -137,8 +137,8 @@ face_detection/
 ├── data/
 │   └── pepper_topics.yaml                          # topic name overrides
 ├── launch/
-│   ├── face_detection_launch_robot.launch.py
-│   └── age_gender_detection_launch_robot.launch.py
+│   ├── face_detection.launch.py
+│   └── age_gender_detection.launch.py
 ├── models/
 │   ├── face_detection_goldYOLO.onnx                # face detector weights
 │   ├── face_detection_sixdrepnet360.onnx           # head-pose estimator weights

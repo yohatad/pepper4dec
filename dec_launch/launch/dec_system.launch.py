@@ -49,7 +49,7 @@ def generate_launch_description():
 
         # Speech / dialogue
         _include('speech_event', 'speech_event.launch.py'),
-        _include('text_to_speech', 'text_to_speech_launch_robot.launch.py'),
+        _include('text_to_speech', 'text_to_speech.launch.py'),
         _include('conversation_manager', 'conversation_manager.launch.py'),
 
         # Navigation stack (own internal lifecycle manager)

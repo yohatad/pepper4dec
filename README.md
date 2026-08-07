@@ -99,7 +99,7 @@ For development and testing, individual components can be launched:
 
 1. **Launch Perception System**
 ```bash
-ros2 launch face_detection face_detection_launch_robot.launch.py
+ros2 launch face_detection face_detection.launch.py
 ```
 
 2. **Launch Behavior Controller**

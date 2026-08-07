@@ -5,7 +5,7 @@ Launch the age_gender_detection node.
 
 Assumes /camera/color/image_raw, /face_detection/data, and
 /person_detection/data are already being published (e.g. by
-face_detection_launch_robot.launch.py or a ROS2 bag).
+face_detection.launch.py or a ROS2 bag).
 """
 
 from launch import LaunchDescription

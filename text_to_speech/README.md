@@ -256,7 +256,7 @@ text_to_speech/
 ├── data/
 │   └── pepper_topics.yaml                    # topic name overrides
 ├── launch/
-│   └── text_to_speech_launch_robot.launch.py
+│   └── text_to_speech.launch.py
 ├── scripts/
 │   └── text_to_speech                        # venv launcher for `ros2 run`
 ├── resource/
