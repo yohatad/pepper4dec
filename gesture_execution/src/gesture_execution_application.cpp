@@ -1,6 +1,6 @@
 /* gesture_execution_application.cpp
  *
- * Entry point for the GestureExecutionSystem lifecycle node. Spins the
+ * Entry point for the GestureExecutionNode lifecycle node. Spins the
  * node single-threaded; the class itself is implemented in
  * gesture_execution_implementation.cpp.
  *
@@ -16,7 +16,7 @@
 #include "dec_common/node_runner.h"
 
 int main(int argc, char** argv) {
-    return dec_common::runNode<GestureExecutionSystem>(
+    return dec_common::runNode<GestureExecutionNode>(
         argc, argv,
         {"gesture_execution v1.0 — This program comes with ABSOLUTELY NO WARRANTY.", "gesture_execution"});
 }

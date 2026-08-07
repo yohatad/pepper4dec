@@ -196,13 +196,13 @@ gesture_execution/
 ├── include/
 │   └── gesture_execution/
 │       ├── gesture_execution_interface.h     # shared class/struct declarations
-│       └── pepper_kinematics_utilities.h
+│       └── gesture_pepper_kinematics.h
 ├── launch/
 │   └── gesture_execution.launch.py
 ├── src/
 │   ├── gesture_execution_application.cpp     # node entry point, action server
 │   ├── gesture_execution_implementation.cpp  # trajectory generation + execution
-│   ├── pepper_kinematics_utilities.cpp       # IK helpers for deictic gestures
+│   ├── gesture_pepper_kinematics.cpp         # IK helpers for deictic gestures
 │   └── gesture_test_visualization.cpp        # RViz2 marker publishing (optional)
 ├── CMakeLists.txt
 ├── package.xml
@@ -258,7 +258,7 @@ ros2 topic echo /joint_angles_trajectory
 ### RViz2 Visualization
 ```bash
 # Run the visualization test
-ros2 run gesture_execution test_visualization
+ros2 run gesture_execution gesture_test_visualization
 
 # In another terminal, launch RViz2
 ros2 run rviz2 rviz2

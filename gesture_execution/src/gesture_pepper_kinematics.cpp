@@ -1,7 +1,7 @@
-/* pepper_kinematics_utilities.cpp
+/* gesture_pepper_kinematics.cpp
  *
  * Implements the forward/inverse kinematics helpers declared in
- * pepper_kinematics_utilities.h.
+ * gesture_pepper_kinematics.h.
  *
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa
@@ -10,7 +10,7 @@
  * Version: v1.0 - C++ port of pepper_kinematics_utilities.py
  */
 
-#include "gesture_execution/pepper_kinematics_utilities.h"
+#include "gesture_execution/gesture_pepper_kinematics.h"
 
 #include <cmath>
 #include <limits>

@@ -29,7 +29,7 @@ find_package(yaml-cpp REQUIRED)
 # Library
 add_library(${PROJECT_NAME}_lib
   src/gesture_execution_implementation.cpp
-  src/pepper_kinematics_utilities.cpp
+  src/gesture_pepper_kinematics.cpp
 )
 target_include_directories(${PROJECT_NAME}_lib PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -54,13 +54,13 @@ target_link_libraries(${PROJECT_NAME}_lib yaml-cpp)
 add_executable(gesture_execution src/gesture_execution_application.cpp)
 target_link_libraries(gesture_execution ${PROJECT_NAME}_lib dec_common::dec_common_runner)
 
-add_executable(test_visualization src/gesture_test_visualization.cpp)
-ament_target_dependencies(test_visualization rclcpp visualization_msgs geometry_msgs)
+add_executable(gesture_test_visualization src/gesture_test_visualization.cpp)
+ament_target_dependencies(gesture_test_visualization rclcpp visualization_msgs geometry_msgs)
 
 # Install
 install(TARGETS
   gesture_execution
-  test_visualization
+  gesture_test_visualization
   ${PROJECT_NAME}_lib
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
@@ -89,7 +89,7 @@ if(BUILD_TESTING)
   # test compiles the source directly instead of linking ${PROJECT_NAME}_lib.
   ament_add_gtest(test_pepper_kinematics
     test/test_pepper_kinematics.cpp
-    src/pepper_kinematics_utilities.cpp
+    src/gesture_pepper_kinematics.cpp
   )
   target_include_directories(test_pepper_kinematics PRIVATE include)
 endif()

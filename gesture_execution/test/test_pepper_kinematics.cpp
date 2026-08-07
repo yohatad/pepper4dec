@@ -1,7 +1,7 @@
 /* test_pepper_kinematics.cpp
  *
  * Unit tests for the pure forward/inverse kinematics helpers in
- * pepper_kinematics_utilities.cpp. No ROS runtime needed — everything here
+ * gesture_pepper_kinematics.cpp. No ROS runtime needed — everything here
  * is numbers in, numbers out.
  *
  * Expected values come from three sources, noted per test:
@@ -22,7 +22,7 @@
 #include <array>
 #include <cmath>
 
-#include "gesture_execution/pepper_kinematics_utilities.h"
+#include "gesture_execution/gesture_pepper_kinematics.h"
 
 namespace pk = pepper_kinematics;
 
@@ -42,7 +42,7 @@ TEST(AngleConversions, KnownValuesAndRoundTrip) {
 //   y = l_2 + l_5          = ±(149.74 + 15.0)     = ±164.74
 //   z = l_3 + l_6          = 86.82 + 0.13         = 86.95
 // (l_6 really is 0.13 — the meters-vs-mm quirk inherited from the Python
-// reference; see the constants block in pepper_kinematics_utilities.cpp.)
+// reference; see the constants block in gesture_pepper_kinematics.cpp.)
 TEST(ElbowPosition, ZeroPoseMatchesLinkOffsets) {
     auto left = pk::getElbowPosition(pk::LEFT_ARM, 0.0, 0.0);
     EXPECT_NEAR(left[0], 124.2, 1e-9);

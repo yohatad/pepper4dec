@@ -1,4 +1,4 @@
-/* pepper_kinematics_utilities.h
+/* gesture_pepper_kinematics.h
  *
  * Pure forward and inverse kinematics helpers for Pepper's arms and head,
  * used by gesture_execution to compute joint angles for deictic pointing
@@ -12,8 +12,8 @@
  * Copyright (C) 2025 Carnegie Mellon University Africa
  */
 
-#ifndef GESTURE_EXECUTION_PEPPER_KINEMATICS_UTILITIES_H
-#define GESTURE_EXECUTION_PEPPER_KINEMATICS_UTILITIES_H
+#ifndef GESTURE_EXECUTION_GESTURE_PEPPER_KINEMATICS_H
+#define GESTURE_EXECUTION_GESTURE_PEPPER_KINEMATICS_H
 
 #include <array>
 
@@ -124,4 +124,4 @@ std::array<double, 2> getHeadAngles(double camera_x, double camera_y, double cam
 
 }  // namespace pepper_kinematics
 
-#endif  // GESTURE_EXECUTION_PEPPER_KINEMATICS_UTILITIES_H
+#endif  // GESTURE_EXECUTION_GESTURE_PEPPER_KINEMATICS_H

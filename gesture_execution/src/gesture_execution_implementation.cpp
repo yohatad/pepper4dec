@@ -1,6 +1,6 @@
 /* gesture_execution_implementation.cpp
  *
- * Implements GestureExecutionSystem: loads gesture descriptors and topic
+ * Implements GestureExecutionNode: loads gesture descriptors and topic
  * mappings from YAML, runs the /gesture_execution action server, and
  * computes/publishes the joint trajectories for deictic, iconic, bow, and
  * nod gestures. See gesture_execution_interface.h for the full
@@ -95,17 +95,17 @@ RobotTopics loadRobotTopics(const std::string& yaml_path) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GestureExecutionSystem — constructor
+// GestureExecutionNode — constructor
 // ─────────────────────────────────────────────────────────────────────────────
 
-GestureExecutionSystem::GestureExecutionSystem() : rclcpp_lifecycle::LifecycleNode("gesture_action_server") {}
+GestureExecutionNode::GestureExecutionNode() : rclcpp_lifecycle::LifecycleNode("gesture_action_server") {}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // on_configure — load YAML configs, init kinematics/state, create publishers
 // and the action server
 // ─────────────────────────────────────────────────────────────────────────────
 
-GestureExecutionSystem::CallbackReturn GestureExecutionSystem::on_configure(const rclcpp_lifecycle::State&) {
+GestureExecutionNode::CallbackReturn GestureExecutionNode::on_configure(const rclcpp_lifecycle::State&) {
     std::string package_path;
     try {
         package_path = ament_index_cpp::get_package_share_directory("gesture_execution");
@@ -146,11 +146,11 @@ GestureExecutionSystem::CallbackReturn GestureExecutionSystem::on_configure(cons
     action_server_ = rclcpp_action::create_server<GestureAction>(
         this,
         "/gesture_execution",
-        std::bind(&GestureExecutionSystem::handleGoal, this, std::placeholders::_1, std::placeholders::_2),
-        std::bind(&GestureExecutionSystem::handleCancel, this, std::placeholders::_1),
-        std::bind(&GestureExecutionSystem::handleAccepted, this, std::placeholders::_1));
+        std::bind(&GestureExecutionNode::handleGoal, this, std::placeholders::_1, std::placeholders::_2),
+        std::bind(&GestureExecutionNode::handleCancel, this, std::placeholders::_1),
+        std::bind(&GestureExecutionNode::handleAccepted, this, std::placeholders::_1));
 
-    RCLCPP_INFO(get_logger(), "GestureExecutionSystem configured");
+    RCLCPP_INFO(get_logger(), "GestureExecutionNode configured");
     return CallbackReturn::SUCCESS;
 }
 
@@ -158,16 +158,16 @@ GestureExecutionSystem::CallbackReturn GestureExecutionSystem::on_configure(cons
 // on_activate — activate publishers, subscribe to joint_states and robot_pose
 // ─────────────────────────────────────────────────────────────────────────────
 
-GestureExecutionSystem::CallbackReturn GestureExecutionSystem::on_activate(const rclcpp_lifecycle::State& state) {
+GestureExecutionNode::CallbackReturn GestureExecutionNode::on_activate(const rclcpp_lifecycle::State& state) {
     LifecycleNode::on_activate(state);
     lifecycle_active_ = true;
 
     joint_sub_ = create_subscription<sensor_msgs::msg::JointState>(
-        topics_.joint_states, 10, std::bind(&GestureExecutionSystem::jointStatesCallback, this, std::placeholders::_1));
+        topics_.joint_states, 10, std::bind(&GestureExecutionNode::jointStatesCallback, this, std::placeholders::_1));
     pose_sub_ = create_subscription<nav_msgs::msg::Odometry>(
-        topics_.robot_pose, 10, std::bind(&GestureExecutionSystem::robotPoseCallback, this, std::placeholders::_1));
+        topics_.robot_pose, 10, std::bind(&GestureExecutionNode::robotPoseCallback, this, std::placeholders::_1));
 
-    RCLCPP_INFO(get_logger(), "GestureExecutionSystem activated — ready for goals on /gesture_execution");
+    RCLCPP_INFO(get_logger(), "GestureExecutionNode activated — ready for goals on /gesture_execution");
     return CallbackReturn::SUCCESS;
 }
 
@@ -175,12 +175,12 @@ GestureExecutionSystem::CallbackReturn GestureExecutionSystem::on_activate(const
 // on_deactivate — destroy the joint_states/robot_pose subscriptions
 // ─────────────────────────────────────────────────────────────────────────────
 
-GestureExecutionSystem::CallbackReturn GestureExecutionSystem::on_deactivate(const rclcpp_lifecycle::State& state) {
+GestureExecutionNode::CallbackReturn GestureExecutionNode::on_deactivate(const rclcpp_lifecycle::State& state) {
     lifecycle_active_ = false;
     joint_sub_.reset();
     pose_sub_.reset();
     LifecycleNode::on_deactivate(state);
-    RCLCPP_INFO(get_logger(), "GestureExecutionSystem deactivated");
+    RCLCPP_INFO(get_logger(), "GestureExecutionNode deactivated");
     return CallbackReturn::SUCCESS;
 }
 
@@ -188,11 +188,11 @@ GestureExecutionSystem::CallbackReturn GestureExecutionSystem::on_deactivate(con
 // on_cleanup — destroy the lifecycle publishers and the action server
 // ─────────────────────────────────────────────────────────────────────────────
 
-GestureExecutionSystem::CallbackReturn GestureExecutionSystem::on_cleanup(const rclcpp_lifecycle::State&) {
+GestureExecutionNode::CallbackReturn GestureExecutionNode::on_cleanup(const rclcpp_lifecycle::State&) {
     joint_traj_pub_.reset();
     marker_pub_.reset();
     action_server_.reset();
-    RCLCPP_INFO(get_logger(), "GestureExecutionSystem cleaned up");
+    RCLCPP_INFO(get_logger(), "GestureExecutionNode cleaned up");
     return CallbackReturn::SUCCESS;
 }
 
@@ -200,14 +200,14 @@ GestureExecutionSystem::CallbackReturn GestureExecutionSystem::on_cleanup(const 
 // on_shutdown — log the shutdown transition
 // ─────────────────────────────────────────────────────────────────────────────
 
-GestureExecutionSystem::CallbackReturn GestureExecutionSystem::on_shutdown(const rclcpp_lifecycle::State&) {
-    RCLCPP_INFO(get_logger(), "GestureExecutionSystem shutting down");
+GestureExecutionNode::CallbackReturn GestureExecutionNode::on_shutdown(const rclcpp_lifecycle::State&) {
+    RCLCPP_INFO(get_logger(), "GestureExecutionNode shutting down");
     return CallbackReturn::SUCCESS;
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────
 
-void GestureExecutionSystem::initJointStates() {
+void GestureExecutionNode::initJointStates() {
     joint_states_["HeadPitch"] = DEFAULT_HEAD_PITCH;
     joint_states_["HeadYaw"] = DEFAULT_HEAD_YAW;
     joint_states_["RShoulderPitch"] = home_positions_.r_arm[0];
@@ -229,7 +229,7 @@ void GestureExecutionSystem::initJointStates() {
 
 // ── Subscription callbacks ─────────────────────────────────────────────────
 
-void GestureExecutionSystem::jointStatesCallback(const sensor_msgs::msg::JointState::SharedPtr msg) {
+void GestureExecutionNode::jointStatesCallback(const sensor_msgs::msg::JointState::SharedPtr msg) {
     for (size_t i = 0; i < msg->name.size() && i < msg->position.size(); ++i) {
         auto it = joint_states_.find(msg->name[i]);
         if (it != joint_states_.end()) {
@@ -238,7 +238,7 @@ void GestureExecutionSystem::jointStatesCallback(const sensor_msgs::msg::JointSt
     }
 }
 
-void GestureExecutionSystem::robotPoseCallback(const nav_msgs::msg::Odometry::SharedPtr msg) {
+void GestureExecutionNode::robotPoseCallback(const nav_msgs::msg::Odometry::SharedPtr msg) {
     const auto& p = msg->pose.pose;
     robot_pose_.x = p.position.x;
     robot_pose_.y = p.position.y;
@@ -249,7 +249,7 @@ void GestureExecutionSystem::robotPoseCallback(const nav_msgs::msg::Odometry::Sh
 
 // ── Action server callbacks ────────────────────────────────────────────────
 
-rclcpp_action::GoalResponse GestureExecutionSystem::handleGoal(
+rclcpp_action::GoalResponse GestureExecutionNode::handleGoal(
     const rclcpp_action::GoalUUID&, std::shared_ptr<const GestureAction::Goal> goal) {
     if (!lifecycle_active_) {
         RCLCPP_WARN(get_logger(), "Rejecting goal — node is not active");
@@ -264,12 +264,12 @@ rclcpp_action::GoalResponse GestureExecutionSystem::handleGoal(
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
 }
 
-rclcpp_action::CancelResponse GestureExecutionSystem::handleCancel(const std::shared_ptr<GoalHandleGesture>) {
+rclcpp_action::CancelResponse GestureExecutionNode::handleCancel(const std::shared_ptr<GoalHandleGesture>) {
     RCLCPP_INFO(get_logger(), "Cancel requested (NAOqi motion cannot be stopped mid-way)");
     return rclcpp_action::CancelResponse::ACCEPT;
 }
 
-void GestureExecutionSystem::handleAccepted(const std::shared_ptr<GoalHandleGesture> goal_handle) {
+void GestureExecutionNode::handleAccepted(const std::shared_ptr<GoalHandleGesture> goal_handle) {
     // Executed synchronously (single-threaded spin in main()) — mirrors the
     // reference implementation, where execute_callback blocks the executor
     // for the duration of the gesture while a background thread streams
@@ -277,7 +277,7 @@ void GestureExecutionSystem::handleAccepted(const std::shared_ptr<GoalHandleGest
     execute(goal_handle);
 }
 
-void GestureExecutionSystem::execute(const std::shared_ptr<GoalHandleGesture> goal_handle) {
+void GestureExecutionNode::execute(const std::shared_ptr<GoalHandleGesture> goal_handle) {
     executing_ = true;
     feedback_stop_ = false;
 
@@ -300,7 +300,7 @@ void GestureExecutionSystem::execute(const std::shared_ptr<GoalHandleGesture> go
             gesture_type.c_str(), goal->gesture_name.c_str(), static_cast<long>(goal->gesture_duration));
     }
 
-    std::thread feedback_thread(&GestureExecutionSystem::publishElapsedFeedback, this, goal_handle, start_time);
+    std::thread feedback_thread(&GestureExecutionNode::publishElapsedFeedback, this, goal_handle, start_time);
 
     bool success = false;
     std::string error_message;
@@ -329,7 +329,7 @@ void GestureExecutionSystem::execute(const std::shared_ptr<GoalHandleGesture> go
     executing_ = false;
 }
 
-void GestureExecutionSystem::publishElapsedFeedback(
+void GestureExecutionNode::publishElapsedFeedback(
     const std::shared_ptr<GoalHandleGesture> goal_handle, double start_time) {
     while (!feedback_stop_) {
         auto feedback = std::make_shared<GestureAction::Feedback>();
@@ -345,7 +345,7 @@ void GestureExecutionSystem::publishElapsedFeedback(
 
 // ── Gesture execution ────────────────────────────────────────────────────
 
-bool GestureExecutionSystem::executeGesture(const std::string& gesture_type, const std::string& gesture_name,
+bool GestureExecutionNode::executeGesture(const std::string& gesture_type, const std::string& gesture_name,
                                             int64_t gesture_duration_ms, int64_t bow_nod_angle,
                                             double location_x, double location_y, double location_z) {
     gesture_duration_ms = std::max(MIN_GESTURE_DURATION_MS, std::min(gesture_duration_ms, MAX_GESTURE_DURATION_MS));
@@ -366,7 +366,7 @@ bool GestureExecutionSystem::executeGesture(const std::string& gesture_type, con
     }
 }
 
-bool GestureExecutionSystem::executeDeicticGesture(double point_x, double point_y, double point_z, int64_t duration_ms) {
+bool GestureExecutionNode::executeDeicticGesture(double point_x, double point_y, double point_z, int64_t duration_ms) {
     try {
         double robot_x = robot_pose_.x * 1000.0;
         double robot_y = robot_pose_.y * 1000.0;
@@ -424,7 +424,7 @@ bool GestureExecutionSystem::executeDeicticGesture(double point_x, double point_
     }
 }
 
-bool GestureExecutionSystem::checkJointLimits(int arm, double shoulder_pitch, double shoulder_roll) {
+bool GestureExecutionNode::checkJointLimits(int arm, double shoulder_pitch, double shoulder_roll) {
     if (arm == pepper_kinematics::RIGHT_ARM) {
         if (shoulder_pitch < MIN_RSHOULDER_PITCH || shoulder_pitch > MAX_RSHOULDER_PITCH ||
             shoulder_roll < MIN_RSHOULDER_ROLL || shoulder_roll > MAX_RSHOULDER_ROLL) {
@@ -445,7 +445,7 @@ bool GestureExecutionSystem::checkJointLimits(int arm, double shoulder_pitch, do
     return true;
 }
 
-bool GestureExecutionSystem::executePointingMotion(int arm, double shoulder_pitch, double shoulder_roll,
+bool GestureExecutionNode::executePointingMotion(int arm, double shoulder_pitch, double shoulder_roll,
                                                     int64_t duration_ms, double pointing_x, double pointing_y,
                                                     double pointing_z) {
     try {
@@ -499,7 +499,7 @@ bool GestureExecutionSystem::executePointingMotion(int arm, double shoulder_pitc
     }
 }
 
-std::array<double, 2> GestureExecutionSystem::calculateHeadAnglesToTarget(
+std::array<double, 2> GestureExecutionNode::calculateHeadAnglesToTarget(
     double target_x, double target_y, double target_z) {
     double distance_xy = std::sqrt(target_x * target_x + target_y * target_y);
     double head_yaw = std::atan2(target_y, target_x);
@@ -510,7 +510,7 @@ std::array<double, 2> GestureExecutionSystem::calculateHeadAnglesToTarget(
     return {head_pitch, head_yaw};
 }
 
-bool GestureExecutionSystem::executeIconicGesture(const std::string& gesture_name, int64_t duration_ms) {
+bool GestureExecutionNode::executeIconicGesture(const std::string& gesture_name, int64_t duration_ms) {
     try {
         auto it = gestures_.find(gesture_name);
         if (it == gestures_.end()) {
@@ -573,7 +573,7 @@ bool GestureExecutionSystem::executeIconicGesture(const std::string& gesture_nam
     }
 }
 
-bool GestureExecutionSystem::executeBowingGesture(int64_t bow_angle, int64_t duration_ms) {
+bool GestureExecutionNode::executeBowingGesture(int64_t bow_angle, int64_t duration_ms) {
     try {
         double duration_sec = duration_ms / 1000.0;
         double bow_angle_clamped = std::max(MIN_BOW_ANGLE, std::min(static_cast<double>(bow_angle), MAX_BOW_ANGLE));
@@ -590,7 +590,7 @@ bool GestureExecutionSystem::executeBowingGesture(int64_t bow_angle, int64_t dur
     }
 }
 
-bool GestureExecutionSystem::executeNoddingGesture(int64_t nod_angle, int64_t duration_ms) {
+bool GestureExecutionNode::executeNoddingGesture(int64_t nod_angle, int64_t duration_ms) {
     try {
         double duration_sec = duration_ms / 1000.0;
         double nod_angle_clamped = std::max(MIN_NOD_ANGLE, std::min(static_cast<double>(nod_angle), MAX_NOD_ANGLE));
@@ -607,7 +607,7 @@ bool GestureExecutionSystem::executeNoddingGesture(int64_t nod_angle, int64_t du
     }
 }
 
-void GestureExecutionSystem::moveJointsBezier(const std::vector<std::string>& joint_names,
+void GestureExecutionNode::moveJointsBezier(const std::vector<std::string>& joint_names,
                                               const std::vector<std::vector<double>>& waypoints,
                                               double total_duration, bool use_bezier) {
     size_t num_joints = joint_names.size();
@@ -636,7 +636,7 @@ void GestureExecutionSystem::moveJointsBezier(const std::vector<std::string>& jo
     publishJointTrajectory(joint_names, msg_joint_angles, msg_times, use_bezier);
 }
 
-void GestureExecutionSystem::publishJointTrajectory(const std::vector<std::string>& joint_names,
+void GestureExecutionNode::publishJointTrajectory(const std::vector<std::string>& joint_names,
                                                     const std::vector<float>& joint_angles,
                                                     const std::vector<float>& times, bool use_bezier) {
     naoqi_bridge_msgs::msg::JointAnglesTrajectory msg;
@@ -657,7 +657,7 @@ void GestureExecutionSystem::publishJointTrajectory(const std::vector<std::strin
     }
 }
 
-void GestureExecutionSystem::publishDeicticVisualization(double target_x, double target_y, double target_z,
+void GestureExecutionNode::publishDeicticVisualization(double target_x, double target_y, double target_z,
                                                          double shoulder_x, double shoulder_y, double shoulder_z,
                                                          int arm) {
     try {

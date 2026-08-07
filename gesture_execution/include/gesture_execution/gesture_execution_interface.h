@@ -5,7 +5,7 @@
  * elapsed-time feedback. Loads gesture descriptors and topic mappings
  * from YAML, computes the joint trajectories needed to perform a
  * requested gesture (using inverse kinematics for deictic pointing via
- * pepper_kinematics_utilities), and streams the resulting joint-angle
+ * gesture_pepper_kinematics), and streams the resulting joint-angle
  * trajectory to the robot. While a gesture is executing, it periodically
  * reports elapsed time back to the action client. Deictic gestures also
  * publish RViz markers showing the target point, shoulder position, and
@@ -67,7 +67,7 @@
 #include <mutex>
 #include <atomic>
 
-#include "gesture_execution/pepper_kinematics_utilities.h"
+#include "gesture_execution/gesture_pepper_kinematics.h"
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 constexpr int64_t MIN_GESTURE_DURATION_MS = 1000;
@@ -152,7 +152,7 @@ struct RobotTopics {
 RobotTopics loadRobotTopics(const std::string& yaml_path);
 
 //=============================================================================
-// GestureExecutionSystem
+// GestureExecutionNode
 //
 // Lifecycle state machine:
 //   UNCONFIGURED → on_configure:  load gesture descriptors + topic mapping,
@@ -166,14 +166,14 @@ RobotTopics loadRobotTopics(const std::string& yaml_path);
 //                                 action server.
 //=============================================================================
 
-class GestureExecutionSystem : public rclcpp_lifecycle::LifecycleNode {
+class GestureExecutionNode : public rclcpp_lifecycle::LifecycleNode {
 public:
     using CallbackReturn =
         rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
     using GestureAction = dec_interfaces::action::Gesture;
     using GoalHandleGesture = rclcpp_action::ServerGoalHandle<GestureAction>;
 
-    GestureExecutionSystem();
+    GestureExecutionNode();
 
     // ── Lifecycle callbacks ─────────────────────────────────────────────────
     CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;
