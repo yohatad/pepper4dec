@@ -4,7 +4,7 @@
   <name>dec_launch</name>
   <version>0.0.0</version>
   <description>Custom launch files for Pepper4DEC system</description>
-  <maintainer email="your_email@example.com">Your Name</maintainer>
+  <maintainer email="yohatad123@gmail.com">Yohannes</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

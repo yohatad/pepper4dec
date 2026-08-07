@@ -2,7 +2,7 @@
   <name>gesture_execution</name>
   <version>0.1.0</version>
   <description>Gesture execution node(s)</description>
-  <maintainer email="you@example.com">Yohannes</maintainer>
+  <maintainer email="yohatad123@gmail.com">Yohannes</maintainer>
   <license>BSD-3-Clause</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

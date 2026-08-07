@@ -4,7 +4,7 @@
   <name>overt_attention</name>
   <version>1.0.0</version>
   <description>Unified visual attention system for robot overt attention</description>
-  <maintainer email="your@email.com">Your Name</maintainer>
+  <maintainer email="yohatad123@gmail.com">Yohannes</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
