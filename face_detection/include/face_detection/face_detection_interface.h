@@ -160,7 +160,7 @@ private:
 // the person-detection subscription used for face-person matching.
 class FaceDetectionNode : public dec_common::CameraLifecycleNode {
 public:
-    explicit FaceDetectionNode(const std::string& node_name = "faceDetection");
+    explicit FaceDetectionNode(const std::string& node_name = "face_detection");
 
     // ── Lifecycle callbacks ─────────────────────────────────────────────────
     CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;

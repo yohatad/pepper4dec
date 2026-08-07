@@ -48,7 +48,7 @@ from sensor_msgs.msg import CompressedImage, Image
 
 from dec_interfaces.msg import PersonDetection
 
-NODE_NAME = 'personDetection'
+NODE_NAME = 'person_detection'
 CAMERA_TOPIC = '/test_camera/image_raw'
 _TEST_DIR = os.path.dirname(os.path.abspath(__file__))
 BAG_PATH = os.path.join(_TEST_DIR, 'data', 'person_walk_minibag')

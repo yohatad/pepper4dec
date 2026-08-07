@@ -122,7 +122,7 @@ struct TrackingDatum {
 // class filtering, and tracking post-processing.
 class PersonDetectionNode : public dec_common::CameraLifecycleNode {
 public:
-    explicit PersonDetectionNode(const std::string& node_name = "personDetection");
+    explicit PersonDetectionNode(const std::string& node_name = "person_detection");
 
     // ── Lifecycle callbacks ─────────────────────────────────────────────────
     CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;
