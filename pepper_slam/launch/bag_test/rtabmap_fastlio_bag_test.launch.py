@@ -9,7 +9,7 @@
 # frame is Z-up, which the 2D occupancy projection requires.
 #
 # Usage:
-#   ros2 launch pepper_slam rtabmap_fastlio_bag_test.launch.py
+#   ros2 launch pepper_slam bag_test/rtabmap_fastlio_bag_test.launch.py
 #   ros2 bag play <bag> --clock --topics /points /imu/data /tf_static
 #
 # NOTE: do NOT replay /tf -- the bag's wheel-odometry TF (pepper_odom ->

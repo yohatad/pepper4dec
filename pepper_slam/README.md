@@ -42,7 +42,7 @@ other profiles in `fast_lio/config/` are upstream defaults for other lidars — 
 | Stack | Launch | Loop closure | Owns `map` | `bridge_level_frame` |
 |-------|--------|--------------|-----------|----------------------|
 | Odometry only | `fast_lio mapping.launch.py config_file:=l2.yaml` | none | nobody | `true` (unused) |
-| + RTAB-Map | `pepper_slam rtabmap_fastlio_bag_test.launch.py` | RTAB-Map ICP + visual BoW | RTAB-Map | `true` |
+| + RTAB-Map | `pepper_slam bag_test/rtabmap_fastlio_bag_test.launch.py` | RTAB-Map ICP + visual BoW | RTAB-Map | `true` |
 | + Scan-Context PGO | `fastlio_lc_pgo fastlio_lc_l2.launch.py` | GTSAM/ISAM2 on Scan Context | `pgo_map_odom_bridge` | `false` |
 | + prior-map ICP | `lio_localization fastlio_localization_l2.launch.py` | n/a (localization) | `transform_fusion` | `false` |
 
@@ -138,10 +138,10 @@ file's header.
 
 | Launch file | Sensor setup | Odometry source |
 |-------------|--------------|-----------------|
-| `rtabmap_rgbd_wheel_bag_test.launch.py` | RealSense RGB-D (infra1 + depth) | bag TF (`pepper_odom`) |
-| `rtabmap_l2_bag_test.launch.py` | L2 lidar + IMU, no camera | RTAB-Map `icp_odometry` |
-| `rtabmap_fastlio_bag_test.launch.py` | L2 lidar + RGB for loop closure | FAST-LIO (best measured: 0.19 m closure) |
-| `rtabmap_fused_bag_test.launch.py` | L2 + RGB + aligned depth + fused IMU | `odom_source:=wheel` (default) or `icp` |
+| `bag_test/rtabmap_rgbd_wheel_bag_test.launch.py` | RealSense RGB-D (infra1 + depth) | bag TF (`pepper_odom`) |
+| `bag_test/rtabmap_l2_bag_test.launch.py` | L2 lidar + IMU, no camera | RTAB-Map `icp_odometry` |
+| `bag_test/rtabmap_fastlio_bag_test.launch.py` | L2 lidar + RGB for loop closure | FAST-LIO (best measured: 0.19 m closure) |
+| `bag_test/rtabmap_fused_bag_test.launch.py` | L2 + RGB + aligned depth + fused IMU | `odom_source:=wheel` (default) or `icp` |
 
 `rtabmap_fused_bag_test.launch.py` is the all-three-sensors variant: visual
 bag-of-words proposes the loop closure, lidar ICP refines it, and
@@ -152,23 +152,42 @@ drift is what loop closure corrects.
 
 ## 📁 Package Structure
 
-Launch and params only (`ament_cmake`, no compiled targets):
+Launch, params, and a few standalone TF/odometry helper scripts (`ament_cmake`, no compiled targets):
 
 ```
 pepper_slam/
-├── config/mapper_params_online_async.yaml   # SLAM Toolbox parameters
+├── config/
+│   ├── ekf_lio_wheel.yaml                    # robot_localization EKF (wheel + LIO fusion)
+│   ├── mapper_params_online_async.yaml       # SLAM Toolbox parameters
+│   ├── record_qos.yaml                       # QoS overrides for bag recording
+│   └── sensor_tf.yaml                        # static sensor-rig transform provenance
 ├── launch/
-│   ├── rtabmap_base.launch.py                # vendored upstream; excluded from flake8
+│   ├── rtabmap_base.launch.py                 # vendored upstream; excluded from flake8
 │   ├── slam_toolbox.launch.py
 │   ├── pepper_sensor_tf.launch.py
-│   ├── rtabmap_rgbd_wheel_bag_test.launch.py
-│   ├── rtabmap_l2_bag_test.launch.py
-│   ├── rtabmap_fastlio_bag_test.launch.py
-│   └── rtabmap_fused_bag_test.launch.py
-├── rviz/{rtabmap_fastlio_mapping,rtabmap_fused_mapping}.rviz
+│   ├── ekf_fusion.launch.py                   # robot_localization EKF, alternative to lio_map_odom_bridge
+│   ├── fastlio_mapping.launch.py              # standalone-usable wrapper around fast_lio's mapping.launch.py
+│   ├── pointlio_mapping.launch.py             # same, for Point-LIO
+│   ├── view_rig.launch.py                     # sensor rig visualization
+│   └── bag_test/                              # manual bag-replay validation, not automated tests
+│       ├── rtabmap_rgbd_wheel_bag_test.launch.py
+│       ├── rtabmap_l2_bag_test.launch.py
+│       ├── rtabmap_fastlio_bag_test.launch.py
+│       └── rtabmap_fused_bag_test.launch.py
+├── rviz/{rtabmap_fastlio_mapping,rtabmap_fused_mapping,view_rig}.rviz
 │   (compute_lidar_camera_bridge.py moved to ros2_ws/utils/)
+├── scripts/
+│   ├── check_frame_contract.py                # asserts the LIO frame contract holds, whichever backend runs
+│   ├── leveled_odometry_publisher.py          # republishes LIO odometry rotated into the gravity-level odom frame
+│   ├── pepper_odom_relabel.py                 # republishes /pepper_odom with frame_id overridden to odom
+│   └── static_tf_publisher.py                 # publishes a whole static TF chain from one node
+├── urdf/
+│   ├── pepper_display_with_rig.urdf.xacro     # DISPLAY ONLY: Pepper body + sensor rig together
+│   ├── pepper_sensor_rig.urdf.xacro           # sensor rig only, rooted for the real robot
+│   └── sensor_rig.xacro                       # the one xacro macro definition of the L2 + D435i rig
 ├── ament_flake8.ini
 ├── CMakeLists.txt
+├── FRAMES.md
 └── package.xml
 ```
 

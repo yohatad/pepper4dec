@@ -29,8 +29,8 @@
 # sawtooth (std 5.139 ms vs 0.001 ms) from l2_sync_rate_ms:30.
 #
 # Usage:
-#   ros2 launch pepper_slam rtabmap_fused_bag_test.launch.py
-#   ros2 launch pepper_slam rtabmap_fused_bag_test.launch.py odom_source:=icp
+#   ros2 launch pepper_slam bag_test/rtabmap_fused_bag_test.launch.py
+#   ros2 launch pepper_slam bag_test/rtabmap_fused_bag_test.launch.py odom_source:=icp
 #
 #   ros2 bag play <bag> --clock --read-ahead-queue-size 2000 \
 #     --topics /points /camera/imu /tf \
