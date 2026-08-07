@@ -53,8 +53,8 @@ target_link_libraries(${PROJECT_NAME}_lib yaml-cpp ${OpenCV_LIBS})
 add_executable(overt_attention_saliency src/overt_attention_saliency.cpp)
 target_link_libraries(overt_attention_saliency ${PROJECT_NAME}_lib)
 
-add_executable(overt_attention_unified_attention src/overt_attention_application.cpp)
-target_link_libraries(overt_attention_unified_attention ${PROJECT_NAME}_lib)
+add_executable(overt_attention src/overt_attention_application.cpp)
+target_link_libraries(overt_attention ${PROJECT_NAME}_lib)
 
 add_executable(overt_attention_visualization src/overt_attention_visualization.cpp)
 target_link_libraries(overt_attention_visualization ${PROJECT_NAME}_lib)
@@ -62,7 +62,7 @@ target_link_libraries(overt_attention_visualization ${PROJECT_NAME}_lib)
 # Install
 install(TARGETS
   overt_attention_saliency
-  overt_attention_unified_attention
+  overt_attention
   overt_attention_visualization
   ${PROJECT_NAME}_lib
   ARCHIVE DESTINATION lib

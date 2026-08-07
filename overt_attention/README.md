@@ -66,7 +66,7 @@ its own parameter set; a shared `/**` block applies `use_compressed`/`camera_typ
 | `peak_min_distance_px` | Minimum pixel distance between reported peaks | `50` |
 | `process_hz` | Saliency computation rate (Hz) | `1.0` |
 
-**`unified_attention_node`**
+**`overt_attention`**
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
@@ -136,8 +136,8 @@ ros2 run overt_attention overt_attention_saliency \
   -p use_compressed:=false \
   -p publish_map:=true
 
-# Start Unified Attention Controller
-ros2 run overt_attention overt_attention_unified_attention \
+# Start Attention Controller
+ros2 run overt_attention overt_attention \
   --ros-args \
   -p engaged_priority_bonus:=2.0 \
   -p face_timeout:=2.0
@@ -158,11 +158,11 @@ Camera/depth/camera-info topics are resolved from `data/pepper_topics.yaml` base
 
 | Topic | Type | Description |
 |-------|------|-------------|
-| `/face_detection/data` | `dec_interfaces/msg/FaceDetection` | Face detection messages (`unified_attention_node`) |
+| `/face_detection/data` | `dec_interfaces/msg/FaceDetection` | Face detection messages (`overt_attention`) |
 | `/pepper/front/image_raw` | `sensor_msgs/Image` | RGB image from camera (`saliency_node`, `attention_visualization`) |
 | `/naoqi_driver/camera/depth/image_raw` | `sensor_msgs/Image` | Depth image (`saliency_node`, if `use_depth_weighting`) |
 | `/pepper/front/camera_info` | `sensor_msgs/CameraInfo` | Camera intrinsics (`attention_visualization`) |
-| `/joint_states` | `sensor_msgs/JointState` | Current head position (`unified_attention_node`) |
+| `/joint_states` | `sensor_msgs/JointState` | Current head position (`overt_attention`) |
 
 With `camera_type: "realsense"`, these resolve instead to `/camera/color/image_raw_custom`,
 `/camera/aligned_depth_to_color/image_raw_custom`, and `/camera/color/camera_info`. When

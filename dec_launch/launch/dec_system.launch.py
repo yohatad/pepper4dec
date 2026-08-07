@@ -80,7 +80,7 @@ def generate_launch_description():
                 'node_names': [
                     'person_detection',
                     'face_detection',
-                    'unified_attention_node',
+                    'overt_attention',
                     'robot_localization',
                     'animate_behavior',
                     'gesture_action_server',

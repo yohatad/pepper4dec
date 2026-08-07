@@ -66,11 +66,11 @@ def generate_launch_description():
             output='screen'
         ),
         
-        # Unified attention controller (Laptop)
+        # Attention controller (Laptop)
         Node(
             package='overt_attention',
-            executable='overt_attention_unified_attention',
-            name='unified_attention_node',
+            executable='overt_attention',
+            name='overt_attention',
             parameters=[LaunchConfiguration('params_file')],
             output='screen'
         ),

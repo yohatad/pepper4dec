@@ -33,9 +33,9 @@ saliency_node:
     process_hz: 1.0
 
 # ===========================================
-# Unified attention node params
+# Attention controller node params
 # ===========================================
-unified_attention_node:
+overt_attention:
   ros__parameters:
     # System
     start_enabled: true
