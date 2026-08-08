@@ -150,12 +150,8 @@ void SaliencyNode::setupParameters() {
     declare_parameter("depth_max_m", 10.0);
     declare_parameter("depth_weight_min", 0.2);
     declare_parameter("publish_map", true);
-    declare_parameter("down_w", 160);
-    declare_parameter("down_h", 120);
     declare_parameter("min_peak", 0.25);
-    declare_parameter("overlay_alpha", 0.4);
     declare_parameter("num_peaks", 10);
-    declare_parameter("peak_min_distance_px", 50);
     declare_parameter("process_hz", 1.0);
 }
 
@@ -177,13 +173,11 @@ void SaliencyNode::loadParameters() {
     depth_max_m_ = get_parameter("depth_max_m").as_double();
     depth_weight_min_ = get_parameter("depth_weight_min").as_double();
     publish_map_flag_ = get_parameter("publish_map").as_bool();
-    down_w_ = static_cast<int>(get_parameter("down_w").as_int());
-    down_h_ = static_cast<int>(get_parameter("down_h").as_int());
     min_peak_ = get_parameter("min_peak").as_double();
-    overlay_alpha_ = get_parameter("overlay_alpha").as_double();
     num_peaks_ = static_cast<int>(get_parameter("num_peaks").as_int());
-    peak_min_dist_ = static_cast<int>(get_parameter("peak_min_distance_px").as_int());
     process_hz_ = get_parameter("process_hz").as_double();
+    // down_w_, down_h_, peak_min_dist_, overlay_alpha_ are fixed (see member
+    // initializers) -- internal/cosmetic, not operator-facing tuning.
 }
 
 //============ Image Callbacks (just cache frames) ============

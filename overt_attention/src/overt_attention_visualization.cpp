@@ -27,12 +27,10 @@ VisualizationNode::VisualizationNode() : Node("attention_visualization") {
     declare_parameter("camera_type", std::string("pepper"));
     declare_parameter("show_face_ids", true);
     declare_parameter("show_depth", true);
-    declare_parameter("show_engagement", true);
 
     std::string camera_type = get_parameter("camera_type").as_string();
     show_face_ids_ = get_parameter("show_face_ids").as_bool();
     show_depth_ = get_parameter("show_depth").as_bool();
-    show_engagement_ = get_parameter("show_engagement").as_bool();
 
     // Load topics from YAML config
     std::string face_topic = topics_config_.face;
