@@ -43,9 +43,7 @@ from .conversation_manager_implementation import (
     get_config,
     get_collection,
     setup_collection,
-    handle_query,
     retrieve_documents,
-    generate_response,
     generate_response_stream,
     extract_answer_from_raw,
     extract_intent_from_raw,
@@ -69,7 +67,7 @@ class ConversationManagerNode(LifecycleNode):
     # ── Lifecycle callbacks ─────────────────────────────────────────────────────
 
     def on_configure(self, _state) -> TransitionCallbackReturn:
-        """Load YAML configuration, initialize the ChromaDB collection, and create the publisher and action server."""
+        """Load YAML config, init the ChromaDB collection, create the publisher/action server."""
 
         # Load configuration from YAML file
         config_file = PACKAGE_PATH / 'config' / 'converation_manager_configuration.yaml'
@@ -96,9 +94,10 @@ class ConversationManagerNode(LifecycleNode):
         # Log configuration (hide API key)
         self.get_logger().info(f"LLM URL: {config.llm_base_url}")
         self.get_logger().info(f"LLM Model: {config.llm_model}")
-        self.get_logger().info(
-            f"LLM API Key: {'***' + config.llm_api_key[-4:] if len(config.llm_api_key) > 4 else '(default)'}"
+        masked_key = (
+            '***' + config.llm_api_key[-4:] if len(config.llm_api_key) > 4 else '(default)'
         )
+        self.get_logger().info(f"LLM API Key: {masked_key}")
         self.get_logger().info(f"Embedding Model: {config.embedding_model}")
         self.get_logger().info(f"Data Default Path: {config.data_default_path}")
         self.get_logger().info(f"Retrieval Mode: {config.retrieval_mode}")
@@ -150,7 +149,7 @@ class ConversationManagerNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_cleanup(self, _state) -> TransitionCallbackReturn:
-        """Destroy the action server, and clear the ChromaDB collection and conversation history."""
+        """Destroy the action server, and clear the ChromaDB collection and history."""
         self._action_server.destroy()
         self.collection = None
         self.conversation_history = []
@@ -175,7 +174,8 @@ class ConversationManagerNode(LifecycleNode):
             self.collection = get_collection(name)
             if self.collection:
                 count = self.collection.count()
-                self.get_logger().info(f"Loaded existing collection '{name}' with {count} documents")
+                self.get_logger().info(
+                    f"Loaded existing collection '{name}' with {count} documents")
                 self.log_verbose(f"Collection metadata: {self.collection.metadata}")
                 return
         except Exception as e:
@@ -223,7 +223,8 @@ class ConversationManagerNode(LifecycleNode):
 
     @property
     def verbose(self) -> bool:
-        return get_config().verbose or self.get_parameter('verbose').get_parameter_value().bool_value
+        return (get_config().verbose
+                or self.get_parameter('verbose').get_parameter_value().bool_value)
 
     def log_verbose(self, message: str) -> None:
         """Log message only if verbose mode is enabled"""
@@ -311,9 +312,9 @@ class ConversationManagerNode(LifecycleNode):
 
             self.log_verbose(f"Response: {response_text[:200]}")
 
-            result.success    = True
-            result.response   = response_text
-            result.intent     = intent
+            result.success = True
+            result.response = response_text
+            result.intent = intent
             result.confidence = confidence
             goal_handle.succeed()
 

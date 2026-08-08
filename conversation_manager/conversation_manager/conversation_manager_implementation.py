@@ -75,6 +75,7 @@ DEFAULT_DATA_PATH = str(PACKAGE_PATH / 'data' / 'upanzi_data.json')
 DEFAULT_SYSTEM_PROMPT_PATH = str(PACKAGE_PATH / 'data' / 'system_prompt.txt')
 DEFAULT_VERBOSE = False
 
+
 def is_verbose() -> bool:
     """Check verbose state without auto-creating a default config."""
     return global_config is not None and global_config.verbose
@@ -84,21 +85,21 @@ def is_verbose() -> bool:
 class ConversationManagerConfig:
     """
     Configuration for RAG system.
-    
+
     LLM_API_KEY must be exported as environment variable.
     All other values are loaded from configuration file with sensible defaults.
     """
-    
+
     # LLM settings (only LLM_API_KEY comes from environment variable)
     llm_base_url: str = DEFAULT_LLM_BASE_URL
     llm_api_key: str = field(
         default_factory=lambda: os.getenv("LLM_API_KEY", DEFAULT_LLM_API_KEY)
     )
     llm_model: str = DEFAULT_LLM_MODEL
-    
+
     # ChromaDB settings (embedded mode - no server needed)
     chroma_path: str = DEFAULT_CHROMA_PATH
-    
+
     # Embedding settings
     embedding_model: str = DEFAULT_EMBEDDING_MODEL
 
@@ -108,32 +109,32 @@ class ConversationManagerConfig:
     # Search settings
     similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD
     default_top_k: int = DEFAULT_TOP_K
-    
+
     # Conversation settings
     max_history_turns: int = DEFAULT_MAX_HISTORY_TURNS
     context_turns: int = DEFAULT_CONTEXT_TURNS
-    
+
     # Response settings
     max_response_sentences: int = DEFAULT_MAX_RESPONSE_SENTENCES
-    
+
     # Data settings
     data_default_path: str = DEFAULT_DATA_PATH
-    
+
     # Debug settings
     verbose: bool = DEFAULT_VERBOSE
-    
+
     def validate(self) -> Tuple[bool, List[str]]:
         """
         Validate configuration values.
-        
+
         Returns:
             Tuple of (is_valid, list of error messages)
         """
         errors = []
-        
+
         if not self.llm_base_url:
             errors.append("llm_base_url cannot be empty")
-        
+
         if not self.llm_api_key:
             errors.append("llm_api_key cannot be empty")
         elif self.llm_api_key == DEFAULT_LLM_API_KEY and not os.getenv("LLM_API_KEY"):
@@ -141,35 +142,41 @@ class ConversationManagerConfig:
                 "LLM_API_KEY environment variable is not set; "
                 "using placeholder key (acceptable for local servers that require no auth)"
             )
-        
+
         if not self.llm_model:
             errors.append("llm_model cannot be empty")
 
         if self.retrieval_mode not in VALID_RETRIEVAL_MODES:
             errors.append(
-                f"retrieval_mode must be one of {VALID_RETRIEVAL_MODES}, got '{self.retrieval_mode}'"
+                f"retrieval_mode must be one of {VALID_RETRIEVAL_MODES}, "
+                f"got '{self.retrieval_mode}'"
             )
 
         if not 0.0 <= self.similarity_threshold <= 1.0:
-            errors.append(f"similarity_threshold must be between 0 and 1, got {self.similarity_threshold}")
-        
+            errors.append(
+                f"similarity_threshold must be between 0 and 1, got {self.similarity_threshold}")
+
         if self.default_top_k < 1:
             errors.append(f"default_top_k must be at least 1, got {self.default_top_k}")
-        
+
         if self.max_history_turns < 0:
             errors.append(f"max_history_turns must be non-negative, got {self.max_history_turns}")
-        
+
         if self.context_turns < 0:
             errors.append(f"context_turns must be non-negative, got {self.context_turns}")
-        
+
         if self.context_turns > self.max_history_turns:
-            errors.append(f"context_turns ({self.context_turns}) should not exceed max_history_turns ({self.max_history_turns})")
-        
+            errors.append(
+                f"context_turns ({self.context_turns}) should not exceed "
+                f"max_history_turns ({self.max_history_turns})")
+
         return len(errors) == 0, errors
+
 
 class RAGError(Exception):
     """Custom exception for RAG-related errors"""
     pass
+
 
 class ConfigError(RAGError):
     """Exception for configuration-related errors"""
@@ -178,6 +185,7 @@ class ConfigError(RAGError):
 # =============================================================================
 # Global Clients
 # =============================================================================
+
 
 global_config: Optional[ConversationManagerConfig] = None
 openai_client_instance: Optional[openai.OpenAI] = None
@@ -193,6 +201,7 @@ def get_config() -> ConversationManagerConfig:
         global_config = ConversationManagerConfig()
     return global_config
 
+
 def set_config(config: ConversationManagerConfig) -> None:
     """
     Set custom configuration.
@@ -203,7 +212,8 @@ def set_config(config: ConversationManagerConfig) -> None:
     Raises:
         ConfigError: If configuration validation fails
     """
-    global global_config, openai_client_instance, chroma_client_instance, embedding_function_instance, full_context_cache
+    global global_config, openai_client_instance, chroma_client_instance
+    global embedding_function_instance, full_context_cache
 
     is_valid, errors = config.validate()
     if not is_valid:
@@ -215,7 +225,9 @@ def set_config(config: ConversationManagerConfig) -> None:
     embedding_function_instance = None
     full_context_cache = None
 
-    logger.debug(f"Configuration updated: llm_base_url={config.llm_base_url}, llm_model={config.llm_model}")
+    logger.debug(
+        f"Configuration updated: llm_base_url={config.llm_base_url}, llm_model={config.llm_model}")
+
 
 def get_openai_client() -> openai.OpenAI:
     """Get or create OpenAI client"""
@@ -231,6 +243,7 @@ def get_openai_client() -> openai.OpenAI:
         )
     return openai_client_instance
 
+
 def get_chroma_client() -> chromadb.PersistentClient:
     """Get or create ChromaDB client (embedded mode - no server needed)"""
     global chroma_client_instance
@@ -243,6 +256,7 @@ def get_chroma_client() -> chromadb.PersistentClient:
         except Exception as e:
             raise RAGError(f"Failed to initialize ChromaDB: {e}")
     return chroma_client_instance
+
 
 def get_embedding_function():
     """Get or create embedding function"""
@@ -260,16 +274,17 @@ def get_embedding_function():
 # Data Loading
 # =============================================================================
 
+
 def load_json_data(file_path: str) -> List[Dict]:
     """
     Load and parse JSON knowledge base file.
-    
+
     Args:
         file_path: Path to JSON file
-        
+
     Returns:
         List of document dictionaries
-        
+
     Raises:
         RAGError: If file not found or invalid JSON
     """
@@ -293,10 +308,11 @@ def load_json_data(file_path: str) -> List[Dict]:
     except FileNotFoundError:
         raise RAGError(f"File not found: {file_path}")
 
+
 def parse_upanzi_format(json_data: Dict) -> List[Dict]:
     """Parse Upanzi lab JSON format with 'text' fields"""
     documents = []
-    
+
     # Lab info
     if 'lab_info' in json_data:
         lab = json_data['lab_info']
@@ -307,7 +323,7 @@ def parse_upanzi_format(json_data: Dict) -> List[Dict]:
             'keywords': lab.get('keywords', []),
             'category': 'lab_info'
         })
-    
+
     # Goals
     if 'goals' in json_data:
         goals = json_data['goals']
@@ -318,7 +334,7 @@ def parse_upanzi_format(json_data: Dict) -> List[Dict]:
             'keywords': goals.get('keywords', []),
             'category': 'goals'
         })
-    
+
     # Impact
     if 'impact' in json_data:
         impact = json_data['impact']
@@ -329,7 +345,7 @@ def parse_upanzi_format(json_data: Dict) -> List[Dict]:
             'keywords': impact.get('keywords', []),
             'category': 'impact'
         })
-    
+
     # Facilities
     if 'facilities' in json_data:
         for facility in json_data['facilities']:
@@ -340,7 +356,7 @@ def parse_upanzi_format(json_data: Dict) -> List[Dict]:
                 'keywords': facility.get('keywords', []) + facility.get('focus_areas', []),
                 'category': 'facility'
             })
-    
+
     # Thrust areas
     if 'thrust_areas' in json_data:
         for thrust in json_data['thrust_areas']:
@@ -351,7 +367,7 @@ def parse_upanzi_format(json_data: Dict) -> List[Dict]:
                 'keywords': thrust.get('keywords', []),
                 'category': 'thrust_area'
             })
-    
+
     # Projects
     if 'projects' in json_data:
         for project in json_data['projects']:
@@ -360,7 +376,7 @@ def parse_upanzi_format(json_data: Dict) -> List[Dict]:
                 keywords.append(project['thrust_area'])
             if project.get('status'):
                 keywords.append(project['status'])
-            
+
             documents.append({
                 'doc_id': f"project_{project.get('id', '')}",
                 'title': project.get('name', ''),
@@ -370,9 +386,10 @@ def parse_upanzi_format(json_data: Dict) -> List[Dict]:
                 'thrust_area': project.get('thrust_area', ''),
                 'status': project.get('status', '')
             })
-    
+
     logger.debug(f"Parsed {len(documents)} documents from Upanzi format")
     return documents
+
 
 def _build_document_content(doc: Dict) -> str:
     """Build searchable/displayable content from a document's title, keywords, and text."""
@@ -388,14 +405,16 @@ def _build_document_content(doc: Dict) -> str:
 # =============================================================================
 # Collection Management
 # =============================================================================
+
+
 def create_collection(name: str, description: str = "") -> chromadb.Collection:
     """
     Create or get ChromaDB collection.
-    
+
     Args:
         name: Collection name
         description: Optional description
-        
+
     Returns:
         ChromaDB Collection object
     """
@@ -403,10 +422,10 @@ def create_collection(name: str, description: str = "") -> chromadb.Collection:
     if existing:
         logger.debug(f"Using existing collection: {name}")
         return existing
-    
+
     client = get_chroma_client()
     ef = get_embedding_function()
-    
+
     logger.debug(f"Creating new collection: {name}")
     metadata = {'hnsw:space': 'cosine'}
     if description:
@@ -434,14 +453,15 @@ def get_collection(name: str) -> Optional[chromadb.Collection]:
             return None
         raise RAGError(f"Failed to get collection '{name}': {e}")
 
+
 def populate_collection(collection: chromadb.Collection, documents: List[Dict]) -> int:
     """
     Add documents to collection.
-    
+
     Args:
         collection: ChromaDB collection
         documents: List of document dictionaries
-        
+
     Returns:
         Number of documents added
     """
@@ -478,7 +498,9 @@ def populate_collection(collection: chromadb.Collection, documents: List[Dict]) 
 
     return len(docs)
 
-def setup_collection(name: str, json_path: str, description: str = "", force_reload: bool = False) -> chromadb.Collection:
+
+def setup_collection(name: str, json_path: str, description: str = "",
+                     force_reload: bool = False) -> chromadb.Collection:
     """
     Convenience: Create collection and load data.
 
@@ -518,6 +540,7 @@ def setup_collection(name: str, json_path: str, description: str = "", force_rel
 # =============================================================================
 # Full-context retrieval (retrieval_mode == "full_context")
 # =============================================================================
+
 
 def get_full_context_documents(category_filter: str = None) -> List[Dict]:
     """
@@ -559,6 +582,7 @@ def get_full_context_documents(category_filter: str = None) -> List[Dict]:
 # Retrieval
 # =============================================================================
 
+
 def retrieve_documents(
     collection: Optional[chromadb.Collection],
     query: str,
@@ -594,41 +618,44 @@ def retrieve_documents(
 
     top_k = top_k if top_k is not None else config.default_top_k
 
-    logger.debug(f"Searching for query: '{query}' with top_k={top_k}, category_filter={category_filter}")
-    
+    logger.debug(
+        f"Searching for query: '{query}' with top_k={top_k}, category_filter={category_filter}")
+
     where_filter = None
     if category_filter:
         where_filter = {"category": category_filter}
-    
+
     try:
         results = collection.query(
             query_texts=[query],
             n_results=top_k,
             where=where_filter
         )
-        
+
         if not results or not results['ids'] or not results['ids'][0]:
             logger.debug("No search results found")
             return []
-        
+
         formatted = []
         for i in range(len(results['ids'][0])):
             score = 1 - results['distances'][0][i]
-            
+
             if score < config.similarity_threshold:
-                logger.debug(f"Result {results['ids'][0][i]} below threshold ({score} < {config.similarity_threshold})")
+                logger.debug(
+                    f"Result {results['ids'][0][i]} below threshold "
+                    f"({score} < {config.similarity_threshold})")
                 continue
-            
+
             formatted.append({
                 'doc_id': results['ids'][0][i],
                 'title': results['metadatas'][0][i].get('title', ''),
                 'content': results['documents'][0][i],
                 'score': score
             })
-        
+
         logger.debug(f"Search returned {len(formatted)} results above threshold")
         return formatted
-        
+
     except Exception as e:
         logger.error(f"Search failed: {e}")
         raise RAGError(f"Search failed: {e}")
@@ -637,7 +664,9 @@ def retrieve_documents(
 # Response Generation
 # =============================================================================
 
+
 system_prompt_cache: Optional[str] = None
+
 
 def load_system_prompt() -> str:
     """Load system prompt from data/system_prompt.txt, caching after first read."""
@@ -655,62 +684,62 @@ def load_system_prompt() -> str:
 
 
 def generate_response(
-    query: str,
-    search_results: List[Dict],
-    conversation_history: List[Dict] = None) -> str:
+        query: str,
+        search_results: List[Dict],
+        conversation_history: List[Dict] = None) -> str:
     """
     Generate response using LLM with retrieved context.
-    
+
     Args:
         query: User's question
         search_results: Retrieved documents from search
         conversation_history: Optional previous conversation turns
-        
+
     Returns:
         Generated response string
-        
+
     Raises:
         RAGError: If LLM call fails
     """
     config = get_config()
     logger.debug(f"Generating response for query: '{query}'")
-    
+
     # Print search results in verbose mode
     if search_results:
         print_search_results(is_verbose(), search_results)
-    
+
     # Build context from search results
     context = ""
     if search_results:
         context_parts = [f"[{r['title']}]\n{r['content']}" for r in search_results]
         context = "\n\n".join(context_parts)
         logger.debug(f"Using {len(search_results)} search results as context")
-    
+
     # Build messages
     messages = [{"role": "system", "content": load_system_prompt()}]
-    
+
     # Add conversation history if provided (use configured context_turns)
     if conversation_history:
         history_to_use = conversation_history[-config.context_turns:]
-        
+
         # Print conversation history in verbose mode
         print_conversation_history(is_verbose(), conversation_history, config.context_turns)
-        
+
         logger.debug(f"Using {len(history_to_use)} previous conversation turns")
         for turn in history_to_use:
             messages.append({"role": "user", "content": turn.get("query", "")})
             messages.append({"role": "assistant", "content": turn.get("response", "")})
-    
+
     # Add current query with context
     user_content = f'Question: "{query}"'
     if context:
         user_content += f"\n\nRelevant information:\n{context}"
-    
+
     messages.append({"role": "user", "content": user_content})
-    
+
     # Print complete LLM request in verbose mode
     print_llm_request(is_verbose(), messages, config.llm_model)
-    
+
     try:
         client = get_openai_client()
         logger.debug(f"Sending request to LLM (model: {config.llm_model})")
@@ -723,7 +752,7 @@ def generate_response(
             messages=messages,
             max_tokens=max_tokens
         )
-        
+
         if response.choices:
             raw = response.choices[0].message.content.strip()
 
@@ -732,7 +761,9 @@ def generate_response(
                 raw = raw.split("</think>")[-1].strip()
 
             if is_verbose():
-                logger.info(f"{Colors.BG_CYAN}{Colors.BLACK}{Colors.BOLD} LLM RESPONSE {Colors.RESET}\n{raw}")
+                logger.info(
+                    f"{Colors.BG_CYAN}{Colors.BLACK}{Colors.BOLD} LLM RESPONSE "
+                    f"{Colors.RESET}\n{raw}")
 
             # Extract the spoken answer from the structured JSON response
             try:
@@ -743,10 +774,10 @@ def generate_response(
 
             logger.debug(f"LLM response received: {answer[:100]}...")
             return answer
-        
+
         logger.debug("LLM returned no choices")
         return "I'm sorry, I couldn't generate a response. Please try again."
-        
+
     except Exception as e:
         logger.error(f"LLM request failed: {e}")
         raise RAGError(f"LLM request failed: {e}")
@@ -755,25 +786,26 @@ def generate_response(
 # Main Query Handler
 # =============================================================================
 
+
 def handle_query(
-    collection: chromadb.Collection,
-    query: str,
-    conversation_history: List[Dict] = None,
-    category_filter: str = None,
-    top_k: int = None) -> Dict:
+        collection: chromadb.Collection,
+        query: str,
+        conversation_history: List[Dict] = None,
+        category_filter: str = None,
+        top_k: int = None) -> Dict:
     """
     Handle a user query end-to-end.
-    
+
     Args:
         collection: ChromaDB collection
         query: User's question
         conversation_history: Previous conversation turns (will be truncated to max_history_turns)
         category_filter: Optional category to filter search
         top_k: Number of documents to retrieve
-        
+
     Returns:
         Dict with 'response', 'sources', and 'query'
-        
+
     Raises:
         RAGError: If search or generation fails
     """
@@ -784,23 +816,25 @@ def handle_query(
             'sources': [],
             'query': query
         }
-    
+
     config = get_config()
     logger.debug(f"Handling query: '{query}'")
-    
+
     # Truncate history to configured maximum
     if conversation_history and len(conversation_history) > config.max_history_turns:
-        logger.debug(f"Truncating conversation history from {len(conversation_history)} to {config.max_history_turns} turns")
+        logger.debug(
+            f"Truncating conversation history from {len(conversation_history)} "
+            f"to {config.max_history_turns} turns")
         conversation_history = conversation_history[-config.max_history_turns:]
-    
+
     # Search for relevant documents
     logger.debug("Searching for relevant documents...")
     results = retrieve_documents(collection, query, top_k=top_k, category_filter=category_filter)
-    
+
     # Generate response
     logger.debug("Generating response...")
     response = generate_response(query, results, conversation_history)
-    
+
     logger.debug(f"Query handled successfully, response length: {len(response)}")
     return {
         'response': response,
@@ -916,6 +950,7 @@ def extract_answer_from_raw(raw: str) -> str:
 # Intents that benefit from slightly slower speech for clarity
 _SLOW_INTENTS = {"ASK_EXHIBIT_QUESTION", "ASK_TOUR_META"}
 
+
 def apply_speech_tags(answer: str, intent: str) -> str:
     """
     Prepend a sentence-level NAOqi speed tag based on intent.
@@ -957,8 +992,8 @@ def extract_intent_from_raw(raw: str) -> Tuple[str, float]:
     fields are missing.
     """
     parsed = _parse_llm_json(raw)
-    intent     = parsed.get("intent",     "UNKNOWN") if parsed else "UNKNOWN"
-    confidence = parsed.get("confidence", 0.0)       if parsed else 0.0
+    intent = parsed.get("intent", "UNKNOWN") if parsed else "UNKNOWN"
+    confidence = parsed.get("confidence", 0.0) if parsed else 0.0
     try:
         confidence = float(confidence)
     except (TypeError, ValueError):
@@ -1091,16 +1126,17 @@ def generate_response_stream(
     finally:
         raw_response_out.append(raw_buffer)
 
+
 def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
     """
     Load and apply configuration from YAML file.
-    
+
     Args:
         file_path: Path to YAML config file
-        
+
     Returns:
         Tuple of (success, list of warnings/errors)
-        
+
     Example YAML format:
         llm:
           base_url: "https://api.groq.com/openai/v1"
@@ -1123,13 +1159,13 @@ def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
           verbose: true
     """
     messages = []
-    
+
     yaml_config, error = read_yaml_config(file_path)
     if error:
         return False, [error]
-    
+
     logger.debug(f"Successfully read YAML config from {file_path}")
-    
+
     # Extract nested values with defaults
     llm = yaml_config.get('llm', {})
     embedding = yaml_config.get('embedding', {})
@@ -1160,15 +1196,15 @@ def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
     top_k, warn = safe_int(search_cfg.get('top_k'), DEFAULT_TOP_K, 'top_k')
     if warn:
         messages.append(warn)
-    
+
     max_history_turns, warn = safe_int(
-        conversation.get('max_history_turns'), 
-        DEFAULT_MAX_HISTORY_TURNS, 
+        conversation.get('max_history_turns'),
+        DEFAULT_MAX_HISTORY_TURNS,
         'max_history_turns'
     )
     if warn:
         messages.append(warn)
-    
+
     context_turns, warn = safe_int(
         conversation.get('context_turns'),
         DEFAULT_CONTEXT_TURNS,
@@ -1193,7 +1229,7 @@ def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
     )
     if warn:
         messages.append(warn)
-    
+
     # Parse verbose
     verbose, warn = safe_bool(
         debug.get('verbose'),
@@ -1202,10 +1238,10 @@ def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
     )
     if warn:
         messages.append(warn)
-    
+
     try:
         logger.debug(f"Using package data folder for ChromaDB: {DEFAULT_CHROMA_PATH}")
-        
+
         config = ConversationManagerConfig(
             llm_base_url=llm.get('base_url', DEFAULT_LLM_BASE_URL),
             # LLM_API_KEY must be exported as environment variable, not from config file
@@ -1221,12 +1257,12 @@ def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
             data_default_path=data_default_path,
             verbose=verbose,
         )
-        
+
         # This will validate and raise ConfigError if invalid
         set_config(config)
         logger.debug(f"Configuration applied successfully: verbose={verbose}")
         return True, messages
-        
+
     except ConfigError as e:
         logger.error(f"Configuration error: {e}")
         return False, [str(e)] + messages

@@ -24,34 +24,34 @@ logger = rclpy.logging.get_logger('conversation_manager')
 
 class Colors:
     """ANSI color codes for terminal output"""
-    RESET  = '\033[0m'
-    BOLD   = '\033[1m'
-    DIM    = '\033[2m'
+    RESET = '\033[0m'
+    BOLD = '\033[1m'
+    DIM = '\033[2m'
 
     # Regular colors
-    BLACK   = '\033[30m'
-    RED     = '\033[31m'
-    GREEN   = '\033[32m'
-    YELLOW  = '\033[33m'
-    BLUE    = '\033[34m'
+    BLACK = '\033[30m'
+    RED = '\033[31m'
+    GREEN = '\033[32m'
+    YELLOW = '\033[33m'
+    BLUE = '\033[34m'
     MAGENTA = '\033[35m'
-    CYAN    = '\033[36m'
-    WHITE   = '\033[37m'
+    CYAN = '\033[36m'
+    WHITE = '\033[37m'
 
     # Bright colors
-    BRIGHT_BLACK   = '\033[90m'
-    BRIGHT_RED     = '\033[91m'
-    BRIGHT_GREEN   = '\033[92m'
-    BRIGHT_YELLOW  = '\033[93m'
-    BRIGHT_BLUE    = '\033[94m'
+    BRIGHT_BLACK = '\033[90m'
+    BRIGHT_RED = '\033[91m'
+    BRIGHT_GREEN = '\033[92m'
+    BRIGHT_YELLOW = '\033[93m'
+    BRIGHT_BLUE = '\033[94m'
     BRIGHT_MAGENTA = '\033[95m'
-    BRIGHT_CYAN    = '\033[96m'
-    BRIGHT_WHITE   = '\033[97m'
+    BRIGHT_CYAN = '\033[96m'
+    BRIGHT_WHITE = '\033[97m'
 
     # Background colors
     BG_BLACK = '\033[40m'
-    BG_CYAN  = '\033[46m'
-    BG_BLUE  = '\033[44m'
+    BG_CYAN = '\033[46m'
+    BG_BLUE = '\033[44m'
 
 
 # =============================================================================
@@ -72,12 +72,12 @@ def print_message_header(verbose: bool, role: str, index: int = None) -> None:
         return
 
     role_colors = {
-        'system':    Colors.BRIGHT_MAGENTA,
-        'user':      Colors.BRIGHT_CYAN,
+        'system': Colors.BRIGHT_MAGENTA,
+        'user': Colors.BRIGHT_CYAN,
         'assistant': Colors.BRIGHT_GREEN,
     }
 
-    color     = role_colors.get(role, Colors.WHITE)
+    color = role_colors.get(role, Colors.WHITE)
     role_upper = role.upper()
 
     if index is not None:
@@ -110,7 +110,7 @@ def print_search_results(verbose: bool, search_results: List[Dict]) -> None:
         f"SEARCH RESULTS ({len(search_results)} documents){Colors.RESET}"
     ]
     for i, result in enumerate(search_results, 1):
-        score       = result.get('score', 0)
+        score = result.get('score', 0)
         score_color = (
             Colors.BRIGHT_GREEN if score > 0.5
             else Colors.YELLOW if score > 0.3
@@ -142,7 +142,7 @@ def print_conversation_history(verbose: bool, conversation_history: List[Dict],
         f"({len(history_to_use)}/{len(conversation_history)} turns used){Colors.RESET}"
     ]
     for i, turn in enumerate(history_to_use, 1):
-        query    = turn.get('query', '')
+        query = turn.get('query', '')
         response = turn.get('response', '')
         if len(response) > 150:
             response = response[:150] + "..."
@@ -165,7 +165,7 @@ def print_llm_request(verbose: bool, messages: List[Dict], model: str) -> None:
         f"{Colors.DIM}Messages:{Colors.RESET} {Colors.BRIGHT_WHITE}{len(messages)}{Colors.RESET}"
     ]
     for i, message in enumerate(messages, 1):
-        role    = message.get('role', 'unknown').upper()
+        role = message.get('role', 'unknown').upper()
         content = message.get('content', '')
         lines.append(
             f"{Colors.BOLD}[{role} #{i}]{Colors.RESET} {content[:200]}"
