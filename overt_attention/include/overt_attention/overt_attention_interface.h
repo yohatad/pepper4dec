@@ -303,7 +303,6 @@ private:
     double face_timeout_ = 2.0;
     double engaged_bonus_ = 2.0;
     double face_switch_cooldown_ = 1.0;
-    double same_face_threshold_ = 0.0;  // radians
     bool prefer_closer_ = true;
     double max_face_distance_ = 5.0;
 
@@ -411,7 +410,6 @@ private:
     // Parameters
     bool show_face_ids_ = true;
     bool show_depth_ = true;
-    bool show_engagement_ = true;
 
     std::string image_topic_;
     bool use_compressed_ = false;

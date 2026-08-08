@@ -12,7 +12,7 @@
   </description>
 
   <maintainer email="yohatad123@gmail.com">Yohannes Tadesse Haile</maintainer>
-  <license>Apache-2.0</license>
+  <license>BSD-3-Clause</license>
 
   <!-- Build tools -->
   <buildtool_depend>ament_cmake</buildtool_depend>
@@ -29,6 +29,9 @@
 
   <!-- Required for interface packages -->
   <member_of_group>rosidl_interface_packages</member_of_group>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

@@ -56,15 +56,16 @@ its own parameter set; a shared `/**` block applies `use_compressed`/`camera_typ
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `publish_map` | Publish saliency map visualization | `true` |
-| `down_w` / `down_h` | Downsampled width/height used for saliency computation (px) | `160` / `120` |
 | `use_depth_weighting` | Weight saliency by depth proximity | `true` |
 | `depth_min_m` / `depth_max_m` | Depth range considered for weighting (m) | `0.3` / `10.0` |
 | `depth_weight_min` | Minimum depth weight applied outside range | `0.2` |
 | `min_peak` | Minimum saliency score to count as a peak | `0.5` |
-| `overlay_alpha` | Blend alpha for the saliency overlay | `0.4` |
 | `num_peaks` | Max number of saliency peaks to report | `5` |
-| `peak_min_distance_px` | Minimum pixel distance between reported peaks | `50` |
 | `process_hz` | Saliency computation rate (Hz) | `1.0` |
+
+Downsample resolution (`160x120`), minimum peak spacing (`50px`), and overlay blend alpha
+(`0.4`) are fixed internal saliency-computation/cosmetic constants, not configurable via
+parameters.
 
 **`overt_attention`**
 
@@ -74,14 +75,11 @@ its own parameter set; a shared `/**` block applies `use_compressed`/`camera_typ
 | `move_to_default_on_disable` | Move head to default pose when disabled | `true` |
 | `default_yaw` / `default_pitch` | Default head pose (radians) | `0.0` / `-0.2` |
 | `default_move_speed` | ALMotion speed used moving to default pose | `0.1` |
-| `face_yaw_lim` | Head yaw joint limit for face tracking (radians) | `1.8` |
-| `face_pitch_up` / `face_pitch_dn` | Head pitch limits for face tracking (radians) | `0.4` / `-0.7` |
 | `saliency_yaw_lim` | Head yaw joint limit for saliency (radians) | `1.2` |
 | `saliency_pitch_up` / `saliency_pitch_dn` | Head pitch limits for saliency (radians) | `0.3` / `-0.3` |
 | `face_timeout` | Time after losing faces before switching to saliency (s) | `2.0` |
 | `engaged_priority_bonus` | Priority multiplier for engaged (mutual-gaze) faces | `2.0` |
 | `face_switch_cooldown` | Minimum time between switching tracked faces (s) | `1.0` |
-| `same_face_threshold_deg` | Angular threshold to treat a face as "the same" target | `8.0` |
 | `prefer_closer_faces` | Prefer nearer faces when scoring candidates | `true` |
 | `max_face_distance` | Max face depth considered for tracking (m) | `5.0` |
 | `min_angular_change_deg` | Dead-zone: skip a head command if already this close (deg) | `2.0` |
@@ -95,19 +93,27 @@ its own parameter set; a shared `/**` block applies `use_compressed`/`camera_typ
 | `ior_max_suppression` | Max suppression strength for a visited location | `0.9` |
 | `ior_half_life` | Half-life for IOR decay (s) | `3.0` |
 | `ior_radius_deg` | Angular radius of an IOR-suppressed region (deg) | `15.0` |
-| `ior_cleanup_threshold` | Suppression value below which an IOR entry is dropped | `0.05` |
-| `ior_max_locations` | Max number of IOR-suppressed locations tracked | `20` |
+
+The decay threshold for dropping stale IOR entries (`0.05`) and the max tracked locations
+(`20`) are fixed internal bookkeeping constants, not configurable via parameters.
+
+The face-tracking joint limits (`face_yaw_lim: 1.8`, `face_pitch_up: 0.4`,
+`face_pitch_dn: -0.7`) are also fixed — unlike the saliency limits above, they've never
+needed adjustment from these defaults on this robot.
+
+`same_face_threshold_deg` was removed: it was converted to radians and stored but never
+actually consulted — face identity is matched by `face_id` string, not angular distance.
 
 **`attention_visualization`**
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `publish_overlay` | Publish the annotated visualization image | `true` |
-| `publish_markers` | Publish RViz markers | `true` |
-| `show_metrics` | Draw metrics text on the overlay | `true` |
 | `show_face_ids` | Draw face IDs on the overlay | `true` |
 | `show_depth` | Draw per-face depth on the overlay | `true` |
-| `show_engagement` | Draw engagement/mutual-gaze status on the overlay | `true` |
+
+The overlay image and its markers (face boxes, saliency peaks, metrics panel) are always
+published; there's no toggle for that. Engagement (glow + "ENGAGED" label) also always
+draws — the `show_engagement` toggle was removed since it never actually gated anything.
 
 Topic names (face detection, saliency, camera, joint angles, target angles) are configured separately
 via `data/pepper_topics.yaml`, keyed by `camera_type` (`pepper` vs `realsense`).

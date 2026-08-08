@@ -73,6 +73,7 @@ import rclpy.logging
 from rclpy.executors import MultiThreadedExecutor
 from .speech_event_implementation import SpeechRecognitionNode
 
+
 def main(args=None):
     """Initialize and run the speech event node."""
     rclpy_inited = False
@@ -111,6 +112,7 @@ def main(args=None):
                 rclpy.shutdown()
             except Exception:
                 pass
+
 
 if __name__ == "__main__":
     main()

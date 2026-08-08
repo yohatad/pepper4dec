@@ -9,6 +9,7 @@ from launch.conditions import IfCondition
 from ament_index_python.packages import get_package_share_directory
 import os
 
+
 def generate_launch_description():
     pkg_dir = get_package_share_directory('overt_attention')
     params_file = os.path.join(pkg_dir, 'config', 'overt_attention_configuration.yaml')
@@ -54,7 +55,7 @@ def generate_launch_description():
             launch_arguments={'launch_camera': 'false'}.items()
         ),
 
-        # Saliency node (Laptop)
+        # Saliency node
         Node(
             package='overt_attention',
             executable='overt_attention_saliency',
@@ -65,8 +66,8 @@ def generate_launch_description():
             ],
             output='screen'
         ),
-        
-        # Attention controller (Laptop)
+
+        # Attention controller
         Node(
             package='overt_attention',
             executable='overt_attention',
@@ -74,8 +75,8 @@ def generate_launch_description():
             parameters=[LaunchConfiguration('params_file')],
             output='screen'
         ),
-        
-        # Visualization (Laptop)
+
+        # Visualization
         Node(
             package='overt_attention',
             executable='overt_attention_visualization',

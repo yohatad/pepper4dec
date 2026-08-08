@@ -31,11 +31,6 @@ OvertAttentionNode::OvertAttentionNode() : LifecycleNode("overt_attention") {
     declare_parameter("default_pitch", -0.2);
     declare_parameter("default_move_speed", 0.1);
 
-    // Joint limits for face tracking
-    declare_parameter("face_yaw_lim", 1.8);
-    declare_parameter("face_pitch_up", 0.4);
-    declare_parameter("face_pitch_dn", -0.7);
-
     // Joint limits for saliency
     declare_parameter("saliency_yaw_lim", 1.8);
     declare_parameter("saliency_pitch_up", 0.4);
@@ -45,7 +40,6 @@ OvertAttentionNode::OvertAttentionNode() : LifecycleNode("overt_attention") {
     declare_parameter("face_timeout", 2.0);
     declare_parameter("engaged_priority_bonus", 2.0);
     declare_parameter("face_switch_cooldown", 1.0);
-    declare_parameter("same_face_threshold_deg", 8.0);
     declare_parameter("prefer_closer_faces", true);
     declare_parameter("max_face_distance", 5.0);
 
@@ -65,8 +59,8 @@ OvertAttentionNode::OvertAttentionNode() : LifecycleNode("overt_attention") {
     declare_parameter("ior_max_suppression", 0.9);
     declare_parameter("ior_half_life", 3.0);
     declare_parameter("ior_radius_deg", 15.0);
-    declare_parameter("ior_cleanup_threshold", 0.05);
-    declare_parameter("ior_max_locations", 20);
+    // ior_cleanup_threshold_, ior_max_locations_ are fixed (see member
+    // initializers) -- internal decay-cleanup bookkeeping, not tuning knobs.
 }
 
 OvertAttentionNode::CallbackReturn
@@ -86,9 +80,9 @@ OvertAttentionNode::on_configure(const rclcpp_lifecycle::State&) {
     default_pitch_ = get_parameter("default_pitch").as_double();
     default_move_speed_ = get_parameter("default_move_speed").as_double();
 
-    face_yaw_lim_ = get_parameter("face_yaw_lim").as_double();
-    face_pitch_up_ = get_parameter("face_pitch_up").as_double();
-    face_pitch_dn_ = get_parameter("face_pitch_dn").as_double();
+    // face_yaw_lim_, face_pitch_up_, face_pitch_dn_ are fixed (see member
+    // initializers) -- never adjusted from default, unlike the saliency
+    // limits below which were tuned narrower for this robot.
 
     saliency_yaw_lim_ = get_parameter("saliency_yaw_lim").as_double();
     saliency_pitch_up_ = get_parameter("saliency_pitch_up").as_double();
@@ -97,7 +91,6 @@ OvertAttentionNode::on_configure(const rclcpp_lifecycle::State&) {
     face_timeout_ = get_parameter("face_timeout").as_double();
     engaged_bonus_ = get_parameter("engaged_priority_bonus").as_double();
     face_switch_cooldown_ = get_parameter("face_switch_cooldown").as_double();
-    same_face_threshold_ = get_parameter("same_face_threshold_deg").as_double() * M_PI / 180.0;
     prefer_closer_ = get_parameter("prefer_closer_faces").as_bool();
     max_face_distance_ = get_parameter("max_face_distance").as_double();
 
@@ -114,8 +107,6 @@ OvertAttentionNode::on_configure(const rclcpp_lifecycle::State&) {
     ior_max_suppression_ = get_parameter("ior_max_suppression").as_double();
     ior_half_life_ = get_parameter("ior_half_life").as_double();
     ior_radius_ = get_parameter("ior_radius_deg").as_double() * M_PI / 180.0;
-    ior_cleanup_threshold_ = get_parameter("ior_cleanup_threshold").as_double();
-    ior_max_locations_ = static_cast<int>(get_parameter("ior_max_locations").as_int());
 
     // Enable/disable state
     attention_enabled_ = get_parameter("start_enabled").as_bool();

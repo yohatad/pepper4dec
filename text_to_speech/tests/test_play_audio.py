@@ -32,6 +32,11 @@ Usage:
 Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
 """
 
+from text_to_speech.text_to_speech_implementation import (
+    AudioPlayer,
+    audio_to_wav_bytes,
+    synthesize_kokoro,
+)
 import argparse
 import io
 import sys
@@ -48,11 +53,6 @@ from naoqi_bridge_msgs.srv import LoadAudioFile, UnloadAudioFile, SendAudioBuffe
 
 # ── Pull helpers from the package under test ──────────────────────────────────
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from text_to_speech.text_to_speech_implementation import (
-    AudioPlayer,
-    audio_to_wav_bytes,
-    synthesize_kokoro,
-)
 
 # ---------------------------------------------------------------------------
 # Default config (mirrors text_to_speech_configuration.yaml)
@@ -69,7 +69,7 @@ DEFAULT_TEXT = "Hello, I am Pepper. The play audio test is working correctly."
 # Robot audio settings for streaming
 ROBOT_SAMPLE_RATE = 48000
 STREAM_CHUNK_FRAMES = 16384          # max frames per send_audio_buffer call
-STREAM_CHUNK_BYTES  = STREAM_CHUNK_FRAMES * 4  # stereo 16-bit = 4 bytes/frame
+STREAM_CHUNK_BYTES = STREAM_CHUNK_FRAMES * 4  # stereo 16-bit = 4 bytes/frame
 
 
 # ---------------------------------------------------------------------------
@@ -134,28 +134,31 @@ class FilePlayTester(Node):
     """
 
     SERVICE_TIMEOUT_S = 10.0
-    LOAD_TIMEOUT_S    = 30.0   # SCP can take a few seconds
-    PLAY_TIMEOUT_S    = 60.0
+    LOAD_TIMEOUT_S = 30.0   # SCP can take a few seconds
+    PLAY_TIMEOUT_S = 60.0
 
     def __init__(self):
         super().__init__("test_play_audio_file")
-        self._load_client   = self.create_client(LoadAudioFile,   "/naoqi_driver/load_audio_file")
-        self._unload_client = self.create_client(UnloadAudioFile, "/naoqi_driver/unload_audio_file")
-        self._play_client   = ActionClient(self, PlayAudio,       "/naoqi_driver/play_audio")
+        self._load_client = self.create_client(LoadAudioFile, "/naoqi_driver/load_audio_file")
+        self._unload_client = self.create_client(
+            UnloadAudioFile, "/naoqi_driver/unload_audio_file")
+        self._play_client = ActionClient(self, PlayAudio, "/naoqi_driver/play_audio")
 
     def wait_for_services(self) -> bool:
         self.get_logger().info("Waiting for naoqi_driver services…")
         for client, name in [
-            (self._load_client,   "/naoqi_driver/load_audio_file"),
+            (self._load_client, "/naoqi_driver/load_audio_file"),
             (self._unload_client, "/naoqi_driver/unload_audio_file"),
         ]:
             if not client.wait_for_service(timeout_sec=self.SERVICE_TIMEOUT_S):
-                self.get_logger().error(f"Service {name} not available after {self.SERVICE_TIMEOUT_S}s")
+                self.get_logger().error(
+                    f"Service {name} not available after {self.SERVICE_TIMEOUT_S}s")
                 return False
 
         if not self._play_client.wait_for_server(timeout_sec=self.SERVICE_TIMEOUT_S):
             self.get_logger().error(
-                f"/naoqi_driver/play_audio action server not available after {self.SERVICE_TIMEOUT_S}s"
+                f"/naoqi_driver/play_audio action server not available "
+                f"after {self.SERVICE_TIMEOUT_S}s"
             )
             return False
 
@@ -166,7 +169,7 @@ class FilePlayTester(Node):
         """Send WAV bytes to naoqi_driver (driver SCPs to robot). Returns file_id or -1."""
         req = LoadAudioFile.Request()
         req.remote_path = ""
-        req.audio_data  = list(wav_bytes)
+        req.audio_data = list(wav_bytes)
 
         self.get_logger().info(f"Sending {len(wav_bytes):,} bytes to load_audio_file…")
         future = self._load_client.call_async(req)
@@ -188,9 +191,9 @@ class FilePlayTester(Node):
         """Send play_audio goal and block until it completes. Returns True on success."""
         goal = PlayAudio.Goal()
         goal.file_id = file_id
-        goal.volume  = 0.85
-        goal.pan     = 0.0
-        goal.loop    = False
+        goal.volume = 0.85
+        goal.pan = 0.0
+        goal.loop = False
 
         self.get_logger().info(f"Sending play_audio goal (file_id={file_id})…")
         send_future = self._play_client.send_goal_async(goal)
@@ -257,7 +260,8 @@ class StreamPlayTester(Node):
 
     def __init__(self):
         super().__init__("test_play_audio_stream")
-        self._buffer_client = self.create_client(SendAudioBuffer, "/naoqi_driver/send_audio_buffer")
+        self._buffer_client = self.create_client(
+            SendAudioBuffer, "/naoqi_driver/send_audio_buffer")
 
     def wait_for_services(self) -> bool:
         self.get_logger().info("Waiting for send_audio_buffer service…")
@@ -310,15 +314,14 @@ class StreamPlayTester(Node):
         self.get_logger().info("Resampling to 48 kHz stereo…")
         pcm = self._resample_to_robot(wav_bytes)
 
-        total_frames    = len(pcm) // 2          # stereo → frames
-        duration_s      = total_frames / ROBOT_SAMPLE_RATE
-        bytes_per_sec   = ROBOT_SAMPLE_RATE * 4  # 2ch * 2B
+        total_frames = len(pcm) // 2          # stereo → frames
+        duration_s = total_frames / ROBOT_SAMPLE_RATE
         self.get_logger().info(
             f"Streaming {len(pcm) * 2:,} bytes ({duration_s:.2f}s) in "
             f"{(len(pcm) * 2 + STREAM_CHUNK_BYTES - 1) // STREAM_CHUNK_BYTES} chunks…"
         )
 
-        offset  = 0
+        offset = 0
         success = True
         while offset < len(pcm):
             chunk = pcm[offset: offset + STREAM_CHUNK_FRAMES * 2]  # *2 for stereo samples

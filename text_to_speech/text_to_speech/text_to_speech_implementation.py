@@ -18,7 +18,6 @@ Version: v1.0
 
 import io
 import math
-import queue
 import re
 import threading
 from typing import Generator, Iterator, List, Optional, Tuple
@@ -167,7 +166,7 @@ def prepare_stream_audio(
 
     offset = 0
     while offset < len(stereo):
-        chunk = stereo[offset : offset + max_chunk]
+        chunk = stereo[offset: offset + max_chunk]
         wait_time = max(0.01, chunk.nbytes / bytes_per_second - 0.01)
         yield list(chunk.tobytes()), wait_time
         offset += max_chunk
@@ -396,7 +395,7 @@ class AudioPlayer:
                 while pos < len(audio):
                     if self._stop_event.is_set():
                         return False
-                    chunk = audio[pos : pos + chunk_size].reshape(-1, 1)
+                    chunk = audio[pos: pos + chunk_size].reshape(-1, 1)
                     stream.write(chunk)
                     pos += chunk_size
         except Exception as exc:
@@ -443,4 +442,3 @@ class AudioPlayer:
     def stop(self):
         """Interrupt playback at the next chunk boundary (~50 ms)."""
         self._stop_event.set()
-

@@ -31,7 +31,6 @@ Version: v1.0
 
 import os
 import wave
-import signal
 import numpy as np
 import rclpy
 from rclpy.node import Node
@@ -39,20 +38,21 @@ from naoqi_bridge_msgs.msg import AudioBuffer
 from ament_index_python.packages import get_package_share_directory
 
 CHANNEL_LABELS = {
-    AudioBuffer.CHANNEL_FRONT_LEFT:         "front_left",
-    AudioBuffer.CHANNEL_FRONT_CENTER:       "front_center",
-    AudioBuffer.CHANNEL_FRONT_RIGHT:        "front_right",
-    AudioBuffer.CHANNEL_REAR_LEFT:          "rear_left",
-    AudioBuffer.CHANNEL_REAR_CENTER:        "rear_center",
-    AudioBuffer.CHANNEL_REAR_RIGHT:         "rear_right",
-    AudioBuffer.CHANNEL_SURROUND_LEFT:      "surround_left",
-    AudioBuffer.CHANNEL_SURROUND_RIGHT:     "surround_right",
-    AudioBuffer.CHANNEL_SUBWOOFER:          "subwoofer",
-    AudioBuffer.CHANNEL_LFE:                "lfe",
+    AudioBuffer.CHANNEL_FRONT_LEFT: "front_left",
+    AudioBuffer.CHANNEL_FRONT_CENTER: "front_center",
+    AudioBuffer.CHANNEL_FRONT_RIGHT: "front_right",
+    AudioBuffer.CHANNEL_REAR_LEFT: "rear_left",
+    AudioBuffer.CHANNEL_REAR_CENTER: "rear_center",
+    AudioBuffer.CHANNEL_REAR_RIGHT: "rear_right",
+    AudioBuffer.CHANNEL_SURROUND_LEFT: "surround_left",
+    AudioBuffer.CHANNEL_SURROUND_RIGHT: "surround_right",
+    AudioBuffer.CHANNEL_SUBWOOFER: "subwoofer",
+    AudioBuffer.CHANNEL_LFE: "lfe",
 }
 
+
 class AudioRecorderNode(Node):
-    """Node that records microphone AudioBuffer messages to multichannel and per-channel WAV files."""
+    """Records microphone AudioBuffer messages to multichannel and per-channel WAV files."""
 
     def __init__(self):
         super().__init__('audio_recorder')
@@ -65,8 +65,10 @@ class AudioRecorderNode(Node):
 
         self.mic_topic = self.get_parameter('mic_topic').get_parameter_value().string_value
         raw_output_base = self.get_parameter('output_base').get_parameter_value().string_value
-        self.max_seconds = int(self.get_parameter('max_seconds').get_parameter_value().integer_value)
-        self.split_channels = bool(self.get_parameter('split_channels').get_parameter_value().bool_value)
+        self.max_seconds = int(self.get_parameter(
+            'max_seconds').get_parameter_value().integer_value)
+        self.split_channels = bool(self.get_parameter(
+            'split_channels').get_parameter_value().bool_value)
 
         # Resolve relative output_base against the package data directory
         if os.path.isabs(raw_output_base):
@@ -87,10 +89,12 @@ class AudioRecorderNode(Node):
         # Subscribe
         self.sub = self.create_subscription(AudioBuffer, self.mic_topic, self.on_audio, 10)
         self.get_logger().info(f"Recording from: {self.mic_topic}")
-        self.get_logger().info(f"Saving to base: {self.output_base}  split_channels={self.split_channels}  max_seconds={self.max_seconds or '∞'}")
-
+        self.get_logger().info(
+            f"Saving to base: {self.output_base}  split_channels={self.split_channels}  "
+            f"max_seconds={self.max_seconds or '∞'}")
 
     # ---------- helpers ----------
+
     def _open_main(self, freq: int, channels: int, channel_map):
         """Open the multichannel WAV file."""
         base = self.output_base
@@ -123,13 +127,17 @@ class AudioRecorderNode(Node):
 
     def _close_all(self):
         if self.wave_main is not None:
-            try: self.wave_main.close()
-            except Exception: pass
+            try:
+                self.wave_main.close()
+            except Exception:
+                pass
             self.wave_main = None
 
         for wf in self.wave_split:
-            try: wf.close()
-            except Exception: pass
+            try:
+                wf.close()
+            except Exception:
+                pass
         self.wave_split = []
 
     def _sigint(self, *_):
@@ -162,7 +170,8 @@ class AudioRecorderNode(Node):
             # Warn if stream format changes mid-flight
             if freq_in != self.freq or channels != self.channels:
                 self.get_logger().warning(
-                    f"Stream format changed: {self.freq}Hz/{self.channels}ch -> {freq_in}Hz/{channels}ch"
+                    f"Stream format changed: {self.freq}Hz/{self.channels}ch -> "
+                    f"{freq_in}Hz/{channels}ch"
                 )
 
             # Frames = samples per channel
@@ -171,11 +180,11 @@ class AudioRecorderNode(Node):
                 return
 
             # Write interleaved bytes directly to main WAV
-            self.wave_main.writeframes(data_i16[:num_frames*channels].tobytes())
+            self.wave_main.writeframes(data_i16[:num_frames * channels].tobytes())
 
             # Optionally split per channel
             if self.split_channels:
-                frames = data_i16[:num_frames*channels].reshape(num_frames, channels)
+                frames = data_i16[:num_frames * channels].reshape(num_frames, channels)
                 for i, wf in enumerate(self.wave_split):
                     wf.writeframes(frames[:, i].astype(np.int16).tobytes())
 
@@ -191,6 +200,7 @@ class AudioRecorderNode(Node):
         except Exception as e:
             self.get_logger().error(f"Recorder error: {e}")
 
+
 def main():
     rclpy.init()
     node = AudioRecorderNode()
@@ -202,6 +212,7 @@ def main():
         node._close_all()
         node.destroy_node()
         rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()

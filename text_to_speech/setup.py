@@ -6,7 +6,7 @@ pkg = "text_to_speech"
 setup(
     name=pkg,
     version="0.1.0",
-    packages=["text_to_speech"],  
+    packages=["text_to_speech"],
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="Yohannes",

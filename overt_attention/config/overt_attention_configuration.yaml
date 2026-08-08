@@ -12,23 +12,17 @@
 saliency_node:
   ros__parameters:
     publish_map: true
-    down_w: 160
-    down_h: 120
-    
+
     # Saliency computation parameters
     use_depth_weighting: true
     depth_min_m: 0.3
     depth_max_m: 10.0
     depth_weight_min: 0.2
     min_peak: 0.5
-    
-    # Visualization parameters
-    overlay_alpha: 0.4
-    
+
     # Multi-peak parameters
     num_peaks: 5
-    peak_min_distance_px: 50
-    
+
     # Processing rate
     process_hz: 1.0
 
@@ -44,11 +38,6 @@ overt_attention:
     default_pitch: -0.2
     default_move_speed: 0.1
 
-    # Joint limits for face tracking
-    face_yaw_lim: 1.8
-    face_pitch_up: 0.4
-    face_pitch_dn: -0.7
-
     # Joint limits for saliency
     saliency_yaw_lim: 1.2
     saliency_pitch_up: 0.3
@@ -58,7 +47,6 @@ overt_attention:
     face_timeout: 2.0
     engaged_priority_bonus: 2.0
     face_switch_cooldown: 1.0
-    same_face_threshold_deg: 8.0
     prefer_closer_faces: true
     max_face_distance: 5.0
 
@@ -78,14 +66,11 @@ overt_attention:
     ior_max_suppression: 0.9
     ior_half_life: 3.0
     ior_radius_deg: 15.0
-    ior_cleanup_threshold: 0.05
-    ior_max_locations: 20
 
 # ===========================================
 # Visualization node params
 # ===========================================
 attention_visualization:
   ros__parameters:
-    publish_overlay: true
-    publish_markers: true
-    show_metrics: true
+    show_face_ids: true
+    show_depth: true
