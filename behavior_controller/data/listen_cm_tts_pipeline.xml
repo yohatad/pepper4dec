@@ -4,7 +4,7 @@
   Standalone ASR → Conversation Manager → TTS pipeline
 
   Requires speech_event running with action_server: false
-  (ros2 run speech_event speech_event --ros-args -p action_server:=false)
+  (ros2 run speech_event speech_event, passing action_server:=false as a ROS parameter)
 
   Loop:
     1. ListenForSpeech    – block until a transcription arrives on /speech_event/text
