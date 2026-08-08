@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-realsense_only.launch.py
-ROS 2 launch file for Intel RealSense camera only
+Launch the Intel RealSense camera driver only.
+
+No other nodes are started; used by attention_system.launch.py to bring up
+the shared camera feed for person/face detection and attention.
 """
 
 from launch import LaunchDescription
 from launch_ros.actions import Node
-from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+
 
 def generate_launch_description():
 
@@ -38,7 +39,8 @@ def generate_launch_description():
 
                 # --- QoS (BEST_EFFORT for vision pipelines) ---
                 "qos_overrides./camera/color/image_raw.publisher.reliability": "best_effort",
-                "qos_overrides./camera/aligned_depth_to_color/image_raw.publisher.reliability": "best_effort",
+                "qos_overrides./camera/aligned_depth_to_color/image_raw.publisher.reliability":
+                    "best_effort",
                 "qos_overrides./camera/depth/image_rect_raw.publisher.reliability": "best_effort",
             }]
         )
