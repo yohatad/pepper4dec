@@ -45,8 +45,9 @@ Configuration is managed via `config/gesture_execution_configuration.yaml`, load
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `verboseMode` | Enable detailed logging and debugging | `true` |
-| `gestureDescriptors` | **Unused** — gesture definitions always load from the fixed path `data/gesture.yaml` | n/a |
-| `robotTopics` | **Unused** — topic mappings always load from the fixed path `data/pepper_topics.yaml` | n/a |
+
+Gesture definitions and topic mappings always load from fixed paths (`data/gesture.yaml`,
+`data/pepper_topics.yaml`) — not configurable via parameters.
 
 ### Gesture Definitions
 

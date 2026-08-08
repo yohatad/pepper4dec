@@ -31,9 +31,8 @@
  *
  * Parameters (loaded from gesture_execution_configuration.yaml):
  *   verboseMode (bool, default: true)
- *   gestureDescriptors, robotTopics are loaded but unused — the gesture
- *   and topic data file paths are fixed (data/gesture.yaml,
- *   data/pepper_topics.yaml), mirroring the reference Python ConfigManager.
+ * Gesture and topic data always load from fixed paths (data/gesture.yaml,
+ * data/pepper_topics.yaml) — not configurable via parameters.
  *
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa

@@ -114,9 +114,7 @@ GestureExecutionNode::CallbackReturn GestureExecutionNode::on_configure(const rc
         return CallbackReturn::FAILURE;
     }
 
-    // gestureDescriptors/robotTopics keys in the configuration YAML are
-    // unused (the data file paths below are fixed) — mirrors the reference
-    // Python ConfigManager, which loads but never reads them.
+    // Gesture and topic data always load from these fixed paths.
     verbose_mode_ = false;
     try {
         YAML::Node cfg = YAML::LoadFile(package_path + "/config/gesture_execution_configuration.yaml");
