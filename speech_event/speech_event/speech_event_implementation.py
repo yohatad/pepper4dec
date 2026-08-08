@@ -49,6 +49,7 @@ from faster_whisper import WhisperModel
 from scipy.signal import resample_poly
 from .speech_event_denoiser import SpeechDenoiser
 
+
 class OnnxWrapper():
     def __init__(self, path, force_onnx_cpu=False, logger=None):
         opts = onnxruntime.SessionOptions()
@@ -59,7 +60,8 @@ class OnnxWrapper():
 
         if force_onnx_cpu:
             # Explicitly force CPU
-            self.session = onnxruntime.InferenceSession(path, providers=['CPUExecutionProvider'], sess_options=opts)
+            self.session = onnxruntime.InferenceSession(
+                path, providers=['CPUExecutionProvider'], sess_options=opts)
             self.device = 'CPU (forced)'
         else:
             # Try to use GPU providers in priority order
@@ -70,7 +72,8 @@ class OnnxWrapper():
             else:
                 providers = ['CPUExecutionProvider']
 
-            self.session = onnxruntime.InferenceSession(path, providers=providers, sess_options=opts)
+            self.session = onnxruntime.InferenceSession(
+                path, providers=providers, sess_options=opts)
 
             # Determine which provider was actually used
             provider = self.session.get_providers()[0]
@@ -122,8 +125,8 @@ class OnnxWrapper():
 
             # Reset states if batch size changed
             if batch_size != self._last_batch_size:
-                # Note: reset_states also acquires lock, but Python's threading.Lock is reentrant for same thread
-                # Actually, we need to avoid nested lock - let's call the internal reset directly
+                # reset_states() also acquires this lock, and threading.Lock is not
+                # reentrant, so reset state inline here instead of calling it.
                 self._state = torch.zeros((2, batch_size, 128)).float()
                 self._context = torch.zeros(batch_size, 64)
                 self._last_batch_size = batch_size
@@ -147,6 +150,7 @@ class OnnxWrapper():
 
             # Return speech probability as scalar
             return float(out.squeeze())
+
 
 class SpeechRecognitionNode(LifecycleNode):
     """Lifecycle node that performs voice-activity detection and speech-to-text transcription."""
@@ -179,28 +183,28 @@ class SpeechRecognitionNode(LifecycleNode):
     # ── Lifecycle callbacks ─────────────────────────────────────────────────────
 
     def on_configure(self, _state) -> TransitionCallbackReturn:
-        """Load the VAD/Whisper models and denoiser, and create publishers, services, and the action server."""
+        """Load the VAD/Whisper models and denoiser; create publishers/services/action server."""
         # ── Read parameters ──────────────────────────────────────────────────
-        self.sample_rate           = int(self.get_parameter("sample_rate").value)
-        self.input_sample_rate     = int(self.get_parameter("input_sample_rate").value)
-        self.device                = self.get_parameter("device").value
-        self.compute_type          = self.get_parameter("compute_type").value
-        self.language              = self.get_parameter("language").value
-        self.whisper_model_id      = self.get_parameter("whisper_model_id").value
-        self.speech_threshold      = float(self.get_parameter("speech_threshold").value)
-        self.neg_threshold         = float(self.get_parameter("neg_threshold").value)
+        self.sample_rate = int(self.get_parameter("sample_rate").value)
+        self.input_sample_rate = int(self.get_parameter("input_sample_rate").value)
+        self.device = self.get_parameter("device").value
+        self.compute_type = self.get_parameter("compute_type").value
+        self.language = self.get_parameter("language").value
+        self.whisper_model_id = self.get_parameter("whisper_model_id").value
+        self.speech_threshold = float(self.get_parameter("speech_threshold").value)
+        self.neg_threshold = float(self.get_parameter("neg_threshold").value)
         self.min_silence_duration_ms = int(self.get_parameter("min_silence_duration_ms").value)
         self.max_speech_duration_s = float(self.get_parameter("max_speech_duration_s").value)
-        self.min_speech_duration   = float(self.get_parameter("min_speech_duration").value)
-        self.pre_speech_buffer_ms  = int(self.get_parameter("pre_speech_buffer_ms").value)
-        self.intensity_threshold   = float(self.get_parameter("intensity_threshold").value)
+        self.min_speech_duration = float(self.get_parameter("min_speech_duration").value)
+        self.pre_speech_buffer_ms = int(self.get_parameter("pre_speech_buffer_ms").value)
+        self.intensity_threshold = float(self.get_parameter("intensity_threshold").value)
         self.transcription_timeout_s = float(self.get_parameter("transcription_timeout_s").value)
-        self.microphone_topic      = self.get_parameter("microphone_topic").value
+        self.microphone_topic = self.get_parameter("microphone_topic").value
         self.action_server_enabled = bool(self.get_parameter("action_server").value)
-        self.vad_always_active     = bool(self.get_parameter("vad_always_active").value)
+        self.vad_always_active = bool(self.get_parameter("vad_always_active").value)
         self.noise_cleaning_enabled = bool(self.get_parameter("noise_cleaning_enabled").value)
-        noise_alpha                = float(self.get_parameter("noise_alpha").value)
-        raw_profile_path           = self.get_parameter("noise_profile_path").value
+        noise_alpha = float(self.get_parameter("noise_alpha").value)
+        raw_profile_path = self.get_parameter("noise_profile_path").value
         if raw_profile_path:
             noise_profile_path = (
                 raw_profile_path if os.path.isabs(raw_profile_path)
@@ -211,16 +215,26 @@ class SpeechRecognitionNode(LifecycleNode):
 
         # ── Validate ─────────────────────────────────────────────────────────
         errors = []
-        if self.sample_rate <= 0:             errors.append(f"sample_rate={self.sample_rate} must be > 0")
-        if self.input_sample_rate <= 0:       errors.append(f"input_sample_rate={self.input_sample_rate} must be > 0")
-        if not (0.0 <= self.speech_threshold <= 1.0): errors.append("speech_threshold out of [0,1]")
-        if not (0.0 <= self.neg_threshold <= 1.0):    errors.append("neg_threshold out of [0,1]")
-        if self.min_silence_duration_ms < 0:  errors.append("min_silence_duration_ms must be >= 0")
-        if self.max_speech_duration_s <= 0:   errors.append("max_speech_duration_s must be > 0")
-        if self.min_speech_duration < 0:      errors.append("min_speech_duration must be >= 0")
-        if self.pre_speech_buffer_ms < 0:     errors.append("pre_speech_buffer_ms must be >= 0")
-        if self.intensity_threshold < 0:      errors.append("intensity_threshold must be >= 0")
-        if self.transcription_timeout_s <= 0: errors.append("transcription_timeout_s must be > 0")
+        if self.sample_rate <= 0:
+            errors.append(f"sample_rate={self.sample_rate} must be > 0")
+        if self.input_sample_rate <= 0:
+            errors.append(f"input_sample_rate={self.input_sample_rate} must be > 0")
+        if not (0.0 <= self.speech_threshold <= 1.0):
+            errors.append("speech_threshold out of [0,1]")
+        if not (0.0 <= self.neg_threshold <= 1.0):
+            errors.append("neg_threshold out of [0,1]")
+        if self.min_silence_duration_ms < 0:
+            errors.append("min_silence_duration_ms must be >= 0")
+        if self.max_speech_duration_s <= 0:
+            errors.append("max_speech_duration_s must be > 0")
+        if self.min_speech_duration < 0:
+            errors.append("min_speech_duration must be >= 0")
+        if self.pre_speech_buffer_ms < 0:
+            errors.append("pre_speech_buffer_ms must be >= 0")
+        if self.intensity_threshold < 0:
+            errors.append("intensity_threshold must be >= 0")
+        if self.transcription_timeout_s <= 0:
+            errors.append("transcription_timeout_s must be > 0")
         if errors:
             for e in errors:
                 self.get_logger().error(f'Parameter error: {e}')
@@ -230,7 +244,7 @@ class SpeechRecognitionNode(LifecycleNode):
         # ── Load Silero VAD ───────────────────────────────────────────────────
         try:
             package_path = get_package_share_directory('speech_event')
-            silero_path  = os.path.join(package_path, 'models', 'silero_vad.onnx')
+            silero_path = os.path.join(package_path, 'models', 'silero_vad.onnx')
             self.silero_model = OnnxWrapper(silero_path, logger=self.get_logger())
             self.get_logger().info(f"Silero VAD loaded for {self.sample_rate}Hz")
         except Exception as e:
@@ -271,46 +285,52 @@ class SpeechRecognitionNode(LifecycleNode):
         )
 
         # ── VAD / speech buffers ──────────────────────────────────────────────
-        self.vad_chunk_size      = 512
-        self.vad_pending_buffer  = np.zeros(0, dtype=np.float32)
-        self.pre_speech_samples  = int((self.pre_speech_buffer_ms / 1000.0) * self.sample_rate)
-        self.pre_speech_ring     = deque(maxlen=self.pre_speech_samples)
-        self.speech_buffer       = []
-        self.speech_active       = False
-        self.speech_start_time   = None
-        self.silence_chunks      = 0
-        self.min_silence_chunks  = int(
+        self.vad_chunk_size = 512
+        self.vad_pending_buffer = np.zeros(0, dtype=np.float32)
+        self.pre_speech_samples = int((self.pre_speech_buffer_ms / 1000.0) * self.sample_rate)
+        self.pre_speech_ring = deque(maxlen=self.pre_speech_samples)
+        self.speech_buffer = []
+        self.speech_active = False
+        self.speech_start_time = None
+        self.silence_chunks = 0
+        self.min_silence_chunks = int(
             (self.min_silence_duration_ms / 1000.0) * self.sample_rate / self.vad_chunk_size
         )
-        self.max_speech_chunks   = int(self.max_speech_duration_s * self.sample_rate / self.vad_chunk_size)
-        self.speech_chunk_count  = 0
+        self.max_speech_chunks = int(
+            self.max_speech_duration_s *
+            self.sample_rate /
+            self.vad_chunk_size)
+        self.speech_chunk_count = 0
 
         # ── Transcription thread pool ─────────────────────────────────────────
-        self.transcription_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="whisper")
-        self.transcription_lock     = threading.Lock()
-        self.is_transcribing        = False
-        self.transcribed_text       = ""
+        self.transcription_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="whisper")
+        self.transcription_lock = threading.Lock()
+        self.is_transcribing = False
+        self.transcribed_text = ""
 
         # ── Action server state ───────────────────────────────────────────────
-        self.action_server_lock    = threading.Lock()
-        self.action_started        = False
-        self.action_goal_complete  = threading.Event()
+        self.action_server_lock = threading.Lock()
+        self.action_started = False
+        self.action_goal_complete = threading.Event()
         self.speech_detected_event = threading.Event()
-        self._current_goal_handle  = None
-        self.asr_action_server     = None
-        self._action_cb_group      = MutuallyExclusiveCallbackGroup()
-        self._audio_cb_group       = MutuallyExclusiveCallbackGroup()
+        self._current_goal_handle = None
+        self.asr_action_server = None
+        self._action_cb_group = MutuallyExclusiveCallbackGroup()
+        self._audio_cb_group = MutuallyExclusiveCallbackGroup()
 
         if self.action_server_enabled:
             self.initialize_action_server()
 
         # ── Service (always available after configure) ────────────────────────
         self.listening_enabled = True
-        self.set_enabled_service = self.create_service(SetBool, '/speech_event/set_enabled', self._set_enabled_callback)
+        self.set_enabled_service = self.create_service(
+            SetBool, '/speech_event/set_enabled', self._set_enabled_callback)
 
         # ── Managed publishers ────────────────────────────────────────────────
-        self.vad_prob_pub = self.create_lifecycle_publisher(Float32, "/speech_event/vad_speech_prob", 10)
-        self.asr_pub      = self.create_lifecycle_publisher(String,  "/speech_event/text", 10)
+        self.vad_prob_pub = self.create_lifecycle_publisher(
+            Float32, "/speech_event/vad_speech_prob", 10)
+        self.asr_pub = self.create_lifecycle_publisher(String, "/speech_event/text", 10)
 
         self.get_logger().info(
             f"SpeechRecognitionNode configured — "
@@ -438,7 +458,8 @@ class SpeechRecognitionNode(LifecycleNode):
         self.action_goal_complete.clear()
 
         self.get_logger().info(
-            f"ASR Action Goal received. Waiting up to {goal_handle.request.wait:.1f}s for speech to start."
+            f"ASR Action Goal received. Waiting up to "
+            f"{goal_handle.request.wait:.1f}s for speech to start."
         )
         self.publish_feedback("waiting")
 
@@ -495,7 +516,8 @@ class SpeechRecognitionNode(LifecycleNode):
         cleanup()
 
         if completed:
-            self.get_logger().info(f"ASR Action Goal completed. Transcript: '{result.transcription}'")
+            self.get_logger().info(
+                f"ASR Action Goal completed. Transcript: '{result.transcription}'")
             goal_handle.succeed()
         else:
             self.get_logger().warning(
@@ -539,14 +561,16 @@ class SpeechRecognitionNode(LifecycleNode):
             if num_frames <= 0:
                 return None, None
 
-            frames = data[:num_frames * channels].reshape(num_frames, channels).astype(np.float32) / 32767.0
+            frames = data[:num_frames *
+                          channels].reshape(num_frames, channels).astype(np.float32) / 32767.0
 
             # Extract front-left channel (primary microphone)
             def get_chan(enum_val, fallback=None):
                 if enum_val in channel_map:
                     idx = channel_map.index(enum_val)
                     return frames[:, idx]
-                return np.copy(fallback) if fallback is not None else np.zeros(num_frames, dtype=np.float32)
+                return np.copy(fallback) if fallback is not None else np.zeros(
+                    num_frames, dtype=np.float32)
 
             FL = get_chan(AudioBuffer.CHANNEL_FRONT_LEFT)
 
@@ -675,7 +699,7 @@ class SpeechRecognitionNode(LifecycleNode):
             self.speech_buffer = [pre_speech_audio, vad_chunk.copy()]
 
             self.get_logger().info(f"VAD: speech START (prob={speech_prob:.3f}, "
-                                  f"pre-buffer={len(pre_speech_audio)} samples)")
+                                   f"pre-buffer={len(pre_speech_audio)} samples)")
             self.speech_detected_event.set()
             self.publish_feedback("speech")
 
@@ -717,9 +741,10 @@ class SpeechRecognitionNode(LifecycleNode):
         if reason == "silence":
             silence_duration_s = self.silence_chunks * self.vad_chunk_size / self.sample_rate
             self.get_logger().info(f"VAD: speech END (prob={speech_prob:.3f}, "
-                                  f"silence={silence_duration_s:.2f}s)")
+                                   f"silence={silence_duration_s:.2f}s)")
         else:
-            self.get_logger().info(f"VAD: speech END (max duration {self.max_speech_duration_s}s reached)")
+            self.get_logger().info(
+                f"VAD: speech END (max duration {self.max_speech_duration_s}s reached)")
 
         self.reset_vad_state()
 

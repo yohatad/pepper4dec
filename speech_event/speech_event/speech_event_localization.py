@@ -63,6 +63,7 @@ from naoqi_bridge_msgs.msg import AudioBuffer
 from visualization_msgs.msg import Marker
 from scipy import signal
 
+
 class SoundLocalizationNode(Node):
     """Node that estimates sound source azimuth from 4-microphone audio using SRP-PHAT."""
 
@@ -127,7 +128,8 @@ class SoundLocalizationNode(Node):
 
         if self.freq_min >= self.freq_max:
             self.get_logger().error(
-                f"Invalid frequency range: freq_min ({self.freq_min}) >= freq_max ({self.freq_max})"
+                f"Invalid frequency range: freq_min ({self.freq_min}) >= "
+                f"freq_max ({self.freq_max})"
             )
             raise ValueError("freq_min must be less than freq_max")
 
@@ -167,18 +169,18 @@ class SoundLocalizationNode(Node):
         # Microphone Array Geometry (Pepper, in meters)
         # =====================================================
         self.mic_positions = np.array([
-            [-0.0267,  0.0343, 0.2066],  # Rear Left (RL)
+            [-0.0267, 0.0343, 0.2066],  # Rear Left (RL)
             [-0.0267, -0.0343, 0.2066],  # Rear Right (RR)
-            [ 0.0313,  0.0343, 0.2066],  # Front Left (FL)
-            [ 0.0313, -0.0343, 0.2066]   # Front Right (FR)
+            [0.0313, 0.0343, 0.2066],  # Front Left (FL)
+            [0.0313, -0.0343, 0.2066]   # Front Right (FR)
         ]).T
 
         # Calculate array characteristics
         mic_spacing = np.linalg.norm(self.mic_positions[:, 0] - self.mic_positions[:, 2])
         max_freq_unambiguous = self.speed_of_sound / (2 * mic_spacing)
-        
-        self.get_logger().info(f"Microphone array characteristics:")
-        self.get_logger().info(f"  Planar array (all mics at same height - azimuth-only localization)")
+
+        self.get_logger().info("Microphone array characteristics:")
+        self.get_logger().info("  Planar array (same height - azimuth-only localization)")
         self.get_logger().info(f"  Spacing: {mic_spacing*100:.2f} cm")
         self.get_logger().info(f"  Max unambiguous frequency: {max_freq_unambiguous:.0f} Hz")
         if self.freq_max > max_freq_unambiguous:
@@ -191,21 +193,23 @@ class SoundLocalizationNode(Node):
         # Audio Buffer Configuration
         # =====================================================
         self.chunk_size = 4096  # Pepper sends 4096 samples per chunk (~85ms at 48kHz)
-        
+
         # Ensure enough samples for robust STFT
         min_required_samples = 8 * self.nfft
         min_chunks_needed = int(np.ceil(min_required_samples / self.chunk_size))
         actual_num_chunks = max(self.num_chunks, min_chunks_needed)
-        
+
         self.window_samples = actual_num_chunks * self.chunk_size
         self.window_duration_ms = (self.window_samples / self.sample_rate) * 1000
-        
-        self.get_logger().info(f"Audio buffer configuration:")
+
+        self.get_logger().info("Audio buffer configuration:")
         self.get_logger().info(f"  Chunk size: {self.chunk_size} samples (~85ms)")
-        self.get_logger().info(f"  NFFT: {self.nfft}, minimum required: {min_required_samples} samples")
+        self.get_logger().info(
+            f"  NFFT: {self.nfft}, minimum required: {min_required_samples} samples")
         self.get_logger().info(f"  Using {actual_num_chunks} chunks")
-        self.get_logger().info(f"  Window size: {self.window_samples} samples ({self.window_duration_ms:.1f}ms)")
-        
+        self.get_logger().info(
+            f"  Window size: {self.window_samples} samples ({self.window_duration_ms:.1f}ms)")
+
         # Buffer stores more than needed for continuous processing
         self.audio_buffer = [deque(maxlen=self.window_samples * 2) for _ in range(4)]
         self.buffer_lock = threading.Lock()
@@ -215,10 +219,10 @@ class SoundLocalizationNode(Node):
         # =====================================================
         self.last_localization_time = 0.0
         self.min_localization_interval = 1.0 / self.update_rate
-        
+
         # Smoothing buffer (azimuth only)
         self.azimuth_history = deque(maxlen=self.smoothing_window)
-        
+
         # Current direction
         self.current_azimuth = 0.0
         self.current_confidence = 0.0
@@ -227,9 +231,9 @@ class SoundLocalizationNode(Node):
         # =====================================================
         # Initialize SRP-PHAT DOA Estimator
         # =====================================================
-        azimuth_grid = np.linspace(0, 2*np.pi, self.angular_resolution, endpoint=False)
-        colatitude_grid = np.array([np.pi/2])  # 2D horizontal plane only
-        
+        azimuth_grid = np.linspace(0, 2 * np.pi, self.angular_resolution, endpoint=False)
+        colatitude_grid = np.array([np.pi / 2])  # 2D horizontal plane only
+
         self.doa = pra.doa.SRP(
             L=self.mic_positions,
             fs=self.sample_rate,
@@ -240,11 +244,13 @@ class SoundLocalizationNode(Node):
             azimuth=azimuth_grid,
             colatitude=colatitude_grid
         )
-        
-        self.get_logger().info(f"SRP-PHAT localization initialized:")
+
+        self.get_logger().info("SRP-PHAT localization initialized:")
         self.get_logger().info(f"  Sample rate: {self.sample_rate} Hz")
         self.get_logger().info(f"  NFFT: {self.nfft}")
-        self.get_logger().info(f"  Angular resolution: {self.angular_resolution} angles ({360/self.angular_resolution:.1f}° per step)")
+        self.get_logger().info(
+            f"  Angular resolution: {self.angular_resolution} angles "
+            f"({360/self.angular_resolution:.1f}° per step)")
         self.get_logger().info(f"  Frequency range: {self.freq_min}-{self.freq_max} Hz")
         self.get_logger().info(f"  Update rate: {self.update_rate} Hz")
         self.get_logger().info(f"  Confidence threshold: {self.confidence_threshold}")
@@ -252,7 +258,8 @@ class SoundLocalizationNode(Node):
         # =====================================================
         # Publishers
         # =====================================================
-        self.direction_pub = self.create_publisher(Vector3Stamped, "/sound_localization/direction", 10)
+        self.direction_pub = self.create_publisher(
+            Vector3Stamped, "/sound_localization/direction", 10)
         self.azimuth_pub = self.create_publisher(Float32, "/sound_localization/azimuth", 10)
         self.confidence_pub = self.create_publisher(Float32, "/sound_localization/confidence", 10)
         self.pose_pub = self.create_publisher(PoseStamped, "/sound_localization/source_pose", 10)
@@ -261,8 +268,8 @@ class SoundLocalizationNode(Node):
         # =====================================================
         # Subscriber
         # =====================================================
-        self.audio_sub = self.create_subscription(AudioBuffer, self.microphone_topic, 
-            self.audio_callback, 10)
+        self.audio_sub = self.create_subscription(AudioBuffer, self.microphone_topic,
+                                                  self.audio_callback, 10)
 
         self.get_logger().info("Sound localization node ready.")
 
@@ -280,15 +287,17 @@ class SoundLocalizationNode(Node):
             num_frames = data.size // channels
             if num_frames <= 0:
                 return None, None
-            
+
             # Convert to float32 in range [-1, 1]
-            frames = data[:num_frames * channels].reshape(num_frames, channels).astype(np.float32) / 32767.0
+            frames = data[:num_frames *
+                          channels].reshape(num_frames, channels).astype(np.float32) / 32767.0
 
             def get_chan(enum_val, fallback=None):
                 if enum_val in channel_map:
                     idx = channel_map.index(enum_val)
                     return frames[:, idx]
-                return np.copy(fallback) if fallback is not None else np.zeros(num_frames, dtype=np.float32)
+                return np.copy(fallback) if fallback is not None else np.zeros(
+                    num_frames, dtype=np.float32)
 
             # Extract channels in order: RL, RR, FL, FR
             FL = get_chan(AudioBuffer.CHANNEL_FRONT_LEFT)
@@ -326,10 +335,10 @@ class SoundLocalizationNode(Node):
         # Check if we should perform localization
         current_time = time.time()
         time_since_last = current_time - self.last_localization_time
-        
+
         chunks_accumulated = len(self.audio_buffer[0]) >= self.window_samples
         time_ready = time_since_last >= self.min_localization_interval
-        
+
         if chunks_accumulated and time_ready:
             self.perform_localization()
             self.last_localization_time = current_time
@@ -339,7 +348,7 @@ class SoundLocalizationNode(Node):
         with self.buffer_lock:
             if len(self.audio_buffer[0]) < self.window_samples:
                 return
-            
+
             # Extract exactly window_samples from the end of buffer
             multichannel_audio = np.array([
                 list(self.audio_buffer[i])[-self.window_samples:] for i in range(4)
@@ -355,7 +364,7 @@ class SoundLocalizationNode(Node):
 
         try:
             start_time = time.time()
-            
+
             # Compute STFT for each microphone channel
             stft_data = []
             for ch in range(4):
@@ -370,24 +379,25 @@ class SoundLocalizationNode(Node):
                     padded=False
                 )
                 stft_data.append(Zxx)
-            
+
             # Stack into shape (n_mics, n_freqs, n_frames)
             X = np.array(stft_data, dtype=np.complex128)
-            
+
             # Verify STFT shape
             if X.shape[1] != self.nfft // 2 + 1:
                 self.get_logger().error(
-                    f"STFT frequency bins mismatch: got {X.shape[1]}, expected {self.nfft // 2 + 1}"
+                    f"STFT frequency bins mismatch: got {X.shape[1]}, "
+                    f"expected {self.nfft // 2 + 1}"
                 )
                 return
-            
+
             # Run SRP-PHAT localization
             self.doa.locate_sources(
                 X,
                 num_src=1,
                 freq_range=[self.freq_min, self.freq_max]
             )
-            
+
             if len(self.doa.azimuth_recon) > 0:
                 azimuth_rad = self.doa.azimuth_recon[0]
 
@@ -495,12 +505,12 @@ class SoundLocalizationNode(Node):
         marker.action = Marker.ADD
 
         from geometry_msgs.msg import Point
-        
+
         # Arrow from origin to direction
         p1 = Point()
         p1.x, p1.y, p1.z = 0.0, 0.0, 0.0
         marker.points.append(p1)
-        
+
         p2 = Point()
         p2.x, p2.y, p2.z = float(dx), float(dy), float(dz)
         marker.points.append(p2)
@@ -522,7 +532,7 @@ class SoundLocalizationNode(Node):
     def get_direction_name(self, azimuth_deg: float) -> str:
         """Convert azimuth to human-readable direction name."""
         angle = azimuth_deg % 360
-        
+
         directions = [
             (0, 22.5, "Front"),
             (22.5, 67.5, "Front-Left"),
@@ -534,7 +544,7 @@ class SoundLocalizationNode(Node):
             (292.5, 337.5, "Front-Right"),
             (337.5, 360, "Front"),
         ]
-        
+
         for start, end, name in directions:
             if start <= angle < end:
                 return name
@@ -549,9 +559,9 @@ class SoundLocalizationNode(Node):
 def main(args=None):
     import rclpy
     rclpy.init(args=args)
-    
+
     node = SoundLocalizationNode()
-    
+
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
