@@ -45,6 +45,7 @@ speech_recognition:
     min_speech_duration: 0.3     # Minimum segment duration to submit for transcription (seconds)
     max_speech_duration_s: 10.0  # Hard limit on speech segment length (seconds)
     pre_speech_buffer_ms: 200    # Lookback audio prepended before speech onset (ms)
+    transcription_timeout_s: 5.0  # Max time to wait for Whisper to finish transcribing a segment (seconds)
 
     # -------------------------------------------------------------------------
     # Audio Intensity Gate
