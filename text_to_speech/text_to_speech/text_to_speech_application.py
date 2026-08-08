@@ -74,7 +74,6 @@ Version: v1.0
 
 import os
 import queue
-import sys
 import threading
 import time
 
@@ -82,7 +81,6 @@ import rclpy
 import rclpy.logging
 from rclpy.action import ActionServer, ActionClient
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
-from rclpy.executors import MultiThreadedExecutor
 from rclpy.lifecycle import LifecycleNode, TransitionCallbackReturn
 
 from std_msgs.msg import Bool, String
@@ -142,7 +140,7 @@ class TextToSpeechNode(LifecycleNode):
     # ── Lifecycle callbacks ─────────────────────────────────────────────────────
 
     def on_configure(self, _state) -> TransitionCallbackReturn:
-        """Initialize the TTS backend and create publishers, service clients, and the action server."""
+        """Initialize the TTS backend and create publishers, service clients, and action server."""
         self.engine = self.get_parameter("engine").value
         self.naoqi_speech_topic = self.get_parameter("naoqi_speech_topic").value
         self.chars_per_second = float(self.get_parameter("chars_per_second").value)
@@ -156,7 +154,8 @@ class TextToSpeechNode(LifecycleNode):
         self.elevenlabs_voice_id = self.get_parameter("elevenlabs_voice_id").value
         self.elevenlabs_model = self.get_parameter("elevenlabs_model").value
         self.elevenlabs_stability = float(self.get_parameter("elevenlabs_stability").value)
-        self.elevenlabs_similarity_boost = float(self.get_parameter("elevenlabs_similarity_boost").value)
+        self.elevenlabs_similarity_boost = float(
+            self.get_parameter("elevenlabs_similarity_boost").value)
         self.elevenlabs_style = float(self.get_parameter("elevenlabs_style").value)
         self.elevenlabs_speed = float(self.get_parameter("elevenlabs_speed").value)
 
@@ -172,13 +171,13 @@ class TextToSpeechNode(LifecycleNode):
 
         # Internal state
         self.sentence_queue: queue.Queue = queue.Queue()
-        self.is_speaking      = False
-        self.stop_requested   = False
-        self.state_lock       = threading.Lock()
-        self.shutdown         = False
-        self.audio_player     = None
+        self.is_speaking = False
+        self.stop_requested = False
+        self.state_lock = threading.Lock()
+        self.shutdown = False
+        self.audio_player = None
         self.play_goal_handle = None
-        self.play_done_event  = threading.Event()
+        self.play_done_event = threading.Event()
 
         # Per-backend initialisation
         if self.engine in ("kokoro_local", "kokoro_pepper"):
@@ -206,10 +205,12 @@ class TextToSpeechNode(LifecycleNode):
         self.mic_client = self.create_client(SetBool, "/speech_event/set_enabled")
 
         if self.engine in ("kokoro_pepper", "elevenlabs_pepper"):
-            self.load_client   = self.create_client(LoadAudioFile, "/naoqi_driver/load_audio_file")
-            self.unload_client = self.create_client(UnloadAudioFile, "/naoqi_driver/unload_audio_file")
-            self._play_client  = ActionClient(self, PlayAudio, "/naoqi_driver/play_audio")
-            self._send_buffer_client = self.create_client(SendAudioBuffer, "/naoqi_driver/send_audio_buffer")
+            self.load_client = self.create_client(LoadAudioFile, "/naoqi_driver/load_audio_file")
+            self.unload_client = self.create_client(
+                UnloadAudioFile, "/naoqi_driver/unload_audio_file")
+            self._play_client = ActionClient(self, PlayAudio, "/naoqi_driver/play_audio")
+            self._send_buffer_client = self.create_client(
+                SendAudioBuffer, "/naoqi_driver/send_audio_buffer")
 
         # Action server — callback groups for concurrent operation
         self._stream_cb_group = MutuallyExclusiveCallbackGroup()
@@ -224,7 +225,7 @@ class TextToSpeechNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_activate(self, _state) -> TransitionCallbackReturn:
-        """Activate publishers, subscribe to the text input topic, and start the playback thread."""
+        """Activate publishers, subscribe to the input topic, and start the playback thread."""
         super().on_activate(_state)
 
         self._sub_tts_input = self.create_subscription(
@@ -461,7 +462,7 @@ class TextToSpeechNode(LifecycleNode):
           "stream" - send_audio_buffer service (low-latency, max ~170ms per call)
         """
         playback_method = self.playback_method
-        
+
         self.get_logger().info(
             f"{self.node_name}: [kokoro_pepper] synthesising: '{sentence}' "
             f"(method={playback_method})"
@@ -596,9 +597,9 @@ class TextToSpeechNode(LifecycleNode):
 
         goal = PlayAudio.Goal()
         goal.file_id = file_id
-        goal.volume  = 0.85
-        goal.pan     = 0.0
-        goal.loop    = False
+        goal.volume = 0.85
+        goal.pan = 0.0
+        goal.loop = False
 
         send_future = self._play_client.send_goal_async(goal)
         send_future.add_done_callback(self.on_play_goal_response)
@@ -701,7 +702,7 @@ class TextToSpeechNode(LifecycleNode):
 
         req = LoadAudioFile.Request()
         req.remote_path = remote_path
-        req.audio_data  = audio_data
+        req.audio_data = audio_data
         future = self.load_client.call_async(req)
 
         done = threading.Event()
