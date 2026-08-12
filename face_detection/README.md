@@ -192,6 +192,12 @@ For issues or questions:
 - Create an issue on the [pepper4dec GitHub repository](https://github.com/yohatad/pepper4dec/issues)
 - Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a>
 
+## 🧠 Pretrained Models
+This package's own code is BSD-3-Clause, but the bundled Gold-YOLO face
+detector weights are **GPL-3.0** upstream (SixDRepNet360 is MIT, MiVOLO is
+Apache-2.0) — see [MODELS.md](../MODELS.md) at the repo root for full
+attribution and licensing details on every model used across pepper4dec.
+
 ## 📜 License
 Copyright (C) 2026 Upanzi Network
 Licensed under the BSD-3-Clause License. See individual package licenses for details.
