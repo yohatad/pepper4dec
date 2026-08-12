@@ -48,7 +48,6 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
     map_pcd = LaunchConfiguration('map_pcd')
     map_yaml = LaunchConfiguration('map')
-    localization_th = LaunchConfiguration('localization_th')
     rviz = LaunchConfiguration('rviz')
 
     declare_use_sim_time_cmd = DeclareLaunchArgument(
@@ -69,10 +68,13 @@ def generate_launch_description():
                     'map_pcd) served as /map for the global costmap static layer. '
                     'Defaults to the copy shipped in this package (map/). MUST '
                     'exist, or the lifecycle manager aborts the whole bringup.')
-    declare_localization_th_cmd = DeclareLaunchArgument(
-        'localization_th', default_value='0.90',
-        description='Min ICP inlier-ratio fitness to accept (lower for partial '
-                    'L2 overlap; 0.6-0.9 typical).')
+    # localization_th was declared here and forwarded to
+    # fastlio_localization_l2.launch.py, which declared it too and never passed
+    # it to any node -- so the value did nothing while appearing to work, and
+    # its 0.90 default silently disagreed with the 0.85 in
+    # lio_localization/config/localization.yaml. That YAML is the only place
+    # the ICP acceptance gate can be set; it is coupled to max_corr_dist and
+    # the two must be changed together.
     declare_rviz_config_cmd = DeclareLaunchArgument(
         'rviz_config',
         default_value=os.path.join(pkg_share, 'rviz', 'nav2_fastlio_loc.rviz'),
@@ -98,7 +100,6 @@ def generate_launch_description():
             launch_arguments={
                 'use_sim_time': use_sim_time,
                 'map_pcd': map_pcd,
-                'localization_th': localization_th,
                 'rviz': 'false',
             }.items(),
         ),
@@ -240,7 +241,6 @@ def generate_launch_description():
         declare_use_sim_time_cmd,
         declare_map_pcd_cmd,
         declare_map_cmd,
-        declare_localization_th_cmd,
         declare_rviz_cmd,
         declare_rviz_config_cmd,
         lio_localization,
