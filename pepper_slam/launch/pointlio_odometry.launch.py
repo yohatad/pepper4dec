@@ -1,6 +1,12 @@
-# Plain Point-LIO mapping on the Pepper L2 rig, with its required static TF.
+# Plain Point-LIO ODOMETRY on the Pepper L2 rig, with its required static TF.
 #
-# Same defect as plain FAST-LIO's mapping.launch.py (see fastlio_mapping.launch.py
+# RENAMED 2026-08-10 from pointlio_mapping.launch.py -- see the header of
+# fastlio_odometry.launch.py for why. Short version: "mapping" upstream means
+# scan-to-map REGISTRATION, not SLAM. No loop closure, no pose graph, so the
+# accumulated cloud drifts and duplicates on revisit. Use
+# fastlio_lc_pgo pointlio_lc_l2.launch.py for a loop-corrected map.
+#
+# Same defect as plain FAST-LIO's mapping.launch.py (see fastlio_odometry.launch.py
 # in this directory): point_lio's mapping_l2lidar_node.launch.py runs
 # lio_map_odom_bridge.py itself, which needs the static base_footprint ->
 # l2lidar_frame -> l2lidar_frame_imu chain -- but that launch file never includes
@@ -18,7 +24,7 @@
 # Point-LIO's own (drifting) z/roll/pitch instead.
 #
 # Usage:
-#   ros2 launch pepper_slam pointlio_mapping.launch.py
+#   ros2 launch pepper_slam pointlio_odometry.launch.py
 #   ros2 bag play <bag> --clock --topics /points /imu/data
 #   (do NOT also replay /tf -- see pepper_sensor_tf.launch.py's header)
 

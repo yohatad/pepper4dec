@@ -25,12 +25,53 @@
 #     Y lateral    0    mm   (camera sits directly above the lidar)
 #     Z up        +50.85 mm
 # The xyz below is that measurement expressed in l2lidar_frame, offset to
-# camera_camera_link -- which is NOT a surface: Intel puts it at mid-depth,
-# mid-height and 17.5 mm off the width-centre (realsense2_description
-# _d435.urdf.xacro:54-56). Re-derive, do not re-measure to this point directly.
+# camera_camera_link -- which is NOT a surface. Re-derive, do not re-measure to
+# this point directly.
 #
-# ROTATION is inherited from the previous value, NOT measured. Every automated
-# calibration run agreed on rotation to within 0.6-1.8 deg while disagreeing on
+# CORRECTED 2026-08-06. This block previously said camera_link sits at
+# "mid-depth", and the translation was derived on that basis. IT IS NOT AT
+# MID-DEPTH. From realsense2_description/urdf/_d435.urdf.xacro:
+#     d435_cam_depth          = 25.05 mm   (housing front to back)
+#     d435_zero_depth_to_glass =  4.2 mm
+#     d435_glass_to_front      =  0.1 mm
+# so camera_link sits 4.3 mm behind the FRONT plate and therefore
+#     camera_link -> BACK face = 25.05 - 4.3 = 20.75 mm,
+# not the 12.53 mm half-depth that was assumed. Using half-depth put the
+# camera's back face 7.79 mm BEHIND the L2 mounting plate instead of 0.5 mm in
+# front of it -- an 8.29 mm error, first spotted in RViz where the RealSense
+# body visibly sat behind the lidar's back cover.
+#
+# Y and Z were unaffected and are unchanged: camera_link is 17.5 mm off the
+# width-centre (d435_cam_depth_py) and at mid-height (d435_cam_height/2), and
+# both of those were already applied correctly.
+#
+# ROTATION MEASURED 2026-08-06 by utils/plane_calib.py (superseding the
+# inherited value described below, which this block previously carried).
+#   Source:  bag/corner_pose1, stationary window 77.5-101.7 s, the OUTWARD
+#            (convex) corner -- flat faces, no skirting junction in view.
+#   Method:  three mutually non-parallel planes segmented in the raw L2 cloud
+#            (l2lidar_frame) and in the D435i depth cloud, rotation by Kabsch
+#            on the matched normals. No IMU and no odometry in the path.
+#   Result:  mean of 4 reruns, per-run deviation 0.12-0.44 deg, max spread
+#            0.44 deg. Shifts the camera's forward axis by 1.36 deg.
+#
+# WHY ONLY THE ROTATION WAS TAKEN. The same 4 runs scattered in TRANSLATION by
+# 12.6 mm (X), 9.2 mm (Y) and 24.9 mm (Z), and landed ~45 mm from the tape
+# measure. Overwriting a direct measurement with a scattering estimate would be
+# a regression, so xyz is unchanged.
+#
+# WHAT DOES NOT WORK, MEASURED. The other stationary window in the same bag
+# (26.6-72.4 s, an ordinary room corner) is REJECTED: 1.8-2.0 deg rotation
+# residual, and re-running it on identical data returned answers 30 mm apart.
+# Cause diagnosed: the surface there sags 89 mm across its 3.95 x 5.57 m extent
+# with clean U-shaped residual structure, so it is not a plane. RANSAC locks
+# onto a different fragment each run, and the lidar was fitting a 5 m swath of
+# wall while the camera fitted a 1 m patch of the same surface -- on a curved
+# surface those cannot share a normal. Do not calibrate against painted walls;
+# use a manufactured-flat board.
+#
+# HISTORICAL NOTE (still true, and now reproduced independently). Every earlier
+# automated run agreed on rotation to within 0.6-1.8 deg while disagreeing on
 # translation by up to 60 mm, so orientation is the one quantity those runs
 # determined well. A tape measure cannot check it.
 #
@@ -64,9 +105,11 @@ transforms:
   - {parent: base_footprint, child: l2lidar_frame,
      xyz: [0.133, 0.0, 0.2582],
      qxyzw: [0.69313, -0.147438, 0.690138, -0.14677]}
+  # ROTATION MEASURED 2026-08-06 (was inherited/unmeasured before this date).
+  # TRANSLATION still the tape measure -- see the note above this block.
   - {parent: l2lidar_frame, child: camera_camera_link,
-     xyz: [0.038508, -0.036458, 0.012712],
-     qxyzw: [0.680074, -0.159976, 0.69837, 0.155516]}
+     xyz: [0.038541, -0.036473, 0.021032],
+     qxyzw: [0.674794, -0.166617, 0.703353, 0.148951]}
   - {parent: camera_camera_link, child: camera_color_frame, owner: driver,
      xyz: [-0.000237, 0.014846, 8.3e-05],
      qxyzw: [0.00419, 0.000544, 0.001321, 0.99999]}

@@ -1,4 +1,18 @@
-# Plain FAST-LIO mapping on the Pepper L2 rig, with its required static TF.
+# Plain FAST-LIO ODOMETRY on the Pepper L2 rig, with its required static TF.
+#
+# RENAMED 2026-08-10 from fastlio_mapping.launch.py. "mapping" is upstream
+# FAST-LIO's word for scan-to-map REGISTRATION -- the ikd-Tree map the estimator
+# keeps in order to align each new scan. It is a map used FOR odometry, not a
+# SLAM map. There is no loop closure, no pose-graph optimisation and no
+# relocalisation here: every scan is stamped into /Laser_map at whatever pose
+# odometry believed at that instant and nothing ever revisits it, so revisiting
+# a place after N metres of drift lays the same wall down twice, permanently.
+# The old name led to exactly that surprise. For a map worth keeping use
+# fastlio_lc_pgo fastlio_lc_l2.launch.py (Scan Context + GTSAM) or
+# pepper_slam bag_test/rtabmap_fastlio_bag_test.launch.py.
+#
+# This file is still the right tool for MEASURING odometry quality, precisely
+# because nothing here hides the drift.
 #
 # ros2 launch fast_lio mapping.launch.py by itself is not standalone-usable
 # on this robot: lio_map_odom_bridge.py needs the static base_footprint ->
@@ -13,7 +27,7 @@
 # equivalent.
 #
 # Usage:
-#   ros2 launch pepper_slam fastlio_mapping.launch.py
+#   ros2 launch pepper_slam fastlio_odometry.launch.py
 #   ros2 bag play <bag> --clock --topics /points /imu/data
 #   (add --topics /tf to that list only if you also want to exclude it --
 #    see pepper_sensor_tf.launch.py's header: replaying /tf fights the

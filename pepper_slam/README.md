@@ -34,14 +34,18 @@ produces garbage ground/obstacle splits. See `config/README.md` in
 
 ## FAST-LIO options
 
-Always launched through `fast_lio mapping.launch.py`, which starts
-`fastlio_mapping` plus `lio_map_odom_bridge`. Pass `config_file:=l2.yaml` — the
-other profiles in `fast_lio/config/` are upstream defaults for other lidars — and
-`use_sim_time:=true` for bag replay.
+All of these start the `fastlio_mapping` node plus `lio_map_odom_bridge`, via
+`fast_lio mapping.launch.py`. **Do not run that upstream file directly on this
+robot** — it does not include `pepper_sensor_tf.launch.py`, so the bridge waits
+forever for the static `base_footprint -> l2lidar_frame_imu` chain and the stack
+hangs with no error. Use the `pepper_slam` wrappers below, which include the TF
+and pass `config_file:=l2.yaml` for you (the other profiles in `fast_lio/config/`
+are upstream defaults for other lidars). Pass `use_sim_time:=true` for bag replay
+— the wrappers already default it true.
 
 | Stack | Launch | Loop closure | Owns `map` | `bridge_level_frame` |
 |-------|--------|--------------|-----------|----------------------|
-| Odometry only | `fast_lio mapping.launch.py config_file:=l2.yaml` | none | nobody | `true` (unused) |
+| Odometry only | `pepper_slam fastlio_odometry.launch.py` | none | nobody | `true` (unused) |
 | + RTAB-Map | `pepper_slam bag_test/rtabmap_fastlio_bag_test.launch.py` | RTAB-Map ICP + visual BoW | RTAB-Map | `true` |
 | + Scan-Context PGO | `fastlio_lc_pgo fastlio_lc_l2.launch.py` | GTSAM/ISAM2 on Scan Context | `pgo_map_odom_bridge` | `false` |
 | + prior-map ICP | `lio_localization fastlio_localization_l2.launch.py` | n/a (localization) | `transform_fusion` | `false` |
@@ -166,8 +170,8 @@ pepper_slam/
 │   ├── slam_toolbox.launch.py
 │   ├── pepper_sensor_tf.launch.py
 │   ├── ekf_fusion.launch.py                   # robot_localization EKF, alternative to lio_map_odom_bridge
-│   ├── fastlio_mapping.launch.py              # standalone-usable wrapper around fast_lio's mapping.launch.py
-│   ├── pointlio_mapping.launch.py             # same, for Point-LIO
+│   ├── fastlio_odometry.launch.py             # FAST-LIO odometry (no loop closure); wraps fast_lio's mapping.launch.py
+│   ├── pointlio_odometry.launch.py            # same, for Point-LIO
 │   ├── view_rig.launch.py                     # sensor rig visualization
 │   └── bag_test/                              # manual bag-replay validation, not automated tests
 │       ├── rtabmap_rgbd_wheel_bag_test.launch.py
