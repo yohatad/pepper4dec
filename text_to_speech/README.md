@@ -240,13 +240,13 @@ ros2 action send_goal /text_to_speech dec_interfaces/action/TTS "{text: 'Hello, 
 cd ~/ros2_ws/src/pepper4dec/text_to_speech
 
 # Stream mode (robot speakers)
-~/ros2_ws/.venvs/tts_virtual_env/bin/python3 tests/test_play_audio.py "Hello." --method stream
+~/ros2_ws/.venvs/tts_virtual_env/bin/python3 manual_tests/test_play_audio.py "Hello." --method stream
 
 # File mode (robot speakers, requires SSH key)
-~/ros2_ws/.venvs/tts_virtual_env/bin/python3 tests/test_play_audio.py "Hello." --method file
+~/ros2_ws/.venvs/tts_virtual_env/bin/python3 manual_tests/test_play_audio.py "Hello." --method file
 
 # Local speakers only
-~/ros2_ws/.venvs/tts_virtual_env/bin/python3 tests/test_play_audio.py "Hello." --local
+~/ros2_ws/.venvs/tts_virtual_env/bin/python3 manual_tests/test_play_audio.py "Hello." --local
 ```
 
 ## 📁 Package Structure
@@ -263,8 +263,11 @@ text_to_speech/
 │   └── text_to_speech                        # venv launcher for `ros2 run`
 ├── resource/
 │   └── text_to_speech
-├── tests/
-│   └── test_play_audio.py                    # manual playback test script
+├── test/
+│   ├── test_flake8.py                        # ament_flake8 lint stub (colcon test)
+│   └── test_pep257.py                        # ament_pep257 lint stub (colcon test)
+├── manual_tests/
+│   └── test_play_audio.py                    # manual playback test script — not run by colcon test
 ├── text_to_speech/
 │   ├── __init__.py
 │   ├── text_to_speech_application.py         # node entry point, lifecycle node
