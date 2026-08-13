@@ -9,7 +9,7 @@
 # frame is Z-up, which the 2D occupancy projection requires.
 #
 # Usage:
-#   ros2 launch pepper_slam bag_test/rtabmap_fastlio_bag_test.launch.py
+#   ros2 launch pepper_slam rtabmap_fastlio_bag_test.launch.py
 #   ros2 bag play <bag> --clock --topics /points /imu/data /tf_static
 #
 # NOTE: do NOT replay /tf -- the bag's wheel-odometry TF (pepper_odom ->
@@ -26,14 +26,17 @@ from ament_index_python.packages import get_package_share_directory
 def generate_launch_description():
     pkg_launch_dir = os.path.join(
         get_package_share_directory('pepper_slam'), 'launch')
-    fast_lio_launch_dir = os.path.join(
-        get_package_share_directory('fast_lio'), 'launch')
 
+    # 2026-08-12: was fast_lio/mapping.launch.py directly, which does NOT
+    # include pepper_sensor_tf -- so lio_map_odom_bridge had no static
+    # base_footprint -> ..._imu chain and could never close
+    # odom -> base_footprint. Going through pepper_slam's own odometry launch
+    # fixes that, and brings the RealSense-IMU default plus the derived
+    # lidar_imu_frame / sensor_tf scope with it.
     fast_lio = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(fast_lio_launch_dir, 'mapping.launch.py')),
+            os.path.join(pkg_launch_dir, 'fastlio_odometry.launch.py')),
         launch_arguments={
-            'config_file': 'l2.yaml',
             'rviz': 'false',
             'use_sim_time': 'true',
         }.items(),
