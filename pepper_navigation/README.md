@@ -371,7 +371,7 @@ pepper_navigation/
 │   ├── nav2_params_amcl.yaml                 # Nav2 params for AMCL on FAST-LIO odom
 │   ├── nav2_params_fastlio_loc.yaml          # Nav2 params for the lio_localization (ICP) stack
 │   ├── nav2_params_rtabmap_loc.yaml          # Nav2 params for the RTAB-Map localization stack
-│   ├── ekf_nav.yaml.yaml                     # robot_localization EKF parameters (not yet launched)
+│   ├── ekf_nav.yaml                          # robot_localization EKF parameters (not yet launched)
 │   └── README.md
 ├── launch/
 │   ├── pepper_navigation.launch.py           # Nav2 + AMCL against a static map

@@ -285,6 +285,12 @@ For issues or questions:
 - Create an issue on the [pepper4dec GitHub repository](https://github.com/yohatad/pepper4dec/issues)
 - Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a>, <a href="mailto:mahadanso79@gmail.com">mahadanso79@gmail.com</a>
 
+# 🧠 Pretrained Models
+The embedding model (`all-MiniLM-L6-v2`) is Apache-2.0 upstream; DeepSeek
+(or any OpenAI-compatible LLM) is a cloud API, not a locally-run model —
+see [MODELS.md](../MODELS.md) at the repo root for full attribution and
+licensing details on every model used across pepper4dec.
+
 # 📜 License
 Copyright (C) 2026 Upanzi Network  
 Licensed under the BSD-3-Clause License. See individual package licenses for details.

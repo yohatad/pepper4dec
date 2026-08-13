@@ -23,11 +23,11 @@ Then drives the full kokoro_pepper pipeline in one of two modes:
 
 Usage:
   # From your ROS2 workspace (source install/setup.bash first):
-  python3 tests/test_play_audio.py
-  python3 tests/test_play_audio.py "Good morning, I am Pepper."
-  python3 tests/test_play_audio.py "Hello." --local        # laptop speakers only
-  python3 tests/test_play_audio.py "Hello." --method stream # streaming mode
-  python3 tests/test_play_audio.py "Hello." --voice af_heart --rate 22050
+  python3 manual_tests/test_play_audio.py
+  python3 manual_tests/test_play_audio.py "Good morning, I am Pepper."
+  python3 manual_tests/test_play_audio.py "Hello." --local        # laptop speakers only
+  python3 manual_tests/test_play_audio.py "Hello." --method stream # streaming mode
+  python3 manual_tests/test_play_audio.py "Hello." --voice af_heart --rate 22050
 
 Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
 """
