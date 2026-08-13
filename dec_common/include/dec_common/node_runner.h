@@ -73,18 +73,29 @@ int runNode(int argc, char** argv, const NodeRunOptions& options = {},
         throw;
     }
 
-    if (options.executor_threads <= 1 && !extra_nodes) {
-        rclcpp::spin(node->get_node_base_interface());
-    } else {
-        rclcpp::executors::MultiThreadedExecutor executor(
-            rclcpp::ExecutorOptions{}, options.executor_threads);
-        executor.add_node(node->get_node_base_interface());
-        if (extra_nodes) {
-            for (auto& extra : extra_nodes(*node)) {
-                executor.add_node(extra);
+    try {
+        if (options.executor_threads <= 1 && !extra_nodes) {
+            rclcpp::spin(node->get_node_base_interface());
+        } else {
+            rclcpp::executors::MultiThreadedExecutor executor(
+                rclcpp::ExecutorOptions{}, options.executor_threads);
+            executor.add_node(node->get_node_base_interface());
+            if (extra_nodes) {
+                for (auto& extra : extra_nodes(*node)) {
+                    executor.add_node(extra);
+                }
             }
+            executor.spin();
         }
-        executor.spin();
+    } catch (const std::exception&) {
+        // Same race as the construction try/catch above, one step later:
+        // spin()/executor setup creates its own guard condition against the
+        // context, and SIGINT can land (calling rclcpp::shutdown()) between
+        // construction and that call. Exit cleanly rather than aborting.
+        if (!rclcpp::ok()) {
+            return 0;
+        }
+        throw;
     }
 
     if (after_spin) after_spin(*node);
