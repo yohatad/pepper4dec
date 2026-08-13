@@ -73,6 +73,31 @@ def generate_launch_description():
                     'odom leveling frame. Set false when a higher layer owns '
                     'odom (e.g. PGO publishing map -> odom).'
     )
+    # 2026-08-12: the RealSense IMU is now the permanent choice for this rig.
+    # The L2's own gyro cancels rotation about the gravity axis below ~16 deg/s
+    # and cost 139 deg of heading over a 744 s run (utils/L2_IMU/REPORT.md);
+    # l2_rsimu.yaml drives the same estimator from /camera/imu instead and
+    # measured 3.8% -> 2.4% mean yaw error, 11.2% -> 4.6% worst. l2.yaml is kept
+    # selectable for A/B work only.
+    declare_config_file_cmd = DeclareLaunchArgument(
+        'config_file', default_value='l2_rsimu.yaml',
+        description='FAST-LIO config under fast_lio/config. l2_rsimu.yaml uses '
+                    'the RealSense IMU (default); l2.yaml uses the L2 s own.')
+    # Left unset on purpose: mapping.launch.py derives the matching frame from
+    # config_file, so the two cannot drift apart. Override only for a config
+    # this launch does not know about.
+    declare_lidar_imu_frame_cmd = DeclareLaunchArgument(
+        'lidar_imu_frame', default_value='',
+        description='Override the static frame the estimated body corresponds '
+                    'to. Empty (default) lets mapping.launch.py pick it from '
+                    'config_file.')
+    # Bag replay has no RealSense driver, so the camera TF edges must come from
+    # calibration or camera_imu_optical_frame -- which l2_rsimu.yaml names as
+    # the body frame -- will not resolve at all. Use 'mount' on the real robot.
+    declare_scope_cmd = DeclareLaunchArgument(
+        'sensor_tf_scope', default_value='all', choices=['mount', 'all'],
+        description="'all' for bag replay (no driver running); 'mount' on the "
+                    "robot so the driver's device-read camera values win.")
     declare_flatten_base_frame_cmd = DeclareLaunchArgument(
         'flatten_base_frame', default_value='true',
         description='Zero the leveled z/roll/pitch of odom -> base_footprint '
@@ -84,13 +109,15 @@ def generate_launch_description():
     sensor_tf_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_share, 'launch', 'pepper_sensor_tf.launch.py')),
-        launch_arguments={'use_sim_time': use_sim_time}.items())
+        launch_arguments={'use_sim_time': use_sim_time,
+                          'scope': LaunchConfiguration('sensor_tf_scope')}.items())
 
     fast_lio_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(fast_lio_share, 'launch', 'mapping.launch.py')),
         launch_arguments={
-            'config_file': 'l2.yaml',
+            'config_file': LaunchConfiguration('config_file'),
+            'lidar_imu_frame': LaunchConfiguration('lidar_imu_frame'),
             'rviz': rviz,
             'rviz_cfg': rviz_cfg,
             'use_sim_time': use_sim_time,
@@ -99,6 +126,9 @@ def generate_launch_description():
         }.items())
 
     ld = LaunchDescription()
+    ld.add_action(declare_config_file_cmd)
+    ld.add_action(declare_lidar_imu_frame_cmd)
+    ld.add_action(declare_scope_cmd)
     ld.add_action(declare_rviz_cmd)
     ld.add_action(declare_rviz_cfg_cmd)
     ld.add_action(declare_use_sim_time_cmd)
