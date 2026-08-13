@@ -1,4 +1,5 @@
-"""Republish the static TF tree recorded in slam_august_8_bag.
+"""
+Republish the static TF tree recorded in slam_august_8_bag.
 
 Why this exists: the bag holds its 2 /tf_static messages at t+0.0066s, so any
 playback with `--start-offset` seeks past them. rosbag2 (Humble) still creates
