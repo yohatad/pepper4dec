@@ -45,9 +45,20 @@ import os
 from ament_index_python.packages import get_package_share_directory
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
+
+
+def _resolve_scope(context, *args, **kwargs):
+    """sensor_tf scope follows use_sim_time unless set explicitly."""
+    from launch.actions import SetLaunchConfiguration
+    explicit = LaunchConfiguration('sensor_tf_scope').perform(context)
+    if explicit:
+        return [SetLaunchConfiguration('resolved_scope', explicit)]
+    sim = LaunchConfiguration('use_sim_time').perform(context).lower()
+    return [SetLaunchConfiguration(
+        'resolved_scope', 'all' if sim in ('true', '1', 'yes') else 'mount')]
 
 
 def generate_launch_description():
@@ -94,10 +105,21 @@ def generate_launch_description():
     # Bag replay has no RealSense driver, so the camera TF edges must come from
     # calibration or camera_imu_optical_frame -- which l2_rsimu.yaml names as
     # the body frame -- will not resolve at all. Use 'mount' on the real robot.
+    # DERIVED from use_sim_time when left empty, because the correct value is
+    # decided by the same fact: is a RealSense driver running?
+    #   bag replay (use_sim_time true)  -> 'all'   : no driver, so the camera
+    #       edges must come from calibration or camera_imu_optical_frame -- the
+    #       body frame l2_rsimu.yaml names -- does not resolve at all.
+    #   real robot (use_sim_time false) -> 'mount' : the driver publishes the
+    #       camera edges itself, and sensor_tf.yaml warns that its device-read
+    #       values and these recovered ones CAN DIFFER. Publishing both leaves
+    #       whichever /tf_static arrives last in force, nondeterministically.
     declare_scope_cmd = DeclareLaunchArgument(
-        'sensor_tf_scope', default_value='all', choices=['mount', 'all'],
-        description="'all' for bag replay (no driver running); 'mount' on the "
-                    "robot so the driver's device-read camera values win.")
+        'sensor_tf_scope', default_value='', choices=['', 'mount', 'all'],
+        description="Empty (default) derives it from use_sim_time: 'all' for "
+                    "bag replay, 'mount' on the robot. Override only if a bag "
+                    "already carries the driver's camera TF, or you are "
+                    "replaying with a live camera attached.")
     declare_flatten_base_frame_cmd = DeclareLaunchArgument(
         'flatten_base_frame', default_value='true',
         description='Zero the leveled z/roll/pitch of odom -> base_footprint '
@@ -110,7 +132,7 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(
             os.path.join(pkg_share, 'launch', 'pepper_sensor_tf.launch.py')),
         launch_arguments={'use_sim_time': use_sim_time,
-                          'scope': LaunchConfiguration('sensor_tf_scope')}.items())
+                          'scope': LaunchConfiguration('resolved_scope')}.items())
 
     fast_lio_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -134,6 +156,10 @@ def generate_launch_description():
     ld.add_action(declare_use_sim_time_cmd)
     ld.add_action(declare_bridge_level_frame_cmd)
     ld.add_action(declare_flatten_base_frame_cmd)
+    # AFTER every DeclareLaunchArgument: the resolver reads
+    # sensor_tf_scope/use_sim_time, which do not exist in the context until
+    # their declares have run.
+    ld.add_action(OpaqueFunction(function=_resolve_scope))
     ld.add_action(sensor_tf_launch)
     ld.add_action(fast_lio_launch)
     return ld
