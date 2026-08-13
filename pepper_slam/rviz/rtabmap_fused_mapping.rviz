@@ -92,7 +92,7 @@ Visualization Manager:
       Value: true
 
     # Raw (pre-loop-closure) ICP odometry, for comparison against MapPath.
-    - Class: rviz_default_plugins/odom_lio
+    - Class: rviz_default_plugins/Odometry
       Name: IcpOdometry
       Enabled: false
       Topic:
