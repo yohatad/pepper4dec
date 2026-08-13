@@ -7,8 +7,8 @@ Panels:
         - /Global Options1
         - /Grid1
         - /TF1
-        - /Odometry Path1
-        - /Odometry Arrows1
+        - /odom_lio Path1
+        - /odom_lio Arrows1
         - /Start Marker1
         - /LaserScan1
       Splitter Ratio: 0.5
@@ -94,7 +94,7 @@ Visualization Manager:
 
     # Orange arrows showing robot pose history from raw /odom
     - Angle Tolerance: 0.1
-      Class: rviz_default_plugins/Odometry
+      Class: rviz_default_plugins/odom_lio
       Covariance:
         Orientation:
           Alpha: 0.5

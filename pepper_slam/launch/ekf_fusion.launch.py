@@ -2,20 +2,20 @@
 # via robot_localization, as an alternative to lio_map_odom_bridge.py's
 # flatten_base_frame hard clamp -- see ekf_lio_wheel.yaml for why.
 #
-# ADDITIVE, not a replacement: run this ALONGSIDE fastlio_mapping.launch.py
-# or pointlio_mapping.launch.py (needs their odom<-odom TF and raw
+# ADDITIVE, not a replacement: run this ALONGSIDE fastlio_odometry.launch.py
+# or pointlio_odometry.launch.py (needs their odom<-odom TF and raw
 # odom topic already flowing). Publishes /odometry/filtered only -- does not
 # touch the existing TF tree (publish_tf: false in the EKF config), so it's
 # safe to add without risking the working default pipeline.
 #
 # Usage:
-#   ros2 launch pepper_slam fastlio_mapping.launch.py flatten_base_frame:=false
+#   ros2 launch pepper_slam fastlio_odometry.launch.py flatten_base_frame:=false
 #   ros2 launch pepper_slam ekf_fusion.launch.py
 #   ros2 bag play <bag> --clock --topics /points /imu/data /pepper_odom
 #
 # For Point-LIO instead:
-#   ros2 launch pepper_slam pointlio_mapping.launch.py flatten_base_frame:=false
-#   ros2 launch pepper_slam ekf_fusion.launch.py odom_topic:=/aft_mapped_to_init
+#   ros2 launch pepper_slam pointlio_odometry.launch.py flatten_base_frame:=false
+#   ros2 launch pepper_slam ekf_fusion.launch.py odom_topic:=/odom_lio
 #
 # flatten_base_frame:=false on the mapping launch is deliberate here: this
 # fuses FAST-LIO's/Point-LIO's own raw (undoctored) z/roll/pitch with wheel
@@ -40,9 +40,11 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
 
     declare_odom_topic_cmd = DeclareLaunchArgument(
-        'odom_topic', default_value='/Odometry',
-        description='Raw LIO odometry topic to fuse. FAST-LIO: /Odometry '
-                    '(default). Point-LIO: /aft_mapped_to_init.'
+        'odom_topic', default_value='/odom_lio',
+        description='Raw LIO odometry topic to fuse. Every mapping launch '
+                    'remaps its estimator onto /odom_lio (FAST-LIO natively '
+                    '/Odometry, Point-LIO and FAST-LIVO2 /aft_mapped_to_init), '
+                    'so the default suits all of them.'
     )
     declare_use_sim_time_cmd = DeclareLaunchArgument(
         'use_sim_time', default_value='true',

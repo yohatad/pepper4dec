@@ -7,31 +7,27 @@ project(pepper_slam)
 # requirements are declared as exec_depend in package.xml.
 find_package(ament_cmake REQUIRED)
 
+# One plain install(DIRECTORY), matching FAST_LIO/CMakeLists.txt:132-135.
+#
+# WHY NOT FILES_MATCHING (2026-08-10): these were four separate blocks each
+# using `FILES_MATCHING PATTERN "*.py"` / "*.yaml" / "*.xacro" / "*.rviz".
+# colcon's --symlink-install cannot symlink through a FILES_MATCHING filter --
+# it silently falls back to COPYING -- so pepper_slam alone among the SLAM
+# packages installed real copies while fast_lio, point_lio and fastlio_lc_pgo
+# installed symlinks. That divergence is not cosmetic: config/sensor_tf.yaml
+# was edited in install/ on 2026-08-06 (the measured camera rotation) and the
+# correction survived ONLY there, three days after src/ had been reverted to
+# an older value. A routine rebuild would have destroyed the only copy.
+# With symlinks, install/ and src/ cannot drift apart at all.
+#
+# Dropping the patterns also subsumes the old note about urdf/ needing both
+# "*.urdf" and "*.xacro": the whole directory is installed, so the top-level
+# *.urdf.xacro descriptions and the shared sensor_rig.xacro macro they include
+# both resolve at launch.
 install(DIRECTORY
-  launch/
-  DESTINATION share/${PROJECT_NAME}/launch
-  FILES_MATCHING PATTERN "*.py"
-)
-
-install(DIRECTORY
-  config/
-  DESTINATION share/${PROJECT_NAME}/config
-  FILES_MATCHING PATTERN "*.yaml"
-)
-
-# Both patterns are needed: the top-level descriptions are *.urdf.xacro and the
-# shared macro they include is sensor_rig.xacro, so "*.urdf" alone installs
-# nothing and $(find pepper_slam)/urdf/... fails to resolve at launch.
-install(DIRECTORY
-  urdf/
-  DESTINATION share/${PROJECT_NAME}/urdf
-  FILES_MATCHING PATTERN "*.urdf" PATTERN "*.xacro"
-)
-
-install(DIRECTORY
-  rviz/
-  DESTINATION share/${PROJECT_NAME}/rviz
-  FILES_MATCHING PATTERN "*.rviz"
+  launch config urdf rviz
+  DESTINATION share/${PROJECT_NAME}
+  PATTERN "__pycache__" EXCLUDE
 )
 
 install(PROGRAMS

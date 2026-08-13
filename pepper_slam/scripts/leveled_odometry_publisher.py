@@ -65,7 +65,7 @@ class LeveledOdometryPublisher(Node):
 
     def __init__(self):
         super().__init__("leveled_odometry_publisher")
-        self.declare_parameter("odom_topic", "/Odometry")
+        self.declare_parameter("odom_topic", "/odom_lio")
         self.declare_parameter("output_topic", "/odometry/lio_leveled")
         odom_topic = self.get_parameter("odom_topic").value
         output_topic = self.get_parameter("output_topic").value

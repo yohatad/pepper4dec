@@ -69,7 +69,14 @@
     <joint name="l2lidar_frame__to__camera_camera_link" type="fixed">
       <parent link="l2lidar_frame"/>
       <child  link="camera_camera_link"/>
-      <origin xyz="0.038508 -0.036458 0.012712" rpy="-0.464105854 -1.544163393 -3.127486964"/>
+      <!-- KEEP IN SYNC WITH config/sensor_tf.yaml. This is the same physical
+           transform expressed twice: the YAML publishes it to /tf_static, this
+           joint only positions the meshes for visualisation. They drifted once
+           already (rotation measured 2026-08-06 and updated in the YAML while
+           this still held the old inherited value), so a rig view can silently
+           show geometry the robot is not using. Equivalent quaternion:
+           qxyzw [0.674794, -0.166617, 0.703353, 0.148951] -->
+      <origin xyz="0.038541 -0.036473 0.021032" rpy="-0.779068046 -1.523300726 -2.812723308"/>
     </joint>
     <!-- The RealSense's OWN internal extrinsics. realsense2_camera publishes
          these itself, read off the device, so declaring them here as well
