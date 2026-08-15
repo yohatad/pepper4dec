@@ -1,15 +1,17 @@
 """ conversation_manager_implementation.py
 
 Core RAG (Retrieval-Augmented Generation) implementation for the conversation manager.
-Provides configuration loading, ChromaDB collection management, knowledge-base
+Provides configuration management, ChromaDB collection management, knowledge-base
 ingestion, vector search, and (streaming) LLM response generation used by
 ConversationManagerNode.
 
-Configuration is held in a module-level ConversationManagerConfig dataclass, loaded
-from config/converation_manager_configuration.yaml via apply_config_file().
-The LLM_API_KEY must be exported as an environment variable; all other settings
-(llm, embedding, search, conversation, data, debug) come from the YAML file with
-sensible defaults. Query handling (handle_query / generate_response_stream)
+Configuration is held in a module-level ConversationManagerConfig dataclass, built
+by ConversationManagerNode.on_configure() from its ROS parameters (declared in
+__init__, populated from config/converation_manager_configuration.yaml via the
+launch file's parameters=[...]) and applied with set_config(). The LLM_API_KEY
+must be exported as an environment variable — it is never a ROS parameter, since
+those are visible via `ros2 param dump`/introspection tools. Query handling
+(handle_query / generate_response_stream)
 performs a similarity search against the ChromaDB knowledge-base collection,
 builds a prompt with conversation history and retrieved context, and calls the
 LLM to produce an answer plus an intent/confidence classification.
@@ -37,11 +39,6 @@ from .conversation_manager_utilities import (
     print_search_results,
     print_conversation_history,
     print_llm_request,
-    read_yaml_config,
-    safe_float,
-    safe_int,
-    safe_str,
-    safe_bool,
 )
 
 logger = rclpy.logging.get_logger('conversation_manager')
@@ -1125,147 +1122,3 @@ def generate_response_stream(
 
     finally:
         raw_response_out.append(raw_buffer)
-
-
-def apply_config_file(file_path: str) -> Tuple[bool, List[str]]:
-    """
-    Load and apply configuration from YAML file.
-
-    Args:
-        file_path: Path to YAML config file
-
-    Returns:
-        Tuple of (success, list of warnings/errors)
-
-    Example YAML format:
-        llm:
-          base_url: "https://api.groq.com/openai/v1"
-          # api_key should be set as environment variable LLM_API_KEY
-          model: "llama-3.1-8b-instant"
-        embedding:
-          model: "all-MiniLM-L6-v2"
-        retrieval:
-          mode: "rag"  # "rag" or "full_context"
-        search:
-          similarity_threshold: 0.15
-          top_k: 5
-        conversation:
-          max_history_turns: 15
-          context_turns: 10
-          max_response_sentences: 3
-        data:
-          default_path: "./data/upanzi_data.json"
-        debug:
-          verbose: true
-    """
-    messages = []
-
-    yaml_config, error = read_yaml_config(file_path)
-    if error:
-        return False, [error]
-
-    logger.debug(f"Successfully read YAML config from {file_path}")
-
-    # Extract nested values with defaults
-    llm = yaml_config.get('llm', {})
-    embedding = yaml_config.get('embedding', {})
-    retrieval = yaml_config.get('retrieval', {})
-    search_cfg = yaml_config.get('search', {})
-    conversation = yaml_config.get('conversation', {})
-    data = yaml_config.get('data', {})
-    debug = yaml_config.get('debug', {})
-
-    # Parse retrieval mode
-    retrieval_mode, warn = safe_str(
-        retrieval.get('mode'),
-        DEFAULT_RETRIEVAL_MODE,
-        'retrieval.mode'
-    )
-    if warn:
-        messages.append(warn)
-
-    # Parse numeric values safely
-    similarity_threshold, warn = safe_float(
-        search_cfg.get('similarity_threshold'),
-        DEFAULT_SIMILARITY_THRESHOLD,
-        'similarity_threshold'
-    )
-    if warn:
-        messages.append(warn)
-
-    top_k, warn = safe_int(search_cfg.get('top_k'), DEFAULT_TOP_K, 'top_k')
-    if warn:
-        messages.append(warn)
-
-    max_history_turns, warn = safe_int(
-        conversation.get('max_history_turns'),
-        DEFAULT_MAX_HISTORY_TURNS,
-        'max_history_turns'
-    )
-    if warn:
-        messages.append(warn)
-
-    context_turns, warn = safe_int(
-        conversation.get('context_turns'),
-        DEFAULT_CONTEXT_TURNS,
-        'context_turns'
-    )
-    if warn:
-        messages.append(warn)
-
-    max_response_sentences, warn = safe_int(
-        conversation.get('max_response_sentences'),
-        DEFAULT_MAX_RESPONSE_SENTENCES,
-        'max_response_sentences'
-    )
-    if warn:
-        messages.append(warn)
-
-    # Get data default path
-    data_default_path, warn = safe_str(
-        data.get('default_path'),
-        DEFAULT_DATA_PATH,
-        'data.default_path'
-    )
-    if warn:
-        messages.append(warn)
-
-    # Parse verbose
-    verbose, warn = safe_bool(
-        debug.get('verbose'),
-        DEFAULT_VERBOSE,
-        'debug.verbose'
-    )
-    if warn:
-        messages.append(warn)
-
-    try:
-        logger.debug(f"Using package data folder for ChromaDB: {DEFAULT_CHROMA_PATH}")
-
-        config = ConversationManagerConfig(
-            llm_base_url=llm.get('base_url', DEFAULT_LLM_BASE_URL),
-            # LLM_API_KEY must be exported as environment variable, not from config file
-            llm_model=llm.get('model', DEFAULT_LLM_MODEL),
-            chroma_path=DEFAULT_CHROMA_PATH,
-            embedding_model=embedding.get('model', DEFAULT_EMBEDDING_MODEL),
-            retrieval_mode=retrieval_mode,
-            similarity_threshold=similarity_threshold,
-            default_top_k=top_k,
-            max_history_turns=max_history_turns,
-            context_turns=context_turns,
-            max_response_sentences=max_response_sentences,
-            data_default_path=data_default_path,
-            verbose=verbose,
-        )
-
-        # This will validate and raise ConfigError if invalid
-        set_config(config)
-        logger.debug(f"Configuration applied successfully: verbose={verbose}")
-        return True, messages
-
-    except ConfigError as e:
-        logger.error(f"Configuration error: {e}")
-        return False, [str(e)] + messages
-    except Exception as e:
-        logger.error(f"Failed to apply configuration: {e}")
-        return False, [f"Failed to apply configuration: {e}"] + messages

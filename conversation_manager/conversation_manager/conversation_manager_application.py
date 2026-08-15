@@ -5,14 +5,15 @@ Entry point for the ConversationManagerNode lifecycle node.
 Running this node provides a Retrieval-Augmented Generation (RAG) action server
 that answers natural-language questions about the Upanzi Network knowledge base.
 
-On configure, the node loads its YAML configuration, initializes (or builds) a
-ChromaDB collection from the knowledge-base JSON file, and starts an action
-server for handling conversational queries. Each goal triggers a vector search
-over the knowledge base followed by a streaming LLM call; sentences are
-accumulated into the full response as they arrive. The action result carries
-the full answer text, classified intent, and confidence score. The BT
-SpeechWithFeedback node is the sole consumer responsible for playback, using
-NAOqi ALAnimatedSpeech to interpret embedded prosody tags and drive gestures.
+On configure, the node builds its RAG configuration from ROS parameters,
+initializes (or builds) a ChromaDB collection from the knowledge-base JSON
+file, and starts an action server for handling conversational queries. Each
+goal triggers a vector search over the knowledge base followed by a streaming
+LLM call; sentences are accumulated into the full response as they arrive.
+The action result carries the full answer text, classified intent, and
+confidence score. The BT SpeechWithFeedback node is the sole consumer
+responsible for playback, using NAOqi ALAnimatedSpeech to interpret embedded
+prosody tags and drive gestures.
 
 Actions:
     /conversation_manager (dec_interfaces/action/ConversationManager)
@@ -20,9 +21,17 @@ Actions:
         "searching" | "generating", result carries success, response,
         intent, and confidence
 
-Parameters (loaded from config/converation_manager_configuration.yaml):
-    collection_name (str, default: 'upanzi_knowledge')
-    verbose (bool, default: False)
+Parameters (declared here, populated from config/converation_manager_configuration.yaml
+via the launch file's parameters=[...]; run `ros2 param get/set /conversation_manager
+<name>` to inspect or override at runtime):
+    collection_name (str), verbose (bool), llm_base_url (str), llm_model (str),
+    embedding_model (str), retrieval_mode (str), similarity_threshold (float),
+    top_k (int), max_history_turns (int), context_turns (int),
+    max_response_sentences (int), data_default_path (str)
+
+    LLM_API_KEY is never a ROS parameter -- it must be exported as an
+    environment variable, since ROS parameters are visible via `ros2 param
+    dump`/introspection tools.
 
 Author: Yohannes Tadesse Haile
 Affiliation: Carnegie Mellon University Africa
@@ -40,7 +49,21 @@ from rclpy.lifecycle import LifecycleNode, TransitionCallbackReturn
 from ament_index_python.packages import get_package_share_directory
 from dec_interfaces.action import ConversationManager
 from .conversation_manager_implementation import (
+    ConfigError,
+    ConversationManagerConfig,
+    DEFAULT_CONTEXT_TURNS,
+    DEFAULT_DATA_PATH,
+    DEFAULT_EMBEDDING_MODEL,
+    DEFAULT_LLM_BASE_URL,
+    DEFAULT_LLM_MODEL,
+    DEFAULT_MAX_HISTORY_TURNS,
+    DEFAULT_MAX_RESPONSE_SENTENCES,
+    DEFAULT_RETRIEVAL_MODE,
+    DEFAULT_SIMILARITY_THRESHOLD,
+    DEFAULT_TOP_K,
+    DEFAULT_VERBOSE,
     get_config,
+    set_config,
     get_collection,
     setup_collection,
     retrieve_documents,
@@ -48,7 +71,6 @@ from .conversation_manager_implementation import (
     extract_answer_from_raw,
     extract_intent_from_raw,
     apply_speech_tags,
-    apply_config_file,
 )
 
 PACKAGE_PATH = Path(get_package_share_directory('conversation_manager'))
@@ -60,32 +82,51 @@ class ConversationManagerNode(LifecycleNode):
     def __init__(self):
         super().__init__('conversation_manager')
 
-        # Declare parameters — heavy initialisation deferred to on_configure
+        # Declare parameters — heavy initialisation deferred to on_configure.
+        # Defaults here are generic fallbacks; config/converation_manager_configuration.yaml
+        # supplies this deployment's actual values via the launch file's parameters=[...].
         self.declare_parameter('collection_name', 'upanzi_knowledge')
-        self.declare_parameter('verbose', False)
+        self.declare_parameter('verbose', DEFAULT_VERBOSE)
+        self.declare_parameter('llm_base_url', DEFAULT_LLM_BASE_URL)
+        self.declare_parameter('llm_model', DEFAULT_LLM_MODEL)
+        self.declare_parameter('embedding_model', DEFAULT_EMBEDDING_MODEL)
+        self.declare_parameter('retrieval_mode', DEFAULT_RETRIEVAL_MODE)
+        self.declare_parameter('similarity_threshold', DEFAULT_SIMILARITY_THRESHOLD)
+        self.declare_parameter('top_k', DEFAULT_TOP_K)
+        self.declare_parameter('max_history_turns', DEFAULT_MAX_HISTORY_TURNS)
+        self.declare_parameter('context_turns', DEFAULT_CONTEXT_TURNS)
+        self.declare_parameter('max_response_sentences', DEFAULT_MAX_RESPONSE_SENTENCES)
+        self.declare_parameter('data_default_path', DEFAULT_DATA_PATH)
 
     # ── Lifecycle callbacks ─────────────────────────────────────────────────────
 
     def on_configure(self, _state) -> TransitionCallbackReturn:
-        """Load YAML config, init the ChromaDB collection, create the publisher/action server."""
+        """Build RAG config from ROS params, init the ChromaDB collection, and start the action
+        server.
+        """
 
-        # Load configuration from YAML file
-        config_file = PACKAGE_PATH / 'config' / 'converation_manager_configuration.yaml'
-        if config_file.exists():
-            success, messages = apply_config_file(str(config_file))
-            if success:
-                self.get_logger().info(f"Configuration loaded from {config_file}")
-                for msg in messages:
-                    self.get_logger().info(f"Config note: {msg}")
-            else:
-                self.get_logger().error(f"Failed to load configuration: {messages}")
-                return TransitionCallbackReturn.FAILURE
-        else:
-            self.get_logger().error(f"Configuration file not found: {config_file}")
+        # LLM_API_KEY is deliberately excluded: ConversationManagerConfig's
+        # default_factory pulls it from the environment, never from a ROS parameter.
+        config = ConversationManagerConfig(
+            llm_base_url=self.get_parameter('llm_base_url').value,
+            llm_model=self.get_parameter('llm_model').value,
+            embedding_model=self.get_parameter('embedding_model').value,
+            retrieval_mode=self.get_parameter('retrieval_mode').value,
+            similarity_threshold=self.get_parameter('similarity_threshold').value,
+            default_top_k=self.get_parameter('top_k').value,
+            max_history_turns=self.get_parameter('max_history_turns').value,
+            context_turns=self.get_parameter('context_turns').value,
+            max_response_sentences=self.get_parameter('max_response_sentences').value,
+            data_default_path=self.get_parameter('data_default_path').value,
+            verbose=self.get_parameter('verbose').value,
+        )
+        try:
+            set_config(config)
+        except ConfigError as e:
+            self.get_logger().error(f"Invalid configuration: {e}")
             return TransitionCallbackReturn.FAILURE
 
         # Log verbose status
-        config = get_config()
         if config.verbose:
             self.get_logger().info("Verbose mode is ENABLED - detailed logging will be displayed")
         else:
@@ -223,8 +264,7 @@ class ConversationManagerNode(LifecycleNode):
 
     @property
     def verbose(self) -> bool:
-        return (get_config().verbose
-                or self.get_parameter('verbose').get_parameter_value().bool_value)
+        return get_config().verbose
 
     def log_verbose(self, message: str) -> None:
         """Log message only if verbose mode is enabled"""

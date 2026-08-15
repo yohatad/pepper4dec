@@ -1,34 +1,56 @@
-# LLM Settings
-# Note: LLM_API_KEY must be exported as an environment variable (not set here)
-llm:
-  base_url: https://api.deepseek.com/v1
-  model: deepseek-chat
+# Conversation Manager Configuration File
+# ROS2 parameters for the conversation_manager node (loaded via the launch file's
+# `parameters=[...]`). Run `ros2 param get/set /conversation_manager <name>` to
+# inspect or override these at runtime.
+#
+# Note: LLM_API_KEY must be exported as an environment variable, never set here
+# -- ROS2 parameters are visible via `ros2 param dump`/introspection tools.
 
-# Embedding Model
-embedding:
-  model: all-MiniLM-L6-v2
+conversation_manager:
+  ros__parameters:
 
-# Retrieval Settings
-retrieval:
-  # "rag": vector search over ChromaDB, only relevant snippets sent to the LLM
-  # "full_context": skip vector search, send the entire knowledge base every turn
-  mode: rag
+    # =========================================================================
+    # LLM Settings
+    # =========================================================================
+    llm_base_url: https://api.deepseek.com/v1
+    llm_model: deepseek-chat
 
-# Search Settings (only used when retrieval.mode is "rag")
-search:
-  similarity_threshold: 0.15
-  top_k: 5
+    # =========================================================================
+    # Embedding Model
+    # =========================================================================
+    embedding_model: all-MiniLM-L6-v2
 
-# Conversation Settings
-conversation:
-  max_history_turns: 15       # Maximum number of turns to store in history
-  context_turns: 10           # Number of recent turns included in each LLM request
-  max_response_sentences: 3   # Caps max_tokens sent to the LLM (max_response_sentences * 50 + 512)
+    # =========================================================================
+    # Retrieval Settings
+    # =========================================================================
+    # "rag": vector search over ChromaDB, only relevant snippets sent to the LLM
+    # "full_context": skip vector search, send the entire knowledge base every turn
+    retrieval_mode: rag
 
-# Data Settings
-data:
-  default_path: ./data/upanzi_data.json
+    # =========================================================================
+    # Search Settings (only used when retrieval_mode is "rag")
+    # =========================================================================
+    similarity_threshold: 0.15
+    top_k: 5
 
-# Debug Settings
-debug:
-  verbose: true
+    # =========================================================================
+    # Conversation Settings
+    # =========================================================================
+    max_history_turns: 15         # Maximum number of turns to store in history
+    context_turns: 10             # Number of recent turns included in each LLM request
+    max_response_sentences: 3     # Caps max_tokens sent to the LLM (max_response_sentences * 50 + 512)
+
+    # =========================================================================
+    # Data Settings
+    # =========================================================================
+    data_default_path: ./data/upanzi_data.json
+
+    # =========================================================================
+    # Collection Settings
+    # =========================================================================
+    collection_name: upanzi_knowledge
+
+    # =========================================================================
+    # Debug Settings
+    # =========================================================================
+    verbose: true

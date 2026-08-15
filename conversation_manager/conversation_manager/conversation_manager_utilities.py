@@ -1,7 +1,6 @@
 """ conversation_manager_utilities.py
 
-Terminal-color helpers, verbose-mode debug print formatting, YAML config
-loading, and safe type-coercion utilities used by
+Terminal-color helpers and verbose-mode debug print formatting used by
 conversation_manager_implementation.py.
 
 Author: Yohannes Tadesse Haile
@@ -11,9 +10,8 @@ Date: February 28, 2026
 Version: v1.0
 """
 
-import yaml
 import rclpy.logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List
 
 logger = rclpy.logging.get_logger('conversation_manager')
 
@@ -172,78 +170,3 @@ def print_llm_request(verbose: bool, messages: List[Dict], model: str) -> None:
             + ("..." if len(content) > 200 else "")
         )
     logger.info('\n'.join(lines))
-
-
-# =============================================================================
-# YAML / type-coercion helpers
-# =============================================================================
-
-def read_yaml_config(file_path: str) -> Tuple[Dict[str, Any], Optional[str]]:
-    """
-    Read configuration from a YAML file.
-
-    Returns:
-        Tuple of (config dict, error message or None)
-    """
-    try:
-        logger.debug(f"Reading YAML config from: {file_path}")
-        with open(file_path, 'r') as f:
-            config = yaml.safe_load(f)
-            if config is None:
-                return {}, "YAML file is empty"
-            if not isinstance(config, dict):
-                return {}, f"YAML root must be a dictionary, got {type(config).__name__}"
-            return config, None
-    except FileNotFoundError:
-        return {}, f"Config file not found: {file_path}"
-    except yaml.YAMLError as e:
-        return {}, f"Invalid YAML syntax: {e}"
-    except Exception as e:
-        return {}, f"Failed to read config file: {e}"
-
-
-def safe_float(value: Any, default: float, name: str) -> Tuple[float, Optional[str]]:
-    """Safely convert value to float."""
-    if value is None:
-        return default, None
-    try:
-        return float(value), None
-    except (ValueError, TypeError):
-        return default, f"Invalid value for {name}: '{value}' (using default: {default})"
-
-
-def safe_int(value: Any, default: int, name: str) -> Tuple[int, Optional[str]]:
-    """Safely convert value to int."""
-    if value is None:
-        return default, None
-    try:
-        return int(value), None
-    except (ValueError, TypeError):
-        return default, f"Invalid value for {name}: '{value}' (using default: {default})"
-
-
-def safe_str(value: Any, default: str, name: str) -> Tuple[str, Optional[str]]:
-    """Safely convert value to string."""
-    if value is None:
-        return default, None
-    try:
-        return str(value), None
-    except Exception:
-        return default, f"Invalid value for {name}: '{value}' (using default: {default})"
-
-
-def safe_bool(value: Any, default: bool, name: str) -> Tuple[bool, Optional[str]]:
-    """Safely convert value to boolean."""
-    if value is None:
-        return default, None
-    if isinstance(value, bool):
-        return value, None
-    if isinstance(value, str):
-        if value.lower() in ('true', 'yes', '1', 'on'):
-            return True, None
-        if value.lower() in ('false', 'no', '0', 'off'):
-            return False, None
-    try:
-        return bool(value), None
-    except Exception:
-        return default, f"Invalid value for {name}: '{value}' (using default: {default})"
