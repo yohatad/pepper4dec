@@ -117,6 +117,14 @@ if(BUILD_TESTING)
   # skip uncrustify: repo predates it and follows its own consistent style
   set(ament_cmake_uncrustify_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
+
+  find_package(ament_cmake_gtest REQUIRED)
+  # AgeGenderPersonProfile / AgeGenderBoundingBox live in
+  # age_gender_detection_implementation.cpp, which is part of the age-gender lib.
+  ament_add_gtest(test_age_gender_profile
+    test/test_age_gender_profile.cpp
+  )
+  target_link_libraries(test_age_gender_profile ${PROJECT_NAME}_age_gender_lib)
 endif()
 
 ament_package()
