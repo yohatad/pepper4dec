@@ -79,15 +79,33 @@ class SpeechDenoiser:
 
         self.static_noise_profile = profile
         self.fundamental_hz = self.detect_fundamental(profile)
+        fundamental = (
+            f"{self.fundamental_hz:.1f} Hz" if self.fundamental_hz is not None
+            else "unresolved"
+        )
         self.log(
             f"SpeechDenoiser: loaded profile from '{path}' | "
-            f"fan fundamental={self.fundamental_hz:.1f} Hz | sr={self.sr} Hz"
+            f"fan fundamental={fundamental} | sr={self.sr} Hz"
         )
 
     def detect_fundamental(self, profile_1d, min_hz=50, max_hz=500):
-        """Return the frequency of the strongest spectral peak between min_hz and max_hz."""
+        """Return the frequency of the strongest spectral peak between min_hz and max_hz.
+
+        Returns None when the FFT is too coarse to place any bin inside the
+        search band — at 48 kHz with n_fft=64 the bins are 750 Hz apart, so
+        nothing lands in 50-500 Hz. There is no fundamental to resolve in that
+        case; callers skip notch filtering rather than notching a made-up
+        frequency. Without this guard np.argmax raises on the empty selection.
+        """
         freqs = np.fft.rfftfreq(self.n_fft, d=1.0 / self.sr)
         mask = (freqs >= min_hz) & (freqs <= max_hz)
+        if not mask.any():
+            self.log(
+                f"SpeechDenoiser: no FFT bin falls in {min_hz}-{max_hz} Hz "
+                f"(n_fft={self.n_fft} at {self.sr} Hz gives {freqs[1]:.0f} Hz "
+                "bins) — skipping fan-harmonic notching"
+            )
+            return None
         peak_bin = np.argmax(profile_1d[mask])
         return freqs[mask][peak_bin]
 

@@ -181,6 +181,30 @@ def test_detect_fundamental_result_is_inside_the_search_band():
         assert 50.0 <= fundamental <= 500.0
 
 
+def test_detect_fundamental_returns_none_when_no_bin_is_in_band():
+    """A too-coarse FFT has no bin in 50-500 Hz; that must not raise.
+
+    At 48 kHz with n_fft=64 the bins are 750 Hz apart, so the search band
+    selects nothing and np.argmax used to raise ValueError on the empty array.
+    There is no fundamental to resolve, so None is the honest answer — clean()
+    already guards on it and skips notching.
+    """
+    d = make_denoiser(n_fft=64, sr=48_000)
+    freqs = np.fft.rfftfreq(d.n_fft, d=1.0 / d.sr)
+    assert not ((freqs >= 50) & (freqs <= 500)).any(), 'test premise broken'
+
+    assert d.detect_fundamental(np.ones(freqs.shape)) is None
+
+
+def test_clean_skips_notching_when_fundamental_is_unresolved():
+    """The None from detect_fundamental must flow through without breaking."""
+    d = make_denoiser(n_fft=64, sr=48_000)
+    d.fundamental_hz = d.detect_fundamental(np.ones(d.n_fft // 2 + 1))
+    assert d.fundamental_hz is None
+    # apply_notch_filters is never reached; guard the contract clean() relies on.
+    assert d.static_noise_profile is None
+
+
 def test_detect_fundamental_honours_a_custom_band():
     d = make_denoiser()
     freqs = np.fft.rfftfreq(d.n_fft, d=1.0 / d.sr)
