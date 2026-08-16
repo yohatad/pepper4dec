@@ -14,6 +14,7 @@
  */
 
 #include "animate_behavior/animate_behavior_interface.h"
+#include "animate_behavior/animate_behavior_motion.h"
 
 #include <algorithm>
 #include <chrono>
@@ -469,11 +470,9 @@ void AnimateBehaviorNode::applyGesture() {
 void AnimateBehaviorNode::randomGesture(const std::string& limb_name) {
     const auto& joint_def = joints_.at(limb_name);
     for (size_t i = 0; i < joint_def.names.size(); ++i) {
-        double factor = joint_def.factors[i];
-        double rand_val = randomUniform(-1.0, 1.0) * range_ * factor;
-        double target = joint_def.home[i] + rand_val;
-        target = std::max(joint_def.min[i], std::min(joint_def.max[i], target));
-        target_positions_[joint_def.names[i]] = target;
+        target_positions_[joint_def.names[i]] = animate_behavior_motion::gestureTarget(
+            joint_def.home[i], randomUniform(-1.0, 1.0), range_, joint_def.factors[i],
+            joint_def.min[i], joint_def.max[i]);
     }
 }
 
@@ -484,7 +483,7 @@ void AnimateBehaviorNode::publishJoints() {
     std::vector<float> angles;
     for (auto& [name, target] : target_positions_) {
         double current = current_positions_.count(name) ? current_positions_[name] : target;
-        double smoothed = current + smoothing_factor_ * (target - current);
+        double smoothed = animate_behavior_motion::smoothToward(current, target, smoothing_factor_);
         current_positions_[name] = smoothed;
         names.push_back(name);
         angles.push_back(static_cast<float>(smoothed));

@@ -27,6 +27,7 @@ find_package(naoqi_bridge_msgs REQUIRED)
 add_executable(animate_behavior
   src/animate_behavior_application.cpp
   src/animate_behavior_implementation.cpp
+  src/animate_behavior_motion.cpp
 )
 target_include_directories(animate_behavior PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -65,6 +66,15 @@ if(BUILD_TESTING)
   # skip uncrustify: repo predates it and follows its own consistent style
   set(ament_cmake_uncrustify_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
+
+  find_package(ament_cmake_gtest REQUIRED)
+  # The motion helpers are pure math with no ROS dependencies, so the test
+  # compiles the source directly rather than linking the node executable.
+  ament_add_gtest(test_animate_behavior_motion
+    test/test_animate_behavior_motion.cpp
+    src/animate_behavior_motion.cpp
+  )
+  target_include_directories(test_animate_behavior_motion PRIVATE include)
 endif()
 
 ament_package()
