@@ -1,4 +1,4 @@
-""" speech_event_localization.py
+"""speech_event_localization.py
 
 Entry point for the sound_localization node.
 Running this module starts SoundLocalizationNode, which performs 2D
@@ -444,12 +444,20 @@ class SoundLocalizationNode(Node):
             self.get_logger().error(traceback.format_exc())
 
     def circular_mean(self, angles_deg: list) -> float:
-        """Compute circular mean of angles (handles 0°/360° wraparound)."""
+        """Compute circular mean of angles (handles 0°/360° wraparound).
+
+        Returns a bearing in [0, 360) — never 360.0 itself. For a mean landing
+        on zero, floating-point error can put arctan2's result a hair below it;
+        `% 360` then yields 360.0, which breaks callers that range-check with
+        `< 360` or bin with `int(azimuth // 45)` into an 8-element table.
+        """
         angles_rad = np.radians(angles_deg)
         sin_sum = np.sum(np.sin(angles_rad))
         cos_sum = np.sum(np.cos(angles_rad))
         mean_rad = np.arctan2(sin_sum, cos_sum)
-        return float(np.degrees(mean_rad) % 360)
+        mean_deg = float(np.degrees(mean_rad) % 360)
+        # Guard the open upper end: `% 360` can round up to exactly 360.0.
+        return 0.0 if mean_deg >= 360.0 else mean_deg
 
     def publish_results(self, azimuth_deg: float, confidence: float):
         """Publish localization results (azimuth-only in Head frame)."""

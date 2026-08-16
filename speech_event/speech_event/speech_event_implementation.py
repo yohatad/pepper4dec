@@ -1,4 +1,4 @@
-""" speech_event_implementation.py
+"""speech_event_implementation.py
 
 Implements SpeechRecognitionNode, a lifecycle node that runs Silero VAD over
 incoming microphone audio, detects speech segments, applies the

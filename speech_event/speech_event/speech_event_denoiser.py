@@ -1,4 +1,4 @@
-""" speech_event_denoiser.py
+"""speech_event_denoiser.py
 
 Post-VAD, pre-ASR noise reduction utilities for speech segments.
 

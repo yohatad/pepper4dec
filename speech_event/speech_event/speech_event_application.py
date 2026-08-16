@@ -1,6 +1,6 @@
 #!/home/yoha/sound/bin/python3
 
-""" speech_event_application.py
+"""speech_event_application.py
 
 Entry point for the speech_recognition lifecycle node.
 Running this module starts SpeechRecognitionNode and spins it on a

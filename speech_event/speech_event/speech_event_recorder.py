@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-""" speech_event_recorder.py
+"""speech_event_recorder.py
 
 Entry point for the audio_recorder node.
 Running this module starts AudioRecorderNode, which records microphone audio
