@@ -52,6 +52,11 @@ std::string getImageTopic(const std::string& base_topic, bool use_compressed, bo
     return base_topic;
 }
 
+std::pair<int, int> saliencyBorderPad(int height, int width) {
+    int pad = std::max(3, static_cast<int>(std::min(height, width) * 0.05));
+    return {std::min(pad, height / 2), std::min(pad, width / 2)};
+}
+
 cv::Scalar generateColorFromId(const std::string& face_id) {
     std::size_t hash_val = std::hash<std::string>{}(face_id);
 

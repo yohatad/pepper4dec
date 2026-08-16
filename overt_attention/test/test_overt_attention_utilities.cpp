@@ -173,6 +173,58 @@ TEST(GetImageQoS, IsBestEffortVolatileKeepLastOne) {
 }
 
 //=============================================================================
+// saliencyBorderPad
+//=============================================================================
+
+// (a) Hand-derived at the configured downsample size: 5% of the shorter side.
+TEST(SaliencyBorderPad, ScalesWithTheShorterSide) {
+    auto [pad_y, pad_x] = saliencyBorderPad(120, 160);  // package default
+    EXPECT_EQ(pad_y, 6);
+    EXPECT_EQ(pad_x, 6);
+}
+
+// The 3px floor keeps a usable margin on small frames.
+TEST(SaliencyBorderPad, HasAThreePixelFloor) {
+    auto [pad_y, pad_x] = saliencyBorderPad(20, 20);  // 5% would be 1
+    EXPECT_EQ(pad_y, 3);
+    EXPECT_EQ(pad_x, 3);
+}
+
+// (b) The property that matters: the mask ranges findPeaks builds from these
+// pads — [0, pad) and [dim - pad, dim) — must stay inside the image on both
+// axes. An unclamped pad made the second range start negative and OpenCV threw,
+// so a small enough down_w/down_h crashed the saliency node outright.
+TEST(SaliencyBorderPad, NeverExceedsHalfTheImageOnEitherAxis) {
+    for (int h = 1; h <= 40; ++h) {
+        for (int w = 1; w <= 40; ++w) {
+            auto [pad_y, pad_x] = saliencyBorderPad(h, w);
+            EXPECT_GE(pad_y, 0) << "h=" << h << " w=" << w;
+            EXPECT_GE(pad_x, 0) << "h=" << h << " w=" << w;
+            EXPECT_LE(pad_y, h / 2) << "h=" << h << " w=" << w;
+            EXPECT_LE(pad_x, w / 2) << "h=" << h << " w=" << w;
+            // The ranges findPeaks derives must be valid and ordered.
+            EXPECT_GE(h - pad_y, pad_y) << "h=" << h << " w=" << w;
+            EXPECT_GE(w - pad_x, pad_x) << "h=" << h << " w=" << w;
+        }
+    }
+}
+
+// The degenerate sizes that used to throw. A 1px image gets no margin at all,
+// which is harmless; the point is that it returns rather than crashing.
+TEST(SaliencyBorderPad, HandlesDegenerateImageSizes) {
+    EXPECT_EQ(saliencyBorderPad(1, 1), std::make_pair(0, 0));
+    EXPECT_EQ(saliencyBorderPad(2, 2), std::make_pair(1, 1));
+    EXPECT_EQ(saliencyBorderPad(4, 4), std::make_pair(2, 2));
+}
+
+// Non-square frames clamp each axis independently, not by the shorter side.
+TEST(SaliencyBorderPad, ClampsEachAxisIndependently) {
+    auto [pad_y, pad_x] = saliencyBorderPad(2, 200);
+    EXPECT_EQ(pad_y, 1);   // clamped by the 2px height
+    EXPECT_EQ(pad_x, 3);   // the 3px floor, well inside 200
+}
+
+//=============================================================================
 // generateColorFromId
 //=============================================================================
 

@@ -123,6 +123,13 @@ inline std::pair<double, double> pixelToAngles(double u, double v, double fx, do
 // Generate a consistent BGR color for a face ID using a hash of the string.
 cv::Scalar generateColorFromId(const std::string& face_id);
 
+// Border margin (pad_y, pad_x) excluded from the saliency peak search, so that
+// peaks hugging the frame edge — usually partial objects — are not reported.
+// Each axis is clamped to half that dimension: an unclamped pad larger than the
+// image would make the bottom/right mask range start at a negative index and
+// OpenCV would throw.
+std::pair<int, int> saliencyBorderPad(int height, int width);
+
 //=============================================================================
 // Boolean Map Saliency (BMS)
 //=============================================================================

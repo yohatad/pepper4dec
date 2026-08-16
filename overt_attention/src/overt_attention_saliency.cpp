@@ -236,14 +236,16 @@ std::vector<cv::Vec3f> SaliencyNode::findPeaks(const cv::Mat& saliency) {
     double avg_scale = (scale_x + scale_y) / 2.0;
     double min_dist_down = std::max(1.0, peak_min_dist_ / avg_scale);
 
-    int pad = std::max(3, static_cast<int>(std::min(h, w) * 0.05));
+    // Border margin, clamped per axis so a pad larger than the image cannot
+    // give the bottom/right mask range a negative start (see saliencyBorderPad).
+    auto [pad_y, pad_x] = saliencyBorderPad(h, w);
 
     for (int i = 0; i < num_peaks_; ++i) {
         cv::Mat S_masked = S_work.clone();
-        S_masked.rowRange(0, pad).setTo(0);
-        S_masked.rowRange(h - pad, h).setTo(0);
-        S_masked.colRange(0, pad).setTo(0);
-        S_masked.colRange(w - pad, w).setTo(0);
+        S_masked.rowRange(0, pad_y).setTo(0);
+        S_masked.rowRange(h - pad_y, h).setTo(0);
+        S_masked.colRange(0, pad_x).setTo(0);
+        S_masked.colRange(w - pad_x, w).setTo(0);
 
         double max_val;
         cv::Point max_loc;
