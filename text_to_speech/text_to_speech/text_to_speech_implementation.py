@@ -1,4 +1,4 @@
-""" text_to_speech_implementation.py
+"""text_to_speech_implementation.py
 
 Implements the synthesis, audio-conversion, and playback helpers used by the
 text_to_speech_application LifecycleNode.

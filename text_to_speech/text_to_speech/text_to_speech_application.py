@@ -1,6 +1,6 @@
 #!/home/yoha/tts_virtual_env/bin/python3
 
-""" text_to_speech_application.py
+"""text_to_speech_application.py
 
 Entry point for the TextToSpeechNode lifecycle node.
 Running this node lets Pepper convert streamed text into spoken audio with
