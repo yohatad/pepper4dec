@@ -28,6 +28,7 @@ find_package(ament_index_cpp REQUIRED)
 # Library
 add_library(${PROJECT_NAME}_lib
   src/overt_attention_utilities.cpp
+  src/overt_attention_bms.cpp
   src/overt_attention_implementation.cpp
 )
 target_include_directories(${PROJECT_NAME}_lib PUBLIC
@@ -104,6 +105,22 @@ if(BUILD_TESTING)
   # skip uncrustify: repo predates it and follows its own consistent style
   set(ament_cmake_uncrustify_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
+
+  find_package(ament_cmake_gtest REQUIRED)
+  # The helpers under test live in overt_attention_utilities.cpp; the inline
+  # ones come from the interface header.
+  ament_add_gtest(test_overt_attention_utilities
+    test/test_overt_attention_utilities.cpp
+  )
+  target_link_libraries(test_overt_attention_utilities ${PROJECT_NAME}_lib)
+
+  # BooleanMapSaliency lives in overt_attention_bms.cpp, split out of
+  # overt_attention_saliency.cpp (which carries that node's main()) precisely
+  # so it can be linked here.
+  ament_add_gtest(test_boolean_map_saliency
+    test/test_boolean_map_saliency.cpp
+  )
+  target_link_libraries(test_boolean_map_saliency ${PROJECT_NAME}_lib)
 endif()
 
 ament_package()
