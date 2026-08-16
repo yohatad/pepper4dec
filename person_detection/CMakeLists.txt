@@ -88,6 +88,13 @@ if(BUILD_TESTING)
   set(ament_cmake_uncrustify_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 
+  # Unit level: class-filter resolution, no model or camera needed.
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_class_indices test/test_class_indices.cpp)
+  target_link_libraries(test_class_indices ${PROJECT_NAME}_lib)
+
+  # Integration level: the whole node against recorded frames. Skips itself
+  # when the ONNX model or the workspace-level mini-bag is absent.
   find_package(launch_testing_ament_cmake REQUIRED)
   add_launch_test(test/test_bag_replay_launch.py
     TIMEOUT 300

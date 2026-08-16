@@ -3,9 +3,10 @@
 Bag-replay regression test for the person_detection pipeline.
 
 Launches the real node (YOLOv11 ONNX + ByteTrack), feeds it recorded camera frames from
-the checked-in mini-bag (test/data/person_walk_minibag, 12 frames sampled
-from a lab recording with people in view), and asserts on the published
-/person_detection/data stream.
+a mini-bag (person_walk_minibag, 12 frames sampled from a lab recording
+with people in view), and asserts on the published /person_detection/data
+stream. The bag lives outside this package, under the workspace-level
+bags/ directory (see BAG_PATH below) rather than checked into git.
 
 Frames are fed one at a time, each waiting for the node to finish inference
 before the next is sent. This keeps the test deterministic on slow/CPU-only
@@ -15,6 +16,9 @@ is slower than the camera rate, making pass/fail depend on machine speed.
 What this catches that unit tests cannot: ONNX model loading/inference glue,
 image decoding, the full subscribe -> detect -> track -> publish path, and
 message field consistency — against real sensor data, with no robot.
+
+This is the integration tier for this package; test_class_indices.cpp covers
+the class-filter logic at the unit tier, with no model or bag required.
 
 Run via: colcon test --packages-select person_detection
 
@@ -51,7 +55,13 @@ from dec_interfaces.msg import PersonDetection
 NODE_NAME = 'person_detection'
 CAMERA_TOPIC = '/test_camera/image_raw'
 _TEST_DIR = os.path.dirname(os.path.abspath(__file__))
-BAG_PATH = os.path.join(_TEST_DIR, 'data', 'person_walk_minibag')
+# The mini-bag lives outside the package, in the workspace-level bags/ dir
+# (not checked into git), so CI/fresh checkouts won't have it — skip rather
+# than fail. Override with PERSON_DETECTION_TEST_BAG if the workspace lives
+# somewhere other than ~/ros2_ws.
+BAG_PATH = os.environ.get(
+    'PERSON_DETECTION_TEST_BAG',
+    os.path.expanduser('~/ros2_ws/bags/person_walk_minibag'))
 # The YOLOv11 model (77MB) is git-ignored, so CI checkouts don't have it —
 # skip there rather than fail in on_configure.
 MODEL_PATH = os.path.join(_TEST_DIR, '..', 'models',
@@ -136,6 +146,10 @@ class TestBagReplay(unittest.TestCase):
         if not os.path.isfile(MODEL_PATH):
             self.skipTest('ONNX model not present (git-ignored, 77MB) — '
                           'run on a machine with models/ populated')
+        if not os.path.isdir(BAG_PATH):
+            self.skipTest(f'mini-bag not present at {BAG_PATH} — set '
+                          'PERSON_DETECTION_TEST_BAG or place it under '
+                          'ros2_ws/bags/')
         # ONNX model load happens in on_configure — allow generous time.
         self._transition(Transition.TRANSITION_CONFIGURE, CONFIGURE_TIMEOUT)
         self._transition(Transition.TRANSITION_ACTIVATE, 10.0)
