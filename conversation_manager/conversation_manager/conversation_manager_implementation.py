@@ -1,4 +1,4 @@
-""" conversation_manager_implementation.py
+"""conversation_manager_implementation.py
 
 Core RAG (Retrieval-Augmented Generation) implementation for the conversation manager.
 Provides configuration management, ChromaDB collection management, knowledge-base
@@ -171,12 +171,14 @@ class ConversationManagerConfig:
 
 
 class RAGError(Exception):
-    """Custom exception for RAG-related errors"""
+    """Custom exception for RAG-related errors."""
+
     pass
 
 
 class ConfigError(RAGError):
-    """Exception for configuration-related errors"""
+    """Exception for configuration-related errors."""
+
     pass
 
 # =============================================================================
@@ -879,11 +881,11 @@ def parse_json_string_value(s: str) -> Tuple[str, bool]:
 
 
 def _parse_llm_json(raw: str) -> dict:
-    """
+    r"""
     Parse the JSON object from a raw LLM response, stripping any
     <think>…</think> chain-of-thought prefix first.
 
-    NAOqi prosody tags (e.g. \\vct=108\\, \\rspd=82\\, \\pau=200\\) contain
+    NAOqi prosody tags (e.g. \vct=108\, \rspd=82\, \pau=200\) contain
     backslashes that are not valid JSON escape sequences.  If the first parse
     attempt fails we escape those lone backslashes and retry.
 
@@ -910,8 +912,23 @@ def _parse_llm_json(raw: str) -> dict:
         return {}
 
 
+# Quote characters an LLM may wrap the answer in: ASCII double/single, plus the
+# typographic pairs models emit when they "prettify" output. Written as explicit
+# \u escapes on purpose — spelling the curly characters as adjacent string
+# literals concatenates them down to the two ASCII quotes, which is exactly how
+# the curly ones silently went missing from this set before.
+_SURROUNDING_QUOTES = (
+    '"'          # U+0022 quotation mark
+    "'"          # U+0027 apostrophe
+    '\u201c'   # left double quotation mark
+    '\u201d'   # right double quotation mark
+    '\u2018'   # left single quotation mark
+    '\u2019'   # right single quotation mark
+)
+
+
 def extract_answer_from_raw(raw: str) -> str:
-    """
+    r"""
     Extract the spoken answer from a raw LLM response.
 
     Handles:
@@ -921,7 +938,7 @@ def extract_answer_from_raw(raw: str) -> str:
 
     Post-processing:
       - Strips surrounding curly/smart quotes the LLM sometimes adds.
-      - Converts *tag=N* placeholders → \\tag=N\\ NAOqi control sequences.
+      - Converts *tag=N* placeholders → \tag=N\ NAOqi control sequences.
 
     Note: sentence-level speed tags are applied separately in apply_speech_tags().
     """
@@ -934,8 +951,7 @@ def extract_answer_from_raw(raw: str) -> str:
         if "</think>" in answer:
             answer = answer.split("</think>", 1)[1].strip()
 
-    # Strip surrounding smart/curly quotes e.g. "..." or "..."
-    answer = answer.strip('""''"\'')
+    answer = answer.strip(_SURROUNDING_QUOTES)
 
     # Convert *tag=N* placeholders → \tag=N\ NAOqi control sequences.
     # The LLM uses * to avoid JSON backslash escape conflicts.
@@ -949,19 +965,19 @@ _SLOW_INTENTS = {"ASK_EXHIBIT_QUESTION", "ASK_TOUR_META"}
 
 
 def apply_speech_tags(answer: str, intent: str) -> str:
-    """
+    r"""
     Prepend a sentence-level NAOqi speed tag based on intent.
 
     Word-level tags (*pau=N*, etc.) are already embedded in the answer by the
     LLM and converted by extract_answer_from_raw(). This function only adds
-    the sentence-level \\rspd=N\\ prefix so the LLM never has to generate it.
+    the sentence-level \rspd=N\ prefix so the LLM never has to generate it.
 
     Args:
-        answer: cleaned answer text (may already contain \\pau=N\\ tags)
+        answer: cleaned answer text (may already contain \pau=N\ tags)
         intent: LLM-classified intent string
 
     Returns:
-        answer with \\rspd=N\\ prepended for slow intents, unchanged otherwise.
+        answer with \rspd=N\ prepended for slow intents, unchanged otherwise.
     """
     if not answer:
         return answer

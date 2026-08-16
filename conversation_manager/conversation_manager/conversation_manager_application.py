@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-""" conversation_manager_application.py
+"""conversation_manager_application.py
 
 Entry point for the ConversationManagerNode lifecycle node.
 Running this node provides a Retrieval-Augmented Generation (RAG) action server
@@ -104,7 +104,6 @@ class ConversationManagerNode(LifecycleNode):
         """Build RAG config from ROS params, init the ChromaDB collection, and start the action
         server.
         """
-
         # LLM_API_KEY is deliberately excluded: ConversationManagerConfig's
         # default_factory pulls it from the environment, never from a ROS parameter.
         config = ConversationManagerConfig(

@@ -1,4 +1,4 @@
-""" conversation_manager_utilities.py
+"""conversation_manager_utilities.py
 
 Terminal-color helpers and verbose-mode debug print formatting used by
 conversation_manager_implementation.py.
@@ -21,7 +21,8 @@ logger = rclpy.logging.get_logger('conversation_manager')
 # =============================================================================
 
 class Colors:
-    """ANSI color codes for terminal output"""
+    """ANSI color codes for terminal output."""
+
     RESET = '\033[0m'
     BOLD = '\033[1m'
     DIM = '\033[2m'
