@@ -49,9 +49,11 @@ services:
       - /dev/shm:/dev/shm
       - pepper4dec-models:/home/pepper/models
       - pepper4dec-data:/home/pepper/data
+    # The top-level system bringup. Pass nav_profile:=/enable_navigation:= to
+    # pick a localization stack; see dec_launch/launch/dec_system.launch.py.
     command: >
       /bin/bash -c "source /opt/pepper4dec_setup.sh &&
-                    ros2 launch dec_launch rtabmap_realsense.launch.py"
+                    ros2 launch dec_launch dec_system.launch.py"
 
   # Live-edit source without rebuilding. Python nodes resolve from install/,
   # so re-run colcon build inside the container after changing C++ or entry points.
