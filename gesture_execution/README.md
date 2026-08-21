@@ -72,7 +72,7 @@ topics:
   JointAngles: "/joint_angles"
   Wheels: "/cmd_vel"
   JointStates: "/joint_states"
-  RobotPose: "/localization"
+  RobotPose: "/localization/pose"
 ```
 
 ## 🚀 Running the Node
@@ -99,7 +99,7 @@ stack via `dec_launch`'s `dec_system.launch.py`, which drives these transitions 
 | Topic | Type | Description |
 |-------|------|-------------|
 | `/joint_states` | `sensor_msgs/JointState` | Current joint positions |
-| `/localization` | `nav_msgs/Odometry` | Fused map->base_footprint robot pose for IK |
+| `/localization/pose` | `nav_msgs/Odometry` | Fused map->base_footprint robot pose for IK |
 
 ### Published Topics
 
