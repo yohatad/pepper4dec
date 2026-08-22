@@ -102,6 +102,16 @@ def generate_launch_description():
         description='KITTI-format keyframe poses from the SAME mapping run as '
                     'map_pcd, used as candidates for global localization and '
                     '/relocalize. Empty disables both (manual /initialpose only).')
+    # Which IMU drives FAST-LIO. Forwarded so the whole stack switches from one
+    # place; lio_localization derives nothing on its own.
+    declare_config_file_cmd = DeclareLaunchArgument(
+        'config_file', default_value='l2_rsimu.yaml',
+        description='FAST-LIO config: l2_rsimu.yaml (RealSense IMU, matches the '
+                    'prior map) or l2.yaml (the L2 s own).')
+    declare_lidar_imu_frame_cmd = DeclareLaunchArgument(
+        'lidar_imu_frame', default_value='camera_imu_optical_frame',
+        description='Body frame matching config_file. camera_imu_optical_frame '
+                    'for l2_rsimu.yaml, l2lidar_frame_imu for l2.yaml.')
     declare_rviz_config_cmd = DeclareLaunchArgument(
         'rviz_config',
         default_value=os.path.join(pkg_share, 'rviz', 'nav2_fastlio_loc.rviz'),
@@ -128,6 +138,8 @@ def generate_launch_description():
                 'use_sim_time': use_sim_time,
                 'map_pcd': map_pcd,
                 'keyframe_poses': LaunchConfiguration('keyframe_poses'),
+                'config_file': LaunchConfiguration('config_file'),
+                'lidar_imu_frame': LaunchConfiguration('lidar_imu_frame'),
                 'rviz': 'false',
             }.items(),
         ),
@@ -270,6 +282,8 @@ def generate_launch_description():
         declare_map_pcd_cmd,
         declare_map_cmd,
         declare_keyframe_poses_cmd,
+        declare_config_file_cmd,
+        declare_lidar_imu_frame_cmd,
         declare_rviz_cmd,
         declare_rviz_config_cmd,
         lio_localization,
