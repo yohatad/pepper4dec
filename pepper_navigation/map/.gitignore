@@ -1,0 +1,6 @@
+# The 3D prior map is ~7 MB of binary that changes wholesale on every mapping
+# run, so it is deliberately NOT tracked. Copy it to a new machine instead:
+#   scp map/pepper_map_lc.pcd <host>:~/ros2_ws/src/pepper4dec/pepper_navigation/map/
+# then colcon build, which installs it into the package share where the launch
+# defaults look for it. The 2D grids and *_poses.txt ARE tracked: they are small.
+*.pcd

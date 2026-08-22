@@ -13,11 +13,19 @@
 #          base_footprint --(pepper_sensor_tf, static)--> l2lidar_frame_imu / cams
 # The local costmap rolls in 'odom'; the global costmap and map_server in 'map'.
 #
-# Usage (real robot):
+# Usage (real robot) -- the defaults are now a matched set from one mapping
+# run, so no overrides are needed:
+#   ros2 launch pepper_navigation pepper_nav2_fastlio_loc.launch.py
+#   Then set the initial pose in RViz (2D Pose Estimate) so ICP locks on,
+#   or call /relocalize for a seedless search over keyframe_poses.
+#
+# To use a DIFFERENT mapping run, change all three together -- map_pcd, map and
+# keyframe_poses must come from the same run or the localizer and the costmap
+# disagree about where the world is:
 #   ros2 launch pepper_navigation pepper_nav2_fastlio_loc.launch.py \
-#       map_pcd:=/home/yoha/Lidar/run_l2_lc/pgo_output/map_batch.pcd \
-#       map:=/home/yoha/maps/pepper_clean.yaml
-#   Then set the initial pose in RViz (2D Pose Estimate) so ICP locks on.
+#       map_pcd:=<run>/map_batch.pcd \
+#       map:=<run>/grid.yaml \
+#       keyframe_poses:=<run>/optimized_poses.txt
 #
 # Usage (bag replay sanity-check):
 #   ros2 launch pepper_navigation pepper_nav2_fastlio_loc.launch.py use_sim_time:=true ...
@@ -55,15 +63,15 @@ def generate_launch_description():
         description='Use bag/simulation clock instead of wall time.')
     declare_map_pcd_cmd = DeclareLaunchArgument(
         'map_pcd',
-        default_value='/home/yoha/Lidar/run_l2_lc/pgo_output/map_batch.pcd',
+        default_value=os.path.join(pkg_share, 'map', 'pepper_map_lc.pcd'),
         description='Prior 3D .pcd map that lio_localization registers against. '
-                    'Matches fastlio_localization_l2.launch.py\'s own default: the '
-                    'loop-closed map PGO writes when /pgo_batch_optimize is called '
-                    'after a fastlio_lc_l2.launch.py run. That launch file checks the '
-                    'path exists and fails with instructions if not.')
+                    'Now shipped in this package (map/) alongside the 2D grid, so '
+                    'the pair cannot drift apart. /pgo_batch_optimize writes it '
+                    'there directly (fastlio_lc_pgo map_pcd_path). MUST come from '
+                    'the same mapping run as map and keyframe_poses.')
     declare_map_cmd = DeclareLaunchArgument(
         'map',
-        default_value=os.path.join(pkg_share, 'map', 'pepper_map_lc_clean.yaml'),
+        default_value=os.path.join(pkg_share, 'map', 'pepper_map_lc_aug22_clean.yaml'),
         description='2D occupancy grid (the projection of the same environment as '
                     'map_pcd) served as /map for the global costmap static layer. '
                     'Defaults to the copy shipped in this package (map/). MUST '
@@ -75,6 +83,25 @@ def generate_launch_description():
     # lio_localization/config/localization.yaml. That YAML is the only place
     # the ICP acceptance gate can be set; it is coupled to max_corr_dist and
     # the two must be changed together.
+    # Seedless localization / /relocalize candidates. This was NOT forwarded
+    # before, so overriding map_pcd alone still left the global search loading
+    # whatever lio_localization defaulted to -- candidate places expressed in a
+    # DIFFERENT run's frame, with nothing in the logs saying so. Declaring it
+    # here keeps the three artifacts (map_pcd, map, keyframe_poses) switchable
+    # as one set.
+    # These are LEVELLED poses. PGO writes optimized_poses*.txt in the RAW
+    # map_lidar frame while the .pcd it saves is gravity-levelled, so the two
+    # are ~90 deg apart as written -- feeding the raw file here makes the global
+    # search test candidate places that do not exist in the map's frame. The
+    # shipped copy has the level transform already applied (verified: post-
+    # levelling the pose z std is 0.22 m, i.e. a robot on a flat floor, and the
+    # track lies inside the grid footprint).
+    declare_keyframe_poses_cmd = DeclareLaunchArgument(
+        'keyframe_poses',
+        default_value=os.path.join(pkg_share, 'map', 'pepper_map_lc_poses.txt'),
+        description='KITTI-format keyframe poses from the SAME mapping run as '
+                    'map_pcd, used as candidates for global localization and '
+                    '/relocalize. Empty disables both (manual /initialpose only).')
     declare_rviz_config_cmd = DeclareLaunchArgument(
         'rviz_config',
         default_value=os.path.join(pkg_share, 'rviz', 'nav2_fastlio_loc.rviz'),
@@ -100,6 +127,7 @@ def generate_launch_description():
             launch_arguments={
                 'use_sim_time': use_sim_time,
                 'map_pcd': map_pcd,
+                'keyframe_poses': LaunchConfiguration('keyframe_poses'),
                 'rviz': 'false',
             }.items(),
         ),
@@ -241,6 +269,7 @@ def generate_launch_description():
         declare_use_sim_time_cmd,
         declare_map_pcd_cmd,
         declare_map_cmd,
+        declare_keyframe_poses_cmd,
         declare_rviz_cmd,
         declare_rviz_config_cmd,
         lio_localization,
