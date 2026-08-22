@@ -240,7 +240,7 @@ double brightnessOf(const cv::Scalar& bgr) {
 // (b) Property: the same face keeps the same colour across frames — the whole
 // point of hashing the ID rather than assigning colours in arrival order.
 TEST(GenerateColorFromId, IsDeterministic) {
-    for (const std::string& id : {"face_0", "face_17", "", "a-very-long-face-id-42"}) {
+    for (const std::string id : {"face_0", "face_17", "", "a-very-long-face-id-42"}) {
         EXPECT_EQ(generateColorFromId(id), generateColorFromId(id)) << "id=" << id;
     }
 }
