@@ -31,6 +31,13 @@ install(DIRECTORY
 )
 
 install(PROGRAMS
+  # Moved here from FAST_LIO/scripts. They are Pepper glue, not upstream
+  # FAST-LIO code: point_lio, fastlio_lc_pgo, FAST-LIVO2 and
+  # pepper_navigation all ran them out of fast_lio without declaring a
+  # dependency on it.
+  scripts/lio_map_odom_bridge.py
+  scripts/pgo_map_odom_bridge.py
+  scripts/cloud_range_filter.py
   scripts/leveled_odometry_publisher.py
   scripts/pepper_odom_relabel.py
   scripts/check_frame_contract.py
