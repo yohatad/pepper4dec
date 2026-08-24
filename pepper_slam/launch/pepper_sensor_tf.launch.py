@@ -1,67 +1,39 @@
-# Static TF tree for the Pepper sensor rig: Unitree L2 + RealSense (colour,
-# depth, IMU).
+# Static TF tree for the Pepper sensor rig: Unitree L2 + RealSense.
 #
-# WHY THIS EXISTS: bags/slam_recording, slam_recording2 and slam_bench_run* were
-# all recorded with /tf_static containing ZERO messages, so the RealSense driver's
-# internal extrinsics (camera_link -> color/depth/gyro/accel) and the rig mount
-# transforms were never captured. Without them RTAB-Map (or any multi-sensor SLAM)
-# cannot relate the camera to the lidar and refuses to start.
+# Publishes 10 transforms rooted at base_footprint:
+#   base_footprint -> l2lidar_frame -> {l2lidar_frame_imu, camera_camera_link -> ...}
 #
-# The values below were recovered from bags/lidar_cam_calib2, which is one of the
-# few bags whose /tf_static was captured (4 messages).
-#
-# ONE DELIBERATE DEVIATION -- l2lidar_frame -> camera_camera_link:
-# the recorded value is the CAD-based initial guess. The refined result from
-# direct_visual_lidar_calibration (koide3, NID-based, recorded in the header of
-# FAST-LIVO2/config/unitree_l2_pepper.yaml) differs from it by 6.16 cm in
-# translation -- mostly X/Z -- and 1.34 deg in rotation. The refined value is used
-# here, back-composed through camera_camera_link -> camera_color_frame ->
-# camera_color_optical_frame so the rest of the recorded chain still applies.
-#
-# TWO WAYS TO PUBLISH THE SAME 10 TRANSFORMS, pick with publisher:=
-#   urdf (default) -- robot_state_publisher over urdf/pepper_sensor_rig.urdf.xacro.
-#                     Conventional, and gives an RViz RobotModel so a wrong
-#                     mount is visible as geometry rather than bare axes.
-#   yaml           -- static_tf_publisher over config/sensor_tf.yaml.
-# The URDF is GENERATED from the YAML (quaternion to rpy, verified lossless),
-# so both publish identical geometry. The YAML remains the calibration source
-# of truth; regenerate the URDF after editing it.
-#
-# The URDF is the sensor rig ONLY, rooted at base_footprint. It deliberately
-# does not extend naoqi's pepper.urdf: that description roots at base_link with
-# base_footprint hanging off the leg chain, so publishing it here would give
-# base_footprint two parents and split the tree. See the URDF header.
-#
-# ONE NODE, NOT TEN: the geometry now lives in config/sensor_tf.yaml and is
-# published by a single static_tf_publisher (pepper_slam). This used to spawn
-# 10 tf2_ros/static_transform_publisher processes -- one per edge, each a full
-# ROS node with its own executor, DDS participant and discovery traffic, to
-# publish seven constants. tf2 concatenates all /tf_static publishers anyway,
-# so one message carrying the whole chain is equivalent at a tenth the cost.
-# To change the rig geometry, edit config/sensor_tf.yaml -- not this file.
-#
-# Usage (include from another launch file, or run standalone):
 #   ros2 launch pepper_slam pepper_sensor_tf.launch.py
 #
-# REPLAYING /tf IS SAFE, and you usually want it: it carries Pepper's whole body
-# chain, including CameraTop_optical_frame, which the head-camera images are
-# stamped with and which resolves against nothing without it.
+# ARGUMENTS
+#   publisher   urdf (default) -- robot_state_publisher over
+#               urdf/pepper_sensor_rig.urdf.xacro; also gives an RViz
+#               RobotModel, so a wrong mount shows as geometry not bare axes.
+#               yaml -- static_tf_publisher over config/sensor_tf.yaml.
+#               ANY OTHER VALUE (e.g. none) starts neither and publishes
+#               nothing -- correct for a bag that carries its own /tf_static.
+#   scope       mount (default) -- only the rig edges. 'all' adds the seven
+#               RealSense-internal edges, for a bag recorded without them.
+#               On the robot the camera driver publishes its own, and a second
+#               copy leaves whichever /tf_static lands last silently in force.
 #
-# This header, and four other launch files, used to say the opposite -- that a
-# recorded wheel-odometry edge (pepper_odom -> base_footprint) would fight
-# lio_map_odom_bridge for base_footprint's parent. That stopped being true at
-# commit 8edd1f5, which defaulted publish_wheel_odom_tf to false
-# (naoqi_driver2/src/converters/joint_state.cpp:89) for precisely that reason,
-# so the edge is never recorded at all. Wheel odometry exists only as the
-# /pepper_odom topic.
+# The URDF is GENERATED from the YAML (quaternion to rpy, verified lossless), so
+# both publishers emit identical geometry.
 #
-# VERIFIED 2026-08-24 on bags/slam_20260823_merged: across ALL 77080 /tf
-# messages, zero transforms name base_footprint as a child, 'odom' never
-# appears, and base_footprint is the sole root. The bridge attaches above it;
-# the recorded tree hangs below it. Different ends; no contention.
+# THE GEOMETRY IS NOT EDITED HERE. config/sensor_tf.yaml is the calibration
+# source of truth and carries the full provenance -- including why the
+# direct_visual_lidar_calibration result was rejected as unreproducible and
+# replaced with a tape measurement, and which DOF remain unverified. Read that
+# before trusting any number in the rig. Regenerate the URDF after editing it.
 #
-# Bags recorded BEFORE 8edd1f5 may still carry the edge. Check rather than
-# assume:  ros2 bag play <bag> --topics /tf & ros2 run tf2_tools view_frames
+# WHY THE RIG IS ITS OWN DESCRIPTION, not an extension of naoqi's pepper.urdf:
+# that one roots at base_link with base_footprint hanging off the leg chain, so
+# including it here would give base_footprint two parents and split the tree.
+# See the URDF header.
+#
+# Replaying /tf from a bag is safe and usually wanted -- see
+# launch/bag_test/README.md, which also covers which of publisher/scope your
+# bag needs.
 
 import os
 

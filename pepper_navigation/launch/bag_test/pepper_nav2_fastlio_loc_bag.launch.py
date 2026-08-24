@@ -1,10 +1,8 @@
-# Nav2 + FAST-LIO localization, on a recorded bag.
+# Nav2 + FAST-LIO localization on a recorded bag.
 #
 # Thin wrapper over pepper_navigation/launch/pepper_nav2_fastlio_loc.launch.py --
-# the live entry point -- with use_sim_time forced true. Nothing about the stack
-# is duplicated here; same convention as pepper_slam/launch/bag_test/README.md.
+# the live entry point -- with use_sim_time forced true.
 #
-# Usage:
 #   ros2 launch pepper_navigation pepper_nav2_fastlio_loc_bag.launch.py \
 #       map_pcd:=<run>/map_batch.pcd \
 #       map:=<run>/grid.yaml \
@@ -15,32 +13,15 @@
 #     --read-ahead-queue-size 2000 --disable-keyboard-controls \
 #     --topics /points /camera/imu /imu/data /tf /tf_static
 #
-# The map arguments have NO defaults on purpose: they are the output of a
+# THE MAP ARGUMENTS HAVE NO DEFAULTS on purpose: they are the output of a
 # previous mapping run, not something this launch can produce. A silent default
-# pointing at one machine's home directory turned a missing map into a failure
+# pointing into one machine's home directory turns a missing map into a failure
 # somewhere inside localization instead of at launch.
 #
-# --- things that will waste your afternoon if you skip them -----------------
-#
-# play_qos.yaml is REQUIRED: /imu/data and /camera/imu were recorded BEST_EFFORT
-# and the estimator subscribes RELIABLE, which matches nothing -- it then waits
-# forever for IMU init and prints nothing at all.
-#
-# --disable-keyboard-controls is needed if you background the player: rosbag2
-# reads the terminal for its pause/resume keys, and a background job doing that
-# gets SIGTTIN and stops dead.
-#
-# REPLAYING /tf IS SAFE and wanted -- it carries Pepper's body chain including
-# CameraTop_optical_frame. See pepper_sensor_tf.launch.py's header for why the
-# old "do not replay /tf" advice no longer holds.
-#
-# For a bag recorded with config/record_qos.yaml -- one that carries its own
-# /tf_static -- add publisher:=none. That disables the live rig publisher
-# entirely so the bag is the sole source of the transforms, instead of both
-# publishing the same latched edges. 'publisher' is pepper_sensor_tf's own
-# argument and reaches it by inheritance; do not forward it under an alias from
-# here, because an explicit launch_arguments entry SHADOWS the command-line
-# value of the inner name (measured 2026-08-24).
+# For the shared replay gotchas -- why play_qos.yaml is mandatory, which of
+# publisher/scope your bag needs, why replaying /tf is correct, and why
+# backgrounding the player needs --disable-keyboard-controls -- see
+# pepper_slam/launch/bag_test/README.md.
 
 import os
 

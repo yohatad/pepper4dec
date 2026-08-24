@@ -1,19 +1,9 @@
 # lio_map_odom_bridge, in one place, for every estimator.
 #
-# The bridge turns a LIO estimator's /odom_lio (odom -> <body frame>) into
-# odom -> base_footprint, closing the tree per REP-105. Both FAST-LIO and
-# Point-LIO need it, identically -- same six parameters, same topic.
-#
-# WHY THIS FILE EXISTS
-# It used to be duplicated: FAST_LIO/launch/mapping.launch.py and
-# point_lio/launch/mapping_l2lidar_node.launch.py each declared the same
-# arguments, each carried its own copy of the body-frame resolver INCLUDING a
-# hardcoded {config_file: frame} table, and each started the same node. Two
-# copies of glue that is Pepper-specific, living inside two vendored upstream
-# packages, which is also how four other packages ended up running an
-# executable out of fast_lio without declaring a dependency on it.
-#
-# Include it instead:
+# The bridge turns a LIO estimator's /odom_lio (lio_init -> <body frame>) into
+# odom -> base_footprint, closing the tree per REP-105. FAST-LIO and Point-LIO
+# need it identically -- same six parameters, same topic -- so include this
+# rather than starting the node yourself:
 #
 #     IncludeLaunchDescription(
 #         PythonLaunchDescriptionSource(os.path.join(
@@ -25,11 +15,15 @@
 #             'config_file': <the config being used>,
 #         }.items())
 #
-# THE BODY FRAME IS READ FROM THE CONFIG, not from a table. It must equal the
-# estimator's own publish.body_frame or the bridge composes odom ->
-# base_footprint through the wrong rigid offset and yields a pose that looks
-# plausible and is simply wrong. Reading the yaml makes the two impossible to
-# desync, and means a new config needs no edit here.
+# THE BODY FRAME IS READ FROM THE CONFIG (publish.body_frame), not from a table.
+# It must equal what the estimator stamps, or the bridge composes
+# odom -> base_footprint through the wrong rigid offset and yields a pose that
+# looks plausible and is wrong. Reading the yaml makes the two impossible to
+# desync, and a new config needs no edit here.
+#
+# This used to be duplicated in FAST_LIO/launch/mapping.launch.py and
+# point_lio/launch/mapping_l2lidar_node.launch.py, each with its own copy of the
+# resolver and a hardcoded {config_file: frame} table.
 
 import os
 
