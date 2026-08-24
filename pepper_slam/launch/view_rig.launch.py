@@ -68,11 +68,11 @@ def generate_launch_description():
             default_value=os.path.join(pkg_share, 'rviz', 'view_rig.rviz'),
             description='RViz config. Fixed frame base_footprint, 0.1 m grid.'),
         DeclareLaunchArgument(
-            'gui', default_value='true',
+            'gui', default_value='false',
             description='Joint sliders for model:=full. Ignored for the rig, '
                         'which has no movable joints.'),
         DeclareLaunchArgument(
-            'rviz', default_value='true',
+            'rviz', default_value='false',
             description='Set false to publish the description without opening '
                         'RViz (headless checks, or inspecting /robot_description '
                         'over SSH).'),

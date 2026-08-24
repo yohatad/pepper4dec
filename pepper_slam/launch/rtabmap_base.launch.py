@@ -531,10 +531,12 @@ def launch_setup(context, *args, **kwargs):
 
 def generate_launch_description():
     
-    # config_rviz = os.path.join(
-    #     get_package_share_directory('rtabmap_launch'), 'launch', 'config', 'rgbd.rviz'
-    # )
-    config_rviz = '/home/yoha/navigation.rviz'
+    # Was '/home/yoha/navigation.rviz' -- a package launch file defaulting to an
+    # untracked 25 KB file in one user's home directory. Broken on any other
+    # machine, and unrecoverable if that file were ever lost. Copied into this
+    # package (rviz/navigation.rviz) so the default is self-contained.
+    config_rviz = os.path.join(
+        get_package_share_directory('pepper_slam'), 'rviz', 'navigation.rviz')
     
     return LaunchDescription([
         

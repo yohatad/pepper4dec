@@ -5,21 +5,23 @@
 #
 # Frames: FAST-LIO's own odom frame is IMU-aligned (tilted ~90 deg on Pepper's
 # mount). lio_map_odom_bridge publishes odom -> base_footprint plus a one-time
-# gravity-leveled odom -> odom_lidar. RTAB-Map anchors on odom so its map
+# gravity-leveled odom -> lio_init. RTAB-Map anchors on odom so its map
 # frame is Z-up, which the 2D occupancy projection requires.
 #
 # Usage:
-#   ros2 launch pepper_slam rtabmap_fastlio_bag_test.launch.py
+#   ros2 launch pepper_slam rtabmap_fastlio_bag.launch.py
 #   ros2 bag play <bag> --clock --topics /points /imu/data /tf_static
 #
-# NOTE: do NOT replay /tf -- the bag's wheel-odometry TF (pepper_odom ->
-# base_footprint) would fight the bridge for base_footprint's parent.
+# Replaying /tf is SAFE and wanted: publish_wheel_odom_tf has defaulted to
+# false since commit 8edd1f5, so no wheel-odometry edge is recorded and
+# base_footprint is the tf root. See pepper_sensor_tf.launch.py's header.
 
 import os
 
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration
 from ament_index_python.packages import get_package_share_directory
 
 
@@ -39,6 +41,11 @@ def generate_launch_description():
         launch_arguments={
             'rviz': 'false',
             'use_sim_time': 'true',
+            # RTAB-Map owns map -> odom here (rtabmap_base's publish_tf_map
+            # defaults true), so fastlio_odometry must NOT also publish its
+            # identity edge -- two publishers would give odom two parents and
+            # split the tree.
+            'publish_map_identity': 'false',
         }.items(),
     )
 

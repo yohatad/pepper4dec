@@ -43,8 +43,25 @@
 # Usage (include from another launch file, or run standalone):
 #   ros2 launch pepper_slam pepper_sensor_tf.launch.py
 #
-# Play the bag WITH /tf if you want wheel odometry (pepper_odom -> base_footprint
-# lives in /tf, not /tf_static).
+# REPLAYING /tf IS SAFE, and you usually want it: it carries Pepper's whole body
+# chain, including CameraTop_optical_frame, which the head-camera images are
+# stamped with and which resolves against nothing without it.
+#
+# This header, and four other launch files, used to say the opposite -- that a
+# recorded wheel-odometry edge (pepper_odom -> base_footprint) would fight
+# lio_map_odom_bridge for base_footprint's parent. That stopped being true at
+# commit 8edd1f5, which defaulted publish_wheel_odom_tf to false
+# (naoqi_driver2/src/converters/joint_state.cpp:89) for precisely that reason,
+# so the edge is never recorded at all. Wheel odometry exists only as the
+# /pepper_odom topic.
+#
+# VERIFIED 2026-08-24 on bags/slam_20260823_merged: across ALL 77080 /tf
+# messages, zero transforms name base_footprint as a child, 'odom' never
+# appears, and base_footprint is the sole root. The bridge attaches above it;
+# the recorded tree hangs below it. Different ends; no contention.
+#
+# Bags recorded BEFORE 8edd1f5 may still carry the edge. Check rather than
+# assume:  ros2 bag play <bag> --topics /tf & ros2 run tf2_tools view_frames
 
 import os
 
@@ -71,7 +88,15 @@ def generate_launch_description():
     use_yaml = PythonExpression(["'", publisher, "' == 'yaml'"])
 
     return LaunchDescription([
-        DeclareLaunchArgument('use_sim_time', default_value='true'),
+        # false, not true: this is the LIVE entry point. Every bag wrapper in
+        # pepper_slam/launch/bag_test sets use_sim_time:='true' explicitly, so
+        # this default only ever applies on the robot -- where 'true' leaves sim
+        # time pinned at 0, so tf never resolves and nothing fuses, silently.
+        # It also feeds the sensor_tf scope derivation: false -> 'mount', which
+        # is correct live because the RealSense driver publishes its own camera
+        # edges (publishing them here too is the nondeterministic-latch problem
+        # sensor_tf.yaml warns about).
+        DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument(
             'publisher', default_value='urdf',
             description="'urdf' (robot_state_publisher, gives an RViz "

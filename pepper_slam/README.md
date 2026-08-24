@@ -46,7 +46,7 @@ are upstream defaults for other lidars). Pass `use_sim_time:=true` for bag repla
 | Stack | Launch | Loop closure | Owns `map` | `bridge_level_frame` |
 |-------|--------|--------------|-----------|----------------------|
 | Odometry only | `pepper_slam fastlio_odometry.launch.py` | none | nobody | `true` (unused) |
-| + RTAB-Map | `pepper_slam bag_test/rtabmap_fastlio_bag_test.launch.py` | RTAB-Map ICP + visual BoW | RTAB-Map | `true` |
+| + RTAB-Map | `pepper_slam bag_test/rtabmap_fastlio_bag.launch.py` | RTAB-Map ICP + visual BoW | RTAB-Map | `true` |
 | + Scan-Context PGO | `fastlio_lc_pgo fastlio_lc_l2.launch.py` | GTSAM/ISAM2 on Scan Context | `pgo_map_odom_bridge` | `false` |
 | + prior-map ICP | `lio_localization fastlio_localization_l2.launch.py` | n/a (localization) | `transform_fusion` | `false` |
 
@@ -142,12 +142,12 @@ file's header.
 
 | Launch file | Sensor setup | Odometry source |
 |-------------|--------------|-----------------|
-| `bag_test/rtabmap_rgbd_wheel_bag_test.launch.py` | RealSense RGB-D (infra1 + depth) | bag TF (`pepper_odom`) |
-| `bag_test/rtabmap_l2_bag_test.launch.py` | L2 lidar + IMU, no camera | RTAB-Map `icp_odometry` |
-| `bag_test/rtabmap_fastlio_bag_test.launch.py` | L2 lidar + RGB for loop closure | FAST-LIO (best measured: 0.19 m closure) |
-| `bag_test/rtabmap_fused_bag_test.launch.py` | L2 + RGB + aligned depth + fused IMU | `odom_source:=wheel` (default) or `icp` |
+| `bag_test/rtabmap_rgbd_wheel_bag.launch.py` | RealSense RGB-D (infra1 + depth) | bag TF (`pepper_odom`) |
+| `bag_test/rtabmap_l2_bag.launch.py` | L2 lidar + IMU, no camera | RTAB-Map `icp_odometry` |
+| `bag_test/rtabmap_fastlio_bag.launch.py` | L2 lidar + RGB for loop closure | FAST-LIO (best measured: 0.19 m closure) |
+| `bag_test/rtabmap_fused_bag.launch.py` | L2 + RGB + aligned depth + fused IMU | `odom_source:=wheel` (default) or `icp` |
 
-`rtabmap_fused_bag_test.launch.py` is the all-three-sensors variant: visual
+`rtabmap_fused_bag.launch.py` is the all-three-sensors variant: visual
 bag-of-words proposes the loop closure, lidar ICP refines it, and
 `imu_filter_madgwick` supplies the gravity constraint the orientation-less
 `/camera/imu` can't. Wheel odometry is the default because it is by far the
@@ -174,10 +174,10 @@ pepper_slam/
 │   ├── pointlio_odometry.launch.py            # same, for Point-LIO
 │   ├── view_rig.launch.py                     # sensor rig visualization
 │   └── bag_test/                              # manual bag-replay validation, not automated tests
-│       ├── rtabmap_rgbd_wheel_bag_test.launch.py
-│       ├── rtabmap_l2_bag_test.launch.py
-│       ├── rtabmap_fastlio_bag_test.launch.py
-│       └── rtabmap_fused_bag_test.launch.py
+│       ├── rtabmap_rgbd_wheel_bag.launch.py
+│       ├── rtabmap_l2_bag.launch.py
+│       ├── rtabmap_fastlio_bag.launch.py
+│       └── rtabmap_fused_bag.launch.py
 ├── rviz/{rtabmap_fastlio_mapping,rtabmap_fused_mapping,view_rig}.rviz
 │   (compute_lidar_camera_bridge.py moved to ros2_ws/utils/)
 ├── scripts/

@@ -15,7 +15,36 @@ paths follow.
 | `fastlio_lc_bag.launch.py` | `fastlio_lc_pgo/fastlio_lc_l2.launch.py` | same |
 | `pointlio_lc_bag.launch.py` | `fastlio_lc_pgo/pointlio_lc_l2.launch.py` | same |
 | `fastlio_localization_bag.launch.py` | `lio_localization/fastlio_localization_l2.launch.py` | same |
-| `rtabmap_*_bag_test.launch.py` | `pepper_slam/rtabmap_base.launch.py` (+ a LIO) | build one from `rtabmap_base` |
+| `rtabmap_*_bag.launch.py` | `pepper_slam/rtabmap_base.launch.py` (+ a LIO) | build one from `rtabmap_base` |
+
+Navigation follows the same convention but lives in its own package, since the
+live entry point does:
+
+| bag entry point | wraps |
+|---|---|
+| `pepper_navigation/launch/bag_test/pepper_nav2_fastlio_loc_bag.launch.py` | `pepper_navigation/pepper_nav2_fastlio_loc.launch.py` |
+
+```bash
+ros2 launch pepper_navigation pepper_nav2_fastlio_loc_bag.launch.py \
+    map_pcd:=<run>/map_batch.pcd map:=<run>/grid.yaml \
+    keyframe_poses:=<run>/optimized_poses.txt
+```
+
+## `--show-args` lists far more than any one file honours
+
+It walks the whole include tree, so `rtabmap_fused_bag.launch.py` advertises
+**81** arguments and `fastlio_odometry_bag.launch.py` 15, of which that file
+declares 5. Read the "ARGUMENTS THIS FILE HONOURS" block in each header instead.
+
+Two consequences worth knowing:
+
+* An argument declared anywhere below you IS settable from the command line and
+  overrides the declared default — that is how `publisher:=none` reaches
+  `pepper_sensor_tf.launch.py` through three levels of wrapper.
+* But an explicit `launch_arguments={'x': ...}` entry **shadows** a command-line
+  `x:=…` for that subtree. The CLI value is silently ignored while `x` still
+  appears in `--show-args`. So do not forward an inner argument under an alias
+  "for convenience" — it makes the documented name a no-op. Measured 2026-08-24.
 
 ## Invocation
 

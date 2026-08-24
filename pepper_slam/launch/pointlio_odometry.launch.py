@@ -26,7 +26,8 @@
 # Usage:
 #   ros2 launch pepper_slam pointlio_odometry.launch.py
 #   ros2 bag play <bag> --clock --topics /points /imu/data
-#   (do NOT also replay /tf -- see pepper_sensor_tf.launch.py's header)
+#   (replaying /tf is SAFE and wanted -- see pepper_sensor_tf.launch.py's
+#    header for why the old "do not replay /tf" advice no longer holds.)
 
 import os
 
@@ -34,19 +35,26 @@ from ament_index_python.packages import get_package_share_directory
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
 
 
-def _resolve_scope(context, *args, **kwargs):
-    """sensor_tf scope follows use_sim_time unless set explicitly."""
-    from launch.actions import SetLaunchConfiguration
-    explicit = LaunchConfiguration('sensor_tf_scope').perform(context)
-    if explicit:
-        return [SetLaunchConfiguration('resolved_scope', explicit)]
-    sim = LaunchConfiguration('use_sim_time').perform(context).lower()
-    return [SetLaunchConfiguration(
-        'resolved_scope', 'all' if sim in ('true', '1', 'yes') else 'mount')]
+def _echo_resolved(context, *args, **kwargs):
+    """Print the decisions that fail silently if they are wrong.
+
+    use_sim_time true with no /clock pins time at 0 and nothing renders or
+    fuses; publisher:=none against a bag with NO /tf_static leaves the rig
+    transforms missing and lio_map_odom_bridge simply waits. Neither prints an
+    error. One line here beats bisecting either.
+    """
+    from launch.actions import LogInfo
+    sim = LaunchConfiguration('use_sim_time').perform(context)
+    pub = LaunchConfiguration('publisher', default='urdf').perform(context)
+    scope = LaunchConfiguration('scope', default='mount').perform(context)
+    return [LogInfo(msg='[pepper_slam] use_sim_time=%s  sensor_tf publisher=%s  scope=%s'
+                        % (sim, pub, scope))]
 
 
 def generate_launch_description():
@@ -69,13 +77,21 @@ def generate_launch_description():
     # Scope follows use_sim_time: replay has no RealSense driver, so the camera
     # TF edges must come from calibration; on the robot the driver owns them and
     # sensor_tf.yaml warns the two sources CAN DIFFER.
-    declare_scope_cmd = DeclareLaunchArgument(
-        'sensor_tf_scope', default_value='', choices=['', 'mount', 'all'],
-        description="Empty (default) derives it from use_sim_time: 'all' for "
-                    "bag replay, 'mount' on the robot.")
     declare_rviz_cmd = DeclareLaunchArgument('rviz', default_value='true')
+    declare_publish_map_identity_cmd = DeclareLaunchArgument(
+        'publish_map_identity', default_value='true',
+        description='Publish a static identity map -> odom so "map" can be used '
+                    'as a fixed frame in odometry-only runs. Set false when PGO '
+                    'or a localizer owns that edge.')
+    # false, NOT true: this is the LIVE entry point. Every wrapper in
+    # pepper_slam/launch/bag_test sets use_sim_time:='true' explicitly, so this
+    # default only ever applies on the robot -- where 'true' pins sim time at 0,
+    # so tf never resolves and nothing fuses, silently and with no error.
+    # It also feeds the sensor_tf scope derivation: false -> 'mount', correct
+    # live because the RealSense driver publishes its own camera edges (adding a
+    # second copy is the nondeterministic-latch problem sensor_tf.yaml warns of).
     declare_use_sim_time_cmd = DeclareLaunchArgument(
-        'use_sim_time', default_value='true',
+        'use_sim_time', default_value='false',
         description='true for bag replay (--clock); false on the robot. '
                     'Reaches pepper_sensor_tf, Point-LIO and the odom bridge.')
     declare_flatten_base_frame_cmd = DeclareLaunchArgument(
@@ -94,8 +110,7 @@ def generate_launch_description():
     sensor_tf_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_share, 'launch', 'pepper_sensor_tf.launch.py')),
-        launch_arguments={'use_sim_time': use_sim_time,
-                          'scope': LaunchConfiguration('resolved_scope')}.items())
+        launch_arguments={'use_sim_time': use_sim_time}.items())
 
     point_lio_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -108,15 +123,35 @@ def generate_launch_description():
             'bridge_level_frame': bridge_level_frame,
         }.items())
 
+
+    # REP-105 says map -> odom is the loop-closure / localization correction.
+    # This launch is odometry ONLY -- nothing corrects anything -- so that edge
+    # is identity by definition. Publishing it costs nothing and makes 'map' a
+    # usable RViz fixed frame here, so the same rviz config works whether or not
+    # PGO/AMCL is running.
+    #
+    # MUST be false when something else owns map -> odom (pgo_map_odom_bridge,
+    # AMCL, or lio_localization's transform_fusion) -- two publishers would give
+    # odom two parents and split the tree.
+    map_identity = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='map_odom_identity',
+        arguments=['--frame-id', 'map', '--child-frame-id', 'odom'],
+        parameters=[{'use_sim_time': use_sim_time}],
+        condition=IfCondition(LaunchConfiguration('publish_map_identity')),
+    )
+
     ld = LaunchDescription()
     ld.add_action(declare_config_file_cmd)
-    ld.add_action(declare_scope_cmd)
     ld.add_action(declare_rviz_cmd)
     ld.add_action(declare_use_sim_time_cmd)
     ld.add_action(declare_flatten_base_frame_cmd)
     ld.add_action(declare_bridge_level_frame_cmd)
-    # AFTER every declare: the resolver reads sensor_tf_scope and use_sim_time.
-    ld.add_action(OpaqueFunction(function=_resolve_scope))
+    # AFTER every declare: the echo reads use_sim_time.
+    ld.add_action(OpaqueFunction(function=_echo_resolved))
+    ld.add_action(declare_publish_map_identity_cmd)
     ld.add_action(sensor_tf_launch)
+    ld.add_action(map_identity)
     ld.add_action(point_lio_launch)
     return ld

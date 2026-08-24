@@ -15,11 +15,23 @@
 # without the file the estimator waits forever for IMU init and prints nothing.
 # Do NOT replay /tf -- the bag's wheel odometry fights the bridge for
 # base_footprint's parent.
+#
+# ARGUMENTS THIS FILE HONOURS (--show-args lists ~10 more that leak up from the
+# include tree; they are settable but not all meaningful here):
+#   config_file        l2_rsimu.yaml = RealSense IMU (default) | l2.yaml = L2's
+#   rviz, rviz_cfg     open RViz, and with which config
+#   scope              mount (default) | all -- pepper_sensor_tf's own
+#                      argument, reached by inheritance. 'all' only for
+#                      legacy bags that carry no /tf_static.
+#   publisher          none = publish no rig transforms; for a bag that carries
+#                      its own /tf_static
+#   flatten_base_frame zero the leveled z/roll/pitch (default true)
+#   use_sim_time       FORCED true by this wrapper -- do not pass it
 
 import os
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from ament_index_python.packages import get_package_share_directory
@@ -49,6 +61,10 @@ def generate_launch_description():
         }.items())
 
     ld = LaunchDescription()
+    # This wrapper's whole job is forcing use_sim_time; say so, because
+    # a bag replay with sim time NOT set fails silently rather than loudly.
+    ld.add_action(LogInfo(msg=['[pointlio_odometry_bag] use_sim_time=true (forced)  '
+                              'config_file=', LaunchConfiguration('config_file')]))
     ld.add_action(declare_config_file_cmd)
     ld.add_action(declare_rviz_cmd)
     ld.add_action(pointlio)

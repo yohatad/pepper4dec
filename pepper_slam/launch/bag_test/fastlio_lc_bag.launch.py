@@ -37,9 +37,13 @@ def generate_launch_description():
     launch_dir = os.path.join(
         get_package_share_directory('fastlio_lc_pgo'), 'launch')
 
+        # No default: this is the output of a PREVIOUS mapping run, not something
+        # this launch can produce. It used to default to a path under /home/yoha
+        # that exists on one machine only; a wrong or missing map then failed
+        # somewhere inside PGO instead of at launch. Pass it explicitly.
     declare_save_dir_cmd = DeclareLaunchArgument(
         'save_directory',
-        default_value='/home/yoha/Lidar/run_l2_lc_rsimu/pgo_output/',
+        default_value='',
         description='Where PGO writes optimized_poses.txt, Scans/ and (on '
                     '/pgo_batch_optimize) map_batch.pcd.')
     declare_kf_filter_cmd = DeclareLaunchArgument(

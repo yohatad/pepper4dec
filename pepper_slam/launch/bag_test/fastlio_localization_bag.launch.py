@@ -35,13 +35,17 @@ def generate_launch_description():
     launch_dir = os.path.join(
         get_package_share_directory('lio_localization'), 'launch')
 
+        # No default: this is the output of a PREVIOUS mapping run, not something
+        # this launch can produce. It used to default to a path under /home/yoha
+        # that exists on one machine only; a wrong or missing map then failed
+        # somewhere inside PGO instead of at launch. Pass it explicitly.
     declare_map_cmd = DeclareLaunchArgument(
         'map_pcd',
-        default_value='/home/yoha/Lidar/run_l2_lc_rsimu/pgo_output/map_batch.pcd',
+        default_value='',
         description='Prior map to localize against.')
     declare_kf_cmd = DeclareLaunchArgument(
         'keyframe_poses',
-        default_value='/home/yoha/Lidar/run_l2_lc_rsimu/pgo_output/optimized_poses.txt',
+        default_value='',
         description='Candidates for /relocalize and auto_initialize. MUST be '
                     'from the same run as map_pcd.')
     declare_auto_cmd = DeclareLaunchArgument(

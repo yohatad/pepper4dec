@@ -1,8 +1,8 @@
 # RTAB-Map on a recorded bag using ALL THREE sensors: RealSense RGB + aligned
 # depth, the RealSense IMU, and the Unitree L2 lidar.
 #
-# Unlike rtabmap_l2_bag_test.launch.py (lidar only) and
-# rtabmap_fastlio_bag_test.launch.py (lidar odometry via FAST-LIO, RGB for
+# Unlike rtabmap_l2_bag.launch.py (lidar only) and
+# rtabmap_fastlio_bag.launch.py (lidar odometry via FAST-LIO, RGB for
 # appearance only), this variant subscribes to the aligned depth image as well.
 # bags/slam_recording does publish /camera/aligned_depth_to_color/image_raw
 # (6297 msgs, 16UC1, already in camera_color_optical_frame), so the depth topic
@@ -29,8 +29,8 @@
 # sawtooth (std 5.139 ms vs 0.001 ms) from l2_sync_rate_ms:30.
 #
 # Usage:
-#   ros2 launch pepper_slam rtabmap_fused_bag_test.launch.py
-#   ros2 launch pepper_slam rtabmap_fused_bag_test.launch.py odom_source:=icp
+#   ros2 launch pepper_slam rtabmap_fused_bag.launch.py
+#   ros2 launch pepper_slam rtabmap_fused_bag.launch.py odom_source:=icp
 #
 #   ros2 bag play <bag> --clock --read-ahead-queue-size 2000 \
 #     --topics /points /camera/imu /tf \
