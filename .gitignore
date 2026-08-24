@@ -23,3 +23,8 @@ __pycache__/
 /animate_behavior/animate_behavior
 /gesture_execution/gesture_execution
 /overt_attention/overt_attention
+
+# VS Code workspace state. browse.vc.db is the C++ IntelliSense index and
+# reaches ~1.2 GB per package -- it was the single largest thing in this
+# workspace before being deleted twice.
+.vscode/
