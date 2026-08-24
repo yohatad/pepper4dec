@@ -142,6 +142,18 @@ def generate_launch_description():
                 'config_file': 'l2.yaml',
                 'rviz': 'false',
                 'use_sim_time': use_sim_time,
+            }.items(),
+        ),
+        # odom -> base_footprint. FAST_LIO's mapping.launch.py no longer starts this
+        # (see FAST_LIO d8b274c): it was Pepper glue in a launch file shared with
+        # every other FAST-LIO sensor config.
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                os.path.join(get_package_share_directory('pepper_slam'),
+                             'launch', 'lio_odom_bridge.launch.py')),
+            launch_arguments={
+                'use_sim_time': use_sim_time,
+                'config_file': 'l2.yaml',
                 'bridge_level_frame': 'true',
             }.items(),
         ),
