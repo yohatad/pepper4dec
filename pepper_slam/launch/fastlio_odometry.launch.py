@@ -187,7 +187,9 @@ def generate_launch_description():
             os.path.join(pkg_share, 'launch', 'lio_odom_bridge.launch.py')),
         launch_arguments={
             'use_sim_time': use_sim_time,
-            'config_path': os.path.join(fast_lio_share, 'config'),
+            # forwarded, not hardcoded: config_path selects where config_file
+            # lives, and the bridge reads publish.body_frame from that same file.
+            'config_path': LaunchConfiguration('config_path'),
             'config_file': LaunchConfiguration('config_file'),
             'lidar_imu_frame': LaunchConfiguration('lidar_imu_frame'),
             'bridge_level_frame': bridge_level_frame,
