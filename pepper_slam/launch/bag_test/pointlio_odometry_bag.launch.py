@@ -1,32 +1,23 @@
-# Point-LIO odometry only, on a recorded bag.
+# Point-LIO odometry on a recorded bag.
 #
 # Thin wrapper over pepper_slam/launch/pointlio_odometry.launch.py -- the live
-# entry point -- with use_sim_time forced true. Nothing about the stack is
-# duplicated here; see bag_test/README.md for the convention.
+# entry point -- with use_sim_time forced true.
 #
-# Usage:
-#   ros2 launch pepper_slam pointlio_odometry_bag.launch.py
+#   ros2 launch pepper_slam pointlio_odometry_bag.launch.py publisher:=none
 #   ros2 bag play <bag> --clock \
 #     --qos-profile-overrides-path config/play_qos.yaml \
-#     --read-ahead-queue-size 2000
+#     --read-ahead-queue-size 2000 --disable-keyboard-controls \
+#     --topics /points /camera/imu /imu/data /tf /tf_static
 #
-# The QoS overrides are REQUIRED: /imu/data and /camera/imu were recorded
-# BEST_EFFORT, and a RELIABLE subscriber matches nothing against them, so
-# without the file the estimator waits forever for IMU init and prints nothing.
-# Do NOT replay /tf -- the bag's wheel odometry fights the bridge for
-# base_footprint's parent.
+# ARGUMENTS THIS FILE HONOURS:
+#   config_file         l2lidar_rsimu.yaml = RealSense IMU (default) |
+#                       l2lidar_node.yaml = the L2's own
+#   rviz                open RViz
+#   publisher           none = publish no rig transforms
+#   flatten_base_frame  zero the leveled z/roll/pitch (default true)
+#   use_sim_time        FORCED true here; do not pass it
 #
-# ARGUMENTS THIS FILE HONOURS (--show-args lists ~10 more that leak up from the
-# include tree; they are settable but not all meaningful here):
-#   config_file        l2_rsimu.yaml = RealSense IMU (default) | l2.yaml = L2's
-#   rviz, rviz_cfg     open RViz, and with which config
-#   scope              mount (default) | all -- pepper_sensor_tf's own
-#                      argument, reached by inheritance. 'all' only for
-#                      legacy bags that carry no /tf_static.
-#   publisher          none = publish no rig transforms; for a bag that carries
-#                      its own /tf_static
-#   flatten_base_frame zero the leveled z/roll/pitch (default true)
-#   use_sim_time       FORCED true by this wrapper -- do not pass it
+# See README.md in this directory for the shared replay gotchas.
 
 import os
 

@@ -80,27 +80,55 @@ the overrides rmw silently delivers nothing and the estimator waits forever for
 IMU init with no error printed. `/points` matters only for FAST-LIVO2, which
 subscribes RELIABLE; the others use `SensorDataQoS()` and would match either way.
 
-## Do NOT replay `/tf`
+## Replaying `/tf` is fine — and you want it
 
-The bag's wheel odometry (`pepper_odom -> base_footprint`) fights
-`lio_map_odom_bridge` for `base_footprint`'s parent. `/tf_static` is fine and
-mostly redundant — `pepper_sensor_tf` supplies the rig transforms itself.
+An older version of this file said not to, because the bag's wheel odometry
+would fight `lio_map_odom_bridge` for `base_footprint`'s parent. That stopped
+being true at commit 8edd1f5, which defaulted `publish_wheel_odom_tf` to false
+(`naoqi_driver2/src/converters/joint_state.cpp:89`) for exactly that reason, so
+the edge is never recorded.
 
-## Why there is no `scope` argument here
+Verified on `slam_20260823_merged`: across all 77080 `/tf` messages, zero
+transforms name `base_footprint` as a child, `odom` never appears, and
+`base_footprint` is the sole root. The bridge attaches above it; the recorded
+tree hangs below.
 
-`pepper_sensor_tf`'s scope is derived from `use_sim_time` inside the live launch
-files, because both answer the same question: is a RealSense driver running?
+Dropping `/tf` costs you Pepper's whole body chain, including
+`CameraTop_optical_frame` — which the head-camera images are stamped with, and
+which then resolves against nothing.
 
-- replay → `all`: no driver, so the camera edges come from calibration.
-  Without them `camera_imu_optical_frame` — the body frame `l2_rsimu.yaml`
-  names — does not resolve and the bridge waits forever.
-- robot → `mount`: the driver publishes those edges from the device, and
-  `config/sensor_tf.yaml` warns its values *can differ* from the recovered ones.
-  Publishing both leaves whichever `/tf_static` arrives last in force.
+Bags recorded before 8edd1f5 may still carry the edge. Check rather than assume:
 
-Setting `use_sim_time:=true` here is therefore enough. Override
-`sensor_tf_scope` only for the odd case (a bag that already carries the
-driver's camera TF, or replaying with a camera plugged in).
+```bash
+ros2 bag play <bag> --topics /tf & ros2 run tf2_tools view_frames
+```
+
+## Who publishes the rig transforms
+
+`pepper_sensor_tf` normally publishes `base_footprint -> l2lidar_frame -> ...`.
+Whether you want it to depends on what the bag already contains:
+
+| bag | pass | why |
+|---|---|---|
+| recorded with `config/record_qos.yaml` | `publisher:=none` | it carries all 14 `/tf_static` transforms itself; a live publisher would duplicate the latched edges and the last one silently wins |
+| `slam_recording*`, `slam_bench_run*` | `scope:=all` | no `/tf_static` at all, so the camera edges must come from calibration or `camera_imu_optical_frame` never resolves |
+
+Both are `pepper_sensor_tf.launch.py`'s own arguments and reach it by
+inheritance — a command-line value overrides a declared default further down the
+include tree. `publisher` has no `choices=` restriction and both its nodes are
+gated on `IfCondition(publisher=='urdf'/'yaml')`, so any other value starts
+neither.
+
+**Do not forward either under an alias.** An explicit `launch_arguments` entry
+*shadows* the command-line value of the inner name: `publisher:=none` would
+become a silent no-op while still appearing in `--show-args`. Measured
+2026-08-24. There used to be a `sensor_tf_scope` alias here for this reason; it
+was removed.
+
+## Backgrounding the player
+
+Add `--disable-keyboard-controls`. rosbag2 reads the terminal for its
+pause/resume keys, and a background job that does so gets SIGTTIN and stops dead.
 
 ## IMU
 
