@@ -9,13 +9,15 @@ here rather than re-deriving the story.
 |---|---|---|
 | `map` | fixed world reference, **gravity-aligned, floor-referenced** | goals, global costmap, prior maps |
 | `odom` | continuous dead reckoning, **gravity-aligned, floor-referenced** | local costmap, collision monitor, AMCL/RTAB-Map odom frame |
-| `odom_lidar` | the **LIO's own** world frame -- tilted ~90 deg by the sensor mount | nothing. Private to the backend. |
-| `map_lidar` | **PGO's own** world frame -- same tilt | nothing. Private to `pgo_node`. |
+| `lio_init` | the **LIO's own** world frame -- tilted ~90 deg by the sensor mount | nothing. Private to the backend. |
+| `pgo_init` | **PGO's own** world frame -- same tilt | nothing. Private to `pgo_node`. |
 | `base_footprint` | the robot, on the ground | -- |
 
-**Rule: if a config names `odom_lidar` or `map_lidar`, it is wrong.**
+**Rule: if a DOWNSTREAM config names `lio_init` or `pgo_init`, it is wrong.**
+(The estimator configs necessarily define them via `publish.map_frame` -- that
+is the one legitimate mention. Nothing consuming poses should name them.)
 
-## Why the `_lidar` frames exist
+## Why the `*_init` frames exist
 
 The L2 is bolted to Pepper's base at ~90 deg: **Z points forward**, and gravity
 splits across the IMU's X and Y as `[-0.913, +0.407, +0.004]`. The LIO
@@ -31,7 +33,7 @@ That frame cannot simply be redefined, because it is the frame each backend
 stamps its own outputs in: `/cloud_registered`, `/path`, `/Laser_map` for the
 LIO; `/aft_pgo_map`, `/aft_pgo_path` for PGO. Rotating it means rotating all of
 them, continuously. So the tilted frame keeps a name that says whose it is
-(`odom_lidar`, `map_lidar`), and the leveled frame takes the standard name.
+(`lio_init`, `pgo_init`), and the leveled frame takes the standard name.
 
 The two backends also disagree about that frame:
 
@@ -40,7 +42,7 @@ The two backends also disagree about that frame:
 * **Point-LIO** can rotate its world frame to align gravity (`gravity_align`).
 
 `mapping.gravity_align` is therefore **false** in
-`point_lio/config/l2lidar_node.yaml`, so both backends define `odom_lidar`
+`point_lio/config/l2lidar_node.yaml`, so both backends define `lio_init`
 identically. Turning it back on breaks `level_source: calibration` below.
 
 ## The ladder
@@ -49,7 +51,7 @@ Mapping (`fastlio_mapping`, `pointlio_mapping`) and AMCL:
 
 ```
 odom                       leveled, floor-referenced   <- costmaps use this
- └── odom_lidar            the LIO's tilted native frame
+ └── lio_init            the LIO's tilted native frame
       └── base_footprint   the robot
            ├── base_link        body (Pepper URDF hangs off this)
            └── l2lidar_frame    the lidar
@@ -59,31 +61,31 @@ odom                       leveled, floor-referenced   <- costmaps use this
 PGO (`fastlio_lc_l2`, `pointlio_lc_l2`):
 
 ```
-map -> map_lidar -> odom_lidar -> base_footprint -> ...
+map -> pgo_init -> lio_init -> base_footprint -> ...
 ```
 
 Localization (`fastlio_localization_l2`, `pointlio_localization_l2`):
 
 ```
-map -> odom_lidar -> base_footprint -> ...
+map -> lio_init -> base_footprint -> ...
         └── odom          published as a CHILD (level_frame_as_child:=true)
 ```
 
-`base_footprint` is a child of `odom_lidar` in every case -- that is the edge
+`base_footprint` is a child of `lio_init` in every case -- that is the edge
 the bridge publishes. A lookup of `odom -> base_footprint` traverses
-`odom -> odom_lidar -> base_footprint` and works normally.
+`odom -> lio_init -> base_footprint` and works normally.
 
 | edge | kind | published by | meaning |
 |---|---|---|---|
 | `l2lidar_frame -> l2lidar_frame_imu` | static | `static_tf_publisher` | IMU's position inside the lidar housing (17 mm, no rotation) |
 | `base_footprint -> l2lidar_frame` | static | `static_tf_publisher` | **the mount calibration** |
-| `odom_lidar -> base_footprint` | dynamic ~11 Hz | `lio_map_odom_bridge` | **the odometry** -- continuous, drifts, never corrected |
-| `map -> odom_lidar` | dynamic, jumps | the localizer | **the correction** -- discontinuous, does not drift |
-| `odom <-> odom_lidar` | static, one-time | `lio_map_odom_bridge` | **the leveling** (0.2571 m, from calibration) |
-| `map -> map_lidar` | static, one-time | `pgo_map_odom_bridge` | the leveling, map side |
+| `lio_init -> base_footprint` | dynamic ~11 Hz | `lio_map_odom_bridge` | **the odometry** -- continuous, drifts, never corrected |
+| `map -> lio_init` | dynamic, jumps | the localizer | **the correction** -- discontinuous, does not drift |
+| `odom <-> lio_init` | static, one-time | `lio_map_odom_bridge` | **the leveling** (0.2571 m, from calibration) |
+| `map -> pgo_init` | static, one-time | `pgo_map_odom_bridge` | the leveling, map side |
 
-Measured on the July_22 bag over 35 s: `odom_lidar -> base_footprint` moved in
-320 smooth ~32 mm increments (robot motion); `map -> odom_lidar` stepped 9 times
+Measured on the July_22 bag over 35 s: `lio_init -> base_footprint` moved in
+320 smooth ~32 mm increments (robot motion); `map -> lio_init` stepped 9 times
 by ~110 mm (corrections). Two very different signatures on the same clock --
 which is why local consumers read the odom side and global ones read `map`.
 
@@ -105,19 +107,19 @@ true for FAST-LIO always, and for Point-LIO only with `gravity_align: false`.
 
 ## Parent or child?
 
-`odom_lidar` can only have one parent, so the leveled frame flips role
+`lio_init` can only have one parent, so the leveled frame flips role
 depending on who owns it:
 
 | stack | leveling edge |
 |---|---|
-| `fastlio_mapping`, `pointlio_mapping`, `pepper_nav2_amcl` | `odom -> odom_lidar` (odom is parent) |
-| `fastlio_localization_l2`, `pointlio_localization_l2` | `odom_lidar -> odom` (child; `level_frame_as_child:=true`) |
-| `fastlio_lc_l2`, `pointlio_lc_l2` (PGO) | `map -> map_lidar`; no `odom` frame here |
+| `fastlio_mapping`, `pointlio_mapping`, `pepper_nav2_amcl` | `odom -> lio_init` (odom is parent) |
+| `fastlio_localization_l2`, `pointlio_localization_l2` | `lio_init -> odom` (child; `level_frame_as_child:=true`) |
+| `fastlio_lc_l2`, `pointlio_lc_l2` (PGO) | `map -> pgo_init`; no `odom` frame here |
 
-`map_lidar` exists only during mapping. Both artifacts are written **into** the
+`pgo_init` exists only during mapping. Both artifacts are written **into** the
 leveled frame (octomap builds the grid in `map`; `pgo_node` transforms
 `map_batch.pcd` into `map` before saving), so the localization stacks get a
-`map` that is already leveled and need no `map_lidar` of their own.
+`map` that is already leveled and need no `pgo_init` of their own.
 
 ## Why every z number means something
 
@@ -167,7 +169,7 @@ accumulates -- not to widen the threshold.
 
 ## Oddities
 
-* **`aft_mapped`** -- orphan off `odom_lidar`. Point-LIO broadcasts it
+* **`aft_mapped`** -- orphan off `lio_init`. Point-LIO broadcasts it
   unconditionally (no `publish_tf` flag, unlike FAST-LIO) and it is left
   unclaimed so it cannot fight the static chain for a parent. Harmless.
 * **`pepper_odom`** -- naoqi wheel odometry, on a deliberately **disconnected**
@@ -196,9 +198,9 @@ Frames were renamed (2026-08-02) so the standard name is the useful one:
 
 ```
 before        after
-odom       -> odom_lidar     (the LIO's native, tilted frame)
+odom       -> lio_init     (the LIO's native, tilted frame)
 odom_level -> odom           (leveled -- the standard name)
-map        -> map_lidar      (PGO's native, tilted frame)
+map        -> pgo_init      (PGO's native, tilted frame)
 map_level  -> map            (leveled -- the standard name)
 ```
 

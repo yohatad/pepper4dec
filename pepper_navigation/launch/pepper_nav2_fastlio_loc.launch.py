@@ -90,7 +90,7 @@ def generate_launch_description():
     # here keeps the three artifacts (map_pcd, map, keyframe_poses) switchable
     # as one set.
     # These are LEVELLED poses. PGO writes optimized_poses*.txt in the RAW
-    # map_lidar frame while the .pcd it saves is gravity-levelled, so the two
+    # pgo_init frame while the .pcd it saves is gravity-levelled, so the two
     # are ~90 deg apart as written -- feeding the raw file here makes the global
     # search test candidate places that do not exist in the map's frame. The
     # shipped copy has the level transform already applied (verified: post-
@@ -195,7 +195,7 @@ def generate_launch_description():
     # Self-hit filter feeding the safety layer: strip Pepper's own body (< 0.8 m)
     # from the raw L2 /points so the collision monitor doesn't freeze on it.
     points_safety_filter = Node(
-        package='fast_lio',
+        package='pepper_slam',
         executable='cloud_range_filter.py',
         name='points_safety_filter',
         output='screen',

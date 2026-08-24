@@ -12,7 +12,7 @@
   (base_link, torso, Hip, Pelvis, Tibia, then base_footprint). Feeding that to
   robot_state_publisher alongside this stack would publish
   Tibia to base_footprint while lio_map_odom_bridge publishes
-  odom_lidar to base_footprint. Two parents, split tree. Rooting the rig at
+  lio_init to base_footprint. Two parents, split tree. Rooting the rig at
   base_footprint instead composes with whatever owns the Pepper body, because
   this description never claims base_footprint as a child.
 -->

@@ -5,7 +5,7 @@ Republish /pepper_odom with header.frame_id overridden to odom.
 For EKF fusion alongside leveled_odometry_publisher.py's output.
 
 /pepper_odom lives on a TF tree (pepper_odom -> base_footprint) that is
-deliberately disconnected from odom -> odom_lidar -> base_footprint (see
+deliberately disconnected from odom -> lio_init -> base_footprint (see
 lio_map_odom_bridge.py's docstring and pepper_slam's README) -- two live
 parents for base_footprint would be a broken tree. Since there's no TF path
 between the two, robot_localization can't transform pepper_odom's data into

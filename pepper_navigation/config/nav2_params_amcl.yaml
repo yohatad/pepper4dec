@@ -9,14 +9,14 @@
 #
 # WHO OWNS WHICH TRANSFORM
 #   map -> odom        amcl (tf_broadcast: true)
-#   odom -> odom_lidar lio_map_odom_bridge, static one-time leveling
+#   odom -> lio_init lio_map_odom_bridge, static one-time leveling
 #   odom -> base_footprint   lio_map_odom_bridge (from FAST-LIO's /Odometry)
 # FAST-LIO replaces the wheel odometry AMCL would normally correct, so this is
 # a LIO dead-reckoning chain -- NOT pepper_odom (what the older nav2_params.yaml
 # uses; see config/README.md on the naming split). Every frame still has exactly
 # one parent, so the tree is valid.
 #
-# AMCL CORRECTS odom, NOT odom_lidar -- this is the critical bit.
+# AMCL CORRECTS odom, NOT lio_init -- this is the critical bit.
 # FAST-LIO publishes in the raw initial-IMU frame, and on Pepper's mount the L2
 # IMU reads gravity along +X, so 'odom' is tilted ~90deg (see pepper_slam's
 # README frame contract). amcl's motion model takes (x, y, yaw) out of
@@ -63,7 +63,7 @@ amcl:
     alpha5: 0.05
     base_frame_id: "base_footprint"
     global_frame_id: "map"
-    # odom (the LEVELED frame), not odom_lidar and not pepper_odom. The raw FAST-LIO odom frame is
+    # odom (the LEVELED frame), not lio_init and not pepper_odom. The raw FAST-LIO odom frame is
     # tilted ~90deg and breaks the planar motion model -- see the header.
     odom_frame_id: "odom"
     beam_skip_distance: 0.5
@@ -134,7 +134,7 @@ bt_navigator:
     robot_base_frame: base_footprint
     # FAST-LIO's own /Odometry now publishes real twist (not all-zero) --
     # see laserMapping.cpp's publish_odometry(). Frame_id is FAST-LIO's
-    # IMU-tilted "odom_lidar", not the gravity-leveled "odom" the rest of
+    # IMU-tilted "lio_init", not the gravity-leveled "odom" the rest of
     # this TF tree uses, but bt_navigator only reads this for velocity-based
     # BT conditions (is_stuck / distance_traveled), not pose lookups, so the
     # frame mismatch doesn't matter here.
@@ -267,7 +267,7 @@ local_costmap:
       # along a horizontal axis and mark walls as floor.
       # (pepper_nav2_amcl.launch.py runs mapping.launch.py with
       # bridge_level_frame:=true precisely so this frame exists. amcl owns
-      # map -> odom, the bridge owns the static odom -> odom_lidar, so
+      # map -> odom, the bridge owns the static odom -> lio_init, so
       # every frame still has exactly one parent.)
       global_frame: odom
       robot_base_frame: base_footprint

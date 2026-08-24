@@ -8,7 +8,7 @@
 # actually measures tilt gets added later.
 #
 # Deliberately publish_tf: false -- this does not touch the existing
-# odom -> odom_lidar -> base_footprint TF chain at all. Consumers read the
+# odom -> lio_init -> base_footprint TF chain at all. Consumers read the
 # corrected pose from /odometry/filtered instead. Purely additive/optional.
 ekf_filter_node:
   ros__parameters:

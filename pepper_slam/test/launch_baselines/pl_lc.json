@@ -1,0 +1,157 @@
+[
+ {
+  "exe": "robot_state_publisher",
+  "name": "pepper_sensor_tf",
+  "ns": "<node_namespace_unspecified>",
+  "params": [
+   {
+    "publish_frequency": "0.0",
+    "robot_description": "<unresolved>",
+    "use_sim_time": "false"
+   }
+  ],
+  "pkg": "robot_state_publisher",
+  "remaps": []
+ },
+ {
+  "exe": "pointlio_mapping",
+  "name": "laserMapping",
+  "ns": "<node_namespace_unspecified>",
+  "params": [
+   "<unresolved>",
+   {
+    "check_satu": "True",
+    "cube_side_length": "1000.0",
+    "filter_size_map": "0.25",
+    "filter_size_surf": "0.25",
+    "init_map_size": "10",
+    "odom_header_frame_id": "lio_init\n...\n",
+    "point_filter_num": "3",
+    "prop_at_freq_of_imu": "True",
+    "runtime_pos_log_enable": "False",
+    "space_down_sample": "True",
+    "use_imu_as_input": "True",
+    "use_sim_time": "false"
+   }
+  ],
+  "pkg": "point_lio",
+  "remaps": [
+   "/aft_mapped_to_init:=/odom_lio"
+  ]
+ },
+ {
+  "exe": "lio_map_odom_bridge.py",
+  "name": "lio_map_odom_bridge",
+  "ns": "<node_namespace_unspecified>",
+  "params": [
+   {
+    "flatten_base_frame": "false",
+    "level_frame_as_child": "false",
+    "lidar_imu_frame": "camera_imu_optical_frame",
+    "odom_topic": "/odom_lio\n...\n",
+    "publish_level_frame": "false",
+    "use_sim_time": "false"
+   }
+  ],
+  "pkg": "pepper_slam",
+  "remaps": []
+ },
+ {
+  "exe": "pgo_node",
+  "name": "laserPGO",
+  "ns": "<node_namespace_unspecified>",
+  "params": [
+   {
+    "cloud_topic": "/cloud_registered_body\n...\n",
+    "graphUpdateFrequency": "2.0",
+    "graphUpdateTimes": "5",
+    "historyKeyframeSearchNum": "20",
+    "historyKeyframeSearchRadius": "1.5",
+    "historyKeyframeSearchTimeDiff": "30.0",
+    "keyframe_deg_gap": "10.0",
+    "keyframe_filter_size": "0.25",
+    "keyframe_meter_gap": "1.0",
+    "level_frame": "map\n...\n",
+    "loopClosureFrequency": "4.0",
+    "loopFitnessScoreThreshold": "0.15",
+    "loopNoiseScore": "0.3",
+    "map_frame": "pgo_init\n...\n",
+    "map_pcd_path": "/home/yoha/ros2_ws/src/pepper4dec/pepper_navigation/map/pepper_map_lc.pcd",
+    "map_save_filter_size": "0.05",
+    "mapviz_filter_size": "0.1",
+    "odom_topic": "/odom_lio\n...\n",
+    "save_directory": "/home/yoha/Lidar/run_l2_lc_pointlio/pgo_output/",
+    "sc_dist_thres": "0.2",
+    "sc_max_radius": "20.0",
+    "speedFactor": "1.0",
+    "use_sim_time": "false",
+    "vizmapFrequency": "10.0"
+   }
+  ],
+  "pkg": "fastlio_lc_pgo",
+  "remaps": []
+ },
+ {
+  "exe": "pgo_map_odom_bridge.py",
+  "name": "pgo_map_odom_bridge",
+  "ns": "<node_namespace_unspecified>",
+  "params": [
+   {
+    "base_frame": "base_footprint\n...\n",
+    "level_frame": "map\n...\n",
+    "lidar_imu_frame": "camera_imu_optical_frame",
+    "map_frame": "pgo_init\n...\n",
+    "odom_frame": "lio_init\n...\n",
+    "odom_topic": "/odom_lio\n...\n",
+    "pgo_odom_topic": "/aft_pgo_odom\n...\n",
+    "publish_level_frame": "True",
+    "use_sim_time": "false"
+   }
+  ],
+  "pkg": "pepper_slam",
+  "remaps": []
+ },
+ {
+  "exe": "cloud_range_filter.py",
+  "name": "cloud_range_filter",
+  "ns": "<node_namespace_unspecified>",
+  "params": [
+   {
+    "input_topic": "/cloud_registered_body\n...\n",
+    "min_range": "0.8",
+    "output_topic": "/cloud_registered_body_filtered\n...\n",
+    "ror_min_neighbors": "0",
+    "ror_radius": "0.5",
+    "use_sim_time": "false"
+   }
+  ],
+  "pkg": "pepper_slam",
+  "remaps": []
+ },
+ {
+  "exe": "octomap_server_node",
+  "name": "octomap_server",
+  "ns": "<node_namespace_unspecified>",
+  "params": [
+   {
+    "base_frame_id": "base_footprint\n...\n",
+    "filter_ground_plane": "True",
+    "filter_speckles": "True",
+    "frame_id": "map\n...\n",
+    "ground_filter.angle": "0.15",
+    "ground_filter.distance": "0.05",
+    "ground_filter.plane_distance": "0.12",
+    "latch": "True",
+    "occupancy_max_z": "1.45",
+    "occupancy_min_z": "0.20",
+    "resolution": "0.05",
+    "sensor_model.max_range": "20.0",
+    "use_sim_time": "false"
+   }
+  ],
+  "pkg": "octomap_server",
+  "remaps": [
+   "cloud_in:=/cloud_registered_body_filtered"
+  ]
+ }
+]

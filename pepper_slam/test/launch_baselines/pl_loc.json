@@ -1,0 +1,110 @@
+[
+ {
+  "exe": "robot_state_publisher",
+  "name": "pepper_sensor_tf",
+  "ns": "<node_namespace_unspecified>",
+  "params": [
+   {
+    "publish_frequency": "0.0",
+    "robot_description": "<unresolved>",
+    "use_sim_time": "false"
+   }
+  ],
+  "pkg": "robot_state_publisher",
+  "remaps": []
+ },
+ {
+  "exe": "pointlio_mapping",
+  "name": "laserMapping",
+  "ns": "<node_namespace_unspecified>",
+  "params": [
+   "<unresolved>",
+   {
+    "check_satu": "True",
+    "cube_side_length": "1000.0",
+    "filter_size_map": "0.25",
+    "filter_size_surf": "0.25",
+    "init_map_size": "10",
+    "odom_header_frame_id": "lio_init\n...\n",
+    "point_filter_num": "3",
+    "prop_at_freq_of_imu": "True",
+    "runtime_pos_log_enable": "False",
+    "space_down_sample": "True",
+    "use_imu_as_input": "True",
+    "use_sim_time": "false"
+   }
+  ],
+  "pkg": "point_lio",
+  "remaps": [
+   "/aft_mapped_to_init:=/odom_lio"
+  ]
+ },
+ {
+  "exe": "lio_map_odom_bridge.py",
+  "name": "lio_map_odom_bridge",
+  "ns": "<node_namespace_unspecified>",
+  "params": [
+   {
+    "flatten_base_frame": "false",
+    "level_frame_as_child": "true",
+    "lidar_imu_frame": "camera_imu_optical_frame",
+    "odom_topic": "/odom_lio\n...\n",
+    "publish_level_frame": "true",
+    "use_sim_time": "false"
+   }
+  ],
+  "pkg": "pepper_slam",
+  "remaps": []
+ },
+ {
+  "exe": "rviz2",
+  "name": "rviz",
+  "ns": "<node_namespace_unspecified>",
+  "params": [
+   {
+    "use_sim_time": "false"
+   }
+  ],
+  "pkg": "rviz2",
+  "remaps": []
+ },
+ {
+  "exe": "global_localization",
+  "name": "point_lio_localization",
+  "ns": "<node_namespace_unspecified>",
+  "params": [
+   "<unresolved>",
+   {
+    "fov": "6.28",
+    "map_frame": "map\n...\n",
+    "map_pcd": "/home/yoha/ros2_ws/install/pepper_navigation/share/pepper_navigation/map/pepper_",
+    "odom_frame": "lio_init\n...\n",
+    "scan_voxel_size": "0.1",
+    "use_sim_time": "false"
+   }
+  ],
+  "pkg": "lio_localization",
+  "remaps": [
+   "/Odometry:=/odom_lio"
+  ]
+ },
+ {
+  "exe": "transform_fusion",
+  "name": "transform_fusion",
+  "ns": "<node_namespace_unspecified>",
+  "params": [
+   "<unresolved>",
+   {
+    "body_frame": "base_footprint\n...\n",
+    "fusion_rate": "50.0",
+    "map_frame": "map\n...\n",
+    "odom_frame": "lio_init\n...\n",
+    "use_sim_time": "false"
+   }
+  ],
+  "pkg": "lio_localization",
+  "remaps": [
+   "/Odometry:=/odom_lio"
+  ]
+ }
+]

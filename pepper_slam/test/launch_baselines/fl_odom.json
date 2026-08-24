@@ -1,0 +1,72 @@
+[
+ {
+  "exe": "robot_state_publisher",
+  "name": "pepper_sensor_tf",
+  "ns": "<node_namespace_unspecified>",
+  "params": [
+   {
+    "publish_frequency": "0.0",
+    "robot_description": "<unresolved>",
+    "use_sim_time": "false"
+   }
+  ],
+  "pkg": "robot_state_publisher",
+  "remaps": []
+ },
+ {
+  "exe": "static_transform_publisher",
+  "name": "map_odom_identity",
+  "ns": "<node_namespace_unspecified>",
+  "params": [
+   {
+    "use_sim_time": "false"
+   }
+  ],
+  "pkg": "tf2_ros",
+  "remaps": []
+ },
+ {
+  "exe": "fastlio_mapping",
+  "name": null,
+  "ns": "<node_namespace_unspecified>",
+  "params": [
+   "<unresolved>",
+   {
+    "use_sim_time": "false"
+   }
+  ],
+  "pkg": "fast_lio",
+  "remaps": [
+   "/Odometry:=/odom_lio"
+  ]
+ },
+ {
+  "exe": "lio_map_odom_bridge.py",
+  "name": "lio_map_odom_bridge",
+  "ns": "<node_namespace_unspecified>",
+  "params": [
+   {
+    "flatten_base_frame": "true",
+    "level_frame_as_child": "false",
+    "lidar_imu_frame": "camera_imu_optical_frame",
+    "odom_topic": "/odom_lio\n...\n",
+    "publish_level_frame": "true",
+    "use_sim_time": "false"
+   }
+  ],
+  "pkg": "fast_lio",
+  "remaps": []
+ },
+ {
+  "exe": "rviz2",
+  "name": null,
+  "ns": "<node_namespace_unspecified>",
+  "params": [
+   {
+    "use_sim_time": "false"
+   }
+  ],
+  "pkg": "rviz2",
+  "remaps": []
+ }
+]

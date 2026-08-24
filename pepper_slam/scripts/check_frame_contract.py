@@ -88,11 +88,11 @@ class Check(Node):
         fails = []
         print("\n===== LIO frame contract =====")
         try:
-            lt = self.buf.lookup_transform(self.level, 'odom_lidar', rclpy.time.Time())
+            lt = self.buf.lookup_transform(self.level, 'lio_init', rclpy.time.Time())
             off = abs(lt.transform.translation.z)
         except Exception:
             try:
-                lt = self.buf.lookup_transform('odom_lidar', self.level, rclpy.time.Time())
+                lt = self.buf.lookup_transform('lio_init', self.level, rclpy.time.Time())
                 off = abs(lt.transform.translation.z)
             except Exception:
                 off = None

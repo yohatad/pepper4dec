@@ -1,0 +1,208 @@
+# View the merged split-recording bag (slam_20260823_merged) with nothing else
+# running -- no LIO, no RTAB-Map. Everything here comes straight out of the bag.
+#
+#   ros2 bag play /home/yoha/bag/slam_20260823_merged --clock \
+#     --qos-profile-overrides-path ~/ros2_ws/config/play_qos.yaml \
+#     --read-ahead-queue-size 2000 --disable-keyboard-controls
+#   rviz2 -d $(ros2 pkg prefix pepper_slam)/share/pepper_slam/rviz/merged_bag.rviz
+#
+# FIXED FRAME is base_footprint, not map or odom. This bag has no estimator in
+# it: publish_wheel_odom_tf is false (joint_state.cpp:89), so there is no
+# odom -> base_footprint edge and base_footprint IS the tf root. Wheel odometry
+# exists only as the /pepper_odom topic. Switch the fixed frame to odom or map
+# once you run FAST-LIO / RTAB-Map alongside, which is what supplies that edge.
+#
+# RELIABILITY IS "Best Effort" EVERYWHERE ON PURPOSE. The bag records topics at
+# whatever the publisher offered -- /points and the IMUs are BEST_EFFORT, the
+# images and odometry are RELIABLE -- and play_qos.yaml then re-offers three of
+# them as RELIABLE. A Best Effort subscriber matches a publisher of either kind,
+# so these displays work whether or not you pass the override file. A Reliable
+# subscriber would match nothing against a BEST_EFFORT publisher and the display
+# would sit silently empty, which is the failure this avoids.
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /LiveScan1
+        - /PepperHeadCamera1
+      Splitter Ratio: 0.5
+    Tree Height: 700
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Name: root
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: base_footprint
+    Frame Rate: 30
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+      Color: 160; 160; 164
+      Cell Size: 1
+      Plane Cell Count: 40
+      Line Style:
+        Value: Lines
+      Reference Frame: <Fixed Frame>
+      Value: true
+
+    # Pepper's body, from the latched /robot_description in the bag. Needs
+    # Transient Local: the description is published once at t=0 and RViz
+    # subscribes later, so a Volatile subscriber would never receive it.
+    - Class: rviz_default_plugins/RobotModel
+      Name: PepperModel
+      Enabled: true
+      Description Source: Topic
+      Description Topic:
+        Value: /robot_description
+        Depth: 1
+        Durability Policy: Transient Local
+        Reliability Policy: Reliable
+      Alpha: 0.8
+      Visual Enabled: true
+      Collision Enabled: false
+      Value: true
+
+    # L2 lidar. 11.3 Hz in this bag.
+    - Class: rviz_default_plugins/PointCloud2
+      Name: LiveScan
+      Enabled: true
+      Topic:
+        Value: /points
+        Depth: 5
+        Durability Policy: Volatile
+        Reliability Policy: Best Effort
+      Style: Points
+      Size (Pixels): 2
+      Alpha: 0.6
+      Color: 255; 255; 0
+      Color Transformer: FlatColor
+      Decay Time: 0
+      Position Transformer: XYZ
+      Queue Size: 10
+      Value: true
+
+    # RealSense colour, 30 Hz.
+    - Class: rviz_default_plugins/Image
+      Name: CameraRGB
+      Enabled: true
+      Topic:
+        Value: /camera/color/image_raw
+        Depth: 5
+        Durability Policy: Volatile
+        Reliability Policy: Best Effort
+      Max Value: 1
+      Median window: 5
+      Min Value: 0
+      Normalize Range: true
+      Value: true
+
+    # RealSense depth aligned to colour. 16UC1, so leave Normalize Range on or
+    # it renders black.
+    - Class: rviz_default_plugins/Image
+      Name: CameraDepth
+      Enabled: false
+      Topic:
+        Value: /camera/aligned_depth_to_color/image_raw
+        Depth: 5
+        Durability Policy: Volatile
+        Reliability Policy: Best Effort
+      Max Value: 1
+      Median window: 5
+      Min Value: 0
+      Normalize Range: true
+      Value: false
+
+    # Pepper's head camera. Note the topic ends in /compressed and there is NO
+    # raw version in this bag -- gscam2 now publishes JPEG passthrough, and the
+    # bag was transcoded to match (51 GB of raw frames became 2.7 GB).
+    #
+    # RViz handles that without a republish node: its Image display splits the
+    # topic itself (image_transport_display.hpp, getBaseTopicFromTopic /
+    # getTransportFromTopic), taking /pepper/front/image_raw as the base topic
+    # and "compressed" as the transport. Do NOT strip the suffix here -- point
+    # it at the bare topic and the display finds nothing to subscribe to.
+    - Class: rviz_default_plugins/Image
+      Name: PepperHeadCamera
+      Enabled: true
+      Topic:
+        Value: /pepper/front/image_raw/compressed
+        Depth: 5
+        Durability Policy: Volatile
+        Reliability Policy: Best Effort
+      Max Value: 1
+      Median window: 5
+      Min Value: 0
+      Normalize Range: true
+      Value: true
+
+    # Wheel odometry as recorded. It is NOT in tf (see the header), so this is
+    # the only way to see it, and it is the reference to judge LIO drift against.
+    - Class: rviz_default_plugins/Odometry
+      Name: WheelOdom
+      Enabled: true
+      Topic:
+        Value: /pepper_odom
+        Depth: 10
+        Durability Policy: Volatile
+        Reliability Policy: Best Effort
+      Covariance:
+        Value: false
+      Keep: 300
+      Shape:
+        Alpha: 1
+        Color: 255; 85; 0
+        Head Length: 0.05
+        Head Radius: 0.03
+        Shaft Length: 0.15
+        Shaft Radius: 0.015
+        Value: Arrow
+      Value: true
+
+    # Off by default: Pepper's body alone is ~80 frames and swamps the view.
+    # Turn on to check the rig chain base_footprint -> l2lidar_frame ->
+    # camera_camera_link, or CameraTop_optical_frame for the head camera.
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Enabled: false
+      Frame Timeout: 15
+      Marker Scale: 0.3
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Update Interval: 0
+      Value: false
+
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+      Line color: 128; 128; 0
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Name: Current View
+      Distance: 12
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0
+      Pitch: 0.5
+      Yaw: 0.9
+      Near Clip Distance: 0.01
+      Target Frame: <Fixed Frame>
+      Value: Orbit (rviz)
+    Saved: ~
+Window Geometry:
+  Displays:
+    collapsed: false
+  Views:
+    collapsed: false
+  Height: 1000
+  Width: 1700
+  QMainWindow State: ""

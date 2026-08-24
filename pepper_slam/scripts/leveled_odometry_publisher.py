@@ -83,7 +83,7 @@ class LeveledOdometryPublisher(Node):
         if self.R is not None:
             return True
         try:
-            t = self.tf_buffer.lookup_transform("odom", "odom_lidar", Time())
+            t = self.tf_buffer.lookup_transform("odom", "lio_init", Time())
         except Exception:
             return False
         q = t.transform.rotation

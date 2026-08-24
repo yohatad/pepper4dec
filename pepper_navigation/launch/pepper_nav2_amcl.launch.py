@@ -242,7 +242,7 @@ def generate_launch_description():
     # Self-hit filter feeding the safety layer: strip Pepper's own body (< 0.8 m)
     # from the raw L2 /points so the collision monitor doesn't freeze on it.
     points_safety_filter = Node(
-        package='fast_lio',
+        package='pepper_slam',
         executable='cloud_range_filter.py',
         name='points_safety_filter',
         output='screen',
@@ -267,7 +267,7 @@ def generate_launch_description():
     # this map via octomap_server's filter_ground_plane -- removes that failure
     # mode instead of just giving it more margin to drift into.
     points_costmap_filter = Node(
-        package='fast_lio',
+        package='pepper_slam',
         executable='cloud_range_filter.py',
         name='points_costmap_filter',
         output='screen',

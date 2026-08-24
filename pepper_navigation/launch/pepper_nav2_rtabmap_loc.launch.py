@@ -86,7 +86,7 @@ def generate_launch_description():
             'localization': 'true',
             'database_path': database_path,
             # Same ICP/grid tuning validated for mapping (see
-            # pepper_slam's rtabmap_fastlio_bag_test.launch.py); dropped
+            # pepper_slam's rtabmap_fastlio_bag.launch.py); dropped
             # --delete_db_on_start
             # (would erase the map!) and the NeighborLinkRefining/Proximity
             # params (those govern adding NEW loop-closure links, moot with
@@ -146,7 +146,7 @@ def generate_launch_description():
     # Self-hit filter feeding the safety layer: strip Pepper's own body (< 0.8 m)
     # from the raw L2 /points so the collision monitor doesn't freeze on it.
     points_safety_filter = Node(
-        package='fast_lio',
+        package='pepper_slam',
         executable='cloud_range_filter.py',
         name='points_safety_filter',
         output='screen',

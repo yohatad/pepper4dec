@@ -23,7 +23,7 @@ bt_navigator:
     robot_base_frame: base_footprint
     # FAST-LIO's own /Odometry now publishes real twist (not all-zero) --
     # see laserMapping.cpp's publish_odometry(). Frame_id is FAST-LIO's
-    # IMU-tilted "odom_lidar", not the gravity-leveled "odom" the rest of
+    # IMU-tilted "lio_init", not the gravity-leveled "odom" the rest of
     # this TF tree uses, but bt_navigator only reads this for velocity-based
     # BT conditions (is_stuck / distance_traveled), not pose lookups, so the
     # frame mismatch doesn't matter here.
@@ -149,7 +149,7 @@ local_costmap:
     ros__parameters:
       update_frequency: 15.0
       publish_frequency: 2.0
-      # odom (the LEVELED frame), not raw odom_lidar. odom_lidar is backend-native: FAST-LIO leaves
+      # odom (the LEVELED frame), not raw lio_init. lio_init is backend-native: FAST-LIO leaves
       # it at the IMU mount orientation (~90 deg off gravity here) while
       # Point-LIO gravity-aligns it, so the SAME name means different geometry
       # per backend and the height bands below would slice the cloud along the

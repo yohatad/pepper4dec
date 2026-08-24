@@ -23,7 +23,7 @@ bt_navigator:
     robot_base_frame: base_footprint
     # FAST-LIO's own /Odometry now publishes real twist (not all-zero) --
     # see laserMapping.cpp's publish_odometry(). Frame_id is FAST-LIO's
-    # IMU-tilted "odom_lidar", not the gravity-leveled "odom" the rest of
+    # IMU-tilted "lio_init", not the gravity-leveled "odom" the rest of
     # this TF tree uses, but bt_navigator only reads this for velocity-based
     # BT conditions (is_stuck / distance_traveled), not pose lookups, so the
     # frame mismatch doesn't matter here.
