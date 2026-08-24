@@ -177,6 +177,23 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('publish_map_identity')),
     )
 
+
+    # The odom -> base_footprint bridge. It used to be started inside
+    # FAST_LIO/launch/mapping.launch.py, which meant Pepper glue lived in a
+    # launch file shared with every other FAST-LIO sensor config, duplicated
+    # point_lio's identical copy, and pinned the script inside fast_lio.
+    bridge_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(pkg_share, 'launch', 'lio_odom_bridge.launch.py')),
+        launch_arguments={
+            'use_sim_time': use_sim_time,
+            'config_path': os.path.join(fast_lio_share, 'config'),
+            'config_file': LaunchConfiguration('config_file'),
+            'lidar_imu_frame': LaunchConfiguration('lidar_imu_frame'),
+            'bridge_level_frame': bridge_level_frame,
+            'flatten_base_frame': flatten_base_frame,
+        }.items())
+
     ld = LaunchDescription()
     ld.add_action(declare_config_file_cmd)
     ld.add_action(declare_lidar_imu_frame_cmd)
@@ -192,4 +209,5 @@ def generate_launch_description():
     ld.add_action(sensor_tf_launch)
     ld.add_action(map_identity)
     ld.add_action(fast_lio_launch)
+    ld.add_action(bridge_launch)
     return ld

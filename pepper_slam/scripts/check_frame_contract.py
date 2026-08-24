@@ -41,10 +41,22 @@ class Check(Node):
         super().__init__('check_frame_contract')
         self.declare_parameter('level_frame', 'odom')
         self.declare_parameter('base_frame', 'base_footprint')
-        self.declare_parameter('lidar_imu_frame', 'l2lidar_frame_imu')
+        # Whichever IMU the estimator is configured for -- l2.yaml estimates the
+        # L2's (l2lidar_frame_imu), l2_rsimu.yaml the RealSense's
+        # (camera_imu_optical_frame). Defaults to the latter, matching the
+        # default config.
+        self.declare_parameter('lidar_imu_frame', 'camera_imu_optical_frame')
         self.declare_parameter('cloud_topic', '/cloud_registered_body')
         # Predicted from the static calibration: t_base_imu.z
-        self.declare_parameter('expect_offset', 0.2571)
+        #
+        # 0.0 (default) DERIVES it from tf: base_frame -> lidar_imu_frame. It used
+        # to be hardcoded 0.2571, which is the L2 IMU's height -- so the check
+        # failed by 5.7 cm against the default config, whose IMU
+        # (camera_imu_optical_frame) sits at 0.3139. That is the same defect as
+        # the body-frame table in mapping.launch.py: a constant mirroring
+        # something the rig already states. Set it explicitly to assert a
+        # specific number instead.
+        self.declare_parameter('expect_offset', 0.0)
         self.declare_parameter('tol_offset', 0.005)     # m
         self.declare_parameter('tol_rp', 3.0)           # deg
         self.declare_parameter('tol_floor', 0.10)       # m
@@ -56,6 +68,7 @@ class Check(Node):
         self.level, self.base = g('level_frame'), g('base_frame')
         self.imu_frame = g('lidar_imu_frame')
         self.expect, self.tol_o = g('expect_offset'), g('tol_offset')
+        self.expect_derived = (self.expect == 0.0)
         self.tol_rp, self.tol_floor = g('tol_rp'), g('tol_floor')
 
         self.buf = Buffer()
@@ -99,6 +112,11 @@ class Check(Node):
         if off is None:
             fails.append(f"no transform between {self.level} and odom")
         else:
+            if self.expect_derived:
+                # base -> imu is static, so 'latest' is correct.
+                t = self.buf.lookup_transform(self.base, self.imu_frame,
+                                              rclpy.time.Time())
+                self.expect = float(t.transform.translation.z)
             ok = abs(off - self.expect) <= self.tol_o
             print(f"  leveling offset      {off:+.4f} m   expect {self.expect:+.4f}"
                   f"  [{'OK' if ok else 'FAIL'}]")
