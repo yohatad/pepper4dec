@@ -39,12 +39,21 @@ source install/setup.bash
 
 ## 🔧 Configuration
 
-Configuration is managed via `config/gesture_execution_configuration.yaml`, loaded manually
-(yaml-cpp, not yet ROS2 parameters) in `on_configure()`:
+Configuration is managed via `config/gesture_execution_configuration.yaml`, declared as
+ROS2 parameters in the constructor and read in `on_configure()`. The top-level key is the
+node name (`gesture_action_server`):
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `verboseMode` | Enable detailed logging and debugging | `true` |
+| `verbose_mode` | Enable detailed logging and debugging | `false` |
+
+Override at launch or inspect at runtime:
+
+```bash
+ros2 run gesture_execution gesture_execution \
+  --ros-args --params-file config/gesture_execution_configuration.yaml
+ros2 param get /gesture_action_server verbose_mode
+```
 
 Gesture definitions and topic mappings always load from fixed paths (`data/gesture.yaml`,
 `data/pepper_topics.yaml`) — not configurable via parameters.

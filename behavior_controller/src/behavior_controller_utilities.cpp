@@ -53,6 +53,13 @@ bool ConfigManager::loadFromFile(const std::string& configPath) {
     }
 }
 
+void ConfigManager::loadFromParameters(rclcpp_lifecycle::LifecycleNode& node) {
+    scenarioSpecification        = node.get_parameter("scenario_specification").as_string();
+    cultureKnowledgeBasePath     = node.get_parameter("culture_knowledge_base").as_string();
+    environmentKnowledgeBasePath = node.get_parameter("environment_knowledge_base").as_string();
+    verbose                      = node.get_parameter("verbose_mode").as_bool();
+}
+
 std::string ConfigManager::getScenarioSpecification()           const { return scenarioSpecification; }
 bool ConfigManager::isVerbose()                                 const { return verbose; }
 std::string ConfigManager::getCultureKnowledgeBasePath()        const { return cultureKnowledgeBasePath; }

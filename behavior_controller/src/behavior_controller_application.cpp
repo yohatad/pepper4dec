@@ -47,14 +47,15 @@
  *   /speech_event/set_enabled (std_srvs/srv/SetBool)
  *       Mute or unmute speech recognition (SetSpeechListening).
  *
- * Parameters (loaded from behavior_controller_configuration.yaml):
+ * Parameters (config/behavior_controller_configuration.yaml, under
+ * behavior_controller/ros__parameters):
  *   scenario_specification (string, default: "lab_tour")
  *   culture_knowledge_base (string, default: "cultureKnowledgeBase.yaml")
  *   environment_knowledge_base (string, default: "labEnvironmentKnowledgeBase.yaml")
  *   verbose_mode (bool, default: false)
  *
  * Lifecycle:
- *   configure  -> load behavior_controller_configuration.yaml + knowledge base, build the BT tree
+ *   configure  -> read ROS parameters + knowledge base, build the BT tree
  *   activate   -> start the 50 Hz tick timer
  *   deactivate -> cancel the tick timer (tree stays built)
  *   cleanup    -> halt and destroy the BT tree
@@ -90,6 +91,14 @@ namespace behavior_controller {
 BehaviorControllerNode::BehaviorControllerNode()
     : rclcpp_lifecycle::LifecycleNode("behavior_controller")
 {
+    // Declared here so the values are available to `ros2 param` and to
+    // --params-file / launch overrides before the first configure transition.
+    // Defaults mirror ConfigManager's in-class initialisers.
+    declare_parameter<std::string>("scenario_specification", "lab_tour");
+    declare_parameter<std::string>("culture_knowledge_base", "cultureKnowledgeBase.yaml");
+    declare_parameter<std::string>("environment_knowledge_base", "labEnvironmentKnowledgeBase.yaml");
+    declare_parameter<bool>("verbose_mode", false);
+
     // Create the companion BT node immediately so main() can add it to the
     // executor before any lifecycle transition is triggered.
     bt_node_ = rclcpp::Node::make_shared("behavior_controller_bt");
@@ -112,17 +121,13 @@ BehaviorControllerNode::on_configure(const rclcpp_lifecycle::State& /*state*/)
         "\t\tCopyright (C) 2025 Carnegie Mellon University Africa\n"
         "**************************************************\n");
 
-    // ── Load YAML configuration ─────────────────────────────────────────────
+    // ── Load configuration from ROS parameters ──────────────────────────────
+    // Read on every configure so a cleanup/configure cycle picks up values
+    // changed via `ros2 param set` while unconfigured.
     const std::string packagePath =
         ament_index_cpp::get_package_share_directory("behavior_controller");
-    const std::string configPath =
-        packagePath + "/config/behavior_controller_configuration.yaml";
 
-    if (!ConfigManager::instance().loadFromFile(configPath)) {
-        RCLCPP_ERROR(get_logger(),
-                     "Failed to load configuration from: %s", configPath.c_str());
-        return CallbackReturn::FAILURE;
-    }
+    ConfigManager::instance().loadFromParameters(*this);
 
     // ── Load knowledge base ─────────────────────────────────────────────────
     if (!KnowledgeManager::instance().loadFromPackage(packagePath)) {

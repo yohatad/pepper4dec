@@ -106,7 +106,13 @@ class ConfigManager {
 public:
     static ConfigManager& instance();
     
+    // Reads the four settings from a YAML file laid out as a flat mapping.
+    // Retained for the fixture-driven unit tests; the node itself uses
+    // loadFromParameters() so the values go through the ROS parameter system.
     [[nodiscard]] bool loadFromFile(const std::string& configPath);
+
+    // Reads the same four settings from the node's declared ROS parameters.
+    void loadFromParameters(rclcpp_lifecycle::LifecycleNode& node);
     
     // Getters
     bool isVerbose() const;

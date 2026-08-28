@@ -29,8 +29,9 @@
  *     Executes a named or typed gesture (deictic, iconic, bow, nod) with
  *     feedback on elapsed time and a success/failure result.
  *
- * Parameters (loaded from gesture_execution_configuration.yaml):
- *   verboseMode (bool, default: true)
+ * Parameters (config/gesture_execution_configuration.yaml, under
+ * gesture_action_server/ros__parameters):
+ *   verbose_mode (bool, default: false)
  * Gesture and topic data always load from fixed paths (data/gesture.yaml,
  * data/pepper_topics.yaml) — not configurable via parameters.
  *

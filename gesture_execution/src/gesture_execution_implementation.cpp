@@ -98,7 +98,11 @@ RobotTopics loadRobotTopics(const std::string& yaml_path) {
 // GestureExecutionNode — constructor
 // ─────────────────────────────────────────────────────────────────────────────
 
-GestureExecutionNode::GestureExecutionNode() : rclcpp_lifecycle::LifecycleNode("gesture_action_server") {}
+GestureExecutionNode::GestureExecutionNode() : rclcpp_lifecycle::LifecycleNode("gesture_action_server") {
+    // Declared here so the values are available to `ros2 param` and to
+    // --params-file / launch overrides before the first configure transition.
+    declare_parameter<bool>("verbose_mode", false);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // on_configure — load YAML configs, init kinematics/state, create publishers
@@ -114,14 +118,11 @@ GestureExecutionNode::CallbackReturn GestureExecutionNode::on_configure(const rc
         return CallbackReturn::FAILURE;
     }
 
+    // Read the parameter fresh on every configure so a cleanup/configure cycle
+    // picks up values changed via `ros2 param set` while unconfigured.
+    verbose_mode_ = get_parameter("verbose_mode").as_bool();
+
     // Gesture and topic data always load from these fixed paths.
-    verbose_mode_ = false;
-    try {
-        YAML::Node cfg = YAML::LoadFile(package_path + "/config/gesture_execution_configuration.yaml");
-        if (cfg["verboseMode"]) verbose_mode_ = cfg["verboseMode"].as<bool>();
-    } catch (const std::exception& e) {
-        RCLCPP_WARN(get_logger(), "Warning: could not load config: %s", e.what());
-    }
 
     gestures_ = loadGestureDescriptors(package_path + "/data/gesture.yaml");
     topics_ = loadRobotTopics(package_path + "/data/pepper_topics.yaml");
@@ -148,7 +149,8 @@ GestureExecutionNode::CallbackReturn GestureExecutionNode::on_configure(const rc
         std::bind(&GestureExecutionNode::handleCancel, this, std::placeholders::_1),
         std::bind(&GestureExecutionNode::handleAccepted, this, std::placeholders::_1));
 
-    RCLCPP_INFO(get_logger(), "GestureExecutionNode configured");
+    RCLCPP_INFO(get_logger(), "GestureExecutionNode configured (verbose_mode: %s)",
+                verbose_mode_ ? "true" : "false");
     return CallbackReturn::SUCCESS;
 }
 

@@ -1,1 +1,25 @@
-verboseMode: true
+# Gesture Execution Configuration File
+# ROS2 parameters for the gesture_execution node (loaded via the launch file's
+# `parameters=[...]`). Run `ros2 param get/set /gesture_action_server <name>` to
+# inspect or override these at runtime.
+#
+# The top-level key must match the node name set in the constructor
+# ("gesture_action_server"), not the package or executable name.
+#
+# Usage (standalone):
+#   ros2 run gesture_execution gesture_execution \
+#     --ros-args --params-file config/gesture_execution_configuration.yaml
+
+gesture_action_server:
+  ros__parameters:
+
+    # =========================================================================
+    # General Settings
+    # =========================================================================
+
+    # Enable verbose logging of gesture planning and joint trajectories.
+    verbose_mode: true
+
+    # Note: gesture descriptors (data/gesture.yaml) and the robot topic mapping
+    # (data/pepper_topics.yaml) always load from fixed paths in the package
+    # share directory and are deliberately not exposed as parameters.

@@ -1,5 +1,34 @@
-# Behavior Controller Configuration
-scenario_specification: "asr_cm_tts_pipeline"
-culture_knowledge_base: "cultureKnowledgeBase.yaml"
-environment_knowledge_base: "decEnvironmentKnowledgeBase_short.yaml"
-verbose_mode: true
+# Behavior Controller Configuration File
+# ROS2 parameters for the behavior_controller node (loaded via the launch file's
+# `parameters=[...]`). Run `ros2 param get/set /behavior_controller <name>` to
+# inspect or override these at runtime.
+#
+# Usage (standalone):
+#   ros2 run behavior_controller behavior_controller \
+#     --ros-args --params-file config/behavior_controller_configuration.yaml
+
+behavior_controller:
+  ros__parameters:
+
+    # =========================================================================
+    # Scenario Settings
+    # =========================================================================
+
+    # Name of the behavior tree XML to build at configure time, without the
+    # .xml extension. Resolved against the package share directory.
+    scenario_specification: "asr_cm_tts_pipeline"
+
+    # =========================================================================
+    # Knowledge Base Settings
+    # =========================================================================
+    # Filenames are resolved relative to the package's data/ directory.
+
+    culture_knowledge_base: "cultureKnowledgeBase.yaml"
+    environment_knowledge_base: "decEnvironmentKnowledgeBase_short.yaml"
+
+    # =========================================================================
+    # Debug Settings
+    # =========================================================================
+
+    # Enable verbose logging of tree construction and per-tick state.
+    verbose_mode: true
