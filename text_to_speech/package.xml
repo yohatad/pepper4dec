@@ -13,6 +13,12 @@
   <depend>naoqi_bridge_msgs</depend>
   <depend>dec_interfaces</depend>
   <depend>ament_index_python</depend>
+  <!-- numpy is imported at module scope. scipy.signal.resample_poly is imported
+       inside the resampling helpers; that is deferred loading, not optional, as
+       there is no fallback when it is absent. Both were undeclared, so a clean
+       CI image had no scipy and the audio-helper tests failed. -->
+  <depend>python3-numpy</depend>
+  <depend>python3-scipy</depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
