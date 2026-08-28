@@ -95,7 +95,8 @@ def generate_launch_description():
     # second copy is the nondeterministic-latch problem sensor_tf.yaml warns of).
     declare_use_sim_time_cmd = DeclareLaunchArgument(
         'use_sim_time', default_value='false',
-        description='false (default) on the robot; true for bag replay with ros2 bag play --clock. The bag_test wrappers set this for you.')
+        description='false (default) on the robot; true for bag replay with '
+                    'ros2 bag play --clock. The bag_test wrappers set this for you.')
     declare_bridge_level_frame_cmd = DeclareLaunchArgument(
         'bridge_level_frame', default_value='true',
         description='Have lio_map_odom_bridge publish the static odom -> '
@@ -158,7 +159,6 @@ def generate_launch_description():
             'flatten_base_frame': flatten_base_frame,
         }.items())
 
-
     # REP-105 says map -> odom is the loop-closure / localization correction.
     # This launch is odometry ONLY -- nothing corrects anything -- so that edge
     # is identity by definition. Publishing it costs nothing and makes 'map' a
@@ -176,7 +176,6 @@ def generate_launch_description():
         parameters=[{'use_sim_time': use_sim_time}],
         condition=IfCondition(LaunchConfiguration('publish_map_identity')),
     )
-
 
     # The odom -> base_footprint bridge. It used to be started inside
     # FAST_LIO/launch/mapping.launch.py, which meant Pepper glue lived in a

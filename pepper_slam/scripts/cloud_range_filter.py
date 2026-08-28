@@ -89,9 +89,11 @@ class CloudRangeFilter(Node):
         self.declare_parameter('ground_frame', 'base_footprint')
         self.declare_parameter('ground_distance_thresh', 0.05)   # inlier band around fitted plane
         self.declare_parameter('ground_angle_thresh', 0.15)      # rad, normal vs +Z tolerance
-        self.declare_parameter('ground_z_thresh', 0.12)          # fitted plane must sit within this of ground_frame z=0
+        # fitted plane must sit within this of ground_frame z=0
+        self.declare_parameter('ground_z_thresh', 0.12)
         self.declare_parameter('ground_ransac_iterations', 60)
-        self.declare_parameter('ground_min_points', 30)          # below this, skip filtering (keep all points)
+        # below this, skip filtering (keep all points)
+        self.declare_parameter('ground_min_points', 30)
 
         in_topic = self.get_parameter('input_topic').value
         self.out_topic = self.get_parameter('output_topic').value
@@ -142,7 +144,8 @@ class CloudRangeFilter(Node):
         """Boolean keep-mask dropping the dominant near-horizontal, near-z=0
         plane's inliers (fit in ground_frame). Fails safe: on a missing TF or
         an inconclusive fit, keeps every point (never invents obstacles, but
-        also never silently strips more than we're confident is floor)."""
+        also never silently strips more than we're confident is floor).
+        """
         n = pts.shape[0]
         if n < 3:
             return np.ones(n, dtype=bool)

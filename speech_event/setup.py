@@ -8,6 +8,11 @@ setup(
     version="0.1.0",
     packages=["speech_event"],
     install_requires=["setuptools"],
+    # colcon picks its pytest runner only when setup.py declares this;
+    # the <test_depend>python3-pytest</test_depend> in package.xml is not
+    # read by the Python test task, and without it colcon silently falls
+    # back to "python -m unittest", which collects none of these tests.
+    tests_require=["pytest"],
     zip_safe=True,
     maintainer="Yohannes",
     maintainer_email="yohanneh@alumni.cmu.edu",

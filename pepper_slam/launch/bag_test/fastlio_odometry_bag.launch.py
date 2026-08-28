@@ -64,6 +64,6 @@ def generate_launch_description():
     # "launch configuration 'config_file' does not exist" at launch time.
     # --show-args does NOT catch this -- it never executes the action.
     ld.add_action(LogInfo(msg=['[fastlio_odometry_bag] use_sim_time=true (forced)  '
-                              'config_file=', LaunchConfiguration('config_file')]))
+                               'config_file=', LaunchConfiguration('config_file')]))
     ld.add_action(fastlio)
     return ld

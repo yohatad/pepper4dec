@@ -23,6 +23,7 @@ import sys
 
 import pytest
 import yaml
+from ament_index_python.packages import PackageNotFoundError
 
 sys.path.insert(0, os.path.dirname(__file__))
 from resolve_launch import snap  # noqa: E402
@@ -69,7 +70,17 @@ def test_bridge_levels_by_the_estimators_own_imu(launch_rel, config_rel):
     body_frame = _find(yaml.safe_load(open(config_path)), 'body_frame')
     assert body_frame, 'no publish.body_frame in %s' % config_rel
 
-    bridges = [n for n in snap(launch_path, [])
+    # The launch file resolves sibling packages (fast_lio / point_lio /
+    # fastlio_lc_pgo) through get_package_share_directory. They cannot be
+    # declared as test_depends here: fastlio_lc_pgo already exec_depends on
+    # pepper_slam, so that would close a dependency cycle. Skip -- loudly --
+    # rather than fail when the workspace has not built them.
+    try:
+        entries = snap(launch_path, [])
+    except PackageNotFoundError as e:
+        pytest.skip('needs a package this workspace has not built: %s' % e)
+
+    bridges = [n for n in entries
                if str(n.get('exe', '')).endswith('map_odom_bridge.py')]
     assert bridges, (
         '%s starts no *_map_odom_bridge; this test needs updating for a '

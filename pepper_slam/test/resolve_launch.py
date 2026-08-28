@@ -6,7 +6,9 @@ diff. Catches a parameter that stops reaching the estimator -- which
 `--show-args loads OK` does not, and which otherwise surfaces only as bad
 odometry some minutes into a run.
 """
-import sys, json, io
+import io
+import json
+import sys
 from launch import LaunchContext
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.actions import SetLaunchConfiguration
@@ -16,8 +18,10 @@ from launch_ros.actions import Node
 def describe(n, ctx):
     def perf(x):
         try:
-            if x is None: return None
-            if isinstance(x, (str, int, float, bool)): return x
+            if x is None:
+                return None
+            if isinstance(x, (str, int, float, bool)):
+                return x
             if isinstance(x, (list, tuple)):
                 return "".join(str(perf(i)) for i in x)
             return x.perform(ctx)
@@ -37,14 +41,17 @@ def describe(n, ctx):
     d["params"] = params
     remaps = []
     for r in (getattr(n, "_Node__remappings", None) or []):
-        try: remaps.append("%s:=%s" % (perf(r[0]), perf(r[1])))
-        except Exception: remaps.append("<unresolved>")
+        try:
+            remaps.append("%s:=%s" % (perf(r[0]), perf(r[1])))
+        except Exception:
+            remaps.append("<unresolved>")
     d["remaps"] = remaps
     return d
 
 
 def walk(entities, ctx, out, seen=0):
-    if seen > 40: return
+    if seen > 40:
+        return
     for e in entities:
         if isinstance(e, Node):
             # Node.visit() would try to EXECUTE, so the condition is checked by
@@ -61,8 +68,10 @@ def walk(entities, ctx, out, seen=0):
         try:
             sub = e.visit(ctx)
         except Exception as ex:
-            out.append({"ERROR": "%s: %s" % (type(e).__name__, str(ex)[:70])}); continue
-        if sub: walk(sub, ctx, out, seen + 1)
+            out.append({"ERROR": "%s: %s" % (type(e).__name__, str(ex)[:70])})
+            continue
+        if sub:
+            walk(sub, ctx, out, seen + 1)
 
 
 def snap(path, argv):

@@ -35,10 +35,10 @@ def generate_launch_description():
     launch_dir = os.path.join(
         get_package_share_directory('lio_localization'), 'launch')
 
-        # No default: this is the output of a PREVIOUS mapping run, not something
-        # this launch can produce. It used to default to a path under /home/yoha
-        # that exists on one machine only; a wrong or missing map then failed
-        # somewhere inside PGO instead of at launch. Pass it explicitly.
+    # No default: this is the output of a PREVIOUS mapping run, not something
+    # this launch can produce. It used to default to a path under /home/yoha
+    # that exists on one machine only; a wrong or missing map then failed
+    # somewhere inside PGO instead of at launch. Pass it explicitly.
     declare_map_cmd = DeclareLaunchArgument(
         'map_pcd',
         default_value='',

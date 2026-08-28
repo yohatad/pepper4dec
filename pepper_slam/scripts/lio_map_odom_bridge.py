@@ -366,9 +366,11 @@ class LioMapOdomBridge(Node):
         out.transform.rotation.w = float(quaternion[3])
         self.static_tf_broadcaster.sendTransform(out)
         self._level_published = True
+        edge = (f"{self.odom_frame} -> {self.level_frame}" if self.level_as_child
+                else f"{self.level_frame} -> {self.odom_frame}")
         self.get_logger().info(
             f"Published static "
-            f"{self.odom_frame + ' -> ' + self.level_frame if self.level_as_child else self.level_frame + ' -> ' + self.odom_frame} "
+            f"{edge} "
             f"(one-time leveling from {self.level_source}, z=0 on the "
             f"{'floor' if self.level_on_floor else 'LIO start pose'}, "
             f"offset {self._level_z:+.3f} m; use '{self.level_frame}' as "
@@ -426,9 +428,10 @@ class LioMapOdomBridge(Node):
 
         # odom -> l2lidar_frame_imu straight from the message pose.
         m_odom_imu = pose_to_matrix(msg.pose.pose.position,
-                                     msg.pose.pose.orientation)
+                                    msg.pose.pose.orientation)
 
-        # odom -> base_footprint = (odom -> l2lidar_frame_imu) * (base_footprint -> l2lidar_frame_imu)^-1
+        # odom -> base_footprint =
+        #     (odom -> l2lidar_frame_imu) * (base_footprint -> l2lidar_frame_imu)^-1
         m_odom_base = m_odom_imu @ np.linalg.inv(m_base_imu)
 
         if self.publish_level and not self._level_published:

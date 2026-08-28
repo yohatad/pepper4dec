@@ -123,7 +123,6 @@ def generate_launch_description():
             'bridge_level_frame': bridge_level_frame,
         }.items())
 
-
     # REP-105 says map -> odom is the loop-closure / localization correction.
     # This launch is odometry ONLY -- nothing corrects anything -- so that edge
     # is identity by definition. Publishing it costs nothing and makes 'map' a

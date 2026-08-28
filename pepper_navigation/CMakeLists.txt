@@ -117,11 +117,33 @@ if(BUILD_TESTING)
   # auto-discovered hook here (its extension gets registered before that
   # variable takes effect) - AMENT_LINT_AUTO_EXCLUDE is the mechanism
   # ament_lint_auto actually documents for "run this linter manually".
-  set(AMENT_LINT_AUTO_EXCLUDE ament_cmake_flake8)
+  set(AMENT_LINT_AUTO_EXCLUDE ament_cmake_flake8 ament_cmake_pep257)
   ament_lint_auto_find_test_dependencies()
 
   find_package(ament_cmake_flake8 REQUIRED)
   ament_flake8(CONFIG_FILE "${CMAKE_CURRENT_SOURCE_DIR}/ament_flake8.ini")
+
+  # pep257 is likewise run manually so it gets the same ignore list the
+  # ament_python packages in this repo already use (see e.g.
+  # text_to_speech/test/test_pep257.py). Codes disabled deliberately:
+  #   D213  conflicts with D212, which the "ament" convention already ignores;
+  #         the pair is mutually exclusive and this repo puts the summary on
+  #         the first line.
+  #   D205/D400/D415  assume a one-line summary; this repo wraps summaries
+  #         across lines, so they fire on well-formed docstrings.
+  #   D406/D407/D413  are numpy-style section rules; this repo uses
+  #         Google-style "Args:"/"Returns:" sections.
+  #   D401  imperative mood - too many false positives on descriptive
+  #         module and test docstrings.
+  find_package(ament_cmake_pep257 REQUIRED)
+  ament_pep257(--add-ignore D205 D213 D400 D401 D406 D407 D413 D415)
+
+  # Guards that the 3 nav2 sections meant to be shared have not drifted apart
+  # across the 4 param files. Previously this file existed but was never
+  # registered, so it only ever ran if someone invoked it by hand.
+  find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(test_shared_nav2_params
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/test_shared_nav2_params.py")
 endif()
 
 ament_package()
