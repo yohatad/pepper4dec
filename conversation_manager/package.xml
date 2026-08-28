@@ -8,13 +8,16 @@
   <maintainer email="mahadanso79@gmail.com">Muhammed Danso</maintainer>
   <license>BSD-3-Clause</license>
 
-  <buildtool_depend>setuptools</buildtool_depend>
+  <buildtool_depend>python3-setuptools</buildtool_depend>
 
   <depend>rclpy</depend>
-  <depend>llm_interfaces</depend>
-  <depend>openai</depend>
-  <depend>chromadb</depend>
-  <depend>sentence-transformers</depend>
+  <!-- The action type is dec_interfaces/action/ConversationManager. This said
+       llm_interfaces, which exists nowhere in the workspace, while the package
+       it does import went undeclared. -->
+  <depend>dec_interfaces</depend>
+  <!-- openai, chromadb and sentence-transformers are deliberately not declared:
+       they are pip-only names that rosdep cannot resolve, they live in the
+       language_model_env venv, and the tests that need them already skip. -->
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
