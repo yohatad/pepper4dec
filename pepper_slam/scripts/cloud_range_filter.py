@@ -76,6 +76,22 @@ class CloudRangeFilter(Node):
         self.declare_parameter('output_topic', '/cloud_registered_body_filtered')
         self.declare_parameter('min_range', 0.8)     # drop self-hits closer than this
         self.declare_parameter('max_range', 0.0)     # 0 = no upper limit
+
+        # GEOMETRIC SELF-FILTER (off by default). min_range above is RADIAL from
+        # the sensor, which cannot express "Pepper's body is behind the lidar":
+        # the L2 sits 0.133 m FORWARD of base_footprint, so at 0.3-0.6 m the
+        # points behind it are the robot and the points in front of it are real
+        # obstacles. A radial cutoff has to discard both.
+        #
+        # That matters because the collision monitor's 0.40 m stop polygon is
+        # unreachable with min_range 0.8: the closest point that can survive is
+        # ~0.78 m out horizontally, so the stop zone can never trigger. Excluding
+        # a BOX around the robot body instead lets min_range drop to ~0.30 and
+        # gives the stop polygon real points to see.
+        #
+        # [xmin, xmax, ymin, ymax, zmin, zmax] in self_filter_frame; empty = off.
+        self.declare_parameter('self_filter_box', [])
+        self.declare_parameter('self_filter_frame', 'base_footprint')
         # Radius-outlier removal. OFF by default (0): the sparse per-scan L2 cloud
         # loses real far returns at neighbourly settings. Loose radius if enabled.
         self.declare_parameter('ror_min_neighbors', 0)   # 0 disables ROR
@@ -102,6 +118,15 @@ class CloudRangeFilter(Node):
         self.ror_k = int(self.get_parameter('ror_min_neighbors').value)
         self.ror_r = float(self.get_parameter('ror_radius').value)
 
+        box = list(self.get_parameter('self_filter_box').value or [])
+        if box and len(box) != 6:
+            self.get_logger().error(
+                f"self_filter_box needs 6 values [xmin,xmax,ymin,ymax,zmin,zmax], "
+                f"got {len(box)}; self-filter DISABLED.")
+            box = []
+        self.self_box = [float(v) for v in box]
+        self.self_frame = self.get_parameter('self_filter_frame').value
+
         self.remove_ground = bool(self.get_parameter('remove_ground_plane').value)
         self.ground_frame = self.get_parameter('ground_frame').value
         self.ground_dist = float(self.get_parameter('ground_distance_thresh').value)
@@ -111,7 +136,7 @@ class CloudRangeFilter(Node):
         self.ground_min_pts = int(self.get_parameter('ground_min_points').value)
         self.tf_buffer = None
         self.tf_listener = None
-        if self.remove_ground:
+        if self.remove_ground or self.self_box:
             self.tf_buffer = Buffer()
             self.tf_listener = TransformListener(self.tf_buffer, self)
 
@@ -124,10 +149,38 @@ class CloudRangeFilter(Node):
                if self.ror_k > 0 else ", ROR off")
         ground = (f", ground-plane removal vs {self.ground_frame}"
                   if self.remove_ground else ", ground-plane removal off")
+        selff = (f", self-filter box {self.self_box} in {self.self_frame}"
+                 if self.self_box else ", self-filter off")
         self.get_logger().info(
             f"cloud_range_filter: {in_topic} -> {self.out_topic}, keep "
             f"{self.min_r} m <= range" +
-            (f" <= {self.max_r} m" if self.max_r > 0 else " (no max)") + ror + ground + ".")
+            (f" <= {self.max_r} m" if self.max_r > 0 else " (no max)") +
+            ror + ground + selff + ".")
+
+    def _self_filter_keep(self, pts: np.ndarray, stamp, frame_id: str) -> np.ndarray:
+        """Drop points inside the robot-body box, expressed in self_filter_frame.
+
+        Fails SAFE in the conservative direction: on a missing TF every point is
+        kept, so the robot may freeze on its own body but will never be blinded
+        to a real obstacle by a transform hiccup.
+        """
+        n = pts.shape[0]
+        if not self.self_box or n == 0:
+            return np.ones(n, dtype=bool)
+        try:
+            tf = self.tf_buffer.lookup_transform(self.self_frame, frame_id, stamp)
+        except (LookupException, ConnectivityException, ExtrapolationException) as ex:
+            self.get_logger().warn(
+                f"TF {self.self_frame} <- {frame_id} unavailable, skipping "
+                f"self-filter for this scan: {ex}", throttle_duration_sec=5.0)
+            return np.ones(n, dtype=bool)
+        m = _transform_to_matrix(tf)
+        pts_body = (np.hstack([pts, np.ones((n, 1))]) @ m.T)[:, :3]
+        xmin, xmax, ymin, ymax, zmin, zmax = self.self_box
+        inside = ((pts_body[:, 0] >= xmin) & (pts_body[:, 0] <= xmax) &
+                  (pts_body[:, 1] >= ymin) & (pts_body[:, 1] <= ymax) &
+                  (pts_body[:, 2] >= zmin) & (pts_body[:, 2] <= zmax))
+        return ~inside
 
     def _radius_outlier_keep(self, pts: np.ndarray) -> np.ndarray:
         """Keep points with >= ror_k neighbours within ror_r (self excluded)."""
@@ -198,6 +251,8 @@ class CloudRangeFilter(Node):
         if self.max_r > 0:
             keep &= r <= self.max_r
         pts = pts[keep]
+        if self.self_box and pts.shape[0]:
+            pts = pts[self._self_filter_keep(pts, msg.header.stamp, msg.header.frame_id)]
         if pts.shape[0]:
             pts = pts[self._radius_outlier_keep(pts)]
         if self.remove_ground and pts.shape[0]:

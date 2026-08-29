@@ -1,0 +1,131 @@
+# World-frame people tracker.
+#
+# TWO CAMERAS, SPLIT BY RANGE. Each is trusted over the band it is actually
+# good at, and the bands overlap so a person walking in is handed from one to
+# the other as a CONTINUATION of the same track (association is in metres, so
+# the handover costs neither the ID nor the velocity estimate).
+#
+#   front  -- CLOSE work, 0.4-3.5 m.
+#             Pepper's own head camera (kTopCamera) at ~1.15 m above the floor,
+#             55.2 x 44.3 deg, VGA 640x480, panning with HeadYaw/HeadPitch. At
+#             conversational range it frames a whole person, which the
+#             RealSense physically cannot. It fades with distance because VGA
+#             simply runs out of pixels on a small target.
+#
+#             It has NO depth, and -- computed from pepper.urdf -- with the head
+#             level its lower frame edge does not reach the floor until 2.82 m
+#             (further still at overt_attention's default upward pitch). So
+#             close in, the FEET ARE NEVER IN FRAME and feet-based ground-plane
+#             ranging cannot run. The head-plane fallback covers it, but the
+#             camera sits only ~0.55 m below a standing head, so height
+#             variation swings range by ~20%. That is handled honestly rather
+#             than hidden: such detections enter the filter with a large
+#             range_stddev and a small cross_stddev, i.e. as near-BEARING-ONLY.
+#             The direction they give is excellent and is used in full.
+#
+#   realsense -- LONG work, 2.0-8.0 m.
+#             Better sensor and better optics, which is why it carries
+#             distance. Its framing also improves with range where the front
+#             camera's degrades: mounted at z=0.308 m with the optical axis
+#             pitched DOWN 2.31 deg (from pepper_slam/urdf/sensor_rig.xacro),
+#             it sees up to 0.308 + 0.343*range metres of height -- waist at
+#             2 m, chest at 3 m, first FULL body at ~4.5 m. Below ~2 m it is
+#             looking at legs, which is exactly where the front camera takes
+#             over. It has metric depth, so within its band it carries the
+#             position outright.
+#
+# The 2.0-3.5 m overlap is deliberate: that is the handover band, and it is
+# also where both cameras are decent, so tracks are best determined there.
+
+people_tracker:
+  ros__parameters:
+
+    # map, not odom: the global costmap and the prior map live here, and the
+    # proxemic layer / SFM critic transform into their own costmap frame.
+    tracking_frame: "map"
+    robot_frame: "base_footprint"
+
+    # Floor height in tracking_frame. The whole TF chain is floor-referenced
+    # (lio_map_odom_bridge, level_source=calibration), so this is 0.
+    ground_z: 0.0
+
+    # Sensor noise, split along vs across the line of sight, and by which
+    # ranging method produced the point. A camera measures bearing far better
+    # than range; these numbers say so explicitly instead of averaging the two
+    # into one pessimistic sigma.
+    #   depth       metric, trustworthy
+    #   feet        ground-plane intersection, good but pixel-quantised
+    #   head_plane  the front camera's close-range fallback -- weak range on
+    #               purpose, so it acts as a bearing measurement
+    # All three are per-metre and scale with range.
+    depth_range_stddev: 0.10
+    feet_range_stddev: 0.18
+    head_plane_range_stddev: 0.55
+    cross_stddev: 0.04
+
+    # Association gate. A person walks ~1.4 m/s; at a 15 Hz cycle that is ~9 cm
+    # between updates, so 0.9 m is generous -- deliberately, because it also has
+    # to bridge the deprojection disagreement between the two cameras.
+    association_distance: 0.9
+
+    # process_noise_accel is how hard people are allowed to change velocity.
+    process_noise_accel: 0.6
+    initial_velocity_variance: 1.0
+
+    # Drop a track this long without a measurement. Long enough to survive a
+    # head pan away and back, short enough that a person who left does not
+    # keep repelling the robot.
+    max_track_age: 1.5
+    confirm_hits: 3
+
+    # Above this, it is a deprojection artefact, not a person (world record
+    # pace is ~10 m/s and a tour visitor is not setting it).
+    max_speed: 2.5
+
+    tf_timeout: 0.15
+    publish_rate: 15.0
+
+    # Reject boxes whose bottom edge is within this many pixels of the image
+    # border: the feet are cropped, so the ground-plane ray lands well beyond
+    # the person and would inject a confidently-wrong range.
+    border_margin_px: 6.0
+
+    # Audience vs bystander. dec_Tour.xml has Pepper say "follow me", so the
+    # tour group is BEHIND the robot by design. Without this split, vanilla SFM
+    # reads that cluster as a large repulsive force and the robot flees its own
+    # visitors. Someone within audience_radius AND at least audience_min_bearing
+    # off the heading (110 deg -> behind the shoulders) is audience, and is
+    # excluded from ~/bystanders, which is what the costmap layer and the SFM
+    # critic consume. Only applies while /behavior_controller/tour_active is
+    # true; with no tour running, everyone is a bystander.
+    audience_radius: 3.0
+    audience_min_bearing: 1.919862
+
+    sources: ["realsense", "front"]
+
+    source:
+      realsense:
+        detections_topic: "/person_detection/realsense/data"
+        camera_info_topic: "/camera/color/camera_info"
+        has_depth: true
+        min_confidence: 0.5
+        # LONG range. The floor enters its view at ~0.71 m, but below ~2 m it
+        # sees only legs and the front camera is the better source there.
+        min_range: 2.0
+        max_range: 8.0
+      front:
+        # Pepper's head camera. naoqi_driver2 publishes camera_info alongside
+        # the image and stamps it CameraTop_optical_frame; the head joint chain
+        # from /joint_states is what makes the pan cancel out.
+        detections_topic: "/person_detection/front/data"
+        camera_info_topic: "/camera/front/camera_info"
+        has_depth: false
+        min_confidence: 0.5
+        # CLOSE range. Upper bound is where VGA stops resolving people well;
+        # raise it only if you also raise min_confidence, or the far end of
+        # this band fills with weak detections.
+        min_range: 0.4
+        max_range: 3.5
+        # Standing height assumed by the head-plane fallback. Only used when
+        # the feet are out of frame and there is no depth.
+        person_height: 1.70

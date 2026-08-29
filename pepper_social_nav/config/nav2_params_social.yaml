@@ -1,0 +1,486 @@
+# Nav2 params for the SOCIALLY-AWARE stack (pepper_nav2_social.launch.py).
+#
+# Derived from nav2_params_fastlio_loc.yaml -- same localization (lio_localization
+# ICP against a prior .pcd), same maps, same frames. bt_navigator, planner_server
+# and behavior_server are carried over VERBATIM so a behavioural difference
+# against that stack is a controller/costmap difference and nothing else.
+#
+# Deliberately NOT covered by test_shared_nav2_params.py: that test asserts
+# controller_server is byte-identical across the four DWB profiles, and this
+# file replaces DWB with MPPI on purpose. Adding it there would be asserting
+# that the whole point of this file does not exist.
+#
+# THREE THINGS CHANGE HERE, and they are meant to be validated in this order:
+#
+#   1. Controller: DWB -> MPPI, motion_model "Omni".
+#      DWB scored obstacles at BaseObstacle.scale 0.02 against PathDist 24.0 --
+#      about 0.1% weight -- so any social cost fed to DWB would have been
+#      arithmetically ignored. MPPI also samples lateral velocity natively.
+#
+#   2. Holonomic: vy_max 0.4 (was max_vel_y 0.0, vy_samples 0).
+#      Pepper's base is 3 omniwheels and naoqi_driver2's teleop.cpp reads
+#      twist.linear.y, so the sideways channel was simply unused. A robot that
+#      can only turn-then-go produces the "turn away, turn back" wobble that
+#      reads as indecisive; a side-step reads as yielding.
+#
+#   3. Social terms: the ProxemicLayer on both costmaps and the
+#      SocialForceCritic in MPPI.
+#
+# VALIDATE 1+2 FIRST with the social terms disabled (proxemic_layer.enabled
+# false, SocialForce weight 0). If you switch controller AND add social costs
+# in one step and the robot drives worse, you cannot tell which did it.
+
+bt_navigator:
+  ros__parameters:
+    use_sim_time: False
+    global_frame: map
+    robot_base_frame: base_footprint
+    # FAST-LIO's own /Odometry now publishes real twist (not all-zero) --
+    # see laserMapping.cpp's publish_odometry(). Frame_id is FAST-LIO's
+    # IMU-tilted "lio_init", not the gravity-leveled "odom" the rest of
+    # this TF tree uses, but bt_navigator only reads this for velocity-based
+    # BT conditions (is_stuck / distance_traveled), not pose lookups, so the
+    # frame mismatch doesn't matter here.
+    odom_topic: /odom_lio   # shared LIO odometry; every mapping launch remaps onto it
+    bt_loop_duration: 2
+    default_server_timeout: 20
+    wait_for_service_timeout: 5
+
+    default_nav_to_pose_bt_xml: /opt/ros/humble/share/nav2_bt_navigator/behavior_trees/navigate_to_pose_w_replanning_and_recovery.xml
+    plugin_lib_names:
+      - nav2_compute_path_to_pose_action_bt_node
+      - nav2_compute_path_through_poses_action_bt_node
+      - nav2_smooth_path_action_bt_node
+      - nav2_follow_path_action_bt_node
+      - nav2_spin_action_bt_node
+      - nav2_wait_action_bt_node
+      - nav2_back_up_action_bt_node
+      - nav2_drive_on_heading_bt_node
+      - nav2_clear_costmap_service_bt_node
+      - nav2_is_stuck_condition_bt_node
+      - nav2_goal_reached_condition_bt_node
+      - nav2_goal_updated_condition_bt_node
+      - nav2_globally_updated_goal_condition_bt_node
+      - nav2_is_path_valid_condition_bt_node
+      - nav2_initial_pose_received_condition_bt_node
+      - nav2_reinitialize_global_localization_service_bt_node
+      - nav2_rate_controller_bt_node
+      - nav2_distance_controller_bt_node
+      - nav2_speed_controller_bt_node
+      - nav2_truncate_path_action_bt_node
+      - nav2_truncate_path_local_action_bt_node
+      - nav2_goal_updater_node_bt_node
+      - nav2_recovery_node_bt_node
+      - nav2_pipeline_sequence_bt_node
+      - nav2_round_robin_node_bt_node
+      - nav2_transform_available_condition_bt_node
+      - nav2_time_expired_condition_bt_node
+      - nav2_path_expiring_timer_condition
+      - nav2_distance_traveled_condition_bt_node
+      - nav2_single_trigger_bt_node
+      - nav2_goal_updated_controller_bt_node
+      - nav2_is_battery_low_condition_bt_node
+      - nav2_navigate_through_poses_action_bt_node
+      - nav2_navigate_to_pose_action_bt_node
+      - nav2_remove_passed_goals_action_bt_node
+      - nav2_planner_selector_bt_node
+      - nav2_controller_selector_bt_node
+      - nav2_goal_checker_selector_bt_node
+      - nav2_controller_cancel_bt_node
+      - nav2_path_longer_on_approach_bt_node
+      - nav2_wait_cancel_bt_node
+      - nav2_spin_cancel_bt_node
+      - nav2_back_up_cancel_bt_node
+      - nav2_drive_on_heading_cancel_bt_node
+
+planner_server:
+  ros__parameters:
+    expected_planner_frequency: 20.0
+    use_sim_time: False
+    planner_plugins: ["GridBased"]
+    GridBased:
+      plugin: "nav2_navfn_planner/NavfnPlanner"
+      tolerance: 0.5
+      use_astar: false
+      allow_unknown: true
+
+behavior_server:
+  ros__parameters:
+    use_sim_time: False
+    global_frame: map
+    robot_base_frame: base_footprint
+    transform_tolerance: 0.1
+    simulate_ahead_time: 2.0
+    max_rotational_vel: 1.0
+    min_rotational_vel: 0.4
+    rotational_acc_lim: 3.2
+    behavior_plugins: ["spin", "backup", "wait"]
+    spin:
+      plugin: "nav2_behaviors/Spin"
+    backup:
+      plugin: "nav2_behaviors/BackUp"
+    wait:
+      plugin: "nav2_behaviors/Wait"
+controller_server:
+  ros__parameters:
+    use_sim_time: False
+    # MPPI is materially heavier than DWB. 20 Hz with batch_size 1000 is the
+    # budget this was written for; if the Jetson cannot hold it, cut batch_size
+    # before cutting controller_frequency -- a late command is worse than a
+    # slightly coarser one.
+    controller_frequency: 20.0
+    min_x_velocity_threshold: 0.001
+    min_y_velocity_threshold: 0.001
+    min_theta_velocity_threshold: 0.001
+    failure_tolerance: 0.3
+    progress_checker_plugin: "progress_checker"
+    goal_checker_plugins: ["general_goal_checker"]
+    controller_plugins: ["FollowPath"]
+
+    progress_checker:
+      plugin: "nav2_controller::SimpleProgressChecker"
+      required_movement_radius: 0.1
+      # Longer than the DWB stacks' 30 s: a socially-aware controller is
+      # SUPPOSED to wait for someone to pass rather than force through, and
+      # that must not be scored as a stuck robot.
+      movement_time_allowance: 45.0
+
+    general_goal_checker:
+      stateful: True
+      plugin: "nav2_controller::SimpleGoalChecker"
+      xy_goal_tolerance: 0.15
+      yaw_goal_tolerance: 0.15
+
+    FollowPath:
+      plugin: "nav2_mppi_controller::MPPIController"
+      time_steps: 40              # 40 * 0.05 = 2.0 s horizon, matching DWB's sim_time
+      model_dt: 0.05
+      batch_size: 1000
+      vx_std: 0.15
+      vy_std: 0.15
+      wz_std: 0.3
+      vx_max: 0.5                 # unchanged from the DWB stacks
+      vx_min: -0.25
+      vy_max: 0.4                 # THE SIDE-STEP. Was 0.0 under DWB.
+      wz_max: 0.5
+      iteration_count: 1
+      prune_distance: 1.7
+      transform_tolerance: 0.2
+      temperature: 0.3
+      gamma: 0.015
+      # Pepper's base is three omniwheels. "Omni" is what lets MPPI sample the
+      # lateral channel at all; with "DiffDrive" vy_max above is ignored.
+      motion_model: "Omni"
+      visualize: true
+      TrajectoryVisualizer:
+        trajectory_step: 5
+        time_step: 3
+
+      critics: [
+        "ConstraintCritic", "CostCritic", "GoalCritic", "GoalAngleCritic",
+        "PathAlignCritic", "PathFollowCritic", "PathAngleCritic",
+        "PreferForwardCritic", "SocialForceCritic"]
+
+      ConstraintCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 4.0
+      CostCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 3.81
+        critical_cost: 300.0
+        consider_footprint: false
+        collision_cost: 1000000.0
+        near_goal_distance: 1.0
+      GoalCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 5.0
+        threshold_to_consider: 1.4
+      GoalAngleCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 3.0
+        threshold_to_consider: 0.5
+      PathAlignCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 14.0
+        max_path_occupancy_ratio: 0.05
+        trajectory_point_step: 4
+        threshold_to_consider: 0.5
+        offset_from_furthest: 20
+        use_path_orientations: false
+      PathFollowCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 5.0
+        offset_from_furthest: 5
+        threshold_to_consider: 1.4
+      PathAngleCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 2.0
+        offset_from_furthest: 4
+        threshold_to_consider: 0.5
+        max_angle_to_furthest: 1.0
+      PreferForwardCritic:
+        # Kept, but light. Facing the direction of travel is legible and keeps
+        # the head camera pointed where the robot is going -- but weighting it
+        # hard would suppress exactly the side-step that vy_max was enabled for.
+        enabled: true
+        cost_power: 1
+        cost_weight: 2.0
+        threshold_to_consider: 0.5
+
+      # ---------------------------------------------------------------------
+      # The social force model itself. Scores trajectories by the REPULSIVE
+      # POTENTIAL V(d) = A*B*exp((r-d)/B), whose negative gradient is Helbing's
+      # pedestrian repulsion force -- so the optimum MPPI settles on is
+      # consistent with SFM dynamics rather than an ad-hoc "penalty near people".
+      #
+      # SET cost_weight: 0.0 for the step-3 parity run.
+      # ---------------------------------------------------------------------
+      SocialForceCritic:
+        enabled: true
+        topic: "/people_tracker/bystanders"
+        cost_power: 1
+        cost_weight: 12.0
+        force_a: 2.1              # A: interaction strength (Helbing)
+        force_b: 0.55             # B: interaction range, metres
+        radius_sum: 0.55          # robot radius 0.25 + person radius ~0.30
+        lambda: 0.35              # anisotropy; 1.0 = isotropic, lower = more front-weighted
+        cutoff: 3.0               # beyond this a person contributes nothing
+        message_timeout: 1.0      # stale people stop steering (offboard WiFi link)
+        max_extrapolation: 2.0    # cap constant-velocity lookahead, seconds
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      update_frequency: 15.0
+      publish_frequency: 2.0
+      # odom (the LEVELED frame), not raw lio_init. lio_init is backend-native: FAST-LIO leaves
+      # it at the IMU mount orientation (~90 deg off gravity here) while
+      # Point-LIO gravity-aligns it, so the SAME name means different geometry
+      # per backend and the height bands below would slice the cloud along the
+      # wrong axis. odom is gravity-aligned and floor-referenced on every
+      # backend (lio_map_odom_bridge, level_source=calibration), published as a
+      # child of odom here since transform_fusion owns map -> odom.
+      global_frame: odom
+      robot_base_frame: base_footprint
+      use_sim_time: False
+      rolling_window: true
+      width: 3
+      height: 3
+      resolution: 0.05
+      robot_radius: 0.25
+      plugins: ["voxel_layer", "proxemic_layer", "inflation_layer"]
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        cost_scaling_factor: 4.0
+        inflation_radius: 0.30
+      voxel_layer:
+        plugin: "nav2_costmap_2d::VoxelLayer"
+        enabled: True
+        # VoxelLayer (not ObstacleLayer): keeps a 3D voxel column grid and
+        # clears per-voxel, so a tilted 360 deg 3D lidar + moving obstacles
+        # (people) clear reliably without leaving stale marks behind. The voxel
+        # grid spans the obstacle band: origin_z .. origin_z + z_voxels*z_res.
+        publish_voxel_map: True
+        # FLOOR-referenced now (global_frame is odom): plain heights
+        # above the ground. Old raw-odom values +0.30. z_voxels max is 16 --
+        # nav2's VoxelGrid packs a column into a 32-bit word.
+        origin_z: -0.30            # 0.30 m BELOW the floor: keeps the sensor
+                                   # origin (L2 ~0.25 m up, plus drift) inside
+                                   # the grid so VoxelLayer can raytrace-clear.
+        z_resolution: 0.125        # voxel height
+        z_voxels: 16               # 16 * 0.125 = 2.0 m -> covers -0.30 .. 1.70
+        max_obstacle_height: 1.70
+        mark_threshold: 0          # marked voxels in a column to flag the 2D cell (0 = any)
+        unknown_threshold: 15
+        combination_method: 1
+        # L2 lidar = primary all-around (360 deg) obstacle source; RealSense
+        # depth = complementary DENSE forward source for the low/small/overhang
+        # obstacles the sparse tilted L2 sweep misses. See obstacle_min_range
+        # notes below -- the low-mounted L2 sees Pepper's own body up close.
+        observation_sources: points realsense
+        points:
+          topic: /points
+          data_type: "PointCloud2"
+          clearing: True
+          marking: True
+          # Height band is in odom, which is FLOOR-referenced (z=0 IS
+          # the ground plane), so these read directly as height above the
+          # floor. min_obstacle_height MUST stay above the floor or the floor
+          # is marked as an obstacle; keep it low enough (0.10 m) to still
+          # catch low objects/chair legs.
+          min_obstacle_height: 0.10
+          max_obstacle_height: 1.70
+          raytrace_max_range: 3.0
+          # Skip the near field: the L2 is mounted low (~0.26 m up) and sees
+          # Pepper's own body as a dense cluster ~0.3-0.6 m out. With min_range
+          # 0.0 the robot marks ITSELF as an obstacle in the local costmap and
+          # freezes. 0.8 m clears the self-hits (measured self-hit shell < 0.6 m).
+          raytrace_min_range: 0.8
+          obstacle_max_range: 2.5
+          obstacle_min_range: 0.8
+        realsense:
+          # RealSense D435i depth cloud. Requires the driver launched with
+          # pointcloud.enable:=true (it is disabled during recording). Narrow
+          # ~87 deg forward FOV, so it only COMPLEMENTS the L2 -- never make it
+          # the sole source (blind to the sides/rear).
+          topic: /camera/depth/color/points
+          data_type: "PointCloud2"
+          clearing: True
+          marking: True
+          min_obstacle_height: 0.10
+          max_obstacle_height: 1.70
+          # D435i reliable depth ~0.3-3 m; below 0.3 m it is blind.
+          raytrace_max_range: 3.0
+          raytrace_min_range: 0.3
+          obstacle_max_range: 3.0
+          obstacle_min_range: 0.3
+      # Personal space, not bodies -- the lidar already marks the person via
+      # voxel_layer. Ordered AFTER voxel_layer and BEFORE inflation_layer so
+      # the robot-radius inflation is applied on top of the social cost.
+      # In the LOCAL costmap this mostly stops the controller shaving corners
+      # around someone; the routing win is in the global costmap below.
+      proxemic_layer:
+        plugin: "pepper_social_nav::ProxemicLayer"
+        enabled: True
+        topic: /people_tracker/bystanders
+        amplitude: 200.0
+        sigma: 0.55
+        sigma_front: 1.1
+        cutoff: 2.5
+        message_timeout: 1.0
+        use_velocity_scaling: True
+      always_send_full_costmap: True
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      update_frequency: 5.0
+      publish_frequency: 1.0
+      global_frame: map
+      robot_base_frame: base_footprint
+      use_sim_time: False
+      robot_radius: 0.25
+      resolution: 0.05
+      track_unknown_space: true
+      plugins: ["static_layer", "voxel_layer", "proxemic_layer", "inflation_layer"]
+      voxel_layer:
+        plugin: "nav2_costmap_2d::VoxelLayer"
+        enabled: True
+        # VoxelLayer for the same per-voxel 3D clearing as the local costmap.
+        publish_voxel_map: True
+        origin_z: -0.30            # floor-referenced, see local costmap
+        z_resolution: 0.125
+        z_voxels: 16               # 16 * 0.125 = 2.0 m -> covers -0.30 .. 1.70
+        max_obstacle_height: 1.70
+        mark_threshold: 0
+        unknown_threshold: 15
+        combination_method: 1
+        observation_sources: points
+        points:
+          topic: /points
+          data_type: "PointCloud2"
+          clearing: True
+          marking: True
+          min_obstacle_height: 0.10
+          max_obstacle_height: 1.70
+          raytrace_max_range: 3.0
+          # Same as the local costmap: skip the L2 self-hits (Pepper's own body
+          # ~0.3-0.6 m from the low lidar) so the robot doesn't mark itself.
+          raytrace_min_range: 0.8
+          obstacle_max_range: 2.5
+          obstacle_min_range: 0.8
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        map_subscribe_transient_local: True
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        cost_scaling_factor: 4.0
+        inflation_radius: 0.20
+      # Personal space, not bodies -- the lidar already marks the person via
+      # voxel_layer. Ordered AFTER voxel_layer and BEFORE inflation_layer so
+      # the robot-radius inflation is applied on top of the social cost.
+      # This is where it earns its keep: the planner routes AROUND a group
+      # instead of aiming through it and leaving the controller to cope.
+      proxemic_layer:
+        plugin: "pepper_social_nav::ProxemicLayer"
+        enabled: True
+        topic: /people_tracker/bystanders
+        amplitude: 200.0
+        sigma: 0.55
+        sigma_front: 1.1
+        cutoff: 2.5
+        message_timeout: 1.0
+        use_velocity_scaling: True
+      always_send_full_costmap: True
+
+# ---------------------------------------------------------------------------
+# Collision Monitor -- independent safety layer, unchanged in role: it reads
+# the lidar directly and gates cmd_vel_raw -> cmd_vel regardless of what the
+# costmaps or the SFM critic believe. With perception running offboard over
+# WiFi, this on-robot, lidar-driven layer is the ONLY thing that is still true
+# when the link drops, so it matters more here than in the DWB stacks.
+#
+# THE BUG THIS FIXES. In nav2_params_fastlio_loc.yaml PolygonStop has radius
+# 0.40 m, but its only source is /points_safety, which the launch file builds
+# with cloud_range_filter min_range=0.8 (radial, from the lidar body). With the
+# L2 at z=0.2582 and min_height 0.10, the closest surviving point is
+# sqrt(0.8^2 - 0.16^2) ~= 0.78 m horizontally. Nothing can EVER fall inside
+# 0.40 m, so the stop zone has never once fired, and PolygonSlow at 0.80 m only
+# triggers in a sliver. For a robot whose whole purpose here is operating close
+# to people, that is the wrong dead zone to have.
+#
+# THE FIX. pepper_nav2_social.launch.py runs the safety filter with
+# min_range=0.30 and the new geometric self_filter_box, which removes Pepper's
+# own body by GEOMETRY instead of by radius. Both polygons then see real points.
+#
+# >> The box in the launch file is a STARTING POINT from Pepper's nominal
+# >> dimensions, NOT a measurement. Verify it before driving:
+# >>   ros2 topic echo /points_safety --once
+# >>   (or view /points_safety in RViz and confirm no returns sit on the robot)
+# >> If the robot freezes in place, the box is too small and is leaking
+# >> self-hits into the stop polygon. Widen it, or revert min_range to 0.8.
+# ---------------------------------------------------------------------------
+collision_monitor:
+  ros__parameters:
+    use_sim_time: False
+    base_frame_id: "base_footprint"
+    odom_frame_id: "odom"
+    cmd_vel_in_topic: "cmd_vel_raw"
+    cmd_vel_out_topic: "cmd_vel"
+    state_topic: "collision_monitor_state"
+    transform_tolerance: 0.2
+    source_timeout: 1.0
+    base_shift_correction: True
+    stop_pub_timeout: 2.0
+    polygons: ["PolygonStop", "PolygonSlow"]
+    PolygonStop:
+      type: "circle"
+      radius: 0.40
+      action_type: "stop"
+      max_points: 3
+      visualize: True
+      polygon_pub_topic: "polygon_stop"
+      enabled: True
+    PolygonSlow:
+      type: "circle"
+      radius: 0.80
+      action_type: "slowdown"
+      slowdown_ratio: 0.3
+      max_points: 3
+      visualize: True
+      polygon_pub_topic: "polygon_slowdown"
+      enabled: True
+    observation_sources: ["pointcloud"]
+    pointcloud:
+      type: "pointcloud"
+      topic: "/points_safety"
+      min_height: 0.10
+      max_height: 1.80
+      enabled: True

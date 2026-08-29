@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>pepper_social_nav</name>
+  <version>0.0.0</version>
+  <description>Socially-aware navigation for Pepper: a multi-camera world-frame
+  people tracker, a proxemic costmap layer, and a social-force MPPI critic.</description>
+  <maintainer email="yohatad000@gmail.com">yoha</maintainer>
+  <license>BSD-3-Clause</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>rclcpp_components</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>visualization_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_geometry_msgs</depend>
+  <depend>eigen</depend>
+
+  <!-- The people interface. Pedestrian carries pose2D + twist2D, which is
+       exactly the SFM input. Not pulled in by nav2; install it explicitly:
+         sudo apt install ros-humble-social-nav-msgs -->
+  <depend>social_nav_msgs</depend>
+  <depend>nav_2d_msgs</depend>
+
+  <!-- Detections in. PersonDetection is pixel u,v + depth; this package is
+       what turns that into metric world-frame tracks. -->
+  <depend>dec_interfaces</depend>
+
+  <!-- Plugin hosts: the proxemic layer is loaded by costmap_2d, the social
+       force critic by nav2_mppi_controller. Both are pluginlib libraries. -->
+  <depend>nav2_costmap_2d</depend>
+  <depend>nav2_core</depend>
+  <depend>nav2_mppi_controller</depend>
+  <depend>pluginlib</depend>
+
+  <!-- Launched by inclusion, not linked. -->
+  <exec_depend>person_detection</exec_depend>
+  <exec_depend>pepper_navigation</exec_depend>
+  <exec_depend>image_decompressor</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>python3-yaml</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+    <nav2_costmap_2d plugin="${prefix}/costmap_plugins.xml" />
+    <nav2_mppi_controller plugin="${prefix}/critics.xml" />
+  </export>
+</package>

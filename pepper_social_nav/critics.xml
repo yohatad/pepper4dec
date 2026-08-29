@@ -1,0 +1,10 @@
+<class_libraries>
+  <library path="pepper_social_nav_critics">
+    <class type="pepper_social_nav::SocialForceCritic" base_class_type="mppi::critics::CriticFunction">
+      <description>
+        Scores MPPI trajectories by the social force model's repulsive potential
+        from tracked pedestrians, with anisotropy and constant-velocity lookahead.
+      </description>
+    </class>
+  </library>
+</class_libraries>

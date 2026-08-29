@@ -1,0 +1,10 @@
+<class_libraries>
+  <library path="pepper_social_nav_costmap_plugins">
+    <class type="pepper_social_nav::ProxemicLayer" base_class_type="nav2_costmap_2d::Layer">
+      <description>
+        Paints an asymmetric proxemic cost field around tracked pedestrians so
+        the planner routes around personal space, not just around bodies.
+      </description>
+    </class>
+  </library>
+</class_libraries>
