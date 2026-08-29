@@ -119,11 +119,28 @@ FROM base AS workspace
 ARG WS
 WORKDIR ${WS}
 
+# naoqi_libqi / naoqi_libqicore / nao_meshes / pepper_meshes are NOT
+# cloned/built from source here -- they come from the pinned
+# ros-humble-naoqi-libqi / ros-humble-naoqi-libqicore / ros-humble-nao-meshes /
+# ros-humble-pepper-meshes apt packages installed in the `base` stage above.
+# These are stable/data packages that don't change per-project, so tracking
+# an upstream git ref and recompiling them on every build was pure waste.
+#
+# BehaviorTree.CPP stays source-built, NOT swapped for ros-humble-behaviortree-cpp:
+# that apt package (4.9.1) has a real packaging bug on jammy -- its library
+# actually installs to lib/x86_64-linux-gnu/libbehaviortree_cpp.so (a
+# multiarch-triplet subdirectory), but the package's own
+# ament_cmake_export_libraries-extras.cmake looks for it at the non-multiarch
+# path and never finds it, so anything doing find_package(behaviortree_cpp)
+# -- i.e. BehaviorTree.ROS2 -- fails to configure. Confirmed by installing
+# the apt package standalone and checking `dpkg -L`. Not our bug to work
+# around; revisit if a newer apt release fixes it upstream.
 RUN git clone --depth 1 https://github.com/yohatad/naoqi_driver2.git src/naoqi_driver2 && \
-    git clone --depth 1 -b ros2 https://github.com/ros-naoqi/libqi.git src/naoqi_libqi && \
-    git clone --depth 1 -b ros2 https://github.com/ros-naoqi/libqicore.git src/naoqi_libqicore && \
-    git clone --depth 1 https://github.com/ros-naoqi/nao_meshes2.git src/nao_meshes && \
-    git clone --depth 1 https://github.com/ros-naoqi/pepper_meshes2.git src/pepper_meshes && \
+    git clone --depth 1 https://github.com/yohatad/lio_localization.git src/lio_localization && \
+    git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/yohatad/FAST_LIO_ROS2.git src/fast_lio && \
+    git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/yohatad/point_lio_ros2.git src/point_lio && \
+    git clone --depth 1 https://github.com/yohatad/fastlio_lc_pgo.git src/fastlio_lc_pgo && \
+    git clone --depth 1 https://github.com/yohatad/l2lidar_node.git src/l2lidar_node && \
     git clone --depth 1 https://github.com/BehaviorTree/BehaviorTree.CPP.git src/BehaviorTree.CPP && \
     git clone --depth 1 https://github.com/BehaviorTree/BehaviorTree.ROS2.git src/BehaviorTree.ROS2
 
@@ -136,6 +153,7 @@ RUN git clone --depth 1 https://github.com/yohatad/naoqi_bridge_msgs2.git src/na
 COPY . src/pepper4dec
 
 RUN apt-get update && \
+    apt-get install -y --no-install-recommends ros-humble-gtsam net-tools && \
     rosdep install --from-paths src --ignore-src -r -y --skip-keys "python3-pip" && \
     rm -rf /var/lib/apt/lists/*
 
