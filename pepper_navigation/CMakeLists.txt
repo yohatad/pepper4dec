@@ -83,21 +83,28 @@ install(DIRECTORY
   FILES_MATCHING PATTERN "*.yaml"
 )
 
-# Install map files.
-# *.pcd is here for the 3D prior map fastlio_lc_pgo's /pgo_batch_optimize
-# writes (map_pcd_path) -- lio_localization ICPs against it, and it shares the
-# levelled, floor-referenced frame with the .pgm/.yaml 2D grid beside it.
+# Install 2D occupancy grid files (nav2 map_server format).
 install(DIRECTORY
   map/
   DESTINATION share/${PROJECT_NAME}/map
   FILES_MATCHING
   PATTERN "*.yaml"
   PATTERN "*.pgm"
+)
+
+# Install the 3D prior map fastlio_lc_pgo's /pgo_batch_optimize writes
+# (map_pcd_path) -- lio_localization ICPs against it. It shares the levelled,
+# floor-referenced frame with the .pgm/.yaml 2D grid in map/, but lives in its
+# own directory since it is a different artifact (3D prior vs. 2D nav grid).
+install(DIRECTORY
+  pcd/
+  DESTINATION share/${PROJECT_NAME}/pcd
+  FILES_MATCHING
   PATTERN "*.pcd"
   # Levelled keyframe poses for lio_localization's seedless global search /
-  # /relocalize. Ships here so map_pcd, map and keyframe_poses are ONE
-  # package-relative set -- no absolute /home/<user> path that only resolves on
-  # the machine that built the map.
+  # /relocalize. Ships beside the .pcd it was written alongside, so map_pcd
+  # and keyframe_poses are ONE package-relative set -- no absolute
+  # /home/<user> path that only resolves on the machine that built the map.
   PATTERN "*_poses.txt"
 )
 

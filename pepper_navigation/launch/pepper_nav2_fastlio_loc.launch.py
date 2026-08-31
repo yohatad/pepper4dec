@@ -63,12 +63,12 @@ def generate_launch_description():
         description='Use bag/simulation clock instead of wall time.')
     declare_map_pcd_cmd = DeclareLaunchArgument(
         'map_pcd',
-        default_value=os.path.join(pkg_share, 'map', 'pepper_map_lc.pcd'),
+        default_value=os.path.join(pkg_share, 'pcd', 'pepper_map_lc.pcd'),
         description='Prior 3D .pcd map that lio_localization registers against. '
-                    'Now shipped in this package (map/) alongside the 2D grid, so '
-                    'the pair cannot drift apart. /pgo_batch_optimize writes it '
-                    'there directly (fastlio_lc_pgo map_pcd_path). MUST come from '
-                    'the same mapping run as map and keyframe_poses.')
+                    'Shipped in this package (pcd/, separate from the 2D grid in '
+                    'map/), so /pgo_batch_optimize writes it directly '
+                    '(fastlio_lc_pgo map_pcd_path). MUST come from the same '
+                    'mapping run as map and keyframe_poses.')
     declare_map_cmd = DeclareLaunchArgument(
         'map',
         default_value=os.path.join(pkg_share, 'map', 'pepper_map_lc_clean_0826.yaml'),
@@ -98,7 +98,7 @@ def generate_launch_description():
     # track lies inside the grid footprint).
     declare_keyframe_poses_cmd = DeclareLaunchArgument(
         'keyframe_poses',
-        default_value=os.path.join(pkg_share, 'map', 'pepper_map_lc_poses.txt'),
+        default_value=os.path.join(pkg_share, 'pcd', 'pepper_map_lc_poses.txt'),
         description='KITTI-format keyframe poses from the SAME mapping run as '
                     'map_pcd, used as candidates for global localization and '
                     '/relocalize. Empty disables both (manual /initialpose only).')

@@ -1,0 +1,7 @@
+image: pepper_map_lc_aug23.pgm
+mode: trinary
+resolution: 0.05
+origin: [-19.9, -95.7, 0]
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.25
