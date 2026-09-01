@@ -52,8 +52,8 @@
   ]
  },
  {
-  "exe": "lio_map_odom_bridge.py",
-  "name": "lio_map_odom_bridge",
+  "exe": "lio_odom_bridge.py",
+  "name": "lio_odom_bridge",
   "ns": "<node_namespace_unspecified>",
   "params": [
    {

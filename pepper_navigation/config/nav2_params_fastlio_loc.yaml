@@ -154,7 +154,7 @@ local_costmap:
       # Point-LIO gravity-aligns it, so the SAME name means different geometry
       # per backend and the height bands below would slice the cloud along the
       # wrong axis. odom is gravity-aligned and floor-referenced on every
-      # backend (lio_map_odom_bridge, level_source=calibration), published as a
+      # backend (lio_odom_bridge, level_source=calibration), published as a
       # child of odom here since transform_fusion owns map -> odom.
       global_frame: odom
       robot_base_frame: base_footprint

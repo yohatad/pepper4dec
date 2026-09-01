@@ -23,7 +23,7 @@ source ~/ros2_ws/install/setup.bash
 |-------|--------------|-------|
 | `pepper_odom` | `naoqi_driver2` | wheel odometry; **not** named `odom` on purpose |
 | `odom` | FAST-LIO | IMU-aligned, tilted ~90° on Pepper's mount — **not** gravity-aligned |
-| `odom` | `lio_map_odom_bridge` | one-time gravity-leveled parent of `odom`; Z-up |
+| `odom` | `lio_odom_bridge` | one-time gravity-leveled parent of `odom`; Z-up |
 | `map` | RTAB-Map / PGO / `transform_fusion` | whichever layer owns the loop-closure or prior-map correction |
 
 **Only one node may publish a given frame's parent** — that constraint is what
@@ -34,7 +34,7 @@ produces garbage ground/obstacle splits. See `config/README.md` in
 
 ## FAST-LIO options
 
-All of these start the `fastlio_mapping` node plus `lio_map_odom_bridge`, via
+All of these start the `fastlio_mapping` node plus `lio_odom_bridge`, via
 `fast_lio mapping.launch.py`. **Do not run that upstream file directly on this
 robot** — it does not include `pepper_sensor_tf.launch.py`, so the bridge waits
 forever for the static `base_footprint -> l2lidar_frame_imu` chain and the stack
@@ -169,7 +169,7 @@ pepper_slam/
 │   ├── rtabmap_base.launch.py                 # vendored upstream; excluded from flake8
 │   ├── slam_toolbox.launch.py
 │   ├── pepper_sensor_tf.launch.py
-│   ├── ekf_fusion.launch.py                   # robot_localization EKF, alternative to lio_map_odom_bridge
+│   ├── ekf_fusion.launch.py                   # robot_localization EKF, alternative to lio_odom_bridge
 │   ├── fastlio_odometry.launch.py             # FAST-LIO odometry (no loop closure); wraps fast_lio's mapping.launch.py
 │   ├── pointlio_odometry.launch.py            # same, for Point-LIO
 │   ├── view_rig.launch.py                     # sensor rig visualization

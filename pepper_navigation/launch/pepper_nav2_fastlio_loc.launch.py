@@ -9,7 +9,7 @@
 # No Open3D, no RTAB-Map, no PGO at runtime -- the lightest localization stack
 # (see the Jetson CPU-budget discussion).
 #
-# Frames:  map --(transform_fusion)--> odom --(lio_map_odom_bridge)-->
+# Frames:  map --(transform_fusion)--> odom --(lio_odom_bridge)-->
 #          base_footprint --(pepper_sensor_tf, static)--> l2lidar_frame_imu / cams
 # The local costmap rolls in 'odom'; the global costmap and map_server in 'map'.
 #

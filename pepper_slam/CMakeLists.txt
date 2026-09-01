@@ -35,7 +35,7 @@ install(PROGRAMS
   # FAST-LIO code: point_lio, fastlio_lc_pgo, FAST-LIVO2 and
   # pepper_navigation all ran them out of fast_lio without declaring a
   # dependency on it.
-  scripts/lio_map_odom_bridge.py
+  scripts/lio_odom_bridge.py
   scripts/pgo_map_odom_bridge.py
   scripts/cloud_range_filter.py
   scripts/cloud_to_odom_frame.py

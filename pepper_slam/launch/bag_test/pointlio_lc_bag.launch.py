@@ -12,8 +12,12 @@
 # The QoS overrides are REQUIRED: /imu/data and /camera/imu were recorded
 # BEST_EFFORT and a RELIABLE subscriber matches nothing against them, so without
 # the file the estimator waits forever for IMU init and prints nothing.
-# Do NOT replay /tf -- the bag's wheel odometry fights the bridge for
-# base_footprint's parent.
+# Replaying /tf is SAFE and wanted -- see pepper_sensor_tf.launch.py's
+# header for why the old "do not replay /tf" advice no longer holds. Bags
+# recorded before commit 8edd1f5 may still carry a wheel-odometry edge that
+# claims base_footprint as a child; check with
+# `ros2 bag play <bag> --topics /tf & ros2 run tf2_tools view_frames` before
+# replaying /tf from one of those.
 #
 # Point-LIO variant of fastlio_lc_bag.launch.py; same /pgo_batch_optimize step
 # applies.

@@ -8,7 +8,7 @@
 #
 # Same defect as plain FAST-LIO's mapping.launch.py (see fastlio_odometry.launch.py
 # in this directory): point_lio's mapping_l2lidar_node.launch.py runs
-# lio_map_odom_bridge.py itself, which needs the static base_footprint ->
+# lio_odom_bridge.py itself, which needs the static base_footprint ->
 # l2lidar_frame -> l2lidar_frame_imu chain -- but that launch file never includes
 # pepper_sensor_tf.launch.py, so launched alone it silently hangs waiting for
 # a transform that will never appear. This wraps both together.
@@ -46,7 +46,7 @@ def _echo_resolved(context, *args, **kwargs):
 
     use_sim_time true with no /clock pins time at 0 and nothing renders or
     fuses; publisher:=none against a bag with NO /tf_static leaves the rig
-    transforms missing and lio_map_odom_bridge simply waits. Neither prints an
+    transforms missing and lio_odom_bridge simply waits. Neither prints an
     error. One line here beats bisecting either.
     """
     from launch.actions import LogInfo
@@ -102,7 +102,7 @@ def generate_launch_description():
     )
     declare_bridge_level_frame_cmd = DeclareLaunchArgument(
         'bridge_level_frame', default_value='true',
-        description='Have lio_map_odom_bridge publish the static odom -> '
+        description='Have lio_odom_bridge publish the static odom -> '
                     'odom leveling frame. Set false when a higher layer owns '
                     'odom (e.g. PGO publishing map -> odom).'
     )

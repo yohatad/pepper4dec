@@ -149,7 +149,7 @@ def yaw_only_rotation(r: np.ndarray) -> np.ndarray:
 class LioMapOdomBridge(Node):
 
     def __init__(self):
-        super().__init__('lio_map_odom_bridge')
+        super().__init__('lio_odom_bridge')
 
         # Frames
         self.declare_parameter('odom_frame', 'lio_init')
@@ -261,7 +261,7 @@ class LioMapOdomBridge(Node):
                      f" (leveling {self.level_frame} DISABLED; a higher layer "
                      f"owns {self.odom_frame})")
         self.get_logger().info(
-            f"lio_map_odom_bridge: consuming {self.odom_topic} "
+            f"lio_odom_bridge: consuming {self.odom_topic} "
             f"({self.odom_frame} -> {self.lidar_imu_frame}), publishing "
             f"{self.odom_frame} -> {self.base_frame}{level_msg}. "
             f"Ensure FAST-LIO's own TF broadcast (publish.publish_tf) is DISABLED.")

@@ -4,7 +4,7 @@
 # Grid/3D) -- with ICP proximity loop closures on /points.
 #
 # Frames: FAST-LIO's own odom frame is IMU-aligned (tilted ~90 deg on Pepper's
-# mount). lio_map_odom_bridge publishes odom -> base_footprint plus a one-time
+# mount). lio_odom_bridge publishes odom -> base_footprint plus a one-time
 # gravity-leveled odom -> lio_init. RTAB-Map anchors on odom so its map
 # frame is Z-up, which the 2D occupancy projection requires.
 #
@@ -29,7 +29,7 @@ def generate_launch_description():
         get_package_share_directory('pepper_slam'), 'launch')
 
     # 2026-08-12: was fast_lio/mapping.launch.py directly, which does NOT
-    # include pepper_sensor_tf -- so lio_map_odom_bridge had no static
+    # include pepper_sensor_tf -- so lio_odom_bridge had no static
     # base_footprint -> ..._imu chain and could never close
     # odom -> base_footprint. Going through pepper_slam's own odometry launch
     # fixes that, and brings the RealSense-IMU default plus the derived

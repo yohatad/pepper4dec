@@ -226,9 +226,9 @@ odometry frame and the global costmap lives in `map`:
 
 | Stack | `map → odom` | `odom → base_footprint` | Local costmap frame |
 |-------|--------------|-------------------------|---------------------|
-| `pepper_nav2_amcl` | `amcl` | `lio_map_odom_bridge` (FAST-LIO) | `odom` |
-| `pepper_nav2_fastlio_loc` | `transform_fusion` | `lio_map_odom_bridge` | `odom` |
-| `pepper_nav2_rtabmap_loc` | `rtabmap` (to `odom`) | `lio_map_odom_bridge` | `odom` |
+| `pepper_nav2_amcl` | `amcl` | `lio_odom_bridge` (FAST-LIO) | `odom` |
+| `pepper_nav2_fastlio_loc` | `transform_fusion` | `lio_odom_bridge` | `odom` |
+| `pepper_nav2_rtabmap_loc` | `rtabmap` (to `odom`) | `lio_odom_bridge` | `odom` |
 | `pepper_navigation` (legacy) | `amcl` | `naoqi_driver2` (`pepper_odom`) | `pepper_odom` |
 
 The static sensor chain (`base_footprint → l2lidar_frame → cameras`) comes from

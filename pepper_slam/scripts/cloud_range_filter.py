@@ -20,7 +20,7 @@ any other consumer of the original topic, are untouched):
 3. GROUND-PLANE REMOVAL (off by default) -- for feeding nav2's costmap
    voxel_layer, which marks obstacles with a FIXED height band evaluated in
    its global_frame (odom/map). That frame's leveling is a one-time
-   snapshot (see lio_map_odom_bridge.py); residual tilt at that instant grows
+   snapshot (see lio_odom_bridge.py); residual tilt at that instant grows
    with distance/time, so a fixed band eventually mis-marks the real floor as
    an obstacle. base_footprint, by contrast, is republished continuously from
    FAST-LIO's live odometry and tracks the robot's true current

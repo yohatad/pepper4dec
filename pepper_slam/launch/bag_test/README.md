@@ -83,7 +83,7 @@ subscribes RELIABLE; the others use `SensorDataQoS()` and would match either way
 ## Replaying `/tf` is fine — and you want it
 
 An older version of this file said not to, because the bag's wheel odometry
-would fight `lio_map_odom_bridge` for `base_footprint`'s parent. That stopped
+would fight `lio_odom_bridge` for `base_footprint`'s parent. That stopped
 being true at commit 8edd1f5, which defaulted `publish_wheel_odom_tf` to false
 (`naoqi_driver2/src/converters/joint_state.cpp:89`) for exactly that reason, so
 the edge is never recorded.

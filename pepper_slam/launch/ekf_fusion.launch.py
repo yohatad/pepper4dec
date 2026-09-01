@@ -1,5 +1,5 @@
 # Fuses leveled LIO odometry (x, y, yaw) with wheel odometry's z/roll/pitch
-# via robot_localization, as an alternative to lio_map_odom_bridge.py's
+# via robot_localization, as an alternative to lio_odom_bridge.py's
 # flatten_base_frame hard clamp -- see ekf_lio_wheel.yaml for why.
 #
 # ADDITIVE, not a replacement: run this ALONGSIDE fastlio_odometry.launch.py

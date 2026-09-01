@@ -3,7 +3,7 @@
 Republish a raw LIO odometry topic, rotated into the gravity-level odom frame.
 
 Takes FAST-LIO's /Odometry, Point-LIO's /aft_mapped_to_init, or any backend
-routed through lio_map_odom_bridge.py, and emits a full nav_msgs/Odometry for
+routed through lio_odom_bridge.py, and emits a full nav_msgs/Odometry for
 feeding into an EKF (see ekf_lio_wheel.yaml) alongside wheel odometry.
 
 Position-only leveling isn't enough for a state estimator: the ORIENTATION

@@ -15,7 +15,7 @@
 # because nothing here hides the drift.
 #
 # ros2 launch fast_lio mapping.launch.py by itself is not standalone-usable
-# on this robot: lio_map_odom_bridge.py needs the static base_footprint ->
+# on this robot: lio_odom_bridge.py needs the static base_footprint ->
 # l2lidar_frame -> l2lidar_frame_imu chain, which only pepper_sensor_tf.launch.py
 # provides, and mapping.launch.py doesn't include it (that file is shared
 # across every FAST-LIO sensor config in this workspace -- mid360, velodyne,
@@ -56,7 +56,7 @@ def _echo_resolved(context, *args, **kwargs):
 
     use_sim_time true with no /clock pins time at 0 and nothing renders or
     fuses; publisher:=none against a bag with NO /tf_static leaves the rig
-    transforms missing and lio_map_odom_bridge simply waits. Neither prints an
+    transforms missing and lio_odom_bridge simply waits. Neither prints an
     error. One line here beats bisecting either.
     """
     from launch.actions import LogInfo
@@ -99,7 +99,7 @@ def generate_launch_description():
                     'ros2 bag play --clock. The bag_test wrappers set this for you.')
     declare_bridge_level_frame_cmd = DeclareLaunchArgument(
         'bridge_level_frame', default_value='true',
-        description='Have lio_map_odom_bridge publish the static odom -> '
+        description='Have lio_odom_bridge publish the static odom -> '
                     'odom leveling frame. Set false when a higher layer owns '
                     'odom (e.g. PGO publishing map -> odom).'
     )

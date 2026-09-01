@@ -20,7 +20,7 @@
 #      costmaps still take the full 3D /points; the scan is localization-only.
 #
 # Frames:  map --(amcl)--> odom --(bridge, static)--> odom
-#          --(lio_map_odom_bridge)--> base_footprint
+#          --(lio_odom_bridge)--> base_footprint
 #          --(pepper_sensor_tf, static)--> l2lidar_frame / cams
 #
 # Usage (real robot):

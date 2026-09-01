@@ -79,9 +79,9 @@ the bridge publishes. A lookup of `odom -> base_footprint` traverses
 |---|---|---|---|
 | `l2lidar_frame -> l2lidar_frame_imu` | static | `static_tf_publisher` | IMU's position inside the lidar housing (17 mm, no rotation) |
 | `base_footprint -> l2lidar_frame` | static | `static_tf_publisher` | **the mount calibration** |
-| `lio_init -> base_footprint` | dynamic ~11 Hz | `lio_map_odom_bridge` | **the odometry** -- continuous, drifts, never corrected |
+| `lio_init -> base_footprint` | dynamic ~11 Hz | `lio_odom_bridge` | **the odometry** -- continuous, drifts, never corrected |
 | `map -> lio_init` | dynamic, jumps | the localizer | **the correction** -- discontinuous, does not drift |
-| `odom <-> lio_init` | static, one-time | `lio_map_odom_bridge` | **the leveling** (0.2571 m, from calibration) |
+| `odom <-> lio_init` | static, one-time | `lio_odom_bridge` | **the leveling** (0.2571 m, from calibration) |
 | `map -> pgo_init` | static, one-time | `pgo_map_odom_bridge` | the leveling, map side |
 
 Measured on the July_22 bag over 35 s: `lio_init -> base_footprint` moved in

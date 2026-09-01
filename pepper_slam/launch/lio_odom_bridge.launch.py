@@ -1,4 +1,4 @@
-# lio_map_odom_bridge, in one place, for every estimator.
+# lio_odom_bridge, in one place, for every estimator.
 #
 # The bridge turns a LIO estimator's /odom_lio (lio_init -> <body frame>) into
 # odom -> base_footprint, closing the tree per REP-105. FAST-LIO and Point-LIO
@@ -106,8 +106,8 @@ def generate_launch_description():
 
         Node(
             package='pepper_slam',
-            executable='lio_map_odom_bridge.py',
-            name='lio_map_odom_bridge',
+            executable='lio_odom_bridge.py',
+            name='lio_odom_bridge',
             output='screen',
             parameters=[{
                 'use_sim_time': LaunchConfiguration('use_sim_time'),

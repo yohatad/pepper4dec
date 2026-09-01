@@ -9,8 +9,8 @@
 #
 # WHO OWNS WHICH TRANSFORM
 #   map -> odom        amcl (tf_broadcast: true)
-#   odom -> lio_init lio_map_odom_bridge, static one-time leveling
-#   odom -> base_footprint   lio_map_odom_bridge (from FAST-LIO's /Odometry)
+#   odom -> lio_init lio_odom_bridge, static one-time leveling
+#   odom -> base_footprint   lio_odom_bridge (from FAST-LIO's /Odometry)
 # FAST-LIO replaces the wheel odometry AMCL would normally correct, so this is
 # a LIO dead-reckoning chain -- NOT pepper_odom (what the older nav2_params.yaml
 # uses; see config/README.md on the naming split). Every frame still has exactly
@@ -292,7 +292,7 @@ local_costmap:
         publish_voxel_map: True
         # HEIGHT DATUM: odom is FLOOR-referenced -- its z=0 is the ground
         # plane, not the LiDAR start height (level_frame_on_floor in
-        # lio_map_odom_bridge.py). Every height here is therefore simply
+        # lio_odom_bridge.py). Every height here is therefore simply
         # "metres above the floor". These were previously expressed against a
         # floor sitting at z ~= -0.30, so each band is the old value + 0.30.
         #

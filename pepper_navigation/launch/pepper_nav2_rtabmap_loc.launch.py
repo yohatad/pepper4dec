@@ -7,7 +7,7 @@
 # publishes /map itself. No pointcloud_to_laserscan conversion needed --
 # Nav2's costmaps take /points (PointCloud2) directly.
 #
-# Frames: FAST-LIO's odom -> lio_map_odom_bridge's gravity-leveled
+# Frames: FAST-LIO's odom -> lio_odom_bridge's gravity-leveled
 # odom -> RTAB-Map's map. See nav2_params_rtabmap_loc.yaml for why
 # local_costmap uses odom (not pepper_odom) as its global_frame.
 #

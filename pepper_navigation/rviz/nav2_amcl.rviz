@@ -48,7 +48,7 @@ Visualization Manager:
       Reference Frame: <Fixed Frame>
       Value: true
 
-    # map -> odom (transform_fusion / ICP) -> base_footprint (lio_map_odom_bridge)
+    # map -> odom (transform_fusion / ICP) -> base_footprint (lio_odom_bridge)
     - Class: rviz_default_plugins/TF
       Enabled: true
       Frame Timeout: 15

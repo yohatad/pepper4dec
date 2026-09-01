@@ -1,6 +1,6 @@
 # EKF fusion of leveled LIO odometry (x, y, yaw) with wheel odometry's
 # implicit flat-floor assumption (z, roll, pitch) -- alternative to
-# lio_map_odom_bridge.py's flatten_base_frame hard clamp. Same practical
+# lio_odom_bridge.py's flatten_base_frame hard clamp. Same practical
 # effect on this platform (wheel odometry always reports z=roll=pitch=0
 # exactly, confirmed against a real bag -- there's no extra signal in it),
 # but via genuine per-field sensor fusion instead of an assumption baked into

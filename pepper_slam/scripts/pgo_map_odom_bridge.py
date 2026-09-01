@@ -2,7 +2,7 @@
 """
 Publishes the REP-105 map -> odom loop-closure correction from PGO.
 
-FAST-LIO owns   odom -> base_footprint  (via lio_map_odom_bridge).
+FAST-LIO owns   odom -> base_footprint  (via lio_odom_bridge).
 PGO owns        map  -> odom            (this node) -- the loop-closure
 correction, so the full tree is
 
@@ -141,7 +141,7 @@ class PgoMapOdomBridge(Node):
         # Physical sensor frame the LIO's body corresponds to in the static
         # tree; only used by level_source='calibration'.
         self.declare_parameter('lidar_imu_frame', 'l2lidar_frame_imu')
-        # See lio_map_odom_bridge.py's level_source for the full rationale.
+        # See lio_odom_bridge.py's level_source for the full rationale.
         # 'calibration' reads the leveling straight off the rigid, calibrated
         # base_frame -> lidar_imu_frame mount, so level_frame (and therefore
         # the map_batch.pcd pgo_node saves INTO it) is byte-identical on every
