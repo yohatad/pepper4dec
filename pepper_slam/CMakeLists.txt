@@ -38,6 +38,7 @@ install(PROGRAMS
   scripts/lio_map_odom_bridge.py
   scripts/pgo_map_odom_bridge.py
   scripts/cloud_range_filter.py
+  scripts/cloud_to_odom_frame.py
   scripts/leveled_odometry_publisher.py
   scripts/pepper_odom_relabel.py
   scripts/check_frame_contract.py

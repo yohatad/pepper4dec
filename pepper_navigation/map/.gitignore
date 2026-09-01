@@ -4,3 +4,6 @@
 # then colcon build, which installs it into the package share where the launch
 # defaults look for it. The 2D grids and *_poses.txt ARE tracked: they are small.
 *.pcd
+
+# local pre-rotation backups from utils/align_map.py
+*.bak

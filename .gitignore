@@ -28,3 +28,6 @@ __pycache__/
 # reaches ~1.2 GB per package -- it was the single largest thing in this
 # workspace before being deleted twice.
 .vscode/
+
+# CycloneDDS drops this wherever a node is launched from
+cyclonedds.log

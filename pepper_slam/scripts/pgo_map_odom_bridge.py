@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Publishes the REP-105 map -> odom loop-closure correction from PGO.
+"""
+Publishes the REP-105 map -> odom loop-closure correction from PGO.
 
 FAST-LIO owns   odom -> base_footprint  (via lio_map_odom_bridge).
 PGO owns        map  -> odom            (this node) -- the loop-closure
