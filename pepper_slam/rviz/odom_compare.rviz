@@ -1,0 +1,221 @@
+Panels:
+- Class: rviz_common/Displays
+  Help Height: 138
+  Name: Displays
+  Property Tree Widget:
+    Expanded:
+    - /Global Options1
+    - /Submap1
+    - /ScanInMap1
+    - /LiveMap (accumulated)1
+    - /Localization1
+    Splitter Ratio: 0.5
+  Tree Height: 484
+- Class: rviz_common/Selection
+  Name: Selection
+- Class: rviz_common/Tool Properties
+  Expanded:
+  - /2D Pose Estimate1
+  Name: Tool Properties
+  Splitter Ratio: 0.5886790156364441
+- Class: rviz_common/Views
+  Expanded:
+  - /Current View1
+  Name: Views
+  Splitter Ratio: 0.5
+- Class: rviz_common/Time
+  Experimental: false
+  Name: Time
+  SyncMode: 0
+  SyncSource: Submap
+Visualization Manager:
+  Class: ''
+  Displays:
+  - Alpha: 0.30000001192092896
+    Cell Size: 1.0
+    Class: rviz_default_plugins/Grid
+    Color: 160; 160; 164
+    Enabled: true
+    Line Style:
+      Line Width: 0.029999999329447746
+      Value: Lines
+    Name: Grid
+    Normal Cell Count: 0
+    Offset:
+      X: 0
+      Y: 0
+      Z: 0
+    Plane: XY
+    Plane Cell Count: 100
+    Reference Frame: compare
+    Value: true
+  - Alpha: 1.0
+    Buffer Length: 1
+    Class: rviz_default_plugins/Path
+    Color: 0; 220; 80
+    Enabled: true
+    Head Diameter: 0.30000001192092896
+    Head Length: 0.20000000298023224
+    Length: 0.30000001192092896
+    Line Style: Lines
+    Line Width: 0.029999999329447746
+    Name: FAST-LIO odometry (leveled)
+    Offset:
+      X: 0
+      Y: 0
+      Z: 0
+    Pose Color: 255; 85; 255
+    Pose Style: None
+    Radius: 0.029999999329447746
+    Shaft Diameter: 0.10000000149011612
+    Shaft Length: 0.10000000149011612
+    Topic:
+      Depth: 1
+      Durability Policy: Volatile
+      History Policy: Keep Last
+      Reliability Policy: Reliable
+      Value: /compare/lio_path
+    Value: true
+  - Alpha: 1.0
+    Buffer Length: 1
+    Class: rviz_default_plugins/Path
+    Color: 240; 60; 60
+    Enabled: true
+    Head Diameter: 0.30000001192092896
+    Head Length: 0.20000000298023224
+    Length: 0.30000001192092896
+    Line Style: Lines
+    Line Width: 0.029999999329447746
+    Name: Wheel odometry (/pepper_odom)
+    Offset:
+      X: 0
+      Y: 0
+      Z: 0
+    Pose Color: 255; 85; 255
+    Pose Style: None
+    Radius: 0.029999999329447746
+    Shaft Diameter: 0.10000000149011612
+    Shaft Length: 0.10000000149011612
+    Topic:
+      Depth: 1
+      Durability Policy: Volatile
+      History Policy: Keep Last
+      Reliability Policy: Reliable
+      Value: /compare/wheel_path
+    Value: true
+  - Class: rviz_default_plugins/Marker
+    Enabled: true
+    Marker Topic: /compare/report
+    Name: Odometer readout
+    Namespaces: {}
+    Queue Size: 100
+    Value: true
+  - Class: rviz_default_plugins/TF
+    Enabled: false
+    Frame Timeout: 15
+    Frames:
+      All Enabled: false
+      base_footprint:
+        Value: true
+      camera_camera_link:
+        Value: true
+      l2lidar_frame:
+        Value: true
+      l2lidar_frame_imu:
+        Value: true
+      map:
+        Value: true
+      odom:
+        Value: true
+      lio_init:
+        Value: true
+    Marker Scale: 0.5
+    Name: TF
+    Show Arrows: false
+    Show Axes: true
+    Show Names: true
+    Tree:
+      map:
+        lio_init:
+          base_footprint:
+            l2lidar_frame:
+              camera_camera_link: {}
+              l2lidar_frame_imu: {}
+          odom: {}
+    Update Interval: 0
+    Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: compare
+    Frame Rate: 30
+  Name: root
+  Tools:
+  - Class: rviz_default_plugins/Interact
+    Hide Inactive Objects: true
+  - Class: rviz_default_plugins/MoveCamera
+  - Class: rviz_default_plugins/Select
+  - Class: rviz_default_plugins/FocusCamera
+  - Class: rviz_default_plugins/Measure
+    Line color: 128; 128; 0
+  - Class: rviz_default_plugins/SetInitialPose
+    Covariance x: 0.25
+    Covariance y: 0.25
+    Covariance yaw: 0.06853891909122467
+    Topic:
+      Depth: 5
+      Durability Policy: Volatile
+      History Policy: Keep Last
+      Reliability Policy: Reliable
+      Value: /initialpose
+  - Class: rviz_default_plugins/SetGoal
+    Topic:
+      Depth: 5
+      Durability Policy: Volatile
+      History Policy: Keep Last
+      Reliability Policy: Reliable
+      Value: /goal_pose
+  - Class: rviz_default_plugins/PublishPoint
+    Single click: true
+    Topic:
+      Depth: 5
+      Durability Policy: Volatile
+      History Policy: Keep Last
+      Reliability Policy: Reliable
+      Value: /clicked_point
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 90.0
+      Pitch: 1.5698
+      Yaw: 3.14
+      Focal Point:
+        X: 20.0
+        Y: -35.0
+        Z: 0.0
+      Name: Current View
+      Near Clip Distance: 0.01
+      Target Frame: <Fixed Frame>
+    Saved: null
+Window Geometry:
+  Displays:
+    collapsed: false
+  Height: 2162
+  Hide Left Dock: false
+  Hide Right Dock: true
+  QMainWindow State: 000000ff00000000fd000000010000000000000316000007d6fc0200000005fb000000100044006900730070006c006100790073010000006e000002dc0000018200fffffffb0000001200530065006c0065006300740069006f006e010000035600000159000000b000fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007301000004bb0000015c000000b000fffffffb0000000a005600690065007700730100000623000002210000013200fffffffb0000000800540069006d006500000007b1000000930000005a00ffffff00000aa2000007d600000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  Selection:
+    collapsed: false
+  Time:
+    collapsed: false
+  Tool Properties:
+    collapsed: false
+  Views:
+    collapsed: false
+  Width: 3524
+  X: 140
+  Y: 54
