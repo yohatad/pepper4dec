@@ -71,7 +71,7 @@ def generate_launch_description():
                     'the same mapping run as map and keyframe_poses.')
     declare_map_cmd = DeclareLaunchArgument(
         'map',
-        default_value=os.path.join(pkg_share, 'map', 'pepper_map_lc_aug22_clean.yaml'),
+        default_value=os.path.join(pkg_share, 'map', 'pepper_map_lc_clean_0826.yaml'),
         description='2D occupancy grid (the projection of the same environment as '
                     'map_pcd) served as /map for the global costmap static layer. '
                     'Defaults to the copy shipped in this package (map/). MUST '
