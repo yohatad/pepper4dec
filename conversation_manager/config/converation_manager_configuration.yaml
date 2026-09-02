@@ -1,0 +1,33 @@
+# LLM Settings
+# Note: LLM_API_KEY must be exported as an environment variable (not set here)
+llm:
+  base_url: https://api.deepseek.com/v1
+  model: deepseek-chat
+
+# Embedding Model
+embedding:
+  model: all-MiniLM-L6-v2
+
+# Retrieval Settings
+retrieval:
+  # "rag": vector search over ChromaDB, only relevant snippets sent to the LLM
+  # "full_context": skip vector search, send the entire knowledge base every turn
+  mode: rag
+
+# Search Settings (only used when retrieval.mode is "rag")
+search:
+  similarity_threshold: 0.15
+  top_k: 5
+
+# Conversation Settings
+conversation:
+  max_history_turns: 15   # Maximum number of turns to store in history
+  context_turns: 10       # Number of recent turns included in each LLM request
+
+# Data Settings
+data:
+  default_path: ./data/upanzi_data.json
+
+# Debug Settings
+debug:
+  verbose: true

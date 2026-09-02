@@ -1,0 +1,5 @@
+# Pepper Robot Topic Mappings
+topics:
+  JointAngles: "/joint_angles"
+  Wheels: "/cmd_vel"
+  JointStates: "/joint_states"

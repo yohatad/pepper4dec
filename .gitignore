@@ -1,0 +1,13 @@
+.env
+**/*.wav
+**/*.mp4
+**/sensorTestOutput.dat
+**/models/**
+**/*.bag
+**/*.pyc
+**/*cpython*
+__pycache__/
+# **/*.png
+**/dec_virtual_envs/**
+**/BehaviorTree.CPP/**
+**/chroma.sqlite3

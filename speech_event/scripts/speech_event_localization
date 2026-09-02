@@ -1,0 +1,3 @@
+#!/bin/bash
+source "$HOME/ros2_ws/.venvs/venv_map.sh"
+exec "$VENV_SOUND" -m speech_event.speech_event_localization "$@"

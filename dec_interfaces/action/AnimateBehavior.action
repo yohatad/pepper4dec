@@ -1,0 +1,15 @@
+# Goal - what behavior to execute
+string behavior_type      # "All", "body", "hands", "rotation"
+float32 selected_range    # 0.0 to 1.0 (movement range)
+int32 duration_seconds    # How long to run (0 = infinite until cancelled)
+---
+# Result - final outcome
+bool success
+string message
+float32 total_duration
+---
+# Feedback - continuous updates during execution
+string current_limb
+int32 gestures_completed
+float32 elapsed_time
+bool is_running

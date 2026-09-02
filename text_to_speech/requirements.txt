@@ -1,0 +1,24 @@
+# TTS node dependencies — install into tts_virtual_env
+#
+# Setup (one-time):
+#   python3 -m venv /home/yoha/tts_virtual_env
+#   /home/yoha/tts_virtual_env/bin/pip install -r requirements.txt
+#
+# After installing, the ROS2 paths .pth file must also be present:
+#   /home/yoha/tts_virtual_env/lib/python3.10/site-packages/ros2_paths.pth
+# containing:
+#   /opt/ros/humble/local/lib/python3.10/dist-packages
+#   /home/yoha/ros2_ws/install/dec_interfaces/local/lib/python3.10/dist-packages
+#   /home/yoha/ros2_ws/install/text_to_speech/local/lib/python3.10/dist-packages
+
+# Core scientific computing
+numpy
+scipy
+
+# Kokoro-82M local TTS (https://huggingface.co/hexgrad/Kokoro-82M)
+# Includes misaki[en] for English phonemisation (pulls in espeakng-loader)
+kokoro>=0.9.4
+
+# Audio I/O
+soundfile     # read/write audio files (used by kokoro internally)
+sounddevice   # play audio through system speakers / soundcard

@@ -1,0 +1,120 @@
+# Environment Knowledge Base
+tour_specification: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+locations:
+  1:
+    robot_location_description: "Pepper's starting location"
+    robot_location_pose:
+      x: 4.0
+      y: 6.8
+      theta: 90.0
+    gesture_target:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+    gesture_message_english: "Thank you for visiting Upanzi's Digital Experience Center. My name is Pepper, and I will be your tour guide. The Digital Experience Center is a physical space designed to showcase cutting-edge digital technologies, such as digital public infrastructure and digital public goods, allowing visitors like you to interact with solutions like digital identity, payments, and cybersecurity. Feel free to ask questions as we go along"
+    cultural_knowledge: ["SymbolicShapeRespect", "BowExtentRespect"]
+
+  2:
+    robot_location_description: "DPG/DPI Booth 1"
+    robot_location_pose:
+      x: 4.8
+      y: 8.0
+      theta: 45.0
+    gesture_target:
+      x: 6.0
+      y: 8.0
+      z: 0.0
+    gesture_message_english: "Our first stop is the Digital Public Goods and Infrastructure section. Here, we showcase the interoperable building blocks that make up the Upanzi Network. These include our flagship digital public goods: the Upanzi Digital Identity (UDI) system, which provides a secure and user-friendly way for citizens to prove their identity online; the Upanzi Payments System (UPS), which enables seamless digital transactions; and the Upanzi Programs Management System (UPMS), which helps governments efficiently manage social benefit programs. These solutions are designed to be open-source and scalable, allowing them to be adopted and adapted by other countries across Africa and beyond."
+    cultural_knowledge: ["DeicticShape"]
+
+  3:
+    robot_location_description: "DPG/DPI Booth 2"
+    robot_location_pose:
+      x: 4.8
+      y: 5.6
+      theta: 45.0
+    gesture_target:
+      x: 6.0
+      y: 5.6
+      z: 0.0
+    gesture_message_english: "Now that you've seen the building blocks of Upanzi's digital infrastructure, let's put it to use! Think of this like setting up your very first bank account - but done digitally, in minutes, using just your digital ID. No long queues, no paperwork, no hassle. Behind the scenes, we've connected Mifos - a banking platform - into Mojaloop, which is the payment network that links banks, mobile money wallets, and financial services into one system. What that means for you as a citizen is simple: once your account is open, you can send and receive money instantly, whether it's to a friend across town, a business across the country, or even someone in another country entirely. We've also built MojaShop - a digital marketplace where merchants and customers can transact using all these connected tools. And to make sure everything works safely and reliably, the entire system has been put through rigorous security and quality testing. This is what digital financial inclusion looks like in practice."
+    cultural_knowledge: ["DeicticShape"]
+
+  4:
+    robot_location_description: "Data Exchange Booth 1"
+    robot_location_pose:
+      x: 3.2
+      y: 1.6
+      theta: 100.0
+    gesture_target:
+      x: 3.2
+      y: 0.4
+      z: 270.0
+    gesture_message_english: "Now that your account is set up and you can make payments, let's talk about what powers good decisions - data. You know how frustrating it is when information is scattered everywhere and hard to find? That's exactly the problem across Africa - governments, researchers, and businesses all have data, but it's locked away in disconnected systems that don't talk to each other. The Open Data Portal solves that. Think of it as a single library where anyone - a government official, a researcher, a student, or an entrepreneur - can come to find, share, and use data easily. It even uses machine learning to automatically describe datasets and score their quality, so you know what you're working with. Whether it's data on public health, education, agriculture, or finance, it's all here in one place. There's also a built-in community forum where people can collaborate and contribute. This is what turns raw data into real decisions."
+    cultural_knowledge: ["DeicticShape"]
+
+  5:
+    robot_location_description: "Data Exchange Booth 2"
+    robot_location_pose:
+      x: 1.6
+      y: 1.6
+      theta: 50.0
+    gesture_target:
+      x: 1.6
+      y: 0.4
+      z: 270.0
+    gesture_message_english: "And here is proof of what good data can do in healthcare! We have two projects that show this beautifully. The first is HumekaFL - imagine a mother gives birth in a rural clinic far from any specialist. The doctor needs to know immediately if the baby is in distress. This system listens to the newborn's cry and alerts the doctor within seconds, giving them the information they need to act fast and save that baby's life. Patient data stays on-site, so privacy is protected. The second is our Malaria Diagnosis project. Traditionally, a doctor would spend a long time examining slides under a microscope to identify which type of malaria a patient has. Now, that same diagnosis can be done digitally and quickly, so patients get the right treatment faster. Doctors also have access to a live dashboard showing malaria patterns across regions, helping hospitals prepare and respond before outbreaks get worse. In both cases, the story is the same: better data means faster care, better decisions, and ultimately more lives saved."
+    cultural_knowledge: ["DeicticShape"]
+
+  6:
+    robot_location_description: "Connectivity Booth"
+    robot_location_pose:
+      x: 2.4
+      y: 3.2
+      theta: 50.0
+    gesture_target:
+      x: 1.2
+      y: 3.2
+      z: 180.0
+    gesture_message_english: "All the digital services you've seen today rely on one thing - a reliable internet connection. This is where our connectivity work comes in. Through the Measurement of Internet Resilience Africa Project or MIRA for short working in partnership with the Internet Society, we've built devices that measure internet strength and stability across Africa, starting right here in Kigali and expanding to more countries. Think of it as a health check for the internet - so we know exactly where it's weak and how to fix it. But what about places with no internet at all? Our second initiative tackles just that - a low-cost mesh network using wireless signals that can connect communities without traditional internet. We're already planning to deploy it in a refugee camp with World Vision, to help share health, sanitation, and education content across the camp. Because connectivity isn't a luxury - it's the foundation everything else is built on."
+    cultural_knowledge: ["DeicticShape"]
+
+  7:
+    robot_location_description: "Cybersecurity Booth 1"
+    robot_location_pose:
+      x: 2.4
+      y: 5.2
+      theta: 50.0
+    gesture_target:
+      x: 1.2
+      y: 5.2
+      z: 180.0
+    gesture_message_english: ""
+    cultural_knowledge: ["DeicticShape"]
+
+  8:
+    robot_location_description: "Cybersecurity Booth 2"
+    robot_location_pose:
+      x: 2.4
+      y: 7.6
+      theta: 50.0
+    gesture_target:
+      x: 1.2
+      y: 7.6
+      z: 180.0
+    gesture_message_english: ""
+    cultural_knowledge: ["DeicticShape"]
+
+  9:
+    robot_location_description: "Pepper's ending location"
+    robot_location_pose:
+      x: 4.0
+      y: 6.8
+      theta: 100.0
+    gesture_target:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+    gesture_message_english: "Thank you for joining us today and accepting to play the role of citizen protagonist. Overall, the tour painted a comprehensive picture of the Upanzi Network's approach: building interoperable Digital Public Infrastructure that is open-source and scalable, while simultaneously investing in the governance, security, and capacity required to make that infrastructure impactful. You have seen how a citizen's single digital identity threads through various services - a powerful illustration of the whole being greater than the sum of its parts. By the end of this immersive experience, it's evident that digital public goods do not stand alone; they interlock like pieces of a puzzle, supported by robust connectivity and safeguarded by vigilant cybersecurity measures, all driven forward by skilled and conscientious individuals. Hope you enjoyed the tour, goodbye."
+    cultural_knowledge: ["IconicShape"]

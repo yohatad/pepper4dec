@@ -1,0 +1,91 @@
+# ===========================================
+# Shared parameters (used by multiple nodes)
+# ===========================================
+/**:
+  ros__parameters:
+    use_compressed: false
+    camera_type: "pepper"   # Camera to use: "pepper" or "realsense"
+
+# ===========================================
+# Laptop saliency node params
+# ===========================================
+saliency_node:
+  ros__parameters:
+    publish_map: true
+    down_w: 160
+    down_h: 120
+    
+    # Saliency computation parameters
+    use_depth_weighting: true
+    depth_min_m: 0.3
+    depth_max_m: 10.0
+    depth_weight_min: 0.2
+    min_peak: 0.5
+    
+    # Visualization parameters
+    overlay_alpha: 0.4
+    
+    # Multi-peak parameters
+    num_peaks: 5
+    peak_min_distance_px: 50
+    
+    # Processing rate
+    process_hz: 1.0
+
+# ===========================================
+# Unified attention node params
+# ===========================================
+unified_attention_node:
+  ros__parameters:
+    # System
+    start_enabled: true
+    move_to_default_on_disable: true
+    default_yaw: 0.0
+    default_pitch: -0.2
+    default_move_speed: 0.1
+
+    # Joint limits for face tracking
+    face_yaw_lim: 1.8
+    face_pitch_up: 0.4
+    face_pitch_dn: -0.7
+
+    # Joint limits for saliency
+    saliency_yaw_lim: 1.2
+    saliency_pitch_up: 0.3
+    saliency_pitch_dn: -0.3
+
+    # Face parameters
+    face_timeout: 2.0
+    engaged_priority_bonus: 2.0
+    face_switch_cooldown: 1.0
+    same_face_threshold_deg: 8.0
+    prefer_closer_faces: true
+    max_face_distance: 5.0
+
+    # Stability parameters (anti-jitter)
+    min_angular_change_deg: 2.0   # Dead-zone: skip cmd if head already close
+    target_smoothing_alpha: 0.4   # EMA weight for new target (0=frozen, 1=raw)
+
+    # Saliency parameters
+    saliency_min_score: 0.30
+    saliency_min_cooldown: 1.5
+    saliency_max_dwell: 3.0
+    switch_score_ratio: 1.4
+    same_target_threshold_deg: 5.0
+
+    # Inhibition of Return (IOR)
+    enable_ior: true
+    ior_max_suppression: 0.9
+    ior_half_life: 3.0
+    ior_radius_deg: 15.0
+    ior_cleanup_threshold: 0.05
+    ior_max_locations: 20
+
+# ===========================================
+# Visualization node params
+# ===========================================
+attention_visualization:
+  ros__parameters:
+    publish_overlay: true
+    publish_markers: true
+    show_metrics: true

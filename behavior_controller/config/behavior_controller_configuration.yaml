@@ -1,0 +1,5 @@
+# Behavior Controller Configuration
+scenario_specification: "asr_cm_tts_pipeline"
+culture_knowledge_base: "cultureKnowledgeBase.yaml"
+environment_knowledge_base: "decEnvironmentKnowledgeBase_short.yaml"
+verbose_mode: true

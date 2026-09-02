@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="4" main_tree_to_execute="DeicticTest">
+
+  <BehaviorTree ID="DeicticTest">
+    <Sequence name="DeicticTestSequence">
+
+      <!-- Load ordered exhibit list from KnowledgeManager -->
+      <Action ID="RetrieveListOfExhibits" exhibit_list="{exhibit_queue}"/>
+
+      <!-- Loop through every exhibit -->
+      <WhileDoElse name="ExhibitLoop">
+
+        <!-- While: exhibits remain -->
+        <Condition ID="IsListWithExhibit" exhibit_list="{exhibit_queue}"/>
+
+        <!-- Do: navigate then point -->
+        <Sequence name="VisitAndPoint">
+          <!-- Pull nav goal + pointing target for the next exhibit -->
+          <Action ID="SelectExhibit"
+                  exhibit_speech="{exhibit_speech}"
+                  exhibit_goal_x="{exhibit_goal_x}"
+                  exhibit_goal_y="{exhibit_goal_y}"
+                  exhibit_goal_theta="{exhibit_goal_theta}"
+                  exhibit_location_x="{exhibit_location_x}"
+                  exhibit_location_y="{exhibit_location_y}"
+                  exhibit_location_z="{exhibit_location_z}"/>
+
+          <!-- Navigate to the exhibit -->
+          <Action ID="Navigate"
+                  goal_x="{exhibit_goal_x}"
+                  goal_y="{exhibit_goal_y}"
+                  goal_theta="{exhibit_goal_theta}"/>
+
+          <!-- Deictic point at the exhibit target -->
+          <Action ID="Gesture"
+                  gesture_type="point"
+                  location_x="{exhibit_location_x}"
+                  location_y="{exhibit_location_y}"
+                  location_z="{exhibit_location_z}"
+                  gesture_duration="3000"/>
+
+          <!-- Remove visited exhibit from queue -->
+          <Action ID="PopExhibitFromList" exhibit_list="{exhibit_queue}"/>
+        </Sequence>
+
+      </WhileDoElse>
+
+    </Sequence>
+  </BehaviorTree>
+
+  <TreeNodesModel>
+    <Action ID="RetrieveListOfExhibits">
+      <output_port name="exhibit_list">Ordered list of location IDs from KnowledgeManager</output_port>
+    </Action>
+
+    <Condition ID="IsListWithExhibit">
+      <input_port name="exhibit_list" default="{exhibit_queue}">Queue of remaining location IDs</input_port>
+    </Condition>
+
+    <Action ID="SelectExhibit">
+      <input_port name="exhibit_list" default="{exhibit_queue}">Queue of remaining location IDs</input_port>
+      <output_port name="exhibit_speech">Description text</output_port>
+      <output_port name="exhibit_goal_x">Navigation goal x (metres)</output_port>
+      <output_port name="exhibit_goal_y">Navigation goal y (metres)</output_port>
+      <output_port name="exhibit_goal_theta">Navigation goal heading (radians)</output_port>
+      <output_port name="exhibit_location_x">Pointing target x (metres)</output_port>
+      <output_port name="exhibit_location_y">Pointing target y (metres)</output_port>
+      <output_port name="exhibit_location_z">Pointing target z (metres)</output_port>
+    </Action>
+
+    <Action ID="Navigate">
+      <input_port name="goal_x">Goal x position (metres)</input_port>
+      <input_port name="goal_y">Goal y position (metres)</input_port>
+      <input_port name="goal_theta" default="0.0">Goal heading (radians)</input_port>
+    </Action>
+
+    <Action ID="Gesture">
+      <input_port name="gesture_type" default="">Gesture type</input_port>
+      <input_port name="gesture_duration" default="0">Duration in ms</input_port>
+      <input_port name="location_x" default="0.0">Target x (metres)</input_port>
+      <input_port name="location_y" default="0.0">Target y (metres)</input_port>
+      <input_port name="location_z" default="0.0">Target z (metres)</input_port>
+    </Action>
+
+    <Action ID="PopExhibitFromList">
+      <input_port name="exhibit_list" default="{exhibit_queue}">Queue to pop from</input_port>
+      <output_port name="remaining_count">Exhibits remaining after pop</output_port>
+    </Action>
+
+    <Action ID="LogEvent">
+      <input_port name="level" default="info">Log level</input_port>
+      <input_port name="message">Log message</input_port>
+    </Action>
+  </TreeNodesModel>
+
+</root>

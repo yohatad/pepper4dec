@@ -1,0 +1,3 @@
+gestureDescriptors: gesture.yaml
+robotTopics: pepperTopics.yaml
+verboseMode: true

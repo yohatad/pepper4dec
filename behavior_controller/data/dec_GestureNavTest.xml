@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="4" main_tree_to_execute="GestureNavTest">
+
+  <BehaviorTree ID="GestureNavTest">
+    <Sequence name="TestSequence">
+
+      <!-- 1. Welcome gesture -->
+      <Action ID="Gesture" gesture_type="welcome" gesture_duration="2000"/>
+
+      <!-- 2. Announce movement -->
+      <Action ID="SpeechWithFeedback" say="I will now navigate to the exhibit."/>
+
+      <!-- 3. Navigate to a target point -->
+      <Action ID="Navigate" goal_x="4.0" goal_y="6.8" goal_theta="1.5708"/>
+
+      <!-- 4. Point at something once arrived -->
+      <Action ID="Gesture"
+              gesture_type="point"
+              location_x="5.0"
+              location_y="6.8"
+              location_z="1.2"
+              gesture_duration="3000"/>
+
+      <!-- 5. Describe what is being pointed at -->
+      <Action ID="SpeechWithFeedback" say="This is the exhibit."/>
+
+      <!-- 6. Navigate back to start -->
+      <Action ID="Navigate" goal_x="0.0" goal_y="0.0" goal_theta="0.0"/>
+
+      <!-- 7. Goodbye gesture -->
+      <Action ID="Gesture" gesture_type="goodbye" gesture_duration="2000"/>
+
+    </Sequence>
+  </BehaviorTree>
+
+  <TreeNodesModel>
+    <Action ID="Gesture">
+      <input_port name="gesture_type" default="">Gesture type (e.g. welcome, point, goodbye)</input_port>
+      <input_port name="gesture_duration" default="0">Duration in ms</input_port>
+      <input_port name="location_x" default="0.0">Target x (metres)</input_port>
+      <input_port name="location_y" default="0.0">Target y (metres)</input_port>
+      <input_port name="location_z" default="0.0">Target z (metres)</input_port>
+    </Action>
+
+    <Action ID="SpeechWithFeedback">
+      <input_port name="say" default="">Text to speak</input_port>
+    </Action>
+
+    <Action ID="Navigate">
+      <input_port name="goal_x">Goal x position (metres)</input_port>
+      <input_port name="goal_y">Goal y position (metres)</input_port>
+      <input_port name="goal_theta" default="0.0">Goal heading (radians)</input_port>
+    </Action>
+  </TreeNodesModel>
+
+</root>

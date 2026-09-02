@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  pepper4dec:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        USE_CUDA: ${USE_CUDA:-0}
+    image: pepper4dec:latest
+    container_name: pepper4dec
+    privileged: true
+    # Shares the host's network stack directly so ROS2 DDS discovery works
+    # with tools running on the host (rviz, ros2 cli) and with the robot on
+    # the LAN. hostname/ports/networks are dropped since they don't apply
+    # (or aren't allowed) under host networking.
+    network_mode: host
+    environment:
+      - DISPLAY=${DISPLAY}
+      - ROS_DOMAIN_ID=42
+      - LANG=C.UTF-8
+      - LC_ALL=C.UTF-8
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.deepseek.com/v1}
+      - LLM_MODEL=${LLM_MODEL:-deepseek-chat}
+    volumes:
+      - ./:/home/pepper/ros2_ws/src/pepper4dec
+    # No explicit /dev/ttyUSB* mappings: privileged: true already grants
+    # access to all host devices, so startup no longer hard-fails if the
+    # lidar isn't plugged in or enumerates under a different path.
+    command: /bin/bash -c "source /opt/pepper4dec_setup.sh && ros2 launch pepper_navigation rtabmap_realsense.launch.py"
+
+  # Optional: RViz2 visualization container
+  pepper4dec-viz:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        USE_CUDA: ${USE_CUDA:-0}
+    image: pepper4dec:latest
+    container_name: pepper4dec-viz
+    privileged: true
+    network_mode: host
+    environment:
+      - DISPLAY=${DISPLAY}
+      - ROS_DOMAIN_ID=42
+      - LANG=C.UTF-8
+      - LC_ALL=C.UTF-8
+    volumes:
+      - ./:/home/pepper/ros2_ws/src/pepper4dec
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    depends_on:
+      - pepper4dec
+    command: /bin/bash -c "source /opt/pepper4dec_setup.sh && rviz2"

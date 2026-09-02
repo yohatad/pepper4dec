@@ -1,0 +1,27 @@
+cmake_minimum_required(VERSION 3.8)
+project(dec_interfaces)
+
+find_package(ament_cmake REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+# Optional but fine to add:
+find_package(action_msgs REQUIRED)
+find_package(builtin_interfaces REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/FaceDetection.msg"
+  "msg/ObjectDetection.msg"
+  "msg/PersonDetection.msg"
+  "srv/ConversationManagerPrompt.srv"
+  "srv/GetDepthROI.srv"
+  "action/ConversationManager.action"
+  "action/TTS.action"
+  "action/Gesture.action"
+  "action/AnimateBehavior.action"
+  "action/SpeechRecognition.action"
+  DEPENDENCIES builtin_interfaces std_msgs geometry_msgs
+)
+
+ament_export_dependencies(rosidl_default_runtime)
+ament_package()

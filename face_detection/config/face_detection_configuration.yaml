@@ -1,0 +1,15 @@
+# Face Detection Configuration File
+# This file contains all configurable parameters for the face detection node
+
+# General Settings
+useCompressed: false         # Use compressed image topics
+camera: "pepper"          # Camera type: "realsense", "pepper", or "video"
+verboseMode: false           # Enable verbose logging and display
+imageTimeout: 2.0            # Timeout in seconds for image reception
+
+# SixDrepNet Algorithm Settings
+sixdrepnetConfidence: 0.90   # Face detection confidence threshold (0.0-1.0)
+sixdrepnetHeadposeAngle: 10  # Head pose angle threshold for mutual gaze (degrees)
+requirePersonDetection: true  # Set to false to run face detection independently
+
+objectDetectionTimeout: 0.5   # Timeout in seconds for object detection messages

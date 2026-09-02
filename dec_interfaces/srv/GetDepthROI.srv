@@ -1,0 +1,37 @@
+# Request
+# Mode 1: Single ROI
+int32 x        # Top-left x coordinate (for single ROI)
+int32 y        # Top-left y coordinate (for single ROI)
+int32 width    # ROI width (for single ROI)
+int32 height   # ROI height (for single ROI)
+
+# Mode 2: Multiple points
+int32[] points_x   # Array of x coordinates
+int32[] points_y   # Array of y coordinates
+
+# Mode 3: Multiple ROIs
+int32[] rois_x      # Array of top-left x coordinates
+int32[] rois_y      # Array of top-left y coordinates
+int32[] rois_width  # Array of widths
+int32[] rois_height # Array of heights
+
+---
+# Response
+bool success
+string message
+
+# Single ROI response (if single ROI requested)
+float32[] depth_values  # Flattened depth array (row-major order)
+int32 roi_width
+int32 roi_height
+float32 min_depth
+float32 max_depth
+float32 mean_depth
+
+# Multiple points response (if points requested)
+float32[] point_depths  # Depth at each point
+
+# Multiple ROIs response (if multiple ROIs requested)
+float32[] roi_mean_depths    # Mean depth for each ROI
+float32[] roi_min_depths     # Min depth for each ROI
+float32[] roi_max_depths     # Max depth for each ROI

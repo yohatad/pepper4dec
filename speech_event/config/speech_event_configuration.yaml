@@ -1,0 +1,153 @@
+# ROS2 Parameters for the speech_event package
+#
+# Nodes and their ROS2 node names:
+#   speech_event              -> node: speech_recognition
+#   speech_event_localization -> node: sound_localization
+#   speech_event_recorder     -> node: audio_recorder
+#
+# Usage (single node):
+#   ros2 run speech_event speech_event \
+#     --ros-args --params-file config/speech_event_configuration.yaml
+#
+# Or in a launch file:
+#   parameters=[yaml_path]
+
+# =============================================================================
+# speech_event (speech_recognition node)
+# =============================================================================
+speech_recognition:
+  ros__parameters:
+
+    # -------------------------------------------------------------------------
+    # Audio Input
+    # -------------------------------------------------------------------------
+    microphone_topic: "/naoqi_driver/audio"   # ROS topic publishing naoqi_bridge_msgs/AudioBuffer
+    input_sample_rate: 48000     # Robot's native microphone sample rate (Hz)
+    sample_rate: 16000           # Target sample rate for VAD and Whisper (Hz)
+
+    # -------------------------------------------------------------------------
+    # Whisper ASR
+    # -------------------------------------------------------------------------
+    device: "cuda"               # PyTorch device: "cuda" or "cpu"
+    compute_type: "float16"      # Computation precision: "float16" or "float32"
+    language: "en"               # ISO 639-1 language code: "en", "fr", "es", etc.
+    whisper_model_id: "deepdml/faster-whisper-large-v3-turbo-ct2"  # HuggingFace model ID or local path
+
+    # -------------------------------------------------------------------------
+    # Voice Activity Detection (VAD) — two-threshold hysteresis
+    # Speech starts when prob >= speech_threshold.
+    # Silence accumulates when prob < neg_threshold.
+    # Segment ends after min_silence_duration_ms of continuous silence.
+    # -------------------------------------------------------------------------
+    speech_threshold: 0.7        # Probability above which speech is considered started (0.0–1.0)
+    neg_threshold: 0.35          # Probability below which silence is accumulated (0.0–1.0)
+    min_silence_duration_ms: 800  # Minimum continuous silence to end a speech segment (ms)
+    min_speech_duration: 0.3     # Minimum segment duration to submit for transcription (seconds)
+    max_speech_duration_s: 10.0  # Hard limit on speech segment length (seconds)
+    pre_speech_buffer_ms: 200    # Lookback audio prepended before speech onset (ms)
+
+    # -------------------------------------------------------------------------
+    # Audio Intensity Gate
+    # Audio chunks with RMS below this threshold are skipped before VAD
+    # (only applied when not already collecting speech).
+    # -------------------------------------------------------------------------
+    intensity_threshold: 0.001   # RMS amplitude gate (float)
+
+    # -------------------------------------------------------------------------
+    # Operating Mode
+    # action_server: true  -> Audio is gated; only processed while an action
+    #                         goal is active. Transcription returned as result.
+    # action_server: false -> Continuous processing; transcript published to
+    #                         /speech_event/text topic (standalone mode).
+    # -------------------------------------------------------------------------
+    action_server: true
+
+    # -------------------------------------------------------------------------
+    # VAD Always Active
+    # When true, VAD runs and publishes /speech_event/vad_speech_prob even when
+    # no ASR action goal is active. Speech is detected but NOT transcribed unless
+    # a goal is active. Enables barge-in monitoring during TTS playback.
+    # -------------------------------------------------------------------------
+    vad_always_active: true
+
+    # -------------------------------------------------------------------------
+    # Audio Cleaning (post-VAD, pre-ASR)
+    # Applied to each speech segment after VAD and before Whisper transcription.
+    # Pipeline: bandpass (80–7500 Hz) → notch filters (fan hum harmonics)
+    #           → Wiener filter with online noise estimation → RMS normalisation.
+    #
+    # noise_profile_path: path to a .npy mean-magnitude-spectrum file recorded
+    #   at sample_rate (16 kHz). Enables the static noise floor and automatic
+    #   notch filter placement for fan hum.
+    #   Leave empty ("") to use online estimation only (no file required).
+    #   NOTE: the 48 kHz fan_noise_profile.npy from the test scripts is NOT
+    #   compatible — record a new one at 16 kHz if you want to use a profile.
+    #
+    # noise_alpha: Wiener filter aggressiveness (0.0–1.0).
+    #   Higher = more noise suppression but more speech distortion.
+    #   Lower toward 0.3 if Whisper misses words; raise toward 0.8 for louder fans.
+    # -------------------------------------------------------------------------
+    noise_cleaning_enabled: false
+    noise_profile_path: "data/noise_profile.npy"  # relative to package share dir, or absolute path; "" for online-only
+    noise_alpha: 0.5               # Wiener aggressiveness — start here, tune if needed
+
+# =============================================================================
+# speech_event_localization (sound_localization node)
+# =============================================================================
+sound_localization:
+  ros__parameters:
+
+    # -------------------------------------------------------------------------
+    # Audio Input
+    # -------------------------------------------------------------------------
+    microphone_topic: "/naoqi_driver/audio"   # ROS topic publishing naoqi_bridge_msgs/AudioBuffer
+    sample_rate: 48000           # Audio sample rate — must match robot output (Hz)
+
+    # -------------------------------------------------------------------------
+    # SRP-PHAT Beamforming (pyroomacoustics)
+    # -------------------------------------------------------------------------
+    speed_of_sound: 343.0        # Speed of sound in air (m/s)
+    nfft: 1024                   # FFT size for STFT (power of 2 recommended)
+    angular_resolution: 36       # Number of azimuth scan angles (evenly spaced over 360°)
+    freq_range_min: 500          # Minimum frequency used for localization (Hz)
+    freq_range_max: 2500         # Maximum frequency used for localization (Hz)
+                                 # Note: must be <= sample_rate/2; exceeding mic-spacing
+                                 # Nyquist limit causes spatial aliasing (warning logged)
+
+    # -------------------------------------------------------------------------
+    # Localization Timing
+    # -------------------------------------------------------------------------
+    num_chunks_for_localization: 6  # Minimum audio chunks to accumulate per run
+    update_rate_hz: 2.0             # Maximum localization update frequency (Hz)
+
+    # -------------------------------------------------------------------------
+    # Output Filtering
+    # -------------------------------------------------------------------------
+    confidence_threshold: 0.15   # Minimum confidence score to publish results (0.0–1.0)
+                                 # Confidence = (peak - mean) / mean of spatial spectrum
+    intensity_threshold: 0.001   # RMS amplitude gate; quiet audio is skipped (float)
+
+    # -------------------------------------------------------------------------
+    # Temporal Smoothing (circular mean over azimuth history)
+    # -------------------------------------------------------------------------
+    enable_smoothing: true       # Enable temporal smoothing of azimuth estimates
+    smoothing_window: 5          # Number of past estimates to average when smoothing
+
+# =============================================================================
+# speech_event_recorder (audio_recorder node)
+# =============================================================================
+audio_recorder:
+  ros__parameters:
+
+    # -------------------------------------------------------------------------
+    # Audio Input
+    # -------------------------------------------------------------------------
+    mic_topic: "/naoqi_driver/audio"          # ROS topic publishing naoqi_bridge_msgs/AudioBuffer
+
+    # -------------------------------------------------------------------------
+    # Output
+    # -------------------------------------------------------------------------
+    output_base: "data/pepper_audio"  # Relative to package share dir, or absolute path.
+                                     # Output: <output_base>_<Hz>_<N>ch.wav
+    max_seconds: 0               # Stop after N seconds (0 = run until Ctrl-C)
+    split_channels: false        # Also write one mono WAV per channel if true
