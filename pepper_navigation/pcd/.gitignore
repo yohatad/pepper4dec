@@ -4,3 +4,6 @@
 # then colcon build, which installs it into the package share where the launch
 # defaults look for it. *_poses.txt IS tracked: it is small.
 *.pcd
+
+# local pre-rotation backups from utils/align_map.py
+*.bak

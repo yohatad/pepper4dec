@@ -53,10 +53,17 @@ def _seed_from_first_keyframe(context, *args, **kwargs):
     """
     import math
 
-    path = LaunchConfiguration('keyframe_poses').perform(context)
+    # keyframe_poses is deliberately undeclared here (see the note in
+    # generate_launch_description), and LaunchConfiguration.perform() RAISES on an
+    # undeclared name rather than returning '' -- so this launch died outright with
+    # "launch configuration 'keyframe_poses' does not exist" whenever it was not
+    # passed on the command line, i.e. the normal case, and the fallback below was
+    # unreachable. Read the context dict instead: it still holds the value when
+    # keyframe_poses:=<path> is passed, and is simply absent otherwise.
+    path = context.launch_configurations.get('keyframe_poses', '')
     if not path:
         from ament_index_python.packages import get_package_share_directory as g
-        path = os.path.join(g('pepper_navigation'), 'map',
+        path = os.path.join(g('pepper_navigation'), 'pcd',
                             'pepper_map_lc_poses.txt')
     try:
         with open(path) as f:

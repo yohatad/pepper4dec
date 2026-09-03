@@ -47,11 +47,11 @@ def generate_launch_description():
     nav_share = get_package_share_directory('pepper_navigation')
 
     declare_map_pcd_cmd = DeclareLaunchArgument(
-        'map_pcd', default_value=os.path.join(nav_share, 'map',
+        'map_pcd', default_value=os.path.join(nav_share, 'pcd',
                                               'pepper_map_lc.pcd'))
     declare_kf_cmd = DeclareLaunchArgument(
         'keyframe_poses', default_value=os.path.join(
-            nav_share, 'map', 'pepper_map_lc_poses.txt'))
+            nav_share, 'pcd', 'pepper_map_lc_poses.txt'))
     declare_params_cmd = DeclareLaunchArgument(
         'params_file', default_value=os.path.join(
             loc_share, 'config', 'localization.yaml'))
