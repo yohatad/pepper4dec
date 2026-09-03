@@ -2,28 +2,14 @@
 #
 # The bridge turns a LIO estimator's /odom_lio (lio_init -> <body frame>) into
 # odom -> base_footprint, closing the tree per REP-105. FAST-LIO and Point-LIO
-# need it identically -- same six parameters, same topic -- so include this
-# rather than starting the node yourself:
+# need it identically, so include this file rather than starting the node
+# yourself -- pass use_sim_time, config_path and config_file.
 #
-#     IncludeLaunchDescription(
-#         PythonLaunchDescriptionSource(os.path.join(
-#             get_package_share_directory('pepper_slam'),
-#             'launch', 'lio_odom_bridge.launch.py')),
-#         launch_arguments={
-#             'use_sim_time': use_sim_time,
-#             'config_path': <the estimator's config dir>,
-#             'config_file': <the config being used>,
-#         }.items())
-#
-# THE BODY FRAME IS READ FROM THE CONFIG (publish.body_frame), not from a table.
-# It must equal what the estimator stamps, or the bridge composes
+# THE BODY FRAME MUST EQUAL WHAT THE ESTIMATOR STAMPS, or the bridge composes
 # odom -> base_footprint through the wrong rigid offset and yields a pose that
-# looks plausible and is wrong. Reading the yaml makes the two impossible to
-# desync, and a new config needs no edit here.
-#
-# This used to be duplicated in FAST_LIO/launch/mapping.launch.py and
-# point_lio/launch/mapping_l2lidar_node.launch.py, each with its own copy of the
-# resolver and a hardcoded {config_file: frame} table.
+# looks plausible and is wrong. lidar_imu_frame now names it explicitly;
+# passing '' falls back to reading publish.body_frame from the config, which
+# makes the two impossible to desync.
 
 import os
 

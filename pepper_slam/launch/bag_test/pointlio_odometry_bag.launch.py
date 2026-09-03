@@ -47,10 +47,9 @@ def generate_launch_description():
     declare_rviz_cmd = DeclareLaunchArgument('rviz', default_value='true')
 
     # 'none': the bag carries its own /tf_static, and a second latched publisher
-    # duplicates the rig edges -- whichever lands last silently wins. Pass
-    # publisher:=urdf scope:=all for a legacy bag with an empty /tf_static.
-    # Keep this DECLARED, not forwarded: a launch_arguments entry would shadow
-    # the command line and make the override above a silent no-op.
+    # duplicates the rig edges -- whichever lands last silently wins. Keep it
+    # DECLARED, not forwarded, or a launch_arguments entry shadows the command
+    # line and makes publisher:=urdf a silent no-op.
     declare_publisher_cmd = DeclareLaunchArgument(
         'publisher', default_value='none',
         description="pepper_sensor_tf publisher: 'none' (default here) starts "
@@ -70,10 +69,9 @@ def generate_launch_description():
     ld.add_action(declare_config_file_cmd)
     ld.add_action(declare_rviz_cmd)
     ld.add_action(declare_publisher_cmd)
-    # AFTER the declares: LogInfo resolves config_file immediately, and a
-    # LaunchConfiguration that has not been declared yet raises
-    # "launch configuration 'config_file' does not exist" at launch time.
-    # --show-args does NOT catch this -- it never executes the action.
+    # AFTER the declares: LogInfo resolves config_file immediately, and an
+    # undeclared LaunchConfiguration raises at launch time. --show-args does
+    # NOT catch this -- it never executes the action.
     ld.add_action(LogInfo(msg=['[pointlio_odometry_bag] use_sim_time=true (forced)  '
                                'config_file=', LaunchConfiguration('config_file')]))
     ld.add_action(pointlio)

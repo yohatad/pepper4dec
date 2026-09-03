@@ -1,32 +1,21 @@
 # RTAB-Map on a recorded bag using ALL THREE sensors: RealSense RGB + aligned
 # depth, the RealSense IMU, and the Unitree L2 lidar.
 #
-# Unlike rtabmap_l2_bag.launch.py (lidar only) and
-# rtabmap_fastlio_bag.launch.py (lidar odometry via FAST-LIO, RGB for
-# appearance only), this variant subscribes to the aligned depth image as well.
-# bags/slam_recording does publish /camera/aligned_depth_to_color/image_raw
-# (6297 msgs, 16UC1, already in camera_color_optical_frame), so the depth topic
-# that earlier bags lacked is available here.
+# Unlike rtabmap_l2_bag (lidar only) and rtabmap_fastlio_bag (FAST-LIO odometry,
+# RGB for appearance), this variant also subscribes to the aligned depth image.
 #
-# ODOMETRY (odom_source arg)
-#   wheel (default) -- the bag's own /pepper_odom. Measured against the other
-#       stacks on slam_recording it is by far the smoothest: median step 0.35 cm
-#       vs 5.74 cm for rtabmap icp_odometry, 2.99 cm for Point-LIO. Wheel odom
-#       drifts over distance, which is exactly what loop closure corrects.
-#   icp   -- rtabmap's icp_odometry on the L2. Measured median step 5.74 cm,
-#       p99 12.52 cm, with two 44-47 cm outliers at t=168 s (5.09 m/s implied,
-#       against Pepper's 0.35 m/s ceiling). Icp/MaxTranslation is capped at 0.3 m
-#       below to reject those; real motion is ~3 cm/frame at ~11 Hz.
+# ODOMETRY (odom_source arg). Measured median step on slam_recording:
+#   wheel (default)  the bag's own /pepper_odom, 0.35 cm -- by far the
+#       smoothest. It drifts over distance, which loop closure corrects.
+#   icp              rtabmap's icp_odometry on the L2, 5.74 cm, p99 12.52 cm,
+#       with 44-47 cm outliers implying 5.09 m/s against Pepper's 0.35 m/s
+#       ceiling. Icp/MaxTranslation is capped at 0.3 m below to reject those.
+# Only ONE source may parent base_footprint, so with wheel (where the bag's /tf
+# already supplies pepper_odom -> base_footprint) icp_odometry is not started.
 #
-# Only ONE odometry source may publish base_footprint's TF parent. With
-# odom_source:=wheel the bag's /tf already supplies pepper_odom -> base_footprint,
-# so icp_odometry is not started.
-#
-# IMU: /camera/imu is raw accel+gyro with orientation_covariance[0] = -1, i.e. no
-# orientation, so RTAB-Map cannot apply a gravity constraint from it directly.
-# imu_filter_madgwick fuses it into /imu/filtered first. The RealSense IMU is used
-# rather than the L2's /imu/data because the latter's timestamps carry a ~17 ms
-# sawtooth (std 5.139 ms vs 0.001 ms) from l2_sync_rate_ms:30.
+# IMU: /camera/imu carries no orientation, so imu_filter_madgwick fuses it into
+# /imu/filtered before RTAB-Map can use it for gravity. The RealSense is used
+# over the L2's /imu/data, whose timestamps carry a ~17 ms sawtooth.
 #
 # Usage:
 #   ros2 launch pepper_slam rtabmap_fused_bag.launch.py

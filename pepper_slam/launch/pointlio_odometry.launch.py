@@ -1,33 +1,17 @@
 # Plain Point-LIO ODOMETRY on the Pepper L2 rig, with its required static TF.
+# The Point-LIO twin of fastlio_odometry.launch.py; see that header for why
+# this is odometry and not SLAM, and use fastlio_lc_pgo's pointlio_lc_l2 for a
+# loop-corrected map.
 #
-# RENAMED 2026-08-10 from pointlio_mapping.launch.py -- see the header of
-# fastlio_odometry.launch.py for why. Short version: "mapping" upstream means
-# scan-to-map REGISTRATION, not SLAM. No loop closure, no pose graph, so the
-# accumulated cloud drifts and duplicates on revisit. Use
-# fastlio_lc_pgo pointlio_lc_l2.launch.py for a loop-corrected map.
+# It exists for the same reason: point_lio's mapping_l2lidar_node.launch.py
+# runs lio_odom_bridge itself but never includes pepper_sensor_tf.launch.py,
+# so launched alone it hangs waiting for a transform that never appears.
 #
-# Same defect as plain FAST-LIO's mapping.launch.py (see fastlio_odometry.launch.py
-# in this directory): point_lio's mapping_l2lidar_node.launch.py runs
-# lio_odom_bridge.py itself, which needs the static base_footprint ->
-# l2lidar_frame -> l2lidar_frame_imu chain -- but that launch file never includes
-# pepper_sensor_tf.launch.py, so launched alone it silently hangs waiting for
-# a transform that will never appear. This wraps both together.
+# flatten_base_frame defaults true here (false upstream): Pepper is confirmed
+# flat-floor-only. Pass false to see Point-LIO's own drifting z/roll/pitch.
 #
-# STALE UNTIL 2026-08-12: mapping_l2lidar_node.launch.py DOES take a
-# config_file argument now, and this file forwards it. It used to be
-# config/l2lidar_node.yaml. use_sim_time, bridge_level_frame and
-# flatten_base_frame ARE forwarded (see that file).
-#
-# flatten_base_frame defaults to true HERE (unlike mapping_l2lidar_node.launch.py's
-# own default of false): this file is Pepper-specific and Pepper is confirmed
-# to only ever run on flat floor. Pass flatten_base_frame:=false to see
-# Point-LIO's own (drifting) z/roll/pitch instead.
-#
-# Usage:
 #   ros2 launch pepper_slam pointlio_odometry.launch.py
-#   ros2 bag play <bag> --clock --topics /points /imu/data
-#   (replaying /tf is SAFE and wanted -- see pepper_sensor_tf.launch.py's
-#    header for why the old "do not replay /tf" advice no longer holds.)
+#   ros2 bag play <bag> --clock --topics /points /imu/data /tf /tf_static
 
 import os
 
@@ -66,33 +50,25 @@ def generate_launch_description():
     flatten_base_frame = LaunchConfiguration('flatten_base_frame')
     bridge_level_frame = LaunchConfiguration('bridge_level_frame')
 
-    # 2026-08-12: the RealSense IMU is the permanent choice for this rig, so
-    # l2lidar_rsimu.yaml is the default, and lio_odom_bridge now hardcodes the
-    # matching camera_imu_optical_frame rather than deriving it. Switching to
-    # l2lidar_node.yaml (body frame l2lidar_frame_imu) therefore needs
-    # lidar_imu_frame:=l2lidar_frame_imu passed too.
+    # The RealSense IMU is the permanent choice, and lio_odom_bridge hardcodes
+    # the matching camera_imu_optical_frame rather than deriving it, so
+    # l2lidar_node.yaml needs lidar_imu_frame:=l2lidar_frame_imu passed too.
     declare_config_file_cmd = DeclareLaunchArgument(
         'config_file', default_value='l2lidar_rsimu.yaml',
         description='Point-LIO config under point_lio/config. l2lidar_rsimu.yaml '
                     'uses the RealSense IMU (default); l2lidar_node.yaml uses '
                     'the L2 s own -- see utils/L2_IMU/REPORT.md.')
-    # Scope follows use_sim_time: replay has no RealSense driver, so the camera
-    # TF edges must come from calibration; on the robot the driver owns them and
-    # sensor_tf.yaml warns the two sources CAN DIFFER.
     declare_rviz_cmd = DeclareLaunchArgument('rviz', default_value='true')
     declare_publish_map_identity_cmd = DeclareLaunchArgument(
         'publish_map_identity', default_value='true',
         description='Publish a static identity map -> odom so "map" can be used '
                     'as a fixed frame in odometry-only runs. Set false when PGO '
                     'or a localizer owns that edge.')
-    # false, NOT true: this is the LIVE entry point. Every wrapper in
-    # pepper_slam/launch/bag_test sets use_sim_time:='true' explicitly, so this
-    # default only ever applies on the robot -- where 'true' pins sim time at 0,
-    # so tf never resolves and nothing fuses, silently and with no error.
-    # pepper_sensor_tf's 'publisher'/'scope' are NOT derived from this -- only
-    # use_sim_time is forwarded. On a bag, pass them yourself: publisher:=none
-    # if it carries its own /tf_static, publisher:=urdf scope:=all if it does
-    # not. The bag_test wrappers already default publisher to none.
+    # false, NOT true: this is the LIVE entry point, and 'true' on the robot
+    # pins sim time at 0, so tf never resolves and nothing fuses, silently.
+    # pepper_sensor_tf's publisher/scope are NOT derived from this -- on a bag
+    # pass publisher:=none if it carries its own /tf_static, publisher:=urdf
+    # scope:=all if it does not.
     declare_use_sim_time_cmd = DeclareLaunchArgument(
         'use_sim_time', default_value='false',
         description='true for bag replay (--clock); false on the robot. '

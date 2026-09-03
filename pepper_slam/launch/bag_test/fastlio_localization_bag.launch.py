@@ -10,14 +10,9 @@
 #     --read-ahead-queue-size 2000
 #
 # The QoS overrides are REQUIRED: /imu/data and /camera/imu were recorded
-# BEST_EFFORT and a RELIABLE subscriber matches nothing against them, so without
-# the file the estimator waits forever for IMU init and prints nothing.
-# Replaying /tf is SAFE and wanted -- see pepper_sensor_tf.launch.py's
-# header for why the old "do not replay /tf" advice no longer holds. Bags
-# recorded before commit 8edd1f5 may still carry a wheel-odometry edge that
-# claims base_footprint as a child; check with
-# `ros2 bag play <bag> --topics /tf & ros2 run tf2_tools view_frames` before
-# replaying /tf from one of those.
+# BEST_EFFORT, so without them the estimator waits forever for IMU init and
+# prints nothing. Replaying /tf is safe and wanted. README.md in this directory
+# has both in full, plus the pre-8edd1f5 bags that need a check first.
 #
 # map_pcd and keyframe_poses MUST come from the same mapping run. Build them
 # with bag_test/fastlio_lc_bag.launch.py, then /pgo_batch_optimize.
@@ -124,10 +119,9 @@ def generate_launch_description():
                     'IMU init and is publishing odometry.')
 
     # 'none': the bag carries its own /tf_static, and a second latched publisher
-    # duplicates the rig edges -- whichever lands last silently wins. Pass
-    # publisher:=urdf scope:=all for a legacy bag with an empty /tf_static.
-    # Keep this DECLARED, not forwarded: a launch_arguments entry would shadow
-    # the command line and make the override above a silent no-op.
+    # duplicates the rig edges -- whichever lands last silently wins. Keep it
+    # DECLARED, not forwarded, or a launch_arguments entry shadows the command
+    # line and makes publisher:=urdf a silent no-op.
     declare_publisher_cmd = DeclareLaunchArgument(
         'publisher', default_value='none',
         description="pepper_sensor_tf publisher: 'none' (default here) starts "

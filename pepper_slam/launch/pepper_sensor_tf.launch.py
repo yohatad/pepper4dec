@@ -17,23 +17,17 @@
 #               On the robot the camera driver publishes its own, and a second
 #               copy leaves whichever /tf_static lands last silently in force.
 #
-# The URDF is GENERATED from the YAML (quaternion to rpy, verified lossless), so
-# both publishers emit identical geometry.
+# The URDF is GENERATED from the YAML, so both publishers emit identical
+# geometry. THE GEOMETRY IS NOT EDITED HERE -- config/sensor_tf.yaml is the
+# calibration source of truth and carries the provenance, including which DOF
+# remain unverified. Regenerate the URDF after editing it.
 #
-# THE GEOMETRY IS NOT EDITED HERE. config/sensor_tf.yaml is the calibration
-# source of truth and carries the full provenance -- including why the
-# direct_visual_lidar_calibration result was rejected as unreproducible and
-# replaced with a tape measurement, and which DOF remain unverified. Read that
-# before trusting any number in the rig. Regenerate the URDF after editing it.
+# The rig is its own description rather than an extension of naoqi's
+# pepper.urdf, which roots at base_link and would give base_footprint two
+# parents. See the URDF header.
 #
-# WHY THE RIG IS ITS OWN DESCRIPTION, not an extension of naoqi's pepper.urdf:
-# that one roots at base_link with base_footprint hanging off the leg chain, so
-# including it here would give base_footprint two parents and split the tree.
-# See the URDF header.
-#
-# Replaying /tf from a bag is safe and usually wanted -- see
-# launch/bag_test/README.md, which also covers which of publisher/scope your
-# bag needs.
+# Replaying /tf from a bag is safe and wanted -- see launch/bag_test/README.md,
+# which also covers which of publisher/scope your bag needs.
 
 import os
 
