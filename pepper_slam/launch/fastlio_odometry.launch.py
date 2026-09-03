@@ -90,9 +90,10 @@ def generate_launch_description():
     # pepper_slam/launch/bag_test sets use_sim_time:='true' explicitly, so this
     # default only ever applies on the robot -- where 'true' pins sim time at 0,
     # so tf never resolves and nothing fuses, silently and with no error.
-    # It also feeds the sensor_tf scope derivation: false -> 'mount', correct
-    # live because the RealSense driver publishes its own camera edges (adding a
-    # second copy is the nondeterministic-latch problem sensor_tf.yaml warns of).
+    # pepper_sensor_tf's 'publisher'/'scope' are NOT derived from this -- only
+    # use_sim_time is forwarded. On a bag, pass them yourself: publisher:=none
+    # if it carries its own /tf_static, publisher:=urdf scope:=all if it does
+    # not. The bag_test wrappers already default publisher to none.
     declare_use_sim_time_cmd = DeclareLaunchArgument(
         'use_sim_time', default_value='false',
         description='false (default) on the robot; true for bag replay with '
@@ -121,18 +122,10 @@ def generate_launch_description():
         description='Override the static frame the estimated body corresponds '
                     'to. Empty (default) lets mapping.launch.py pick it from '
                     'config_file.')
-    # Bag replay has no RealSense driver, so the camera TF edges must come from
-    # calibration or camera_imu_optical_frame -- which l2_rsimu.yaml names as
-    # the body frame -- will not resolve at all. Use 'mount' on the real robot.
-    # DERIVED from use_sim_time when left empty, because the correct value is
-    # decided by the same fact: is a RealSense driver running?
-    #   bag replay (use_sim_time true)  -> 'all'   : no driver, so the camera
-    #       edges must come from calibration or camera_imu_optical_frame -- the
-    #       body frame l2_rsimu.yaml names -- does not resolve at all.
-    #   real robot (use_sim_time false) -> 'mount' : the driver publishes the
-    #       camera edges itself, and sensor_tf.yaml warns that its device-read
-    #       values and these recovered ones CAN DIFFER. Publishing both leaves
-    #       whichever /tf_static arrives last in force, nondeterministically.
+    # (A block here used to describe a 'scope' argument DERIVED from
+    # use_sim_time. The declaration was removed; the derivation never existed.
+    # scope and publisher are pepper_sensor_tf's own arguments, reached from the
+    # command line by inheritance -- see its header and bag_test/README.md.)
     declare_flatten_base_frame_cmd = DeclareLaunchArgument(
         'flatten_base_frame', default_value='true',
         description='Zero the leveled z/roll/pitch of odom -> base_footprint '

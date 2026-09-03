@@ -19,7 +19,7 @@
 import os
 
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory
 
@@ -33,7 +33,8 @@ def generate_launch_description():
     # base_footprint -> ..._imu chain and could never close
     # odom -> base_footprint. Going through pepper_slam's own odometry launch
     # fixes that, and brings the RealSense-IMU default plus the derived
-    # lidar_imu_frame / sensor_tf scope with it.
+    # lidar_imu_frame with it. (The sensor_tf scope is NOT derived -- pass
+    # scope:=all with publisher:=urdf for a bag with an empty /tf_static.)
     fast_lio = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_launch_dir, 'fastlio_odometry.launch.py')),
@@ -108,4 +109,16 @@ def generate_launch_description():
         }.items(),
     )
 
-    return LaunchDescription([fast_lio, rtabmap])
+    # 'none': the bag carries its own /tf_static, and a second latched publisher
+    # duplicates the rig edges -- whichever lands last silently wins. Pass
+    # publisher:=urdf scope:=all for a legacy bag with an empty /tf_static;
+    # rtabmap needs the camera edges and will not start without them.
+    # Keep this DECLARED, not forwarded: a launch_arguments entry would shadow
+    # the command line and make the override above a silent no-op.
+    declare_publisher_cmd = DeclareLaunchArgument(
+        'publisher', default_value='none',
+        description="pepper_sensor_tf publisher: 'none' (default here) starts "
+                    "neither, for a bag carrying its own /tf_static; "
+                    "'urdf'/'yaml' publish the rig transforms.")
+
+    return LaunchDescription([declare_publisher_cmd, fast_lio, rtabmap])

@@ -60,6 +60,17 @@ def generate_launch_description():
                         '(default); l2.yaml = the L2 s own, for A/B only.'),
         DeclareLaunchArgument('rviz', default_value='true'),
 
+        # 'none': the bag carries its own /tf_static, and a second latched
+        # publisher duplicates the rig edges -- whichever lands last silently
+        # wins. Pass publisher:=urdf scope:=all for a legacy bag without one.
+        # Keep this DECLARED, not forwarded: a launch_arguments entry would
+        # shadow the command line and make that override a silent no-op.
+        DeclareLaunchArgument(
+            'publisher', default_value='none',
+            description="pepper_sensor_tf publisher: 'none' (default here) "
+                        "starts neither, for a bag carrying its own "
+                        "/tf_static; 'urdf'/'yaml' publish the rig transforms."),
+
         # Echo the decisions this wrapper made. Every failure mode above is
         # silent, so one line naming the resolved values is worth more than the
         # comments explaining them.

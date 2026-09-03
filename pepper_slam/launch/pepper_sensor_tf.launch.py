@@ -64,10 +64,9 @@ def generate_launch_description():
         # pepper_slam/launch/bag_test sets use_sim_time:='true' explicitly, so
         # this default only ever applies on the robot -- where 'true' leaves sim
         # time pinned at 0, so tf never resolves and nothing fuses, silently.
-        # It also feeds the sensor_tf scope derivation: false -> 'mount', which
-        # is correct live because the RealSense driver publishes its own camera
-        # edges (publishing them here too is the nondeterministic-latch problem
-        # sensor_tf.yaml warns about).
+        # It does NOT drive 'publisher' or 'scope' -- no caller derives them.
+        # Set those yourself: publisher:=none for a bag carrying its own
+        # /tf_static, publisher:=urdf scope:=all for one without.
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument(
             'publisher', default_value='urdf',

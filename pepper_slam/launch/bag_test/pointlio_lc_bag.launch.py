@@ -45,6 +45,17 @@ def generate_launch_description():
         description='Where PGO writes its outputs.')
     declare_rviz_cmd = DeclareLaunchArgument('rviz', default_value='false')
 
+    # 'none': the bag carries its own /tf_static, and a second latched publisher
+    # duplicates the rig edges -- whichever lands last silently wins. Pass
+    # publisher:=urdf scope:=all for a legacy bag with an empty /tf_static.
+    # Keep this DECLARED, not forwarded: a launch_arguments entry would shadow
+    # the command line and make the override above a silent no-op.
+    declare_publisher_cmd = DeclareLaunchArgument(
+        'publisher', default_value='none',
+        description="pepper_sensor_tf publisher: 'none' (default here) starts "
+                    "neither, for a bag carrying its own /tf_static; "
+                    "'urdf'/'yaml' publish the rig transforms.")
+
     inner = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(launch_dir, 'pointlio_lc_l2.launch.py')),
@@ -57,5 +68,6 @@ def generate_launch_description():
     ld = LaunchDescription()
     ld.add_action(declare_save_dir_cmd)
     ld.add_action(declare_rviz_cmd)
+    ld.add_action(declare_publisher_cmd)
     ld.add_action(inner)
     return ld

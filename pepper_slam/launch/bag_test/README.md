@@ -110,12 +110,18 @@ Whether you want it to depends on what the bag already contains:
 
 | bag | pass | why |
 |---|---|---|
-| recorded with `config/record_qos.yaml` | `publisher:=none` | it carries all 14 `/tf_static` transforms itself; a live publisher would duplicate the latched edges and the last one silently wins |
-| `slam_recording*`, `slam_bench_run*` | `scope:=all` | no `/tf_static` at all, so the camera edges must come from calibration or `camera_imu_optical_frame` never resolves |
+| recorded with `config/record_qos.yaml` | nothing — **`publisher:=none` is now the default in every wrapper here** | it carries all 14 `/tf_static` transforms itself; a live publisher would duplicate the latched edges and the last one silently wins |
+| `slam_recording*`, `slam_bench_run*` | `publisher:=urdf scope:=all` | no `/tf_static` at all, so the camera edges must come from calibration or `camera_imu_optical_frame` never resolves. Both are needed now that `none` is the default |
 
-Both are `pepper_sensor_tf.launch.py`'s own arguments and reach it by
-inheritance — a command-line value overrides a declared default further down the
-include tree. `publisher` has no `choices=` restriction and both its nodes are
+Each wrapper **declares** `publisher` with `default_value='none'` rather than
+forwarding it. A declared configuration propagates down the whole include tree
+on its own, so it still reaches `pepper_sensor_tf.launch.py` three levels down,
+and a command-line `publisher:=urdf` still overrides it — verified on a
+three-level test tree. Forwarding it through `launch_arguments` instead would
+shadow the command line, which is the trap the next section describes.
+
+`rtabmap_fused_bag.launch.py` is the deliberate exception: it targets
+`bags/slam_recording`, hardcodes `scope:='all'`, and leaves `publisher` alone. `publisher` has no `choices=` restriction and both its nodes are
 gated on `IfCondition(publisher=='urdf'/'yaml')`, so any other value starts
 neither.
 

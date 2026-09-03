@@ -123,6 +123,17 @@ def generate_launch_description():
         description='Seconds to wait before seeding, so FAST-LIO has finished '
                     'IMU init and is publishing odometry.')
 
+    # 'none': the bag carries its own /tf_static, and a second latched publisher
+    # duplicates the rig edges -- whichever lands last silently wins. Pass
+    # publisher:=urdf scope:=all for a legacy bag with an empty /tf_static.
+    # Keep this DECLARED, not forwarded: a launch_arguments entry would shadow
+    # the command line and make the override above a silent no-op.
+    declare_publisher_cmd = DeclareLaunchArgument(
+        'publisher', default_value='none',
+        description="pepper_sensor_tf publisher: 'none' (default here) starts "
+                    "neither, for a bag carrying its own /tf_static; "
+                    "'urdf'/'yaml' publish the rig transforms.")
+
     inner = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(launch_dir, 'fastlio_localization_l2.launch.py')),
@@ -137,6 +148,7 @@ def generate_launch_description():
     ld.add_action(declare_rviz_cmd)
     ld.add_action(declare_seed_cmd)
     ld.add_action(declare_seed_delay_cmd)
+    ld.add_action(declare_publisher_cmd)
     ld.add_action(OpaqueFunction(
         function=_seed_from_first_keyframe,
         condition=IfCondition(LaunchConfiguration('seed_from_map_start'))))
