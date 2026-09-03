@@ -86,10 +86,17 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'config_file', default_value='l2_rsimu.yaml',
             description='Config whose publish.body_frame the bridge must match.'),
+        # Hardcoded to match every caller: the RealSense IMU is the only
+        # configuration in use, and it is what l2_rsimu.yaml and
+        # l2lidar_rsimu.yaml both name as publish.body_frame. Bridging an
+        # L2-IMU config (l2.yaml, l2lidar_node.yaml -> l2lidar_frame_imu) now
+        # needs the frame passed explicitly; an empty string restores the
+        # read-it-from-the-config behaviour _resolve_body_frame implements.
         DeclareLaunchArgument(
-            'lidar_imu_frame', default_value='',
-            description='Override the body frame. Empty (default) reads it from '
-                        'the config, which is what you want.'),
+            'lidar_imu_frame', default_value='camera_imu_optical_frame',
+            description='Body frame the bridge stamps. Must match the '
+                        'estimator config\'s publish.body_frame. Empty reads '
+                        'it from that config instead.'),
         DeclareLaunchArgument(
             'bridge_level_frame', default_value='true',
             description='Publish the static odom -> odom leveling frame. False '

@@ -114,14 +114,20 @@ def generate_launch_description():
         'config_file', default_value='l2_rsimu.yaml',
         description='FAST-LIO config under fast_lio/config. l2_rsimu.yaml uses '
                     'the RealSense IMU (default); l2.yaml uses the L2 s own.')
-    # Left unset on purpose: mapping.launch.py derives the matching frame from
-    # config_file, so the two cannot drift apart. Override only for a config
-    # this launch does not know about.
+    # Hardcoded, matching every other entry point (the localization, PGO and
+    # nav2 launches all name it explicitly): the RealSense IMU is the only
+    # configuration in use, and l2_rsimu.yaml's publish.body_frame is this
+    # frame. It is NO LONGER derived from config_file -- an A/B run against
+    # l2.yaml, whose body frame is l2lidar_frame_imu, must now pass
+    # lidar_imu_frame:=l2lidar_frame_imu alongside it, or the bridge stamps a
+    # frame the estimator never publishes and odom -> base_footprint never
+    # closes. Pass an empty string to get the old config-derived behaviour back.
     declare_lidar_imu_frame_cmd = DeclareLaunchArgument(
-        'lidar_imu_frame', default_value='',
-        description='Override the static frame the estimated body corresponds '
-                    'to. Empty (default) lets mapping.launch.py pick it from '
-                    'config_file.')
+        'lidar_imu_frame', default_value='camera_imu_optical_frame',
+        description='Static frame the estimated body corresponds to. '
+                    'camera_imu_optical_frame (default) for l2_rsimu.yaml; '
+                    'l2lidar_frame_imu for l2.yaml. Empty derives it from '
+                    'config_file instead.')
     # (A block here used to describe a 'scope' argument DERIVED from
     # use_sim_time. The declaration was removed; the derivation never existed.
     # scope and publisher are pepper_sensor_tf's own arguments, reached from the

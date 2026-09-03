@@ -141,5 +141,8 @@ pause/resume keys, and a background job that does so gets SIGTTIN and stops dead
 All of these default to the **RealSense IMU** (`l2_rsimu.yaml` and friends). The
 L2's own gyro cancels rotation about the gravity axis below ~16 deg/s and cost
 139 deg of heading over a 744 s run — see `utils/L2_IMU/REPORT.md`. Pass
-`config_file:=l2.yaml` to A/B against it; the matching `lidar_imu_frame` is
-derived automatically, so you do not have to remember to change it too.
+`config_file:=l2.yaml` to A/B against it — and `lidar_imu_frame:=l2lidar_frame_imu`
+with it. That frame used to be derived from `config_file`; it is now hardcoded to
+`camera_imu_optical_frame` everywhere, since the RealSense IMU is the only
+configuration in use. Pass only `config_file` and the bridge stamps a frame the
+estimator never publishes, so `odom -> base_footprint` never closes.

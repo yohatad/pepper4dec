@@ -40,11 +40,11 @@ def generate_launch_description():
     pkg_launch_dir = os.path.join(
         get_package_share_directory('pepper_slam'), 'launch')
 
-    # Defaults to the RealSense IMU. lidar_imu_frame IS derived from config_file
-    # inside the live launch (its default is empty and mapping.launch.py picks
-    # the frame), so switching IMU is genuinely one argument here. The sensor_tf
-    # scope is NOT derived from anything -- pass scope:=all explicitly, together
-    # with publisher:=urdf, for a legacy bag with an empty /tf_static.
+    # Defaults to the RealSense IMU, and lidar_imu_frame is now hardcoded to the
+    # matching camera_imu_optical_frame rather than derived, so an A/B run
+    # against the L2's own IMU needs lidar_imu_frame:=l2lidar_frame_imu passed
+    # alongside config_file. The sensor_tf scope is not derived either -- pass
+    # scope:=all with publisher:=urdf for a legacy bag with an empty /tf_static.
     declare_config_file_cmd = DeclareLaunchArgument(
         'config_file', default_value='l2_rsimu.yaml',
         description='FAST-LIO config. l2_rsimu.yaml = RealSense IMU (default); '

@@ -67,8 +67,10 @@ def generate_launch_description():
     bridge_level_frame = LaunchConfiguration('bridge_level_frame')
 
     # 2026-08-12: the RealSense IMU is the permanent choice for this rig, so
-    # l2lidar_rsimu.yaml is the default. The matching lidar_imu_frame is DERIVED
-    # inside mapping_l2lidar_node.launch.py, so switching IMU is one argument.
+    # l2lidar_rsimu.yaml is the default, and lio_odom_bridge now hardcodes the
+    # matching camera_imu_optical_frame rather than deriving it. Switching to
+    # l2lidar_node.yaml (body frame l2lidar_frame_imu) therefore needs
+    # lidar_imu_frame:=l2lidar_frame_imu passed too.
     declare_config_file_cmd = DeclareLaunchArgument(
         'config_file', default_value='l2lidar_rsimu.yaml',
         description='Point-LIO config under point_lio/config. l2lidar_rsimu.yaml '

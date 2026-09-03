@@ -32,9 +32,10 @@ def generate_launch_description():
     # include pepper_sensor_tf -- so lio_odom_bridge had no static
     # base_footprint -> ..._imu chain and could never close
     # odom -> base_footprint. Going through pepper_slam's own odometry launch
-    # fixes that, and brings the RealSense-IMU default plus the derived
-    # lidar_imu_frame with it. (The sensor_tf scope is NOT derived -- pass
-    # scope:=all with publisher:=urdf for a bag with an empty /tf_static.)
+    # fixes that, and brings the RealSense-IMU default plus its matching
+    # lidar_imu_frame with it. (Neither that frame nor the sensor_tf scope is
+    # derived from anything -- pass scope:=all with publisher:=urdf for a bag
+    # with an empty /tf_static.)
     fast_lio = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_launch_dir, 'fastlio_odometry.launch.py')),
