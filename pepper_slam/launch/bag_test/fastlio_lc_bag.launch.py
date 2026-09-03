@@ -54,7 +54,7 @@ def generate_launch_description():
         'keyframe_filter_size', default_value='0.25',
         description='Voxel leaf applied to each keyframe BEFORE storage, so it '
                     'bounds the density of every downstream product.')
-    declare_rviz_cmd = DeclareLaunchArgument('rviz', default_value='false')
+    declare_rviz_cmd = DeclareLaunchArgument('rviz', default_value='true')
 
     # 'none': the bag carries its own /tf_static, and a second latched publisher
     # duplicates the rig edges -- whichever lands last silently wins. Pass

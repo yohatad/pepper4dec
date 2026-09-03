@@ -43,7 +43,7 @@ def generate_launch_description():
         'save_directory',
         default_value='',
         description='Where PGO writes its outputs.')
-    declare_rviz_cmd = DeclareLaunchArgument('rviz', default_value='false')
+    declare_rviz_cmd = DeclareLaunchArgument('rviz', default_value='true')
 
     # 'none': the bag carries its own /tf_static, and a second latched publisher
     # duplicates the rig edges -- whichever lands last silently wins. Pass

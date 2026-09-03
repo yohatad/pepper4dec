@@ -72,7 +72,7 @@ def generate_launch_description():
             description='Joint sliders for model:=full. Ignored for the rig, '
                         'which has no movable joints.'),
         DeclareLaunchArgument(
-            'rviz', default_value='false',
+            'rviz', default_value='true',
             description='Set false to publish the description without opening '
                         'RViz (headless checks, or inspecting /robot_description '
                         'over SSH).'),
