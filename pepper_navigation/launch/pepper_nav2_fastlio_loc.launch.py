@@ -71,19 +71,23 @@ def generate_launch_description():
                     'mapping run as map and keyframe_poses.')
     declare_map_cmd = DeclareLaunchArgument(
         'map',
-        default_value=os.path.join(pkg_share, 'map', 'pepper_map_lc_aug23.yaml'),
+        default_value=os.path.join(pkg_share, 'map', 'pepper_map_lc.yaml'),
         description='2D occupancy grid (the projection of the same environment as '
                     'map_pcd) served as /map for the global costmap static layer. '
                     'Defaults to the copy shipped in this package (map/), which '
-                    'MUST be from the SAME run as map_pcd/keyframe_poses -- '
-                    'pepper_map_lc_aug23 is the one paired with the current '
-                    'pcd/pepper_map_lc.pcd (both from the trimmed bag, both '
-                    'wall-aligned via the same RANSAC-derived rotation).'
-                    'pepper_map_lc_clean_0826 (a separate, differently-oriented '
-                    'regeneration from another branch) is NOT paired with it -- '
-                    'do not default to it without re-deriving map_pcd and '
-                    'keyframe_poses to match. MUST exist, or the lifecycle '
-                    'manager aborts the whole bringup.')
+                    'MUST be from the SAME run as map_pcd/keyframe_poses. '
+                    'pepper_map_lc.pgm/.yaml, pcd/pepper_map_lc.pcd and '
+                    'pcd/pepper_map_lc_poses.txt are ONE set: same bag '
+                    '(slam_20260823_aligned), same PGO run, and rotated together '
+                    'by utils/align_map.py, so they share a frame by construction '
+                    'rather than by coincidence. Every other grid here belongs to '
+                    'an older run and is NOT paired with the current .pcd -- do '
+                    'not default to one without re-deriving map_pcd and '
+                    'keyframe_poses to match. Checking is cheap: every keyframe '
+                    'pose should have prior-map points around it (it was measured '
+                    'at 100%% for this set, 86.6%% for a mismatched pair). '
+                    'MUST exist, or the lifecycle manager aborts the whole '
+                    'bringup.')
     # localization_th was declared here and forwarded to
     # fastlio_localization_l2.launch.py, which declared it too and never passed
     # it to any node -- so the value did nothing while appearing to work, and
