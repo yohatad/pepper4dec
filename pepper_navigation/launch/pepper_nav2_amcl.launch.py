@@ -73,13 +73,16 @@ def generate_launch_description():
         description='Use bag/simulation clock instead of wall time.')
     declare_map_cmd = DeclareLaunchArgument(
         'map',
-        default_value=os.path.join(pkg_share, 'map', 'pepper_map_lc_clean.yaml'),
+        default_value=os.path.join(pkg_share, 'map', 'pepper_map_lc.yaml'),
         description='2D occupancy grid served as /map -- both what amcl matches '
                     'the flattened scan against and the global costmap static layer. '
                     'Defaults to the copy shipped in this package (map/), so the '
                     'stack comes up on a fresh checkout with no absolute paths. '
                     'MUST exist: map_server fails to configure otherwise, and the '
-                    'lifecycle manager then aborts the WHOLE nav2 bringup.')
+                    'lifecycle manager then aborts the WHOLE nav2 bringup. '
+                    'Was pepper_map_lc_clean, an older run that has been removed; '
+                    'pepper_map_lc is the current grid, and the one paired with '
+                    'pcd/pepper_map_lc.pcd and pcd/pepper_map_lc_poses.txt.')
     # The two knobs to reach for first if amcl will not converge. The band is in
     # base_footprint (floor at z=0). Too low and the flattened floor returns
     # swamp the wall hits; too high and tables/desks/people appear in the scan

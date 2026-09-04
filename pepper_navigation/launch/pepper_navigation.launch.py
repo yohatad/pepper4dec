@@ -7,7 +7,10 @@ from ament_index_python.packages import get_package_share_directory
 def generate_launch_description():
     # Paths
     pkg_dir = get_package_share_directory('pepper_navigation')
-    map_file = os.path.join(pkg_dir, 'map', 'rtabmap_march_28.yaml')
+    # pepper_map_lc is the current grid, paired with pcd/pepper_map_lc.pcd
+    # and pcd/pepper_map_lc_poses.txt. Was rtabmap_march_28, an older
+    # RTAB-Map capture that has been removed.
+    map_file = os.path.join(pkg_dir, 'map', 'pepper_map_lc.yaml')
     params_file = os.path.join(pkg_dir, 'config', 'nav2_params.yaml')
     keepout_mask_file = os.path.join(pkg_dir, 'map', 'keepout_zone.yaml')
 
