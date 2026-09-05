@@ -23,12 +23,17 @@ bt_navigator:
     use_sim_time: false
     global_frame: map
     robot_base_frame: base_footprint
-    # FAST-LIO's own /Odometry now publishes real twist (not all-zero) --
-    # see laserMapping.cpp's publish_odometry(). Frame_id is FAST-LIO's
-    # IMU-tilted "lio_init", not the gravity-leveled "odom" the rest of
-    # this TF tree uses, but bt_navigator only reads this for velocity-based
-    # BT conditions (is_stuck / distance_traveled), not pose lookups, so the
-    # frame mismatch doesn't matter here.
+      # odom_topic is a bt_navigator parameter ONLY -- the controller does not
+      # read it. It feeds an OdomSmoother consumed by SpeedController /
+      # IsStuck / DistanceTraveled, and the active BT
+      # (navigate_to_pose_w_replanning_and_recovery.xml) uses NONE of those:
+      # it uses GoalUpdated, which reads the blackboard. So this is currently
+      # inert, and its value cannot affect navigation today.
+      #
+      # Pointed at /localization/pose regardless, because that is the correctly
+      # framed one if the BT ever changes -- see below. Harmless for the
+      # velocity-MAGNITUDE checks above, since rotation preserves magnitude, but
+      # wrong for anything directional.
     # /localization/pose, NOT /odom_lio. Both carry the same trajectory, but
     # /odom_lio is FAST-LIO's raw output: child_frame_id is the IMU on the mast
     # and the twist is in those axes. Odometry semantics put the twist in

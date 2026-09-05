@@ -21,12 +21,19 @@ bt_navigator:
     use_sim_time: False
     global_frame: map
     robot_base_frame: base_footprint
-    # FAST-LIO's own /Odometry now publishes real twist (not all-zero) --
-    # see laserMapping.cpp's publish_odometry(). Frame_id is FAST-LIO's
-    # IMU-tilted "lio_init", not the gravity-leveled "odom" the rest of
-    # this TF tree uses, but bt_navigator only reads this for velocity-based
-    # BT conditions (is_stuck / distance_traveled), not pose lookups, so the
-    # frame mismatch doesn't matter here.
+      # odom_topic is a bt_navigator parameter ONLY -- the controller does not
+      # read it. It feeds an OdomSmoother consumed by SpeedController /
+      # IsStuck / DistanceTraveled, and the active BT
+      # (navigate_to_pose_w_replanning_and_recovery.xml) uses NONE of those:
+      # it uses GoalUpdated, which reads the blackboard. So this is currently
+      # inert, and its value cannot affect navigation today.
+      #
+      # Pointed at /localization/pose regardless, because that is the correctly
+      # framed one if the BT ever changes. /Odometry and /odom_lio carry
+      # child_frame_id = camera_imu_optical_frame -- the IMU on the mast -- with
+      # the twist in those axes. Harmless for the velocity-MAGNITUDE checks
+      # above, since rotation preserves magnitude, but wrong for anything
+      # directional.
     # /localization/pose, NOT /Odometry. Both carry the same pose, but
     # /Odometry keeps stock FAST-LIO semantics: child_frame_id is the IMU on
     # the mast and the twist is in those axes, so a consumer that assumes
@@ -182,7 +189,7 @@ local_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 4.0
-        inflation_radius: 0.30
+        inflation_radius: 0.25
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -213,9 +220,10 @@ local_costmap:
           data_type: "PointCloud2"
           clearing: True
           marking: True
-          # Height band is in odom, which is FLOOR-referenced (z=0 IS
-          # the ground plane), so these read directly as height above the
-          # floor. min_obstacle_height MUST stay above the floor or the floor
+          # Height band is evaluated in this costmap's global_frame (map),
+          # which is FLOOR-referenced here -- z=0 IS the ground plane, because
+          # the prior map was levelled -- so these read directly as height
+          # above the floor. min_obstacle_height MUST stay above the floor or the floor
           # is marked as an obstacle; keep it low enough (0.10 m) to still
           # catch low objects/chair legs.
           min_obstacle_height: 0.10
@@ -290,7 +298,7 @@ global_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 4.0
-        inflation_radius: 0.20
+        inflation_radius: 0.25
       always_send_full_costmap: True
 
 planner_server:
@@ -337,7 +345,19 @@ collision_monitor:
   ros__parameters:
     use_sim_time: False
     base_frame_id: "base_footprint"
-    odom_frame_id: "odom"
+    # map, not odom: this stack has no odom frame at all. After the handover
+    # fastlio_localization's state IS the map pose, so there is no separate
+    # odometry estimate and nothing publishes map -> odom. The lookup failed,
+    # base_shift_correction below could not transform, and the monitor never
+    # got far enough to publish its polygons -- MEASURED, /polygon_stop and
+    # /polygon_slowdown were silent while /points_safety flowed at 11.3 Hz.
+    #
+    # base_shift_correction needs a frame that is CONTINUOUS over the ~0.1 s
+    # between sensing a point and evaluating the polygon; it is named for odom
+    # because that is conventionally the only such frame, not because it must
+    # be odometry. map qualifies here: measured 2.1 cm median step, 4.5 cm max,
+    # zero steps over 0.30 m.
+    odom_frame_id: "map"
     cmd_vel_in_topic: "cmd_vel_raw"
     cmd_vel_out_topic: "cmd_vel"
     state_topic: "collision_monitor_state"

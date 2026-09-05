@@ -176,7 +176,7 @@ Visualization Manager:
   - Class: rviz_common/Group
     Displays:
     - Alpha: 0.6
-      Class: rviz_default_plugins/MarkerArray
+      Class: rviz_default_plugins/Marker
       Enabled: true
       Name: Local Voxel Grid
       Topic:
@@ -188,7 +188,7 @@ Visualization Manager:
         Value: /local_costmap/voxel_markers
       Value: true
     - Alpha: 0.6
-      Class: rviz_default_plugins/MarkerArray
+      Class: rviz_default_plugins/Marker
       Enabled: false
       Name: Global Voxel Grid
       Topic:

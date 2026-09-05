@@ -201,7 +201,9 @@ Visualization Manager:
 
     # Raw 3D voxel grids (VoxelLayer, publish_voxel_map: True in
     # nav2_params_amcl.yaml). nav2_msgs/VoxelGrid isn't natively renderable --
-    # each display needs a live converter node feeding it MarkerArray:
+    # each display needs a live converter node feeding it Marker (SINGULAR --
+      # nav2_costmap_2d_markers publishes visualization_msgs/Marker, and a
+      # MarkerArray display subscribes with the wrong type and shows nothing):
     #   ros2 run nav2_costmap_2d nav2_costmap_2d_markers \
     #     voxel_grid:=/local_costmap/voxel_grid \
     #     visualization_marker:=/local_costmap/voxel_markers
@@ -212,7 +214,7 @@ Visualization Manager:
     - Class: rviz_common/Group
       Displays:
         - Alpha: 0.6
-          Class: rviz_default_plugins/MarkerArray
+          Class: rviz_default_plugins/Marker
           Enabled: false
           Name: Local Voxel Grid
           Topic:
@@ -224,7 +226,7 @@ Visualization Manager:
             Value: /local_costmap/voxel_markers
           Value: false
         - Alpha: 0.6
-          Class: rviz_default_plugins/MarkerArray
+          Class: rviz_default_plugins/Marker
           Enabled: false
           Name: Global Voxel Grid
           Topic:
