@@ -27,7 +27,17 @@ bt_navigator:
     # this TF tree uses, but bt_navigator only reads this for velocity-based
     # BT conditions (is_stuck / distance_traveled), not pose lookups, so the
     # frame mismatch doesn't matter here.
-    odom_topic: /odom_lio   # shared LIO odometry; every mapping launch remaps onto it
+    # /localization/pose, NOT /odom_lio. Both carry the same trajectory, but
+    # /odom_lio is FAST-LIO's raw output: child_frame_id is the IMU on the mast
+    # and the twist is in those axes. Odometry semantics put the twist in
+    # child_frame_id, so a consumer that assumes it is robot_base_frame reads a
+    # velocity rotated by the mount -- ~64 deg of yaw on this rig.
+    #
+    # transform_fusion already publishes the corrected version on
+    # /localization/pose (map -> base_footprint, twist rotated with the lever
+    # arm; see the header note in transform_fusion.cpp). Nothing pointed at it,
+    # so the correction existed but was unused.
+    odom_topic: /localization/pose
     bt_loop_duration: 2
     default_server_timeout: 20
     wait_for_service_timeout: 5
