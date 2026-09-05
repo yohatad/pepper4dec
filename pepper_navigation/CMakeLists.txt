@@ -62,6 +62,12 @@ install(TARGETS send_goal
 # map-editing utility (no rclpy), so it does not belong in a ROS package.
 # Run it manually: python3 utils/generate_keepout.py
 
+# Install python helper scripts
+install(PROGRAMS
+  scripts/wait_for_map_then_start.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 # Install launch files
 install(DIRECTORY
   launch/

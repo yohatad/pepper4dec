@@ -51,10 +51,30 @@ def generate_launch_description():
     # DECLARED, not forwarded, or a launch_arguments entry shadows the command
     # line and makes publisher:=urdf a silent no-op.
     declare_publisher_cmd = DeclareLaunchArgument(
-        'publisher', default_value='none',
-        description="pepper_sensor_tf publisher: 'none' (default here) starts "
-                    "neither, for a bag carrying its own /tf_static; "
-                    "'urdf'/'yaml' publish the rig transforms.")
+        'publisher', default_value='urdf',
+        description="pepper_sensor_tf publisher: 'urdf' (default) publishes the "
+                    "rig and gives RViz a RobotModel; 'yaml' the same geometry "
+                    "without the model; 'none' relies on the bag's /tf_static.")
+    # 'all', not 'mount'. The bag DOES carry these edges -- but all of its
+    # /tf_static messages sit at t=0.000 s, so `ros2 bag play --start-offset N`
+    # skips them entirely and nothing publishes the rig. base_footprint and
+    # camera_imu_optical_frame then come up as separate TF roots and anything
+    # needing the extrinsic between them fails, silently.
+    #
+    # Publishing them here regardless is safe: MEASURED against this bag's own
+    # /tf_static, the two agree to 4.8e-7 over all 10 shared edges (float32
+    # rounding), because both derive from config/sensor_tf.yaml. Duplicate
+    # publishers of IDENTICAL geometry are redundant, not harmful.
+    #
+    # Live is the opposite case and wants 'mount': there the RealSense driver
+    # publishes its internal chain from the device's factory calibration, which
+    # is a genuinely different source, and two publishers disagreeing is a
+    # silent intermittent wrong answer.
+    declare_scope_cmd = DeclareLaunchArgument(
+        'scope', default_value='all', choices=['mount', 'all'],
+        description="Rig transforms to publish. 'all' includes the RealSense "
+                    "internal chain, needed when the bag's /tf_static is not "
+                    "replayed. Use 'mount' on the live robot.")
 
     pointlio = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -69,6 +89,7 @@ def generate_launch_description():
     ld.add_action(declare_config_file_cmd)
     ld.add_action(declare_rviz_cmd)
     ld.add_action(declare_publisher_cmd)
+    ld.add_action(declare_scope_cmd)
     # AFTER the declares: LogInfo resolves config_file immediately, and an
     # undeclared LaunchConfiguration raises at launch time. --show-args does
     # NOT catch this -- it never executes the action.
