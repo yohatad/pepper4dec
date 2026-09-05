@@ -82,12 +82,45 @@ install(DIRECTORY
   FILES_MATCHING PATTERN "*.rviz"
 )
 
-# Install config files
-install(DIRECTORY
-  config/
-  DESTINATION share/${PROJECT_NAME}/config
-  FILES_MATCHING PATTERN "*.yaml"
-)
+# Install config files.
+#
+# SYMLINKED, not copied, so tuning is live: nav2 reads
+# share/<pkg>/config/<file>.yaml, and with a symlink that IS the source file.
+# Edit it -- by hand or from nav2_config's Save Config -- relaunch, done. No
+# colcon build in the loop.
+#
+# install(DIRECTORY) copies unconditionally, and colcon's --symlink-install does
+# NOT change that: it applies to Python packages and a few install types, not to
+# install(DIRECTORY). Without this, every save left nav2 reading the OLD values
+# with nothing to indicate why -- the config looked edited and had no effect.
+#
+# Falls back to a copy if the symlink cannot be created, so the package still
+# installs correctly and only the live-editing convenience is lost.
+#
+# Two install(CODE) blocks: the first carries the configure-time paths in, the
+# second is a bracket argument so the script needs no backslash escaping.
+# NOTE: no ';' anywhere inside these blocks -- CMake treats it as a list
+# separator and silently truncates the generated script mid-statement.
+install(CODE "set(_cfg_src \"${CMAKE_CURRENT_SOURCE_DIR}/config\")")
+install(CODE "set(_cfg_pkg \"${PROJECT_NAME}\")")
+install(CODE [[
+  set(_cfg_dst "${CMAKE_INSTALL_PREFIX}/share/${_cfg_pkg}/config")
+  get_filename_component(_cfg_parent "${_cfg_dst}" DIRECTORY)
+  file(MAKE_DIRECTORY "${_cfg_parent}")
+  if(EXISTS "${_cfg_dst}" OR IS_SYMLINK "${_cfg_dst}")
+    file(REMOVE_RECURSE "${_cfg_dst}")
+  endif()
+  execute_process(
+    COMMAND ${CMAKE_COMMAND} -E create_symlink "${_cfg_src}" "${_cfg_dst}"
+    RESULT_VARIABLE _cfg_rc ERROR_QUIET)
+  if(_cfg_rc EQUAL 0)
+    message(STATUS "config/ symlinked -> ${_cfg_src} (edits are live)")
+  else()
+    message(STATUS "config/ symlink failed -- copying instead")
+    file(COPY "${_cfg_src}/" DESTINATION "${_cfg_dst}"
+         FILES_MATCHING PATTERN "*.yaml")
+  endif()
+]])
 
 # Install 2D occupancy grid files (nav2 map_server format).
 install(DIRECTORY

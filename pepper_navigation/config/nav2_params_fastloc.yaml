@@ -184,12 +184,12 @@ local_costmap:
       width: 3
       height: 3
       resolution: 0.05
-      robot_radius: 0.25
+      robot_radius: 0.20
       plugins: ["voxel_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 4.0
-        inflation_radius: 0.25
+        inflation_radius: 0.20
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -207,7 +207,7 @@ local_costmap:
         z_resolution: 0.125        # voxel height
         z_voxels: 16               # 16 * 0.125 = 2.0 m -> covers -0.30 .. 1.70
         max_obstacle_height: 1.70
-        mark_threshold: 0          # marked voxels in a column to flag the 2D cell (0 = any)
+        mark_threshold: 1          # marked voxels in a column to flag the 2D cell (0 = any)
         unknown_threshold: 15
         combination_method: 1
         # L2 lidar = primary all-around (360 deg) obstacle source; RealSense
@@ -226,16 +226,12 @@ local_costmap:
           # above the floor. min_obstacle_height MUST stay above the floor or the floor
           # is marked as an obstacle; keep it low enough (0.10 m) to still
           # catch low objects/chair legs.
-          min_obstacle_height: 0.10
+          min_obstacle_height: 0.05
           max_obstacle_height: 1.70
           raytrace_max_range: 3.0
-          # Skip the near field: the L2 is mounted low (~0.26 m up) and sees
-          # Pepper's own body as a dense cluster ~0.3-0.6 m out. With min_range
-          # 0.0 the robot marks ITSELF as an obstacle in the local costmap and
-          # freezes. 0.8 m clears the self-hits (measured self-hit shell < 0.6 m).
-          raytrace_min_range: 0.8
-          obstacle_max_range: 2.5
-          obstacle_min_range: 0.8
+          raytrace_min_range: 0.1
+          obstacle_max_range: 4.0
+          obstacle_min_range: 0.1
         realsense:
           # RealSense D435i depth cloud. Requires the driver launched with
           # pointcloud.enable:=true (it is disabled during recording). Narrow
@@ -245,7 +241,7 @@ local_costmap:
           data_type: "PointCloud2"
           clearing: True
           marking: True
-          min_obstacle_height: 0.10
+          min_obstacle_height: 0.05
           max_obstacle_height: 1.70
           # D435i reliable depth ~0.3-3 m; below 0.3 m it is blind.
           raytrace_max_range: 3.0
@@ -262,7 +258,7 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_footprint
       use_sim_time: False
-      robot_radius: 0.25
+      robot_radius: 0.20
       resolution: 0.05
       track_unknown_space: true
       plugins: ["static_layer", "voxel_layer", "inflation_layer"]
@@ -275,7 +271,7 @@ global_costmap:
         z_resolution: 0.125
         z_voxels: 16               # 16 * 0.125 = 2.0 m -> covers -0.30 .. 1.70
         max_obstacle_height: 1.70
-        mark_threshold: 0
+        mark_threshold: 1
         unknown_threshold: 15
         combination_method: 1
         observation_sources: points
@@ -284,21 +280,19 @@ global_costmap:
           data_type: "PointCloud2"
           clearing: True
           marking: True
-          min_obstacle_height: 0.10
+          min_obstacle_height: 0.05
           max_obstacle_height: 1.70
-          raytrace_max_range: 3.0
-          # Same as the local costmap: skip the L2 self-hits (Pepper's own body
-          # ~0.3-0.6 m from the low lidar) so the robot doesn't mark itself.
-          raytrace_min_range: 0.8
-          obstacle_max_range: 2.5
-          obstacle_min_range: 0.8
+          raytrace_max_range: 4.0
+          raytrace_min_range: 0.1
+          obstacle_max_range: 4.0
+          obstacle_min_range: 0.1
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 4.0
-        inflation_radius: 0.25
+        inflation_radius: 0.20
       always_send_full_costmap: True
 
 planner_server:

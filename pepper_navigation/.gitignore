@@ -2,6 +2,17 @@
 # colcon scratch, if a build is ever run from inside this package rather than
 # the workspace root. Delete it when it appears; ignoring is only so it cannot
 # be committed by accident.
-/build/
-/install/
-/log/
+# NOT anchored with a leading slash: colcon drops these wherever it is run, and
+# a build started from e.g. pepper_navigation/rviz/ put build/, install/ and
+# log/ THERE. Anchored rules matched only the package root, so those nested
+# copies were untracked-but-not-ignored and got committed by a `git add -A`
+# (268ced6). Matching at any depth stops that.
+build/
+install/
+log/
+
+# Editor/tool backups. nav2_config writes <file>.yaml.bak before each save
+# (one level only -- each save overwrites it), and utils/align_map.py writes
+# .bak beside the map artifacts it rotates. Neither belongs in the repo, and
+# without this a `git add -A` sweeps them in.
+*.bak
