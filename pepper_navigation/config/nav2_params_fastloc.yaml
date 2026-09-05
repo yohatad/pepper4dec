@@ -1,20 +1,20 @@
-# Nav2 params for the FAST-LIO + RTAB-Map (localization mode) stack.
-# Separate from nav2_params.yaml (the AMCL + map_server config already in
-# this package) -- that one is left untouched in case it's still in use
-# elsewhere; this is the new RTAB-Map-localization-based path.
+# Nav2 params for pepper_nav2_fastloc.launch.py -- FAST-LIO with the prior map
+# inside the filter (fast_lio's fastlio_localization).
 #
-# No amcl / map_server / filter_mask_server / costmap_filter_info_server
-# here -- RTAB-Map itself publishes /map (transient_local) in localization
-# mode, same as it does while mapping, so the global costmap's static_layer
-# subscribes to it directly. Controller/planner/behavior tuning below is
-# carried over unchanged from nav2_params.yaml (already tuned against the
-# real robot); only frames and the costmap observation source changed
-# (PointCloud2 on /points, replacing the LaserScan/AMCL-era 2D scan
-# requirement -- no pointcloud_to_laserscan flattening step needed).
+# Localization publishes map -> base_footprint directly; nav2_map_server serves
+# the matching 2D grid as /map for the global costmap's static layer. No amcl:
+# the pose comes from the localizer, not from particle filtering the grid.
+#
+# Controller/planner/behavior tuning below is carried over from nav2_params.yaml
+# (tuned against the real robot). What differs is frames and the costmap
+# observation source: PointCloud2 on /points, not the LaserScan the AMCL-era
+# config expected, so no pointcloud_to_laserscan flattening step.
 #
 # NOT carried over: the keepout_filter zone. keepout_zone.yaml's mask was
-# authored against map/rtabmap_march_28.yaml's map frame -- re-generate it
-# against the current map before re-enabling that layer.
+# authored against an older map's frame (rtabmap_march_28, since deleted), so it
+# does not line up with map/pepper_map_lc.yaml -- re-generate it with
+# utils/generate_keepout.py against the current map before re-enabling
+# that layer.
 
 bt_navigator:
   ros__parameters:
@@ -155,13 +155,10 @@ local_costmap:
     ros__parameters:
       update_frequency: 15.0
       publish_frequency: 2.0
-      # odom (the LEVELED frame), not raw lio_init. lio_init is backend-native: FAST-LIO leaves
-      # it at the IMU mount orientation (~90 deg off gravity here) while
-      # Point-LIO gravity-aligns it, so the SAME name means different geometry
-      # per backend and the height bands below would slice the cloud along the
-      # wrong axis. odom is gravity-aligned and floor-referenced on every
-      # backend (lio_odom_bridge, level_source=calibration), published as a
-      # child of odom here since transform_fusion owns map -> odom.
+      # The height bands below slice the cloud along this frame's z, so it must
+      # be gravity-aligned and floor-referenced. map is both -- it was levelled
+      # when the prior map was built. Raw lio_init would not be: FAST-LIO leaves
+      # it at the IMU mount orientation, ~90 deg off gravity here.
       # map, not odom. fastlio_localization has no map->odom split: after the
       # handover its state IS the map pose, so there is no separate odometry
       # frame to roll the local costmap in, and nothing else publishes one --

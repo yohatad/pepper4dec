@@ -1,24 +1,26 @@
-# Nav2 params for the FAST-LIO + RTAB-Map (localization mode) stack.
-# Separate from nav2_params.yaml (the AMCL + map_server config already in
-# this package) -- that one is left untouched in case it's still in use
-# elsewhere; this is the new RTAB-Map-localization-based path.
+# Nav2 params for pepper_nav2_fastlio_loc.launch.py -- FAST-LIO with
+# lio_localization (prior-map ICP), the OLDER localization path. The current
+# default is nav2_params_fastloc.yaml; this is kept as the way back.
 #
-# No amcl / map_server / filter_mask_server / costmap_filter_info_server
-# here -- RTAB-Map itself publishes /map (transient_local) in localization
-# mode, same as it does while mapping, so the global costmap's static_layer
-# subscribes to it directly. Controller/planner/behavior tuning below is
-# carried over unchanged from nav2_params.yaml (already tuned against the
-# real robot); only frames and the costmap observation source changed
-# (PointCloud2 on /points, replacing the LaserScan/AMCL-era 2D scan
-# requirement -- no pointcloud_to_laserscan flattening step needed).
+# lio_localization's transform_fusion owns map -> odom and nav2_map_server
+# serves the matching 2D grid as /map for the global costmap's static layer.
+# No amcl: the pose comes from ICP against the prior .pcd, not from particle
+# filtering the grid.
+#
+# Controller/planner/behavior tuning below is carried over from nav2_params.yaml
+# (tuned against the real robot). What differs is frames and the costmap
+# observation source: PointCloud2 on /points, not the LaserScan the AMCL-era
+# config expected, so no pointcloud_to_laserscan flattening step.
 #
 # NOT carried over: the keepout_filter zone. keepout_zone.yaml's mask was
-# authored against map/rtabmap_march_28.yaml's map frame -- re-generate it
-# against the current map before re-enabling that layer.
+# authored against an older map's frame (rtabmap_march_28, since deleted), so it
+# does not line up with map/pepper_map_lc.yaml -- re-generate it with
+# utils/generate_keepout.py against the current map before re-enabling
+# that layer.
 
 bt_navigator:
   ros__parameters:
-    use_sim_time: False
+    use_sim_time: false
     global_frame: map
     robot_base_frame: base_footprint
     # FAST-LIO's own /Odometry now publishes real twist (not all-zero) --
@@ -42,7 +44,8 @@ bt_navigator:
     default_server_timeout: 20
     wait_for_service_timeout: 5
 
-    default_nav_to_pose_bt_xml: /opt/ros/humble/share/nav2_bt_navigator/behavior_trees/navigate_to_pose_w_replanning_and_recovery.xml
+    default_nav_to_pose_bt_xml: 
+      /opt/ros/humble/share/nav2_bt_navigator/behavior_trees/navigate_to_pose_w_replanning_and_recovery.xml
     plugin_lib_names:
       - nav2_compute_path_to_pose_action_bt_node
       - nav2_compute_path_through_poses_action_bt_node
@@ -91,7 +94,7 @@ bt_navigator:
 
 controller_server:
   ros__parameters:
-    use_sim_time: False
+    use_sim_time: false
     controller_frequency: 20.0
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.001
@@ -107,7 +110,7 @@ controller_server:
       movement_time_allowance: 30.0
 
     general_goal_checker:
-      stateful: True
+      stateful: true
       plugin: "nav2_controller::SimpleGoalChecker"
       xy_goal_tolerance: 0.15
       yaw_goal_tolerance: 0.15
@@ -116,7 +119,7 @@ controller_server:
     # the real robot, no reason to re-derive it.
     FollowPath:
       plugin: "dwb_core::DWBLocalPlanner"
-      debug_trajectory_details: False
+      debug_trajectory_details: false
       min_vel_x: 0.0
       min_vel_y: 0.0
       max_vel_x: 0.5
@@ -140,9 +143,10 @@ controller_server:
       transform_tolerance: 0.2
       xy_goal_tolerance: 0.15
       trans_stopped_velocity: 0.1
-      short_circuit_trajectory_evaluation: True
-      stateful: True
-      critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
+      short_circuit_trajectory_evaluation: true
+      stateful: true
+      critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign",
+        "PathDist", "GoalDist"]
       BaseObstacle.scale: 0.02
       PathAlign.scale: 20.0
       PathAlign.forward_point_distance: 0.1
@@ -168,7 +172,7 @@ local_costmap:
       # child of odom here since transform_fusion owns map -> odom.
       global_frame: odom
       robot_base_frame: base_footprint
-      use_sim_time: False
+      use_sim_time: false
       rolling_window: true
       width: 3
       height: 3
@@ -181,16 +185,16 @@ local_costmap:
         inflation_radius: 0.30
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
-        enabled: True
+        enabled: true
         # VoxelLayer (not ObstacleLayer): keeps a 3D voxel column grid and
         # clears per-voxel, so a tilted 360 deg 3D lidar + moving obstacles
         # (people) clear reliably without leaving stale marks behind. The voxel
         # grid spans the obstacle band: origin_z .. origin_z + z_voxels*z_res.
-        publish_voxel_map: True
+        publish_voxel_map: true
         # FLOOR-referenced now (global_frame is odom): plain heights
         # above the ground. Old raw-odom values +0.30. z_voxels max is 16 --
         # nav2's VoxelGrid packs a column into a 32-bit word.
-        origin_z: -0.30            # 0.30 m BELOW the floor: keeps the sensor
+        origin_z: 0.3              # 0.30 m BELOW the floor: keeps the sensor
                                    # origin (L2 ~0.25 m up, plus drift) inside
                                    # the grid so VoxelLayer can raytrace-clear.
         z_resolution: 0.125        # voxel height
@@ -207,8 +211,8 @@ local_costmap:
         points:
           topic: /points
           data_type: "PointCloud2"
-          clearing: True
-          marking: True
+          clearing: true
+          marking: true
           # Height band is in odom, which is FLOOR-referenced (z=0 IS
           # the ground plane), so these read directly as height above the
           # floor. min_obstacle_height MUST stay above the floor or the floor
@@ -231,8 +235,8 @@ local_costmap:
           # the sole source (blind to the sides/rear).
           topic: /camera/depth/color/points
           data_type: "PointCloud2"
-          clearing: True
-          marking: True
+          clearing: true
+          marking: true
           min_obstacle_height: 0.10
           max_obstacle_height: 1.70
           # D435i reliable depth ~0.3-3 m; below 0.3 m it is blind.
@@ -240,7 +244,7 @@ local_costmap:
           raytrace_min_range: 0.3
           obstacle_max_range: 3.0
           obstacle_min_range: 0.3
-      always_send_full_costmap: True
+      always_send_full_costmap: true
 
 global_costmap:
   global_costmap:
@@ -249,16 +253,16 @@ global_costmap:
       publish_frequency: 1.0
       global_frame: map
       robot_base_frame: base_footprint
-      use_sim_time: False
+      use_sim_time: false
       robot_radius: 0.25
       resolution: 0.05
       track_unknown_space: true
       plugins: ["static_layer", "voxel_layer", "inflation_layer"]
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
-        enabled: True
+        enabled: true
         # VoxelLayer for the same per-voxel 3D clearing as the local costmap.
-        publish_voxel_map: True
+        publish_voxel_map: true
         origin_z: -0.30            # floor-referenced, see local costmap
         z_resolution: 0.125
         z_voxels: 16               # 16 * 0.125 = 2.0 m -> covers -0.30 .. 1.70
@@ -270,8 +274,8 @@ global_costmap:
         points:
           topic: /points
           data_type: "PointCloud2"
-          clearing: True
-          marking: True
+          clearing: true
+          marking: true
           min_obstacle_height: 0.10
           max_obstacle_height: 1.70
           raytrace_max_range: 3.0
@@ -282,17 +286,17 @@ global_costmap:
           obstacle_min_range: 0.8
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
-        map_subscribe_transient_local: True
+        map_subscribe_transient_local: true
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 4.0
         inflation_radius: 0.20
-      always_send_full_costmap: True
+      always_send_full_costmap: true
 
 planner_server:
   ros__parameters:
     expected_planner_frequency: 20.0
-    use_sim_time: False
+    use_sim_time: false
     planner_plugins: ["GridBased"]
     GridBased:
       plugin: "nav2_navfn_planner/NavfnPlanner"
@@ -302,7 +306,7 @@ planner_server:
 
 behavior_server:
   ros__parameters:
-    use_sim_time: False
+    use_sim_time: false
     global_frame: map
     robot_base_frame: base_footprint
     transform_tolerance: 0.1
@@ -331,7 +335,7 @@ behavior_server:
 # ---------------------------------------------------------------------------
 collision_monitor:
   ros__parameters:
-    use_sim_time: False
+    use_sim_time: false
     base_frame_id: "base_footprint"
     odom_frame_id: "odom"
     cmd_vel_in_topic: "cmd_vel_raw"
@@ -339,7 +343,7 @@ collision_monitor:
     state_topic: "collision_monitor_state"
     transform_tolerance: 0.2
     source_timeout: 1.0
-    base_shift_correction: True
+    base_shift_correction: true
     stop_pub_timeout: 2.0
     polygons: ["PolygonStop", "PolygonSlow"]
     PolygonStop:
@@ -347,22 +351,22 @@ collision_monitor:
       radius: 0.40          # hard stop inside this radius of base_footprint
       action_type: "stop"
       max_points: 3         # trigger when > this many points fall inside
-      visualize: True
+      visualize: true
       polygon_pub_topic: "polygon_stop"
-      enabled: True
+      enabled: true
     PolygonSlow:
       type: "circle"
       radius: 0.80          # slow to slowdown_ratio inside this radius
       action_type: "slowdown"
       slowdown_ratio: 0.3
       max_points: 3
-      visualize: True
+      visualize: true
       polygon_pub_topic: "polygon_slowdown"
-      enabled: True
+      enabled: true
     observation_sources: ["pointcloud"]
     pointcloud:
       type: "pointcloud"
       topic: "/points_safety"   # L2 self-hit-filtered (see cloud_range_filter)
       min_height: 0.10
       max_height: 1.80
-      enabled: True
+      enabled: true
