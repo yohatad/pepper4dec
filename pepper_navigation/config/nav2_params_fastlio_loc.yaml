@@ -194,7 +194,7 @@ local_costmap:
         # FLOOR-referenced now (global_frame is odom): plain heights
         # above the ground. Old raw-odom values +0.30. z_voxels max is 16 --
         # nav2's VoxelGrid packs a column into a 32-bit word.
-        origin_z: 0.3              # 0.30 m BELOW the floor: keeps the sensor
+        origin_z: -0.30            # 0.30 m BELOW the floor: keeps the sensor
                                    # origin (L2 ~0.25 m up, plus drift) inside
                                    # the grid so VoxelLayer can raytrace-clear.
         z_resolution: 0.125        # voxel height
