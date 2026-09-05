@@ -11,9 +11,20 @@ sequences their lifecycle nodes from `unconfigured` to `active` in dependency
 order via nav2_lifecycle_manager.
 
 Localization: the absolute `map -> base_footprint` pose (`/localization/pose`,
-consumed by gesture_execution for pointing IK) comes from lio_localization's
-transform_fusion node. Each of the `nav_profile` Nav2 bringups except `legacy`
-already nests its own localization, so lio_localization is launched standalone
+consumed by gesture_execution for pointing IK) comes from fast_lio's
+fastlio_localization node, which publishes that topic with the pose AND twist
+composed into base_footprint.
+
+It replaces lio_localization, still selectable as nav_profile 'fastlio_loc'. The
+difference is where the map constraint is applied: inside the iEKF at scan rate,
+rather than as a discrete map->odom correction from a node beside it. On
+slam_20260823_aligned the old path forced 100 corrections through its innovation
+gate, the largest 49.72 m and growing over the run; the new one had 0 steps over
+0.30 m with a 4.5 cm maximum.
+
+NOT YET RUN ON THE ROBOT -- everything measured is bag replay. If it misbehaves
+live, nav_profile:=fastlio_loc is the way back. Each of the `nav_profile` Nav2 bringups except `legacy`
+already nests its own localization, so it is launched standalone
 here only when navigation is off -- launching it twice would fight over the
 `map -> odom` transform.
 """
@@ -31,6 +42,13 @@ from ament_index_python.packages import get_package_share_directory
 # for the trade-offs; `legacy` is AMCL on naoqi's raw wheel odometry and is
 # kept only for reproducing old runs -- it publishes no /localization/pose.
 NAV_PROFILES = {
+    # Default. fastlio_localization: the prior map IS the ikd-Tree the iEKF
+    # registers against, so the map constrains the estimate at scan rate from
+    # inside the filter. 'fastlio_loc' below is the older lio_localization path,
+    # which measures the same constraint OUTSIDE the filter and applies it as a
+    # discrete map->odom step -- MEASURED on slam_20260823_aligned, 100 forced
+    # jumps up to 49.72 m and growing. Kept as the way back, not as an equal.
+    'fastloc': 'pepper_nav2_fastloc.launch.py',
     'fastlio_loc': 'pepper_nav2_fastlio_loc.launch.py',
     'rtabmap_loc': 'pepper_nav2_rtabmap_loc.launch.py',
     'amcl': 'pepper_nav2_amcl.launch.py',
@@ -72,11 +90,13 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'nav_profile',
-            default_value='fastlio_loc',
+            default_value='fastloc',
             choices=sorted(NAV_PROFILES),
             description='Which Nav2 bringup to use when enable_navigation is '
                         'true. fastlio_loc = FAST-LIO + prior-map ICP '
-                        '(lio_localization); rtabmap_loc = RTAB-Map '
+                        '(fastloc = fastlio_localization, the default; '
+                        'fastlio_loc = the older lio_localization); '
+                        'rtabmap_loc = RTAB-Map '
                         'localization mode; amcl = AMCL on FAST-LIO odom; '
                         'legacy = AMCL on wheel odom (no /localization/pose)'
         ),
@@ -91,8 +111,9 @@ def generate_launch_description():
         # so an unscoped 'rviz': 'false' would leak into the nav profile's own
         # 'rviz' argument -- same trap pepper_nav2_fastlio_loc.launch.py hit.
         GroupAction([
-            _include('lio_localization', 'fastlio_localization_l2.launch.py',
-                     launch_arguments={'rviz': 'false'}.items()),
+            _include('fast_lio', 'localization_l2.launch.py',
+                     launch_arguments={'rviz': 'false',
+                                       'sensor_tf_scope': 'mount'}.items()),
         ], condition=UnlessCondition(LaunchConfiguration('enable_navigation'))),
 
         # Actuation
@@ -113,7 +134,7 @@ def generate_launch_description():
         # Sequence configure -> activate for the custom lifecycle nodes above,
         # in dependency order. bond_timeout is disabled because these nodes
         # don't implement the bond protocol used by nav2's C++ lifecycle nodes.
-        # lio_localization's nodes are plain rclcpp nodes, not lifecycle ones,
+        # the localization nodes are plain rclcpp nodes, not lifecycle ones,
         # so they are deliberately absent from this list.
         Node(
             package='nav2_lifecycle_manager',
