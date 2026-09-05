@@ -106,6 +106,13 @@ install(DIRECTORY
   # and keyframe_poses are ONE package-relative set -- no absolute
   # /home/<user> path that only resolves on the machine that built the map.
   PATTERN "*_poses.txt"
+  # pose.json is the SAME mapping run in the format fastlio_localization reads:
+  # per-keyframe quaternion poses, against the KITTI 3x4 in *_poses.txt. It
+  # ships here so the two localization stacks' maps are visibly ONE set rather
+  # than two files that happen to describe the same building. The 2735 keyframe
+  # CLOUDS it indexes are 75 MB and deliberately do NOT live in this package --
+  # they are in ros2_ws/bags/pcd, addressed by localization.map_scan_dir.
+  PATTERN "*.json"
 )
 
 if(BUILD_TESTING)
