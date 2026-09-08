@@ -1,32 +1,88 @@
 #!/usr/bin/env python3
-"""
+"""dec_system.launch.py
+
 Top-level launch file for the Pepper4DEC system.
 
-dec_system.launch.py
-
 Brings up every dec_system package (each with its own launch file, some of
-which nest further launch files for their dependencies, e.g.
-overt_attention's launch nests person_detection and face_detection) and then
-sequences their lifecycle nodes from `unconfigured` to `active` in dependency
-order via nav2_lifecycle_manager.
+which nest further launch files for their dependencies, e.g. overt_attention's
+launch nests person_detection and face_detection) and then sequences their
+lifecycle nodes from `unconfigured` to `active` in dependency order via
+nav2_lifecycle_manager.
 
-Localization: the absolute `map -> base_footprint` pose (`/localization/pose`,
-consumed by gesture_execution for pointing IK) comes from fast_lio's
-fastlio_localization node, which publishes that topic with the pose AND twist
-composed into base_footprint.
+Launch files included:
+    overt_attention/attention_system.launch.py — camera, person and face
+        detection, saliency, and the attention controller.
+    fast_lio/localization_l2.launch.py — only when enable_navigation is false
+        (see Notes); rviz:=false, sensor_tf_scope:=mount.
+    animate_behavior, gesture_execution, speech_event, text_to_speech,
+        conversation_manager, behavior_controller — each package's own launch
+        file, unmodified.
+    pepper_navigation/<nav_profile> — the selected Nav2 bringup, only when
+        enable_navigation is true.
 
-It replaces lio_localization, which has been removed (it lives on at
-github.com/yohatad/lio_localization). The difference is where the map
-constraint is applied: inside the iEKF at scan rate, rather than as a discrete
-map->odom correction computed by a node beside the filter. On
-slam_20260823_aligned this path had 0 correction steps over 0.30 m, 4.5 cm
-maximum.
+Nodes started:
+    nav2_lifecycle_manager/lifecycle_manager (node: lifecycle_manager_dec_system)
+        Drives configure -> activate for person_detection, face_detection,
+        overt_attention, animate_behavior, gesture_action_server,
+        speech_recognition, text_to_speech, conversation_manager, and
+        behavior_controller. bond_timeout is 0.0 because these nodes do not
+        implement the bond protocol nav2's own C++ lifecycle nodes use, and
+        the localization nodes are plain rclcpp nodes, so they are
+        deliberately absent from the managed list.
 
-NOT YET RUN ON THE ROBOT -- everything measured is bag replay. Each of the
-`nav_profile` Nav2 bringups except `legacy` already nests its own localization,
-so it is launched standalone here only when navigation is off -- launching it
-twice would fight over the `map -> odom` transform.
+Launch arguments:
+    enable_navigation (default: "true")
+        Bring up pepper_navigation (the Nav2 navigation/localization stack).
+    nav_profile (default: "fastloc"; choices: amcl, fastloc, legacy,
+                 rtabmap_loc)
+        Which Nav2 bringup to use when enable_navigation is true.
+        fastloc = fastlio_localization, FAST-LIO with the prior map inside the
+        iEKF; rtabmap_loc = RTAB-Map localization mode; amcl = AMCL on FAST-LIO
+        odom; legacy = AMCL on raw wheel odom, kept only for reproducing old
+        runs and publishing no /localization/pose.
+
+Configuration:
+    None of its own; each included launch file loads its package's YAML.
+
+Usage:
+    ros2 launch dec_launch dec_system.launch.py
+    ros2 launch dec_launch dec_system.launch.py nav_profile:=rtabmap_loc
+    ros2 launch dec_launch dec_system.launch.py enable_navigation:=false
+
+Notes:
+    Localization: the absolute `map -> base_footprint` pose
+    (`/localization/pose`, consumed by gesture_execution for pointing IK)
+    comes from fast_lio's fastlio_localization node, which publishes that
+    topic with the pose AND twist composed into base_footprint.
+
+    It replaces lio_localization, which has been removed (it lives on at
+    github.com/yohatad/lio_localization). The difference is where the map
+    constraint is applied: inside the iEKF at scan rate, rather than as a
+    discrete map->odom correction computed by a node beside the filter. On
+    slam_20260823_aligned this path had 0 correction steps over 0.30 m, 4.5 cm
+    maximum.
+
+    NOT YET RUN ON THE ROBOT -- everything measured is bag replay. Each of the
+    `nav_profile` Nav2 bringups except `legacy` already nests its own
+    localization, so it is launched standalone here only when navigation is
+    off -- launching it twice would fight over the `map -> odom` transform.
+
+    The localization include is wrapped in a scoped GroupAction because
+    IncludeLaunchDescription emits its launch_arguments as
+    SetLaunchConfiguration into the current context, so an unscoped
+    'rviz': 'false' would leak into the nav profile's own 'rviz' argument.
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
 """
+
 import os
 from launch import LaunchDescription
 from launch.actions import (DeclareLaunchArgument, GroupAction,

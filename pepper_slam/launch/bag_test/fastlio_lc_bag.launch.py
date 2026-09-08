@@ -1,27 +1,40 @@
-# FAST-LIO + pose-graph loop closure (MAPPING), on a recorded bag.
-#
-# This is how you BUILD map_batch.pcd -- the prior every localization run ICPs
-# against. After the bag finishes, call:
-#   ros2 service call /pgo_batch_optimize std_srvs/srv/Trigger
-# Without that call nothing is written but optimized_poses.txt and Scans/.
-#
-# Thin wrapper over fastlio_lc_pgo/launch/fastlio_lc_l2.launch.py -- the live entry
-# point -- with use_sim_time forced true. See bag_test/README.md.
-#
-# Usage:
-#   ros2 launch pepper_slam fastlio_lc_bag.launch.py
-#   ros2 bag play <bag> --clock \
-#     --qos-profile-overrides-path config/play_qos.yaml \
-#     --read-ahead-queue-size 2000
-#
-# The QoS overrides are REQUIRED: /imu/data and /camera/imu were recorded
-# BEST_EFFORT, so without them the estimator waits forever for IMU init and
-# prints nothing. Replaying /tf is safe and wanted. README.md in this directory
-# has both in full, plus the pre-8edd1f5 bags that need a check first.
-#
-# keyframe_filter_size matters here: it is applied BEFORE keyframes are stored,
-# so map_save_filter_size can never recover resolution it discarded. 0.25
-# matches FAST-LIO's own filter_size_surf, the real floor.
+r"""fastlio_lc_bag.launch.py
+
+FAST-LIO + pose-graph loop closure (MAPPING), on a recorded bag.
+
+This is how you BUILD map_batch.pcd -- the prior every localization run ICPs
+against. After the bag finishes, call:
+  ros2 service call /pgo_batch_optimize std_srvs/srv/Trigger
+Without that call nothing is written but optimized_poses.txt and Scans/.
+
+Thin wrapper over fastlio_lc_pgo/launch/fastlio_lc_l2.launch.py -- the live entry
+point -- with use_sim_time forced true. See bag_test/README.md.
+
+Usage:
+  ros2 launch pepper_slam fastlio_lc_bag.launch.py
+  ros2 bag play <bag> --clock \
+    --qos-profile-overrides-path config/play_qos.yaml \
+    --read-ahead-queue-size 2000
+
+The QoS overrides are REQUIRED: /imu/data and /camera/imu were recorded
+BEST_EFFORT, so without them the estimator waits forever for IMU init and
+prints nothing. Replaying /tf is safe and wanted. README.md in this directory
+has both in full, plus the pre-8edd1f5 bags that need a check first.
+
+keyframe_filter_size matters here: it is applied BEFORE keyframes are stored,
+so map_save_filter_size can never recover resolution it discarded. 0.25
+matches FAST-LIO's own filter_size_surf, the real floor.
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
 
 import os
 

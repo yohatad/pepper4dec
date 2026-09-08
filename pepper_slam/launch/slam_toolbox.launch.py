@@ -1,3 +1,39 @@
+"""slam_toolbox.launch.py
+
+Run SLAM Toolbox in online asynchronous mode against /scan.
+
+2D laser SLAM, kept for comparison against the LIO pipelines. It consumes the
+flattened /scan rather than the L2's /points, so it sees only one horizontal
+slice of the world.
+
+Nodes started:
+    slam_toolbox/async_slam_toolbox_node (node: slam_toolbox)
+
+Launch arguments:
+    slam_params_file (default: <share>/config/mapper_params_online_async.yaml)
+        Full path to the SLAM Toolbox parameters.
+
+Configuration:
+    config/mapper_params_online_async.yaml
+
+Prerequisites:
+    Something must publish /scan — pointcloud_to_laserscan over the L2 cloud,
+    or a 2D lidar driver.
+
+Usage:
+    ros2 launch pepper_slam slam_toolbox.launch.py
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
+
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.actions import DeclareLaunchArgument

@@ -1,17 +1,52 @@
-# Plain Point-LIO ODOMETRY on the Pepper L2 rig, with its required static TF.
-# The Point-LIO twin of fastlio_odometry.launch.py; see that header for why
-# this is odometry and not SLAM, and use fastlio_lc_pgo's pointlio_lc_l2 for a
-# loop-corrected map.
-#
-# It exists for the same reason: point_lio's mapping_l2lidar_node.launch.py
-# runs lio_odom_bridge itself but never includes pepper_sensor_tf.launch.py,
-# so launched alone it hangs waiting for a transform that never appears.
-#
-# flatten_base_frame defaults true here (false upstream): Pepper is confirmed
-# flat-floor-only. Pass false to see Point-LIO's own drifting z/roll/pitch.
-#
-#   ros2 launch pepper_slam pointlio_odometry.launch.py
-#   ros2 bag play <bag> --clock --topics /points /imu/data /tf /tf_static
+"""pointlio_odometry.launch.py
+
+Plain Point-LIO ODOMETRY on the Pepper L2 rig, with its required static TF.
+
+The Point-LIO twin of fastlio_odometry.launch.py; see that file for why this is
+odometry and not SLAM, and use fastlio_lc_pgo's pointlio_lc_l2.launch.py for a
+loop-corrected map.
+
+It exists for the same reason: point_lio's mapping_l2lidar_node.launch.py runs
+lio_odom_bridge itself but never includes pepper_sensor_tf.launch.py, so
+launched alone it hangs waiting for a transform that never appears.
+
+Launch files included:
+    pepper_sensor_tf.launch.py — the rig's static TF.
+    point_lio/mapping_l2lidar_node.launch.py — the estimator, which runs the
+        odom bridge itself.
+
+Nodes started:
+    tf2_ros/static_transform_publisher (node: map_odom_identity)
+        map -> odom identity, only when publish_map_identity is true.
+
+Launch arguments:
+    config_file (default: "l2lidar_rsimu.yaml")
+    rviz (default: "true")
+    publish_map_identity (default: "true")
+    use_sim_time (default: "false")
+    flatten_base_frame (default: "true")
+        Defaults true here (false upstream): Pepper is confirmed
+        flat-floor-only. Pass false to see Point-LIO's own drifting
+        z/roll/pitch.
+    bridge_level_frame (default: "true")
+
+Configuration:
+    Point-LIO's config directory, selected by config_file.
+
+Usage:
+    ros2 launch pepper_slam pointlio_odometry.launch.py
+    ros2 bag play <bag> --clock --topics /points /imu/data /tf /tf_static
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
 
 import os
 

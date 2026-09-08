@@ -1,22 +1,81 @@
-# Nav2 bringup for Pepper: AMCL + map_server, over FAST-LIO odometry.
-# Compare against pepper_nav2_fastloc.launch.py (fastlio_localization) and
-# pepper_nav2_rtabmap_loc.launch.py (RTAB-Map) -- everything downstream of
-# localization is identical, so a behavioural difference is a localization one.
-#
-# AMCL needs a LEVEL odom->base_footprint TF (FAST-LIO's raw odom is tilted
-# ~90deg on Pepper's mount, so mapping.launch.py runs with
-# bridge_level_frame:=true) and a LaserScan (pointcloud_to_laserscan flattens
-# the L2's 360deg /points -> /scan; costmaps still use the full /points).
-#
-# Usage (real robot):
-#   ros2 launch l2lidar_node l2lidar.launch.py
-#   ros2 launch pepper_navigation pepper_nav2_amcl.launch.py map:=<path>
-#   Set the initial pose in RViz (2D Pose Estimate) -- amcl starts unlocalized.
-#
-# Bag replay: pass use_sim_time:=true, then
-#   ros2 bag play <bag> --clock --topics /points /imu/data
-#
-# Requires: sudo apt install ros-humble-pointcloud-to-laserscan
+"""pepper_nav2_amcl.launch.py
+
+Nav2 bringup for Pepper: AMCL + map_server, over FAST-LIO odometry.
+
+Compare against pepper_nav2_fastloc.launch.py (fastlio_localization) and
+pepper_nav2_rtabmap_loc.launch.py (RTAB-Map) — everything downstream of
+localization is identical, so a behavioural difference is a localization one.
+
+AMCL needs a LEVEL odom -> base_footprint TF (FAST-LIO's raw odom is tilted
+~90 deg on Pepper's mount, so mapping.launch.py runs with
+bridge_level_frame:=true) and a LaserScan (pointcloud_to_laserscan flattens
+the L2's 360 deg /points into /scan; the costmaps still use the full /points).
+
+Launch files included:
+    pepper_slam/pepper_sensor_tf.launch.py — the sensor rig TF.
+    fast_lio/mapping.launch.py — FAST-LIO odometry.
+    pepper_slam/lio_odom_bridge.launch.py — the gravity-leveled odom frame.
+
+Nodes started:
+    pointcloud_to_laserscan/pointcloud_to_laserscan_node — /points -> /scan.
+    nav2_map_server/map_server, nav2_amcl/amcl,
+    nav2_controller/controller_server, nav2_planner/planner_server,
+    nav2_behaviors/behavior_server, nav2_bt_navigator/bt_navigator.
+    pepper_slam/cloud_range_filter.py x2 (points_safety_filter,
+    points_costmap_filter) — range-limited clouds for the safety chain and
+    the costmaps.
+    nav2_collision_monitor/collision_monitor.
+    nav2_costmap_2d/nav2_costmap_2d_markers x2 — voxel visualization.
+    pepper_navigation/localization_recovery.py.
+    rviz2/rviz2 — only when rviz is true.
+    nav2_lifecycle_manager/lifecycle_manager (node:
+    lifecycle_manager_navigation).
+
+Launch arguments:
+    use_sim_time (default: "false")
+        Use bag/simulation clock instead of wall time.
+    map (default: <share>/map/pepper_map_lc.yaml)
+        2D occupancy grid served as /map, for amcl and the global costmap
+        static layer. MUST exist: map_server fails to configure otherwise and
+        the lifecycle manager aborts the whole nav2 bringup.
+    scan_min_height (default: "0.20")
+        Bottom of the /points slice flattened into /scan.
+    scan_max_height (default: "1.50")
+        Top of the /points slice flattened into /scan.
+    rviz_config (default: <share>/rviz/nav2_amcl.rviz)
+        nav2_amcl_voxel.rviz gives the 3D voxel view (needs z_voxels <= 16 in
+        the nav2 params).
+    rviz (default: "true")
+        Open RViz2 pre-configured for this stack.
+
+Configuration:
+    config/nav2_params_amcl.yaml, map/pepper_map_lc.yaml, and FAST-LIO's
+    l2.yaml.
+
+Prerequisites:
+    sudo apt install ros-humble-pointcloud-to-laserscan
+
+Usage (real robot):
+    ros2 launch l2lidar_node l2lidar.launch.py
+    ros2 launch pepper_navigation pepper_nav2_amcl.launch.py map:=<path>
+
+    Set the initial pose in RViz (2D Pose Estimate) — amcl starts
+    unlocalized.
+
+Usage (bag replay):
+    ros2 launch pepper_navigation pepper_nav2_amcl.launch.py use_sim_time:=true
+    ros2 bag play <bag> --clock --topics /points /imu/data
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
 
 import os
 

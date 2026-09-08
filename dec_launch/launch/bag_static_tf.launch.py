@@ -1,20 +1,47 @@
-"""
+"""bag_static_tf.launch.py
+
 Republish the static TF tree recorded in slam_august_8_bag.
 
-Why this exists: the bag holds its 2 /tf_static messages at t+0.0066s, so any
-playback with `--start-offset` seeks past them. rosbag2 (Humble) still creates
-the TRANSIENT_LOCAL publisher from the bag metadata - /tf_static shows up in
-`ros2 topic list` - but never writes a sample, so `ros2 run tf2_tools
-view_frames` returns frame_yaml='[]' and RViz has no fixed frame.
+Nodes started:
+    tf2_ros/static_transform_publisher x11
+        One per edge in STATIC_TRANSFORMS: the RealSense internal frames
+        (accel, gyro, imu, depth, color and their optical frames) plus
+        l2lidar_frame -> l2lidar_frame_imu.
 
-Run this alongside the player to get the tree back regardless of the offset:
+Launch arguments:
+    use_sim_time (default: "true")
+        Use /clock from `ros2 bag play --clock`. Defaults true because this
+        launch file exists for bag playback; tf2 ignores timestamps on static
+        transforms, so this only keeps the nodes consistent with the rest of
+        the graph.
 
+Configuration:
+    The transform values are literals in this file, dumped verbatim from the
+    bag's /tf_static messages rather than re-measured, so the tree matches
+    what the recording actually used. They differ slightly from
+    my_realsense_with_staticframes.launch.py, which carries an older
+    hand-measured camera_color_frame extrinsic — prefer these when replaying.
+
+Why this exists:
+    The bag holds its 2 /tf_static messages at t+0.0066s, so any playback with
+    `--start-offset` seeks past them. rosbag2 (Humble) still creates the
+    TRANSIENT_LOCAL publisher from the bag metadata — /tf_static shows up in
+    `ros2 topic list` — but never writes a sample, so `ros2 run tf2_tools
+    view_frames` returns frame_yaml='[]' and RViz has no fixed frame. Run this
+    alongside the player to get the tree back regardless of the offset.
+
+Usage:
     ros2 launch dec_launch bag_static_tf.launch.py
 
-The values below are dumped verbatim from the bag's /tf_static messages, not
-re-measured, so the tree matches what the recording actually used. They differ
-slightly from my_realsense_with_staticframes.launch.py, which carries an older
-hand-measured camera_color_frame extrinsic - prefer these when replaying.
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
 """
 
 from launch import LaunchDescription

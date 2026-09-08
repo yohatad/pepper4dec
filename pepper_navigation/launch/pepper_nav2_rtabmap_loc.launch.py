@@ -1,23 +1,62 @@
-# Nav2 bringup for Pepper on FAST-LIO + RTAB-Map (localization mode).
-#
-# Localizes against the saved rtabmap_fastlio_refined.db instead of AMCL + a
-# static map_server: RTAB-Map runs with Mem/IncrementalMemory=false, reusing
-# the odometry/appearance/ICP pipeline tuned for mapping, and publishes /map
-# itself. No pointcloud_to_laserscan -- costmaps take /points directly.
-#
-# Frames: FAST-LIO odom -> lio_odom_bridge's gravity-leveled odom -> RTAB-Map
-# map. See nav2_params_rtabmap_loc.yaml for why local_costmap uses odom (not
-# pepper_odom) as its global_frame.
-#
-# Usage (real robot):
-#   ros2 launch pepper_navigation pepper_nav2_rtabmap_loc.launch.py
-#
-# Usage (bag replay, to sanity-check localization/costmaps without driving):
-#   ros2 launch pepper_navigation pepper_nav2_rtabmap_loc.launch.py use_sim_time:=true
-#   ros2 bag play <bag> --clock --topics /points /imu/data /tf_static \
-#       /camera/color/image_raw /camera/color/camera_info
-#   (Nav2 will localize and build costmaps, but a bag can't react to cmd_vel
-#   -- driving to a goal needs the real robot or a simulator.)
+r"""pepper_nav2_rtabmap_loc.launch.py
+
+Nav2 bringup for Pepper on FAST-LIO + RTAB-Map (localization mode).
+
+Localizes against the saved rtabmap_fastlio_refined.db instead of AMCL and a
+static map_server: RTAB-Map runs with Mem/IncrementalMemory=false, reusing the
+odometry/appearance/ICP pipeline tuned for mapping, and publishes /map itself.
+No pointcloud_to_laserscan — the costmaps take /points directly.
+
+Launch files included:
+    fast_lio/mapping.launch.py — FAST-LIO odometry.
+    pepper_slam/lio_odom_bridge.launch.py — the gravity-leveled odom frame.
+    pepper_slam/rtabmap_base.launch.py — RTAB-Map in localization mode.
+
+Nodes started:
+    nav2_controller/controller_server, nav2_planner/planner_server,
+    nav2_behaviors/behavior_server, nav2_bt_navigator/bt_navigator.
+    pepper_slam/cloud_range_filter.py (node: points_safety_filter).
+    nav2_collision_monitor/collision_monitor.
+    pepper_navigation/localization_recovery.py.
+    nav2_lifecycle_manager/lifecycle_manager x2 — one for navigation
+    (lifecycle_manager_navigation) and a separate one for the collision
+    monitor (lifecycle_manager_collision_monitor).
+
+Launch arguments:
+    use_sim_time (default: "false")
+        Use bag/simulation clock instead of wall time.
+    database_path (default: "~/.ros/rtabmap_fastlio_refined.db")
+        Map database to localize against.
+
+Configuration:
+    config/nav2_params_rtabmap_loc.yaml and FAST-LIO's l2.yaml.
+
+Frames:
+    FAST-LIO odom -> lio_odom_bridge's gravity-leveled odom -> RTAB-Map map.
+    See nav2_params_rtabmap_loc.yaml for why local_costmap uses odom (not
+    pepper_odom) as its global_frame.
+
+Usage (real robot):
+    ros2 launch pepper_navigation pepper_nav2_rtabmap_loc.launch.py
+
+Usage (bag replay, to sanity-check localization/costmaps without driving):
+    ros2 launch pepper_navigation pepper_nav2_rtabmap_loc.launch.py use_sim_time:=true
+    ros2 bag play <bag> --clock --topics /points /imu/data /tf_static \
+        /camera/color/image_raw /camera/color/camera_info
+
+    Nav2 will localize and build costmaps, but a bag can't react to cmd_vel —
+    driving to a goal needs the real robot or a simulator.
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
 
 import os
 

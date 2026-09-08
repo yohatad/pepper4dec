@@ -1,20 +1,33 @@
-# FAST-LIO + RTAB-Map hybrid on a recorded bag: FAST-LIO supplies the odometry
-# (best measured on the L2: 0.19 m closure), RTAB-Map builds the maps on top --
-# 2D occupancy grid (/map) for Nav2 plus the 3D cloud/occupancy (/cloud_map,
-# Grid/3D) -- with ICP proximity loop closures on /points.
-#
-# Frames: FAST-LIO's own odom frame is IMU-aligned (tilted ~90 deg on Pepper's
-# mount). lio_odom_bridge publishes odom -> base_footprint plus a one-time
-# gravity-leveled odom -> lio_init. RTAB-Map anchors on odom so its map
-# frame is Z-up, which the 2D occupancy projection requires.
-#
-# Usage:
-#   ros2 launch pepper_slam rtabmap_fastlio_bag.launch.py
-#   ros2 bag play <bag> --clock --topics /points /imu/data /tf_static
-#
-# Replaying /tf is SAFE and wanted: publish_wheel_odom_tf has defaulted to
-# false since commit 8edd1f5, so no wheel-odometry edge is recorded and
-# base_footprint is the tf root. See pepper_sensor_tf.launch.py's header.
+"""rtabmap_fastlio_bag.launch.py
+
+FAST-LIO + RTAB-Map hybrid on a recorded bag: FAST-LIO supplies the odometry
+(best measured on the L2: 0.19 m closure), RTAB-Map builds the maps on top --
+2D occupancy grid (/map) for Nav2 plus the 3D cloud/occupancy (/cloud_map,
+Grid/3D) -- with ICP proximity loop closures on /points.
+
+Frames: FAST-LIO's own odom frame is IMU-aligned (tilted ~90 deg on Pepper's
+mount). lio_odom_bridge publishes odom -> base_footprint plus a one-time
+gravity-leveled odom -> lio_init. RTAB-Map anchors on odom so its map
+frame is Z-up, which the 2D occupancy projection requires.
+
+Usage:
+  ros2 launch pepper_slam rtabmap_fastlio_bag.launch.py
+  ros2 bag play <bag> --clock --topics /points /imu/data /tf_static
+
+Replaying /tf is SAFE and wanted: publish_wheel_odom_tf has defaulted to
+false since commit 8edd1f5, so no wheel-odometry edge is recorded and
+base_footprint is the tf root. See pepper_sensor_tf.launch.py's header.
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
 
 import os
 

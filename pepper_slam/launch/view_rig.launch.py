@@ -1,25 +1,55 @@
-# Look at the sensor rig in RViz. Nothing else: no LIO, no bag, no robot.
-#
-#   ros2 launch pepper_slam view_rig.launch.py              # rig alone
-#   ros2 launch pepper_slam view_rig.launch.py model:=full  # rig + Pepper body
-#
-# Use this to check a mesh or a mount before committing to a mapping run --
-# a wrong scale or a mis-seated camera is instantly obvious here and very hard
-# to spot underneath a point cloud.
-#
-# WHY IT DOES NOT REUSE pepper_sensor_tf.launch.py
-# That launch publishes robot_description under the /sensor_rig namespace, so
-# it can never collide with a Pepper body description from the naoqi driver.
-# That is right on the robot and wrong here: this is a standalone viewer, the
-# collision it guards against cannot happen, and the namespace would just force
-# a non-default topic into the RViz config. So this file runs its own
-# robot_state_publisher on the plain /robot_description.
-#
-# JOINT STATES: model:=full pulls in Pepper's body, which has 48 revolute and
-# continuous joints. robot_state_publisher will not publish TF for a movable
-# joint it has no state for, so the body would appear collapsed at the root.
-# joint_state_publisher_gui supplies them and gives you sliders. The rig alone
-# is all-fixed and needs none, so it is not started in that case.
+"""view_rig.launch.py
+
+Look at the sensor rig in RViz. Nothing else: no LIO, no bag, no robot.
+
+Use this to check a mesh or a mount before committing to a mapping run — a
+wrong scale or a mis-seated camera is instantly obvious here and very hard to
+spot underneath a point cloud.
+
+Nodes started:
+    robot_state_publisher/robot_state_publisher
+        On the plain /robot_description (see below).
+    joint_state_publisher_gui/joint_state_publisher_gui
+        Only for model:=full.
+    rviz2/rviz2
+        Only when rviz is true.
+
+Launch arguments:
+    model (default: "rig")
+        'rig' for the sensor rig alone, 'full' for rig + Pepper body.
+    rviz_cfg (default: <share>/rviz/view_rig.rviz)
+    gui (default: "false")
+    rviz (default: "true")
+
+Usage:
+    ros2 launch pepper_slam view_rig.launch.py              # rig alone
+    ros2 launch pepper_slam view_rig.launch.py model:=full  # rig + Pepper body
+
+Why it does not reuse pepper_sensor_tf.launch.py:
+    That launch publishes robot_description under the /sensor_rig namespace,
+    so it can never collide with a Pepper body description from the naoqi
+    driver. That is right on the robot and wrong here: this is a standalone
+    viewer, the collision it guards against cannot happen, and the namespace
+    would just force a non-default topic into the RViz config. So this file
+    runs its own robot_state_publisher on the plain /robot_description.
+
+Joint states:
+    model:=full pulls in Pepper's body, which has 48 revolute and continuous
+    joints. robot_state_publisher will not publish TF for a movable joint it
+    has no state for, so the body would appear collapsed at the root.
+    joint_state_publisher_gui supplies them and gives you sliders. The rig
+    alone is all-fixed and needs none, so it is not started in that case.
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
 
 import os
 

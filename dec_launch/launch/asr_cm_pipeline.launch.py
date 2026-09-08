@@ -1,22 +1,49 @@
-"""
-Launch the ASR → ConversationManager → SpeechWithFeedback pipeline.
+"""asr_cm_pipeline.launch.py
 
-asr_cm_pipeline.launch.py
+Launch the ASR -> ConversationManager -> SpeechWithFeedback pipeline.
 
 Nodes started:
-  1. speech_event        – microphone capture, VAD, and ASR
-                           publishes /speech_event/vad_speech_prob
-                           serves   /speech_recognition_action
-  2. conversation_manager – RAG + LLM; serves /conversation_manager action
-  3. behavior_controller  – BehaviorTree.CPP executor running
-                            asr_cm_tts_pipeline.xml
+    speech_event/speech_event (node: speech_event)
+        Microphone capture, VAD, and ASR; publishes
+        /speech_event/vad_speech_prob and serves /speech_recognition.
+    conversation_manager/conversation_manager (node: conversation_manager)
+        RAG + LLM; serves the /conversation_manager action. Loads its own YAML
+        config internally, so only the two overrides below are passed here.
+    behavior_controller/behavior_controller (node: behavior_controller)
+        BehaviorTree.CPP executor running asr_cm_tts_pipeline.xml. Also loads
+        its config internally; no parameters are passed from this launch.
+
+Launch arguments:
+    collection_name (default: "upanzi_knowledge")
+        ChromaDB collection used by conversation_manager.
+    verbose (default: "false")
+        Verbose logging on speech_event and conversation_manager.
+
+Configuration:
+    speech_event/config/speech_event_configuration.yaml is passed as
+    parameters; conversation_manager and behavior_controller read their own
+    config files at startup and must not be given them here.
 
 Prerequisites (start separately before this launch):
-  ros2 launch naoqi_driver naoqi_driver.launch.py nao_ip:=<PEPPER_IP>
+    ros2 launch naoqi_driver naoqi_driver.launch.py nao_ip:=<PEPPER_IP>
+    SpeechWithFeedback connects to /naoqi_driver/speech_with_feedback, which
+    naoqi_driver serves.
 
 Usage:
-  ros2 launch dec_launch asr_cm_pipeline.launch.py
-  ros2 launch dec_launch asr_cm_pipeline.launch.py nao_ip:=10.0.1.230
+    ros2 launch dec_launch asr_cm_pipeline.launch.py
+    ros2 launch dec_launch asr_cm_pipeline.launch.py verbose:=true
+
+Each node's ROS interface is documented in its application file.
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
 """
 
 import os  # needed for speech_event config path

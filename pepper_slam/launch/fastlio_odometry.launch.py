@@ -1,21 +1,63 @@
-# Plain FAST-LIO ODOMETRY on the Pepper L2 rig, with its required static TF.
-#
-# ODOMETRY, not SLAM. "mapping" is upstream's word for the ikd-Tree the
-# estimator aligns each scan against -- there is no loop closure and nothing
-# ever revisits a pose, so returning to a place after N metres of drift lays
-# the same wall down twice, permanently. For a map worth keeping use
-# fastlio_lc_pgo's fastlio_lc_l2.launch.py or bag_test/rtabmap_fastlio_bag.
-# This file is the right tool for MEASURING odometry, precisely because
-# nothing here hides the drift.
-#
-# It exists because fast_lio's own mapping.launch.py is not standalone-usable
-# here: the bridge needs the static base_footprint -> l2lidar_frame_imu chain
-# that only pepper_sensor_tf.launch.py provides, and mapping.launch.py is
-# shared with every other FAST-LIO sensor config so it cannot bake that in.
-# Forgetting the second launch file is a silent hang.
-#
-#   ros2 launch pepper_slam fastlio_odometry.launch.py
-#   ros2 bag play <bag> --clock --topics /points /imu/data /tf /tf_static
+"""fastlio_odometry.launch.py
+
+Plain FAST-LIO ODOMETRY on the Pepper L2 rig, with its required static TF.
+
+ODOMETRY, not SLAM. "mapping" is upstream's word for the ikd-Tree the
+estimator aligns each scan against — there is no loop closure and nothing ever
+revisits a pose, so returning to a place after N metres of drift lays the same
+wall down twice, permanently. For a map worth keeping use fastlio_lc_pgo's
+fastlio_lc_l2.launch.py or bag_test/rtabmap_fastlio_bag.launch.py. This file is
+the right tool for MEASURING odometry, precisely because nothing here hides the
+drift.
+
+It exists because fast_lio's own mapping.launch.py is not standalone-usable
+here: the bridge needs the static base_footprint -> l2lidar_frame_imu chain
+that only pepper_sensor_tf.launch.py provides, and mapping.launch.py is shared
+with every other FAST-LIO sensor config so it cannot bake that in. Forgetting
+the second launch file is a silent hang.
+
+Launch files included:
+    pepper_sensor_tf.launch.py — the rig's static TF.
+    fast_lio/mapping.launch.py — the estimator.
+    lio_odom_bridge.launch.py — odom -> base_footprint.
+
+Nodes started:
+    tf2_ros/static_transform_publisher (node: map_odom_identity)
+        map -> odom identity, only when publish_map_identity is true.
+
+Launch arguments:
+    rviz (default: "true")
+    rviz_cfg (default: <fast_lio share>/rviz/fastlio.rviz)
+    publish_map_identity (default: "true")
+        Publish the map -> odom identity transform.
+    use_sim_time (default: "false")
+    bridge_level_frame (default: "true")
+        Publish the gravity-leveled odom frame from the bridge.
+    config_file (default: "l2_rsimu.yaml")
+        FAST-LIO config (RealSense IMU); l2.yaml uses the L2's own.
+    lidar_imu_frame (default: "camera_imu_optical_frame")
+        Body frame matching config_file.
+    flatten_base_frame (default: "true")
+        Clamp z, roll, and pitch to zero. Pass false to see FAST-LIO's own
+        drifting estimate, e.g. when feeding ekf_fusion.launch.py.
+
+Configuration:
+    FAST-LIO's config directory, selected by config_file.
+
+Usage:
+    ros2 launch pepper_slam fastlio_odometry.launch.py
+    ros2 bag play <bag> --clock --topics /points /imu/data /tf /tf_static
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
 
 import os
 

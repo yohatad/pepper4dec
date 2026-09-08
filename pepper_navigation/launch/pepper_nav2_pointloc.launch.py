@@ -1,40 +1,99 @@
-# Nav2 bringup for Pepper on pointlio_localization (Point-LIO + prior map loaded
-# into the filter, so the map constrains the estimate at scan rate from inside
-# it). Owns map -> base_footprint; nav2_map_server serves the matching 2D grid
-# as /map for the global costmap.
-#
-# The Point-LIO twin of pepper_nav2_fastloc.launch.py. Everything downstream of
-# localization -- costmaps, DWB, collision monitor, safety chain -- is identical
-# (nav2_params_pointloc.yaml is byte-identical to the fastloc one apart from its
-# header), so a behavioural difference between the two profiles is a BACKEND
-# difference and nothing else.
-#
-# FRAMES.  map --(pointlio_localization)--> base_footprint
-#              --(pepper_sensor_tf / bag tf_static)--> l2lidar_frame_imu, cams
-#
-# No odom frame: after handover the filter state IS the map pose, so the local
-# costmap rolls in 'map' (see local_costmap global_frame in
-# config/nav2_params_pointloc.yaml). Don't add lio_odom_bridge here --
-# base_footprint would get two parents.
-#
-# Usage (real robot):
-#   ros2 launch pepper_navigation pepper_nav2_pointloc.launch.py
-#   No initial pose needed: ScanContext finds it. Call /relocalize if lost.
-#   A lock is accepted standing still; pass init_require_motion:=true to
-#   require ~0.5 m of motion first (see that argument).
-#
-# Usage (bag replay):
-#   ros2 launch pepper_navigation pepper_nav2_pointloc.launch.py use_sim_time:=true
-#   ros2 bag play <bag> --clock \
-#       --qos-profile-overrides-path config/play_qos.yaml \
-#       --read-ahead-queue-size 2000
-#
-# To use a DIFFERENT mapping run, change map, map_pose_file and map_scan_dir
-# together, or the localizer and the costmap disagree about where the world is.
-#
-# NOT YET VALIDATED against a bag: pointlio_localization is newer than the
-# fastloc path. Prefer pepper_nav2_fastloc.launch.py until this one has been
-# run on real data.
+r"""pepper_nav2_pointloc.launch.py
+
+Nav2 bringup for Pepper on pointlio_localization.
+
+Point-LIO with the prior map loaded into the filter, so the map constrains the
+estimate at scan rate from inside it. Owns map -> base_footprint;
+nav2_map_server serves the matching 2D grid as /map for the global costmap.
+
+The Point-LIO twin of pepper_nav2_fastloc.launch.py. Everything downstream of
+localization — costmaps, DWB, collision monitor, safety chain — is identical
+(nav2_params_pointloc.yaml is byte-identical to the fastloc one apart from its
+header), so a behavioural difference between the two profiles is a BACKEND
+difference and nothing else.
+
+NOT YET VALIDATED against a bag: pointlio_localization is newer than the
+fastloc path. Prefer pepper_nav2_fastloc.launch.py until this one has been run
+on real data.
+
+Launch files included:
+    pepper_slam/pepper_sensor_tf.launch.py — the sensor rig TF.
+    point_lio/localization_l2.launch.py — the localizer itself.
+
+Nodes started:
+    Same set as pepper_nav2_fastloc.launch.py: the Nav2 pipeline
+    (map_server, controller_server, planner_server, behavior_server,
+    bt_navigator), the points_safety_filter and collision monitor, the two
+    voxel marker converters, wait_for_map_then_start, localization_recovery,
+    localization_watchdog, RViz when enabled, and
+    lifecycle_manager_navigation.
+
+Launch arguments:
+    use_sim_time (default: "false")
+        Use bag/simulation clock instead of wall time.
+    sensor_tf (default: "urdf")
+        Publish the sensor rig; 'none' if the bag already provides
+        /tf_static.
+    sensor_tf_scope (default: "all")
+        'all' publishes the RealSense internal extrinsics too; use 'mount'
+        live.
+    map_dir (default: <share>/pcd)
+        Directory holding the ScanContext pose file.
+    map_pose_file (default: "sc_pose_20260823.json")
+        Per-keyframe poses. MUST come from the same mapping run as map.
+    map_scan_dir (default: <share>/pcd/sc_pcd_20260823)
+        Per-keyframe clouds indexed BY NUMBER from map_pose_file.
+    map (default: <share>/map/pepper_map_lc.yaml)
+        2D occupancy grid served as /map for the global costmap static layer.
+    config_file (default: "l2lidar_rsimu.yaml")
+        Point-LIO config.
+    body_frame (default: "camera_imu_optical_frame")
+        Body frame matching config_file.
+    init_require_motion (default: "false")
+        Require ~0.5 m of motion before accepting a pose lock.
+    rviz_config (default: <share>/rviz/nav2_fastloc.rviz)
+    rviz (default: "true")
+        Open RViz2 pre-configured for this nav stack.
+    watchdog (default: "true")
+        Cancel navigation goals while the localizer reports itself lost.
+
+Configuration:
+    config/nav2_params_pointloc.yaml, map/pepper_map_lc.yaml, and the
+    Point-LIO config selected by config_file.
+
+Frames:
+    map --(pointlio_localization)--> base_footprint
+        --(pepper_sensor_tf / bag tf_static)--> l2lidar_frame_imu, cams
+
+    No odom frame: after handover the filter state IS the map pose, so the
+    local costmap rolls in 'map' (see local_costmap global_frame in
+    config/nav2_params_pointloc.yaml). Don't add lio_odom_bridge here —
+    base_footprint would get two parents.
+
+Usage (real robot):
+    ros2 launch pepper_navigation pepper_nav2_pointloc.launch.py
+
+    No initial pose needed: ScanContext finds it. Call /relocalize if lost.
+
+Usage (bag replay):
+    ros2 launch pepper_navigation pepper_nav2_pointloc.launch.py use_sim_time:=true
+    ros2 bag play <bag> --clock \
+        --qos-profile-overrides-path config/play_qos.yaml \
+        --read-ahead-queue-size 2000
+
+To use a DIFFERENT mapping run, change map, map_pose_file and map_scan_dir
+together, or the localizer and the costmap disagree about where the world is.
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
 
 import os
 

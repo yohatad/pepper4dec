@@ -1,21 +1,34 @@
-# Point-LIO + pose-graph loop closure (MAPPING), on a recorded bag.
-#
-# Thin wrapper over fastlio_lc_pgo/launch/pointlio_lc_l2.launch.py -- the live entry
-# point -- with use_sim_time forced true. See bag_test/README.md.
-#
-# Usage:
-#   ros2 launch pepper_slam pointlio_lc_bag.launch.py
-#   ros2 bag play <bag> --clock \
-#     --qos-profile-overrides-path config/play_qos.yaml \
-#     --read-ahead-queue-size 2000
-#
-# The QoS overrides are REQUIRED: /imu/data and /camera/imu were recorded
-# BEST_EFFORT, so without them the estimator waits forever for IMU init and
-# prints nothing. Replaying /tf is safe and wanted. README.md in this directory
-# has both in full, plus the pre-8edd1f5 bags that need a check first.
-#
-# Point-LIO variant of fastlio_lc_bag.launch.py; same /pgo_batch_optimize step
-# applies.
+r"""pointlio_lc_bag.launch.py
+
+Point-LIO + pose-graph loop closure (MAPPING), on a recorded bag.
+
+Thin wrapper over fastlio_lc_pgo/launch/pointlio_lc_l2.launch.py -- the live entry
+point -- with use_sim_time forced true. See bag_test/README.md.
+
+Usage:
+  ros2 launch pepper_slam pointlio_lc_bag.launch.py
+  ros2 bag play <bag> --clock \
+    --qos-profile-overrides-path config/play_qos.yaml \
+    --read-ahead-queue-size 2000
+
+The QoS overrides are REQUIRED: /imu/data and /camera/imu were recorded
+BEST_EFFORT, so without them the estimator waits forever for IMU init and
+prints nothing. Replaying /tf is safe and wanted. README.md in this directory
+has both in full, plus the pre-8edd1f5 bags that need a check first.
+
+Point-LIO variant of fastlio_lc_bag.launch.py; same /pgo_batch_optimize step
+applies.
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
 
 import os
 

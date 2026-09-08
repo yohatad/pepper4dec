@@ -1,15 +1,53 @@
-# lio_odom_bridge, in one place, for every estimator.
-#
-# The bridge turns a LIO estimator's /odom_lio (lio_init -> <body frame>) into
-# odom -> base_footprint, closing the tree per REP-105. FAST-LIO and Point-LIO
-# need it identically, so include this file rather than starting the node
-# yourself -- pass use_sim_time, config_path and config_file.
-#
-# THE BODY FRAME MUST EQUAL WHAT THE ESTIMATOR STAMPS, or the bridge composes
-# odom -> base_footprint through the wrong rigid offset and yields a pose that
-# looks plausible and is wrong. lidar_imu_frame now names it explicitly;
-# passing '' falls back to reading publish.body_frame from the config, which
-# makes the two impossible to desync.
+"""lio_odom_bridge.launch.py
+
+lio_odom_bridge, in one place, for every estimator.
+
+The bridge turns a LIO estimator's /odom_lio (lio_init -> <body frame>) into
+odom -> base_footprint, closing the tree per REP-105. FAST-LIO and Point-LIO
+need it identically, so include this file rather than starting the node
+yourself — pass use_sim_time, config_path and config_file.
+
+Nodes started:
+    pepper_slam/lio_odom_bridge.py (node: lio_odom_bridge)
+
+Launch arguments:
+    use_sim_time (default: "false")
+    config_path (default: <fast_lio share>/config)
+        Directory holding config_file.
+    config_file (default: "l2_rsimu.yaml")
+        Estimator config the body frame is read from when lidar_imu_frame is
+        empty.
+    lidar_imu_frame (default: "camera_imu_optical_frame")
+        The body frame the estimator stamps. Passing '' falls back to reading
+        publish.body_frame from the config.
+    bridge_level_frame (default: "true")
+        Publish the gravity-leveled odom frame.
+    level_frame_as_child (default: "false")
+    flatten_base_frame (default: "true")
+        Clamp z, roll, and pitch to zero (Pepper is flat-floor-only).
+    odom_topic (default: "/odom_lio")
+
+THE BODY FRAME MUST EQUAL WHAT THE ESTIMATOR STAMPS, or the bridge composes
+odom -> base_footprint through the wrong rigid offset and yields a pose that
+looks plausible and is wrong. lidar_imu_frame names it explicitly, which makes
+the two impossible to desync.
+
+Usage:
+    Included by fastlio_odometry.launch.py, pointlio_odometry.launch.py, and
+    the Nav2 profiles rather than launched directly.
+
+The node's behavior is documented in scripts/lio_odom_bridge.py.
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
 
 import os
 

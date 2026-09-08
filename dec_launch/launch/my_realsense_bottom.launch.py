@@ -1,3 +1,47 @@
+"""my_realsense_bottom.launch.py
+
+Launch the bottom-mounted RealSense with the point cloud this build needs.
+
+Launch files included:
+    realsense2_camera/rs_launch.py — the stock driver launch, with the
+    profiles, IMU settings, and filter arguments set here.
+
+Nodes started:
+    None directly; everything comes from the included driver launch.
+
+Launch arguments:
+    (none)
+
+Configuration:
+    dec_launch/config/realsense_bottom_pointcloud.yaml, passed as the driver's
+    config_file and merged with HIGHER priority than the launch_arguments
+    below it. This is where the point cloud is actually enabled: this
+    librealsense build exposes the filter as `pointcloud__neon_.*`, so the
+    generic `pointcloud.enable` argument here is a name mismatch that does
+    nothing. Decimation is on at magnitude 2 (~1/4 the points), which keeps
+    the Nav2 VoxelLayer and collision monitor cheap; raise it to 3-4 for a
+    lighter cloud.
+
+Prerequisites:
+    A RealSense device on USB. The l2lidar_frame -> camera_camera_link static
+    transform is NOT published here — it lives in pepper_slam/config/
+    sensor_tf.yaml so there is exactly one owner, since two publishers of a
+    latched /tf_static edge means whichever lands last silently wins.
+
+Usage:
+    ros2 launch dec_launch my_realsense_bottom.launch.py
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
+
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource

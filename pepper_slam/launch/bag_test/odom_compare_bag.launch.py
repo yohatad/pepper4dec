@@ -1,30 +1,43 @@
-# FAST-LIO odometry vs WHEEL odometry, side by side, on a recorded bag.
-#
-# Two terminals total -- this launch brings up the estimator, the comparison
-# node and RViz:
-#
-#   ros2 launch pepper_slam odom_compare_bag.launch.py
-#   ros2 bag play <bag> --clock \
-#     --qos-profile-overrides-path config/play_qos.yaml \
-#     --read-ahead-queue-size 1000 --disable-keyboard-controls --rate 3
-#
-# REPLAY /tf HERE. The other bag_test launches tell you to remap it away,
-# because the bag's wheel odometry fights lio_map_odom_bridge for
-# base_footprint's parent. This launch wants exactly that data: /pepper_odom is
-# the thing under comparison, and the bag's /tf carries it.
-#
-# WHAT TO READ. The two paths start at the same point, so separation between
-# them is accumulated disagreement -- but do NOT read that gap as the error.
-# Wheel odometry's heading error integrates, so its path rotates away over a
-# long run even when both agree on distance travelled. The trustworthy number
-# is the ratio in the Odometer readout marker: PATH LENGTH is robust to heading
-# error, since a wrong heading points a step the wrong way without changing its
-# length. MEASURED on slam_20260823_merged: wheel 503 m, FAST-LIO 508 m
-# (ratio 1.01), Point-LIO 607 m -- all of the latter's excess inside one 80 s
-# window where it read 4.5x the wheel distance.
-#
-# Swap estimator with lio:=pointlio to compare that one instead; the comparison
-# node reads /odom_lio either way.
+r"""odom_compare_bag.launch.py
+
+FAST-LIO odometry vs WHEEL odometry, side by side, on a recorded bag.
+
+Two terminals total -- this launch brings up the estimator, the comparison
+node and RViz:
+
+  ros2 launch pepper_slam odom_compare_bag.launch.py
+  ros2 bag play <bag> --clock \
+    --qos-profile-overrides-path config/play_qos.yaml \
+    --read-ahead-queue-size 1000 --disable-keyboard-controls --rate 3
+
+REPLAY /tf HERE. The other bag_test launches tell you to remap it away,
+because the bag's wheel odometry fights lio_map_odom_bridge for
+base_footprint's parent. This launch wants exactly that data: /pepper_odom is
+the thing under comparison, and the bag's /tf carries it.
+
+WHAT TO READ. The two paths start at the same point, so separation between
+them is accumulated disagreement -- but do NOT read that gap as the error.
+Wheel odometry's heading error integrates, so its path rotates away over a
+long run even when both agree on distance travelled. The trustworthy number
+is the ratio in the Odometer readout marker: PATH LENGTH is robust to heading
+error, since a wrong heading points a step the wrong way without changing its
+length. MEASURED on slam_20260823_merged: wheel 503 m, FAST-LIO 508 m
+(ratio 1.01), Point-LIO 607 m -- all of the latter's excess inside one 80 s
+window where it read 4.5x the wheel distance.
+
+Swap estimator with lio:=pointlio to compare that one instead; the comparison
+node reads /odom_lio either way.
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
 
 import os
 
