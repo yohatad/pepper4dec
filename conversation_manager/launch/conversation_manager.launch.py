@@ -12,7 +12,7 @@ Launch arguments:
     (none)
 
 Configuration:
-    config/converation_manager_configuration.yaml — collection name, LLM and
+    config/conversation_manager_configuration.yaml — collection name, LLM and
     embedding models, and retrieval settings.
 
 Prerequisites:
@@ -47,7 +47,7 @@ def generate_launch_description():
     config = os.path.join(
         get_package_share_directory('conversation_manager'),
         'config',
-        'converation_manager_configuration.yaml'
+        'conversation_manager_configuration.yaml'
     )
 
     return LaunchDescription([

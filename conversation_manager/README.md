@@ -46,7 +46,7 @@ pip install -r ~/ros2_ws/src/pepper4dec/conversation_manager/requirements.txt
 ```
 
 # 🔧 Configuration Parameters
-The configuration is managed via `config/converation_manager_configuration.yaml`. The file must be present for the node to start.
+The configuration is managed via `config/conversation_manager_configuration.yaml`. The file must be present for the node to start.
 
 | Parameter                        | Description                                                      | Range/Values     | Default Value                       |
 |----------------------------------|------------------------------------------------------------------|------------------|--------------------------------------|
@@ -68,7 +68,7 @@ The configuration is managed via `config/converation_manager_configuration.yaml`
 > - ChromaDB storage is automatically configured in the package data folder.
 > - The configuration file is required for node startup.
 
-## Example Configuration File (`config/converation_manager_configuration.yaml`)
+## Example Configuration File (`config/conversation_manager_configuration.yaml`)
 ```yaml
 llm:
   base_url: https://api.deepseek.com/v1
@@ -170,7 +170,7 @@ SpeechRecognition → ConversationManager → SpeechWithFeedback
 ```
 
 ## Knowledge Base Initialization
-The knowledge base is automatically initialized at node startup using `config/converation_manager_configuration.yaml`. The `data.default_path` parameter specifies the JSON data file to load. The collection name is set via the `collection_name` ROS parameter (default: `'upanzi_knowledge'`).
+The knowledge base is automatically initialized at node startup using `config/conversation_manager_configuration.yaml`. The `data.default_path` parameter specifies the JSON data file to load. The collection name is set via the `collection_name` ROS parameter (default: `'upanzi_knowledge'`).
 
 If the collection does not exist it will be created and populated from the data file automatically. If it already exists the existing collection is reused.
 
@@ -257,7 +257,7 @@ ros2 action send_goal /conversation_manager dec_interfaces/action/ConversationMa
 ```
 conversation_manager/
 ├── config/
-│   └── converation_manager_configuration.yaml  # RAG/LLM parameters
+│   └── conversation_manager_configuration.yaml  # RAG/LLM parameters
 ├── data/
 │   ├── upanzi_data.json                        # knowledge base source
 │   └── system_prompt.txt                       # LLM system prompt

@@ -3,7 +3,7 @@
 Launch the ASR -> ConversationManager -> SpeechWithFeedback pipeline.
 
 Nodes started:
-    speech_event/speech_event (node: speech_event)
+    speech_event/speech_event (node: speech_recognition)
         Microphone capture, VAD, and ASR; publishes
         /speech_event/vad_speech_prob and serves /speech_recognition.
     conversation_manager/conversation_manager (node: conversation_manager)
@@ -12,12 +12,18 @@ Nodes started:
     behavior_controller/behavior_controller (node: behavior_controller)
         BehaviorTree.CPP executor running asr_cm_tts_pipeline.xml. Also loads
         its config internally; no parameters are passed from this launch.
+    nav2_lifecycle_manager/lifecycle_manager (node:
+    lifecycle_manager_asr_cm_pipeline)
+        Drives configure -> activate for the three lifecycle nodes above, in
+        that order. Without it they stay UNCONFIGURED and the pipeline does
+        nothing.
 
 Launch arguments:
     collection_name (default: "upanzi_knowledge")
         ChromaDB collection used by conversation_manager.
     verbose (default: "false")
-        Verbose logging on speech_event and conversation_manager.
+        Verbose logging on conversation_manager, the only node in this
+        pipeline that declares the parameter.
 
 Configuration:
     speech_event/config/speech_event_configuration.yaml is passed as
@@ -67,7 +73,8 @@ def generate_launch_description():
     declare_verbose = DeclareLaunchArgument(
         'verbose',
         default_value='false',
-        description='Enable verbose logging on all nodes'
+        description='Enable verbose logging on conversation_manager '
+                    '(the only node in this pipeline declaring it)'
     )
 
     # ── Package share directories ─────────────────────────────────────────────
@@ -86,15 +93,18 @@ def generate_launch_description():
     # ── Node definitions ──────────────────────────────────────────────────────
 
     # 1. Speech event — microphone, VAD, ASR
+    #    The node name MUST be speech_recognition: that is the key
+    #    speech_event_configuration.yaml stores its parameters under, and ROS2
+    #    matches parameter blocks by node name. Naming it anything else leaves
+    #    the node running entirely on its code defaults.
+    #    It declares no 'verbose' parameter, so the verbose argument is not
+    #    passed here.
     speech_event_node = Node(
         package='speech_event',
         executable='speech_event',
-        name='speech_event',
+        name='speech_recognition',
         output='screen',
-        parameters=[
-            speech_event_config,
-            {'verbose': LaunchConfiguration('verbose')},
-        ],
+        parameters=[speech_event_config],
     )
 
     # 2. Conversation manager — loads its YAML config internally
@@ -121,6 +131,27 @@ def generate_launch_description():
 
     # ── Launch description ────────────────────────────────────────────────────
 
+    # All three nodes above are lifecycle nodes: they come up UNCONFIGURED and
+    # do nothing until something drives them to active. dec_system.launch.py
+    # uses nav2_lifecycle_manager for this; without one here the pipeline
+    # launched cleanly and then sat idle. bond_timeout is 0.0 because these
+    # nodes do not implement the bond protocol nav2's own C++ nodes use.
+    lifecycle_manager_node = Node(
+        package='nav2_lifecycle_manager',
+        executable='lifecycle_manager',
+        name='lifecycle_manager_asr_cm_pipeline',
+        output='screen',
+        parameters=[{
+            'autostart': True,
+            'bond_timeout': 0.0,
+            'node_names': [
+                'speech_recognition',
+                'conversation_manager',
+                'behavior_controller',
+            ],
+        }],
+    )
+
     return LaunchDescription([
         declare_collection_name,
         declare_verbose,
@@ -133,4 +164,7 @@ def generate_launch_description():
 
         LogInfo(msg='[asr_cm_pipeline] Starting behavior_controller (asr_cm_tts_pipeline.xml)...'),
         behavior_controller_node,
+
+        LogInfo(msg='[asr_cm_pipeline] Starting lifecycle manager (configure -> activate)...'),
+        lifecycle_manager_node,
     ])

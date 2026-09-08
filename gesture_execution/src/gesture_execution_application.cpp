@@ -7,9 +7,10 @@
  * Subscribers:
  *   /joint_states (sensor_msgs/msg/JointState)
  *     Current joint positions, used to track the robot's arm/head/leg state.
- *   /localization (nav_msgs/msg/Odometry)
- *     Fused map->base_footprint robot pose (from lio_localization's
- *     transform_fusion), used to compute pointing direction.
+ *   /localization/pose (nav_msgs/msg/Odometry)
+ *     Absolute map->base_footprint robot pose from fast_lio's
+ *     fastlio_localization, used to compute pointing direction. The topic
+ *     name comes from the RobotPose key in data/pepper_topics.yaml.
  *
  * Publishers:
  *   /joint_angles_trajectory (naoqi_bridge_msgs/msg/JointAnglesTrajectory)
@@ -33,7 +34,7 @@
  *   configure  -> read parameters, load the gesture and topic YAML data, and
  *                 create the trajectory/marker publishers and action server
  *   activate   -> activate the publishers and subscribe to /joint_states and
- *                 /localization
+ *                 /localization/pose
  *   deactivate -> destroy the joint-state and pose subscriptions and
  *                 deactivate the publishers
  *   cleanup    -> destroy the lifecycle publishers and the action server

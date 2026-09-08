@@ -315,7 +315,16 @@ class TextToSpeechNode(LifecycleNode):
     # ── Stream sentence callback ─────────────────────────────────────────────────
 
     def stream_sentence_callback(self, msg: String):
-        """Enqueue each sentence published by conversation_manager."""
+        """Enqueue one sentence for playback.
+
+        Sentences arrive from whatever publishes /text_to_speech/input --
+        typically an LLM response stream fed sentence by sentence. No node
+        in this repository publishes it today: behavior_controller drives
+        playback through the /text_to_speech action instead.
+
+        Args:
+            msg (std_msgs/String): Sentence to speak.
+        """
         sentence = msg.data.strip()
         if sentence:
             self.sentence_queue.put(sentence)

@@ -22,7 +22,7 @@ Actions:
         intent, and confidence
 
 Parameters (declared as ROS2 parameters in the constructor; populated from
-config/converation_manager_configuration.yaml via the launch file's
+config/conversation_manager_configuration.yaml via the launch file's
 parameters=[...], or `ros2 param set` at runtime):
     collection_name (str, default: "upanzi_knowledge")
     verbose (bool, default: False)
@@ -111,7 +111,7 @@ class ConversationManagerNode(LifecycleNode):
         super().__init__('conversation_manager')
 
         # Declare parameters — heavy initialisation deferred to on_configure.
-        # Defaults here are generic fallbacks; config/converation_manager_configuration.yaml
+        # Defaults here are generic fallbacks; config/conversation_manager_configuration.yaml
         # supplies this deployment's actual values via the launch file's parameters=[...].
         self.declare_parameter('collection_name', 'upanzi_knowledge')
         self.declare_parameter('verbose', DEFAULT_VERBOSE)

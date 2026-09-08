@@ -97,11 +97,7 @@ struct ArmWaypoints {
     std::vector<double> times;                   // one entry per waypoint
 };
 
-/**
- * @brief A single named gesture descriptor (e.g.
- *
- * "welcome", "wave", "shake").
- */
+/** @brief A single named gesture descriptor (e.g. "welcome", "wave", "shake"). */
 struct GestureDescriptor {
     std::vector<std::string> arms;  // e.g. {"LArm", "RArm", "Leg"}
     std::unordered_map<std::string, ArmWaypoints> per_arm;
@@ -133,7 +129,11 @@ std::unordered_map<std::string, GestureDescriptor> loadGestureDescriptors(const 
  */
 struct RobotTopics {
     std::string joint_states = "/joint_states";
-    std::string robot_pose = "/localization";
+    // Matches the RobotPose key in data/pepper_topics.yaml and what
+    // fast_lio's fastlio_localization actually publishes; the old
+    // "/localization" default silently subscribed to a topic nobody
+    // publishes whenever the YAML key was missing.
+    std::string robot_pose = "/localization/pose";
 };
 
 /**
@@ -181,7 +181,7 @@ public:
     CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;
 
     /** @brief Activate the publishers and subscribe to /joint_states and
-     *         /localization. */
+     *         /localization/pose. */
     CallbackReturn on_activate  (const rclcpp_lifecycle::State& state) override;
 
     /** @brief Destroy the joint-state and pose subscriptions. */

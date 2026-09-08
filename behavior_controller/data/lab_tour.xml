@@ -1,4 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Requires speech_event to run in STANDALONE mode: action_server: false in
+  speech_event_configuration.yaml.
+
+  This tree takes visitor speech only through GetVisitorResponse, which blocks
+  on /speech_event/text. speech_event publishes that topic only when
+  action_server is false; with the shipped default (true) transcripts are
+  returned through the /speech_recognition action instead, the topic stays
+  silent, and every GetVisitorResponse times out after its "timeout" seconds
+  and takes the failure branch.
+
+  Either launch speech_event with action_server:=false for tour runs, or
+  replace GetVisitorResponse with the SpeechRecognition action node (as
+  asr_cm_tts_pipeline.xml does).
+-->
 <root BTCPP_format="4" main_tree_to_execute="TourGuide">
   
   <!-- Main Tour Guide Behavior Tree -->
