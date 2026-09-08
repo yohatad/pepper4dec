@@ -106,6 +106,15 @@ def generate_launch_description():
                 'unite_imu_method': '2',
 
                 'rgb_camera.color_profile': '640x480x30',
+                # Default (BGR8) never matches the pointcloud filter's texture
+                # format check (RGB8/Y8 only, see config_file below) -- the
+                # cloud published with no color regardless of stream_filter.
+                # NOTE: an rgb8-sourced image crashes this build's compressed
+                # image transport (OpenCV(4.8.0) alloc.cpp OutOfMemoryError,
+                # MEASURED 2026-09-08) -- if viewing /camera/color/image_raw
+                # in RViz, set that Image display's Image Transport Hint to
+                # 'raw', not 'compressed'.
+                'rgb_camera.color_format': 'RGB8',
                 'depth_module.depth_profile': '640x480x30',
                 'depth_module.infra_profile': '640x480x30',
 
