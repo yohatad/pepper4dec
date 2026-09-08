@@ -97,6 +97,10 @@ def generate_launch_description():
         'config_file', default_value='l2_rsimu.yaml',
         description='FAST-LIO config: l2_rsimu.yaml (RealSense IMU, matches the '
                     'prior map) or l2.yaml (the L2 s own).')
+    declare_lidar_imu_frame_cmd = DeclareLaunchArgument(
+        'lidar_imu_frame', default_value='camera_imu_optical_frame',
+        description='Body frame matching config_file. camera_imu_optical_frame '
+                    'for l2_rsimu.yaml, l2lidar_frame_imu for l2.yaml.')
     # Declared here even though it matches localization_l2.launch.py's own
     # default, so the knob is visible in --show-args at the nav level: it was
     # previously set only inside the include, where this file's header promised
@@ -371,6 +375,7 @@ def generate_launch_description():
         declare_map_scan_dir_cmd,
         declare_map_cmd,
         declare_config_file_cmd,
+        declare_lidar_imu_frame_cmd,
         declare_init_require_motion_cmd,
         declare_rviz_cmd,
         declare_rviz_config_cmd,
