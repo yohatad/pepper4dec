@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""dec_system.launch.py
-
-Top-level launch file for the Pepper4DEC system.
+"""
+dec_system.launch.py: top-level launch file for the Pepper4DEC system.
 
 Brings up every dec_system package (each with its own launch file, some of
 which nest further launch files for their dependencies, e.g. overt_attention's
@@ -49,7 +48,7 @@ Usage:
     ros2 launch dec_launch dec_system.launch.py nav_profile:=rtabmap_loc
     ros2 launch dec_launch dec_system.launch.py enable_navigation:=false
 
-Notes:
+Design notes:
     Localization: the absolute `map -> base_footprint` pose
     (`/localization/pose`, consumed by gesture_execution for pointing IK)
     comes from fast_lio's fastlio_localization node, which publishes that

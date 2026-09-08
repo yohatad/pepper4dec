@@ -1,6 +1,5 @@
-"""asr_cm_pipeline.launch.py
-
-Launch the ASR -> ConversationManager -> SpeechWithFeedback pipeline.
+"""
+asr_cm_pipeline.launch.py: launch the ASR -> ConversationManager -> SpeechWithFeedback pipeline.
 
 Nodes started:
     speech_event/speech_event (node: speech_recognition)

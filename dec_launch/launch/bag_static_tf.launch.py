@@ -1,6 +1,5 @@
-"""bag_static_tf.launch.py
-
-Republish the static TF tree recorded in slam_august_8_bag.
+"""
+bag_static_tf.launch.py: republish the static TF tree recorded in slam_august_8_bag.
 
 Nodes started:
     tf2_ros/static_transform_publisher x11
