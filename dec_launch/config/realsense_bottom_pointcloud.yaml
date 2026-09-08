@@ -1,0 +1,22 @@
+# Overrides for the D435i's point-cloud filter on THIS realsense2_camera_node
+# build. Its librealsense has an NEON-optimized point-cloud processing block
+# (ARM/Jetson only), which the node registers under `pointcloud__neon_.*`
+# instead of the generic `pointcloud.*` names rs_launch.py's launch_arguments
+# target -- so `'pointcloud.enable': 'true'` in the .launch.py is silently
+# ignored (undeclared parameter, no error). MEASURED 2026-09-06: `ros2 param
+# list /camera` on this node has no `pointcloud.*` entries at all, only
+# `pointcloud__neon_.*`, and `pointcloud__neon_.enable` read back False despite
+# the launch arg. Loaded via rs_launch.py's `config_file` arg, which merges
+# with HIGHER priority than its own generic launch_arguments dict.
+pointcloud__neon_.enable: true
+# stream_filter 2 (Color) makes this NEON block log "No stream match for
+# pointcloud chosen texture Process - Color" and NEVER PUBLISH, even though
+# /camera/color/image_raw is running fine at 30Hz - MEASURED 2026-09-06. 0
+# (no specific texture stream) publishes immediately at ~30Hz. Tradeoff: the
+# cloud comes out XYZ-only (3 fields, no rgb) - fine here, since every
+# consumer in this workspace (Nav2 voxel/collision-monitor costmap layers,
+# rviz displays) only needs geometry, not color.
+pointcloud__neon_.stream_filter: 0
+pointcloud__neon_.stream_index_filter: 0
+pointcloud__neon_.allow_no_texture_points: false
+pointcloud__neon_.ordered_pc: false

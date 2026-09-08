@@ -65,7 +65,21 @@ def generate_launch_description():
                 'depth_module.depth_profile': '640x480x30',
                 'depth_module.infra_profile': '640x480x30',
 
-                'pointcloud.enable': 'true',        # <-- disable during recording
+                # This is a NAME MISMATCH, not a toggle: this node's librealsense
+                # build exposes the point-cloud filter as `pointcloud__neon_.*`,
+                # not the generic `pointcloud.*` this launch arg sets, so setting
+                # it here does nothing (see config_file below, which is what
+                # actually turns the point cloud on/off - flip .enable there).
+                'pointcloud.enable': 'true',
+
+                # Real point-cloud enable/params live here (pointcloud__neon_.*
+                # on this build) - config_file is merged with HIGHER priority
+                # than the launch_arguments dict above.
+                'config_file': PathJoinSubstitution([
+                    FindPackageShare('dec_launch'),
+                    'config',
+                    'realsense_bottom_pointcloud.yaml'
+                ]),
 
                 # Decimation post-processing: downsamples the depth image (and
                 # therefore /camera/depth/color/points) before it is published.
