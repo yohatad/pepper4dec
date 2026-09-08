@@ -25,6 +25,15 @@
   <exec_depend>pepper_navigation</exec_depend>
   <exec_depend>dec_interfaces</exec_depend>
 
+  <!-- Sensor/robot bringup: dec_robot.launch.py and the per-driver wrappers
+       it includes. l2lidar_node, naoqi_driver and gscam2 are its runtime
+       dependencies, but are deliberately NOT declared: colcon refuses to
+       build a package whose workspace dependencies are not built, and
+       l2lidar_node needs Qt6 while naoqi_driver needs libqi, neither of which
+       is present on every dev box. Declaring them here makes dec_launch
+       itself unbuildable there. The launch files fail with a clear
+       PackageNotFoundError if any is missing. -->
+
   <!-- Jetson-only RealSense depth ROI service / rtabmap launch -->
   <exec_depend>rclpy</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>

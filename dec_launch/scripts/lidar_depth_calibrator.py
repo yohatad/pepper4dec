@@ -7,7 +7,7 @@ depend on the realsense pointcloud publisher (pointcloud.enable).
 
 Usage:
   ros2 launch l2lidar_node l2lidar.launch.py
-  ros2 launch dec_launch my_realsense_bottom.launch.py
+  ros2 launch dec_launch realsense_bottom.launch.py
   ros2 run dec_launch lidar_depth_calibrator.py
 
 Point both sensors at a wall corner or cluttered area, then run.
@@ -304,7 +304,7 @@ class LidarDepthCalibrator(Node):
         print(f'  RMSE           : {r2.inlier_rmse * 1000:.2f} mm  (<10 mm good)')
         print(f'  Shift from CAD : {shift_mm:.1f} mm')
         print(sep)
-        print('\nPaste into my_realsense_bottom.launch.py '
+        print('\nPaste into realsense_bottom.launch.py '
               '(l2lidar_to_realsense_tf node):\n')
         print(f"                '--x',  '{t[0]:.6f}',")
         print(f"                '--y', '{t[1]:.6f}',")

@@ -1,6 +1,7 @@
-"""my_realsense_bottom.launch.py
+"""
+realsense_bottom.launch.py: launch the bottom-mounted RealSense with its point cloud.
 
-Launch the bottom-mounted RealSense with the point cloud this build needs.
+The point cloud is the one this build needs; see Configuration below.
 
 Launch files included:
     realsense2_camera/rs_launch.py — the stock driver launch, with the
@@ -29,7 +30,7 @@ Prerequisites:
     latched /tf_static edge means whichever lands last silently wins.
 
 Usage:
-    ros2 launch dec_launch my_realsense_bottom.launch.py
+    ros2 launch dec_launch realsense_bottom.launch.py
 
 Author: Yohannes Tadesse Haile
 Affiliation: Carnegie Mellon University Africa

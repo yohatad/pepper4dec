@@ -141,12 +141,22 @@ order:
 ```bash
 source ~/ros2_ws/install/setup.bash
 
+# All three drivers at once (each has an enable_* argument). It publishes no
+# TF of its own -- the stacks below nest the sensor-rig static TF:
+ros2 launch dec_launch dec_robot.launch.py
+```
+
+or individually:
+
+```bash
+source ~/ros2_ws/install/setup.bash
+
 # 1. L2 lidar -> /points + /imu/data. Everything downstream needs both.
 ros2 launch l2lidar_node l2lidar.launch.py
 
 # 2. RealSense. Optional for the AMCL/fastloc stacks (a second, dense forward
 #    obstacle source); REQUIRED for the RTAB-Map stack, which subscribes to RGB.
-ros2 launch dec_launch my_realsense_bottom.launch.py
+ros2 launch dec_launch realsense_bottom.launch.py
 
 # 3. The robot itself, if it should actually move: naoqi_driver2 consumes the
 #    /cmd_vel the collision monitor emits.
