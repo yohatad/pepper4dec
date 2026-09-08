@@ -5,7 +5,7 @@
   <version>0.0.0</version>
   <description>Autonomous navigation for Pepper: Nav2 path planning, obstacle
   avoidance, goal execution, keepout zones, and the saved maps those consume.</description>
-  <maintainer email="yohatad000@gmail.com">yoha</maintainer>
+  <maintainer email="yohatad123@gmail.com">yoha</maintainer>
   <license>BSD-3-Clause</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
