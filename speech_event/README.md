@@ -41,12 +41,13 @@ source install/setup.bash
 ### Python Dependencies
 
 ```bash
-# Install PyTorch with CUDA support (recommended)
-pip install torch==2.5.1+cu121 torchaudio==2.5.1+cu121 --index-url https://download.pytorch.org/whl/cu121
-
-# Install remaining packages
 pip install -r ~/ros2_ws/src/pepper4dec/speech_event/requirements.txt
 ```
+
+PyTorch is **not** needed. The Silero VAD runs on onnxruntime and Whisper on
+CTranslate2 (via faster-whisper), both of which ship their own native runtimes.
+For GPU, install the CUDA build of `onnxruntime-gpu`; `device: cuda` below is
+passed straight to CTranslate2, not to torch.
 
 ## 🔧 Configuration
 
@@ -57,7 +58,7 @@ Configuration is managed via `config/speech_event_configuration.yaml`:
 | `microphone_topic` | ROS topic publishing `naoqi_bridge_msgs/AudioBuffer` | `/naoqi_driver/audio` |
 | `sample_rate` | Target sample rate for VAD/ASR (Hz) | `16000` |
 | `input_sample_rate` | Robot's native microphone sample rate (Hz) | `48000` |
-| `device` | PyTorch device for Whisper inference | `cuda` |
+| `device` | Device for Whisper/CTranslate2 inference (`cuda`/`cpu`) | `cuda` |
 | `compute_type` | Whisper computation precision (`float16`/`float32`) | `float16` |
 | `language` | Language code for ASR (ISO 639-1) | `en` |
 | `whisper_model_id` | HuggingFace model ID or local path for the Whisper model | `deepdml/faster-whisper-large-v3-turbo-ct2` |
