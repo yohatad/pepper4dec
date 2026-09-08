@@ -11,40 +11,19 @@
  * "breathing" animation is driven via the naoqi LED action server, unless
  * disabled.
  *
- * Subscribers:
- *   /joint_states (sensor_msgs/JointState)
- *     Current joint positions, used as the basis for smoothed gesture targets.
- *
- * Publishers:
- *   /joint_angles (naoqi_bridge_msgs/JointAnglesWithSpeed)
- *     Smoothed target joint angles for the animated limbs.
- *   /cmd_vel (geometry_msgs/Twist)
- *     Periodic body rotation command issued while a behavior is active.
- *
- * Services:
- *   /animate_behavior/stop (std_srvs/Trigger)
- *     Immediately stops the current animation and zeroes velocity/LEDs.
- *
- * Actions:
- *   /animate_behavior (dec_interfaces/AnimateBehavior)
- *     Runs a gesture/rotation/LED animation for a requested behavior type,
- *     range, and duration, reporting elapsed-time feedback.
- *   /naoqi_driver/run_led (naoqi_bridge_msgs/RunLed)
- *     Action client used to drive the cascading face-LED animation.
- *
- * Parameters (loaded from animate_behavior_configuration.yaml):
- *   verbose_mode, led_enabled, led_white_step, led_dark_step,
- *   led_fade_duration, led_white_hold, led_dark_pause, gesture_update_rate,
- *   gesture_smoothing_factor, gesture_motion_speed, gesture_interval_min,
- *   gesture_interval_max, gesture_rotation_interval.
+ * The node's complete ROS2 interface (subscribers, publishers,
+ * services, actions, parameters, and lifecycle transitions) is
+ * documented in animate_behavior_application.cpp.
  *
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa
  * Email: yohatad123@gmail.com
- * Date: Jul 05, 2026
+ * Date: July 5, 2026
  * Version: v1.0
  *
  * Copyright (C) 2025 Carnegie Mellon University Africa
+ * This software is provided 'as-is' for research and educational purposes
+ * within the DEC project.
  */
 
 #pragma once
@@ -69,7 +48,10 @@
 #include <condition_variable>
 #include <functional>
 
-// Per-limb joint definition: names + soft-limits + home pose + per-joint randomization factor.
+/**
+ * @brief Per-limb joint definition: names + soft-limits + home pose + per-joint
+ *        randomization factor.
+ */
 struct JointDef {
     std::vector<std::string> names;
     std::vector<double> min;
@@ -98,6 +80,14 @@ struct JointDef {
 //                                 server, stop service, and LED client.
 //=============================================================================
 
+/**
+ * @class AnimateBehaviorNode
+ * @brief ROS2 lifecycle node driving Pepper's idle gestures and face LEDs.
+ *
+ * Serves the /animate_behavior action: animates a configurable subset of the
+ * limbs with smoothed random gestures, issues periodic body rotation, and runs
+ * the cascading face-LED animation while a goal is active.
+ */
 class AnimateBehaviorNode : public rclcpp_lifecycle::LifecycleNode {
 public:
     using CallbackReturn =
@@ -108,11 +98,22 @@ public:
 
     AnimateBehaviorNode();
 
-    // ── Lifecycle callbacks ─────────────────────────────────────────────────
+    /** @brief Read parameters and create the publishers, action server,
+     *         stop service, and LED action client. */
     CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Activate the publishers, subscribe to /joint_states, and start
+     *         the animation timers. */
     CallbackReturn on_activate  (const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Stop the animation and LEDs, cancel the timers, and drop the
+     *         joint-state subscription. */
     CallbackReturn on_deactivate(const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Destroy the publishers, action server, stop service, and LED client. */
     CallbackReturn on_cleanup   (const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Log that the node is shutting down. */
     CallbackReturn on_shutdown  (const rclcpp_lifecycle::State& state) override;
 
 private:

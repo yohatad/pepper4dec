@@ -7,44 +7,19 @@
  * and track configurable COCO classes from synchronized color/depth camera
  * streams.
  *
- * Subscribers:
- *   <camera color topic> (sensor_msgs/Image or CompressedImage)
- *     Color camera frames (topic resolved from pepper_topics.yaml based on
- *     the configured camera type).
- *   <camera depth topic> (sensor_msgs/Image or CompressedImage)
- *     Depth camera frames used to estimate distance to detected objects.
- *
- * Publishers:
- *   /person_detection/data (dec_interfaces/PersonDetection)
- *     Tracked object detections: track IDs, class names/IDs, confidences,
- *     centroids (with depth), widths, and heights.
- *   /person_detection/debug (sensor_msgs/Image)
- *     Annotated color image showing tracked bounding boxes, labels, and depth.
- *   /person_detection/depth_debug (sensor_msgs/Image)
- *     Colorized visualization of the raw depth image.
- *
- * Parameters (ROS2 parameters, loaded from person_detection_configuration.yaml
- * via the launch file):
- *   camera, use_compressed, image_timeout, verbose_mode, confidence_threshold,
- *   target_classes, track_threshold, track_buffer, match_threshold, frame_rate.
- *
- * Lifecycle:
- *   configure  -> create lifecycle publishers, load camera/config settings
- *                 and target classes (base); load ONNX model + ByteTrack (Yolov11Node)
- *   activate   -> start the visualization and status timers (base); create
- *                 camera subscriptions and start the timeout monitor (Yolov11Node)
- *   deactivate -> cancel the visualization and status timers (base); destroy
- *                 camera subscriptions (Yolov11Node)
- *   cleanup    -> destroy the lifecycle publishers (base); release the ONNX
- *                 session (Yolov11Node)
- *   shutdown   -> log that the node is shutting down
+ * The node's complete ROS2 interface (subscribers, publishers,
+ * services, actions, parameters, and lifecycle transitions) is
+ * documented in person_detection_application.cpp.
  *
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa
- * Date: Jul 06, 2026
+ * Email: yohatad123@gmail.com
+ * Date: July 6, 2026
  * Version: v1.0
  *
  * Copyright (C) 2025 Carnegie Mellon University Africa
+ * This software is provided 'as-is' for research and educational purposes
+ * within the DEC project.
  */
 
 #pragma once
@@ -74,6 +49,7 @@
 // The 80 COCO class names, in model-output order.
 extern const std::array<std::string, 80> COCO_CLASSES;
 
+/** @brief Tunable settings for the person-detection node (see the YAML config). */
 struct PersonDetectionConfig {
     std::string camera = "realsense";
     bool use_compressed = false;
@@ -100,7 +76,9 @@ PersonDetectionConfig loadConfiguration(rclcpp_lifecycle::LifecycleNode* node);
 // class indices. Empty or {"all"} means "track everything".
 std::set<int> getClassIndices(const std::vector<std::string>& target_classes, const rclcpp::Logger& logger);
 
-// One finalized tracked-object record, ready to publish/draw.
+/**
+ * @brief One finalized tracked-object record, ready to publish/draw.
+ */
 struct TrackingDatum {
     std::string track_id;
     int class_id = 0;
@@ -115,19 +93,33 @@ struct TrackingDatum {
 // PersonDetectionNode
 //=============================================================================
 
-// Camera plumbing (topic resolution, subscriptions, depth decode, debug
-// visualization, timeout monitor) is inherited from
-// dec_common::CameraLifecycleNode; this class adds the detection publishers,
-// class filtering, and tracking post-processing.
+/**
+ * @class PersonDetectionNode
+ * @brief Base lifecycle node owning the detection publishers and tracking.
+ *
+ * Camera plumbing (topic resolution, subscriptions, depth decode, debug
+ * visualization, timeout monitor) is inherited from
+ * dec_common::CameraLifecycleNode; this class adds the detection publishers,
+ * class filtering, and tracking post-processing.
+ */
 class PersonDetectionNode : public dec_common::CameraLifecycleNode {
 public:
     explicit PersonDetectionNode(const std::string& node_name = "person_detection");
 
-    // ── Lifecycle callbacks ─────────────────────────────────────────────────
+    /** @brief Create the lifecycle publishers and load the camera settings
+     *         and target classes. */
     CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Start the visualization and status timers. */
     CallbackReturn on_activate  (const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Cancel the visualization and status timers. */
     CallbackReturn on_deactivate(const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Destroy the lifecycle publishers. */
     CallbackReturn on_cleanup   (const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Log that the node is shutting down. */
     CallbackReturn on_shutdown  (const rclcpp_lifecycle::State& state) override;
 
 protected:
@@ -168,13 +160,27 @@ protected:
 //   cleanup    -> release ONNX session -> super().on_cleanup()
 //=============================================================================
 
+/**
+ * @class Yolov11Node
+ * @brief Person-detection node running YOLOv11 with ByteTrack tracking.
+ *
+ * Loads the YOLOv11 ONNX model, filters detections down to the configured
+ * target classes, and assigns persistent track IDs with ByteTrack.
+ */
 class Yolov11Node : public PersonDetectionNode {
 public:
     Yolov11Node();
 
+    /** @brief Load the YOLOv11 ONNX model and the ByteTrack tracker. */
     CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Create the camera subscriptions and start the timeout monitor. */
     CallbackReturn on_activate  (const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Destroy the camera subscriptions. */
     CallbackReturn on_deactivate(const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Release the ONNX session. */
     CallbackReturn on_cleanup   (const rclcpp_lifecycle::State& state) override;
 
 protected:

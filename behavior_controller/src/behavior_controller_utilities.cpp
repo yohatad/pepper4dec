@@ -10,8 +10,12 @@
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa
  * Email: yohatad123@gmail.com
- * Date: February 09, 2026
+ * Date: February 9, 2026
  * Version: v1.0
+ *
+ * Copyright (C) 2025 Carnegie Mellon University Africa
+ * This software is provided 'as-is' for research and educational purposes
+ * within the DEC project.
  */
 
 #include "behavior_controller/behavior_controller_interface.h"

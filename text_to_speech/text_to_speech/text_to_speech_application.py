@@ -65,11 +65,26 @@ text_to_speech_configuration.yaml at launch or `ros2 param set` at runtime):
     elevenlabs_style (float, default: 0.0)
     elevenlabs_speed (float, default: 1.0)
 
+Lifecycle:
+    configure  -> read parameters, initialize the selected TTS backend, and
+                  create the publishers, service clients, and action server
+    activate   -> activate the publishers, subscribe to /text_to_speech/input,
+                  and start the background playback thread
+    deactivate -> stop the playback thread, drain the queue, and destroy the
+                  input subscription
+    cleanup    -> destroy the publishers, service clients, and action server,
+                  and release the audio player
+    shutdown   -> log that the node is shutting down
+
 Author: Yohannes Tadesse Haile
 Affiliation: Carnegie Mellon University Africa
 Email: yohatad123@gmail.com
 Date: April 2025
 Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
 """
 
 import os
@@ -114,6 +129,12 @@ class TextToSpeechNode(LifecycleNode):
     """Lifecycle node that converts text to speech and plays it on Pepper's speakers."""
 
     def __init__(self):
+        """Declare parameters only; backend setup is deferred to on_configure().
+
+        Declaring them here (rather than reading a pre-loaded config dict)
+        means they survive repeated configure/cleanup cycles and can be
+        overridden with `ros2 param set`.
+        """
         super().__init__("text_to_speech")
         self.node_name = self.get_name()
 
@@ -319,6 +340,7 @@ class TextToSpeechNode(LifecycleNode):
         done_event = threading.Event()
 
         def sentinel():
+            """Signal the action callback once this sentence has been spoken."""
             done_event.set()
 
         for sentence in split_into_sentences(text):
@@ -741,6 +763,11 @@ class TextToSpeechNode(LifecycleNode):
     # ── Speaking state publisher ──────────────────────────────────────────────────
 
     def publish_speaking(self, speaking: bool):
+        """Publish the speaking-state flag on /text_to_speech/speaking.
+
+        Args:
+            speaking (bool): True while Pepper is actively speaking.
+        """
         if self.shutdown:
             return
         try:
@@ -784,6 +811,14 @@ class TextToSpeechNode(LifecycleNode):
 # ---------------------------------------------------------------------------
 
 def main(args=None):
+    """Entry point for the text_to_speech ROS2 node.
+
+    Initializes rclpy, instantiates the TextToSpeechNode, and spins until
+    shutdown. The node starts in the UNCONFIGURED lifecycle state; the
+    transition callbacks (driven by a lifecycle manager, not by this entry
+    point) read the declared parameters and acquire/release the synthesis
+    backend as the node is brought up and torn down.
+    """
     rclpy.init(args=args)
     node = None
 

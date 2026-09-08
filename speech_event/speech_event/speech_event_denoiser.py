@@ -12,6 +12,10 @@ Affiliation: Carnegie Mellon University Africa
 Email: yohatad123@gmail.com
 Date: April 2026
 Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
 """
 
 import os
@@ -28,12 +32,34 @@ _fallback_logger = rclpy.logging.get_logger("speech_event_denoiser")
 
 
 def butter_bandpass(lowcut, highcut, fs, order=3):
+    """Design a Butterworth bandpass filter.
+
+    Args:
+        lowcut (float): Lower cutoff frequency (Hz).
+        highcut (float): Upper cutoff frequency (Hz).
+        fs (float): Sample rate of the signal to filter (Hz).
+        order (int): Filter order.
+
+    Returns:
+        tuple: The (b, a) filter coefficients.
+    """
     nyq = 0.5 * fs
     b, a = butter(order, [lowcut / nyq, highcut / nyq], btype='band')
     return b, a
 
 
 def apply_bandpass(data, fs, lowcut=80, highcut=7500):
+    """Bandpass *data* to the speech band before further denoising.
+
+    Args:
+        data (numpy.ndarray): Mono audio samples.
+        fs (float): Sample rate of *data* (Hz).
+        lowcut (float): Lower cutoff frequency (Hz).
+        highcut (float): Upper cutoff frequency (Hz).
+
+    Returns:
+        numpy.ndarray: The filtered audio.
+    """
     b, a = butter_bandpass(lowcut, highcut, fs)
     return lfilter(b, a, data)
 
@@ -43,6 +69,20 @@ class SpeechDenoiser:
 
     def __init__(self, noise_profile_path=None, sr=16000, n_fft=512, hop_length=256,
                  alpha=0.5, spectral_floor_scale=0.02, smoothing_size=(5, 1), logger=None):
+        """Configure the denoising pipeline and load the noise profile, if any.
+
+        Args:
+            noise_profile_path (str): Path to a .npy mean-magnitude-spectrum
+                file recorded at *sr*, or None for online estimation only.
+            sr (int): Sample rate of the audio to denoise (Hz).
+            n_fft (int): STFT window size.
+            hop_length (int): STFT hop size.
+            alpha (float): Wiener filter aggressiveness (0.0-1.0).
+            spectral_floor_scale (float): Lower bound on the Wiener gain,
+                as a fraction of the noisy magnitude.
+            smoothing_size (tuple): Median-filter size applied to the gain.
+            logger: Optional ROS logger; falls back to the module logger.
+        """
         self.sr = sr
         self.n_fft = n_fft
         self.hop_length = hop_length
@@ -59,6 +99,11 @@ class SpeechDenoiser:
 
     # ── Initialisation helpers ────────────────────────────────────────────────
     def load_profile(self, path):
+        """Load a recorded noise profile and derive the notch frequencies.
+
+        Args:
+            path (str): Path to the .npy mean-magnitude-spectrum file.
+        """
         if not os.path.exists(path):
             self.log(
                 f"SpeechDenoiser: noise profile not found at '{path}' — "
@@ -187,6 +232,11 @@ class SpeechDenoiser:
         return np.clip(clean_audio.astype(np.float32), -1.0, 1.0)
 
     def log(self, msg):
+        """Log *msg* through the supplied logger, if one was given.
+
+        Args:
+            msg (str): Message to log at info level.
+        """
         if self._log:
             self._log.info(msg)
         else:

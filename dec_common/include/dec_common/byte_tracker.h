@@ -11,10 +11,13 @@
  *
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa
- * Date: Jul 06, 2026
+ * Email: yohatad123@gmail.com
+ * Date: July 6, 2026
  * Version: v1.0
  *
  * Copyright (C) 2025 Carnegie Mellon University Africa
+ * This software is provided 'as-is' for research and educational purposes
+ * within the DEC project.
  */
 
 #pragma once
@@ -27,8 +30,11 @@
 
 namespace byte_tracker {
 
-// ── Detections ──────────────────────────────────────────────────────────────
-// Mirrors the subset of supervision.Detections fields actually used here.
+/**
+ * @brief Per-frame detections handed to and returned by the tracker.
+ *
+ * Mirrors the subset of supervision.Detections fields actually used here.
+ */
 struct Detections {
     std::vector<Eigen::Vector4d> xyxy;   // (x1, y1, x2, y2) per detection
     std::vector<float> confidence;
@@ -36,10 +42,13 @@ struct Detections {
     std::vector<int> tracker_id;         // filled in by ByteTrack::updateWithDetections
 };
 
-// ── KalmanFilter ─────────────────────────────────────────────────────────────
-// 8-state (x, y, aspect, height, vx, vy, va, vh) constant-velocity Kalman
-// filter for bounding boxes in image space, identical in form to
-// supervision's KalmanFilter (itself a bytetrack-style filter).
+/**
+ * @class KalmanFilter
+ * @brief Constant-velocity Kalman filter for image-space bounding boxes.
+ *
+ * 8-state (x, y, aspect, height, vx, vy, va, vh) filter, identical in form to
+ * supervision's KalmanFilter (itself a bytetrack-style filter).
+ */
 class KalmanFilter {
 public:
     KalmanFilter();
@@ -64,6 +73,14 @@ private:
 // ── STrack ───────────────────────────────────────────────────────────────────
 enum class TrackState { New, Tracked, Lost, Removed };
 
+/**
+ * @class STrack
+ * @brief One tracked bounding box and its Kalman state across frames.
+ *
+ * Holds the track's lifecycle state (New/Tracked/Lost/Removed), its internal
+ * and externally visible IDs, and the Kalman mean/covariance advanced by
+ * predict() and the (re)activation calls.
+ */
 class STrack {
 public:
     STrack(const Eigen::Vector4d& tlwh, float score, int minimum_consecutive_frames);
@@ -113,9 +130,13 @@ Eigen::MatrixXd boxIouBatch(const std::vector<Eigen::Vector4d>& boxes_true,
 // at most once, with min(rows, cols) pairs returned.
 std::vector<std::pair<int, int>> hungarianAssignment(const Eigen::MatrixXd& cost);
 
-// Thresholded Hungarian assignment matching supervision's matching.linear_assignment:
-// entries with cost > thresh are excluded from the returned matches (but still
-// considered by the solver, matching scipy's clip-then-solve behavior).
+/**
+ * @brief Thresholded Hungarian assignment result.
+ *
+ * Matches supervision's matching.linear_assignment: entries with cost > thresh
+ * are excluded from the returned matches (but still considered by the solver,
+ * matching scipy's clip-then-solve behavior).
+ */
 struct AssignmentResult {
     std::vector<std::pair<int, int>> matches;
     std::vector<int> unmatched_rows;
@@ -133,7 +154,13 @@ Eigen::MatrixXd fuseScore(Eigen::MatrixXd cost_matrix, const std::vector<STrack>
 
 }  // namespace matching
 
-// ── ByteTrack ────────────────────────────────────────────────────────────────
+/**
+ * @class ByteTrack
+ * @brief Multi-object tracker assigning persistent track IDs to detections.
+ *
+ * Runs the two-stage (high/low confidence) IoU association over the Kalman
+ * predictions and returns the detections with tracker_id filled in.
+ */
 class ByteTrack {
 public:
     ByteTrack(float track_activation_threshold = 0.25f, int lost_track_buffer = 30,

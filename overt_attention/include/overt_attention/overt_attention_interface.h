@@ -9,10 +9,13 @@
  *
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa
- * Date: Jun 12, 2026
+ * Email: yohatad123@gmail.com
+ * Date: June 12, 2026
  * Version: v1.0
  *
  * Copyright (C) 2025 Carnegie Mellon University Africa
+ * This software is provided 'as-is' for research and educational purposes
+ * within the DEC project.
  */
 
 #pragma once
@@ -58,7 +61,9 @@
 // Shared configuration / helpers
 //=============================================================================
 
-// Mirrors the structure of data/pepper_topics.yaml
+/**
+ * @brief Mirrors the structure of data/pepper_topics.yaml
+ */
 struct TopicsConfig {
     struct {
         std::string pepper;
@@ -134,10 +139,14 @@ std::pair<int, int> saliencyBorderPad(int height, int width);
 // Boolean Map Saliency (BMS)
 //=============================================================================
 
-// Boolean Map Saliency (BMS) - Frame-based
-//  - Threshold-based boolean maps (per BMS paper)
-//  - Flood-fill based region activation
-//  - Output normalized to [0, 1]
+/**
+ * @class BooleanMapSaliency
+ * @brief Frame-based Boolean Map Saliency (BMS).
+ *
+ *  - Threshold-based boolean maps (per the BMS paper)
+ *  - Flood-fill based region activation
+ *  - Output normalized to [0, 1]
+ */
 class BooleanMapSaliency {
 public:
     explicit BooleanMapSaliency(int n_thresholds = 10);
@@ -157,9 +166,13 @@ private:
 // Saliency Node
 //=============================================================================
 
-// Computes bottom-up visual attention using Boolean Map Saliency (BMS).
-// Publishes the top-N saliency peaks (pixel coords + score) and, optionally,
-// a saliency-overlay visualization.
+/**
+ * @class SaliencyNode
+ * @brief Computes bottom-up visual attention using Boolean Map Saliency (BMS).
+ *
+ * Publishes the top-N saliency peaks (pixel coords + score) and, optionally,
+ * a saliency-overlay visualization.
+ */
 class SaliencyNode : public rclcpp::Node {
 public:
     SaliencyNode();
@@ -238,24 +251,37 @@ private:
 // Unified Attention Node
 //=============================================================================
 
-// Improved attention controller for robot overt attention.
-// Priority 1: Engaged faces | Priority 2: Detected faces | Priority 3: Saliency (with cooldown + IOR)
+/**
+ * @class OvertAttentionNode
+ * @brief Improved attention controller for robot overt attention.
+ *
+ * Priority 1: Engaged faces | Priority 2: Detected faces | Priority 3:
+ * Saliency (with cooldown + IOR)
+ */
 class OvertAttentionNode : public rclcpp_lifecycle::LifecycleNode {
 public:
     using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
     OvertAttentionNode();
 
-    // Lifecycle transitions. Parameters are declared once in the constructor;
-    // subscriptions/publishers/service are created in on_configure, the
-    // publishers are (de)activated in on_activate/on_deactivate, and everything
-    // is torn down in on_cleanup.
+    // Parameters are declared once in the constructor; the rest of the
+    // resources follow the lifecycle transitions below.
+
+    /** @brief Read parameters and topic names and create the publishers,
+     *         subscriptions, and the set_enabled service. */
     CallbackReturn on_configure(const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Activate the head-command and target publishers. */
     CallbackReturn on_activate(const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Deactivate the head-command and target publishers. */
     CallbackReturn on_deactivate(const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Destroy the subscriptions, publishers, and service. */
     CallbackReturn on_cleanup(const rclcpp_lifecycle::State& state) override;
 
 private:
+    /** @brief One detected face scored as a candidate attention target. */
     struct FaceCandidate {
         std::string face_id;
         geometry_msgs::msg::Point centroid;
@@ -266,6 +292,7 @@ private:
         bool is_current;
     };
 
+    /** @brief A recently attended direction, used for inhibition of return. */
     struct VisitedLocation {
         double yaw;
         double pitch;
@@ -373,13 +400,17 @@ private:
 // Visualization Node
 //=============================================================================
 
-// Shows faces with tracking IDs, engagement status, depth, saliency peaks,
-// and the current head target overlaid on the camera image.
+/**
+ * @class VisualizationNode
+ * @brief Shows faces with tracking IDs, engagement status, depth, saliency peaks,
+ *        and the current head target overlaid on the camera image.
+ */
 class VisualizationNode : public rclcpp::Node {
 public:
     VisualizationNode();
 
 private:
+    /** @brief One face drawn on the visualization overlay. */
     struct FaceInfo {
         int u, v, w, h;
         float depth;
@@ -388,11 +419,13 @@ private:
         cv::Scalar color;
     };
 
+    /** @brief One saliency peak drawn on the visualization overlay. */
     struct SaliencyPeak {
         int u, v;
         float score;
     };
 
+    /** @brief The current attention target drawn on the visualization overlay. */
     struct TargetInfo {
         double yaw, pitch, score;
     };

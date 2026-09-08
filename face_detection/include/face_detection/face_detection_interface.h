@@ -9,50 +9,19 @@
  * Hungarian-assignment cost function when require_person_detection is true;
  * otherwise faces are tracked directly with ByteTrack.
  *
- * Subscribers:
- *   <camera color topic> (sensor_msgs/Image or CompressedImage)
- *     Synchronized RGB camera frames (topic resolved from camera config).
- *   <camera depth topic> (sensor_msgs/Image or CompressedImage)
- *     Synchronized depth camera frames (topic resolved from camera config).
- *   /person_detection/data (dec_interfaces/PersonDetection)
- *     Tracked person detections used to constrain and match faces (only if
- *     requirePersonDetection is true).
- *
- * Publishers:
- *   /face_detection/data (dec_interfaces/FaceDetection)
- *     Per-frame face tracking results: face IDs, centroids, sizes, and
- *     mutual gaze flags.
- *   /face_detection/debug (sensor_msgs/Image)
- *     Debug visualization of the color frame with face boxes and head-pose axes.
- *   /face_detection/depth_debug (sensor_msgs/Image)
- *     Colorized depth visualization for debugging.
- *
- * Parameters (ROS2 parameters, loaded from face_detection_configuration.yaml
- * via the launch file):
- *   use_compressed, camera, verbose_mode, image_timeout,
- *   sixdrepnet_confidence, sixdrepnet_headpose_angle, require_person_detection,
- *   person_detection_timeout, prioritize_face_depth.
- *
- * Lifecycle:
- *   configure  -> create lifecycle publishers and initialize state, incl. the
- *                 standalone-mode ByteTrack face tracker (base); load YOLO +
- *                 SixDrepNet ONNX models (SixDrepNet)
- *   activate   -> subscribe to person detection (if enabled) and start the
- *                 debug visualization timer (base); create camera
- *                 subscriptions and start the image timeout monitor (SixDrepNet)
- *   deactivate -> stop the visualization timer and destroy the person
- *                 detection subscription (base); destroy camera
- *                 subscriptions (SixDrepNet)
- *   cleanup    -> destroy lifecycle publishers (base); release the loaded
- *                 ONNX models (SixDrepNet)
- *   shutdown   -> log shutdown (base)
+ * The node's complete ROS2 interface (subscribers, publishers, parameters,
+ * and lifecycle transitions) is documented in
+ * face_detection_application.cpp.
  *
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa
- * Date: Jul 06, 2026
+ * Email: yohatad123@gmail.com
+ * Date: July 6, 2026
  * Version: v1.0
  *
  * Copyright (C) 2025 Carnegie Mellon University Africa
+ * This software is provided 'as-is' for research and educational purposes
+ * within the DEC project.
  */
 
 #pragma once
@@ -84,6 +53,7 @@
 // solver.
 constexpr double kImpossibleMatchCost = 1e6;
 
+/** @brief Tunable settings for the face-detection node (see the YAML config). */
 struct FaceDetectionConfig {
     bool use_compressed = false;
     std::string camera = "realsense";
@@ -101,7 +71,9 @@ struct FaceDetectionConfig {
 // not set by the launch file's YAML.
 FaceDetectionConfig loadConfiguration(rclcpp_lifecycle::LifecycleNode* node);
 
-// Cached snapshot of the latest /person_detection/data message.
+/**
+ * @brief Cached snapshot of the latest /person_detection/data message.
+ */
 struct PersonSnapshot {
     std::vector<std::string> person_label_id;
     std::vector<std::string> class_names;
@@ -110,7 +82,9 @@ struct PersonSnapshot {
     std::vector<float> height;
 };
 
-// One finalized face tracking record, ready to publish/draw.
+/**
+ * @brief One finalized face tracking record, ready to publish/draw.
+ */
 struct FaceTrackingDatum {
     std::string face_id;
     geometry_msgs::msg::Point centroid;
@@ -128,6 +102,13 @@ struct FaceTrackingDatum {
 // its own NMS).
 //=============================================================================
 
+/**
+ * @class YOLOONNX
+ * @brief ONNX Runtime wrapper around the YOLO face detector.
+ *
+ * NMS is baked into the exported graph, so postprocessing is only a confidence
+ * filter plus coordinate rescale.
+ */
 class YOLOONNX {
 public:
     YOLOONNX(const std::string& model_path, double class_score_th);
@@ -153,21 +134,37 @@ private:
 // FaceDetectionNode
 //=============================================================================
 
-// Camera plumbing (topic resolution, subscriptions, depth decode, debug
-// visualization, timeout monitor) is inherited from
-// dec_common::CameraLifecycleNode; this class adds the face publishers and
-// the person-detection subscription used for face-person matching.
+/**
+ * @class FaceDetectionNode
+ * @brief Base lifecycle node owning the face publishers and person matching.
+ *
+ * Camera plumbing (topic resolution, subscriptions, depth decode, debug
+ * visualization, timeout monitor) is inherited from
+ * dec_common::CameraLifecycleNode; this class adds the face publishers and the
+ * person-detection subscription used for face-person matching.
+ */
 class FaceDetectionNode : public dec_common::CameraLifecycleNode {
 public:
     explicit FaceDetectionNode(const std::string& node_name = "face_detection");
 
-    // ── Lifecycle callbacks ─────────────────────────────────────────────────
+    /** @brief Create the lifecycle publishers and the standalone-mode face tracker. */
     CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Subscribe to person detection (if enabled) and start the debug
+     *         visualization timer. */
     CallbackReturn on_activate  (const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Stop the visualization timer and drop the person-detection
+     *         subscription. */
     CallbackReturn on_deactivate(const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Destroy the lifecycle publishers. */
     CallbackReturn on_cleanup   (const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Log that the node is shutting down. */
     CallbackReturn on_shutdown  (const rclcpp_lifecycle::State& state) override;
 
+    /** @brief Close any open debug windows before the process exits. */
     void cleanup();
 
 protected:
@@ -196,13 +193,28 @@ protected:
 // SixDrepNet
 //=============================================================================
 
+/**
+ * @class SixDrepNet
+ * @brief Face-detection node adding SixDRepNet head-pose and mutual gaze.
+ *
+ * Loads the YOLO face detector and the SixDRepNet head-pose model, runs both
+ * over the synchronized RGB-D frames, and marks a face as engaged when its
+ * head-pose angle falls within sixdrepnet_headpose_angle of the camera.
+ */
 class SixDrepNet : public FaceDetectionNode {
 public:
     SixDrepNet();
 
+    /** @brief Load the YOLO face detector and the SixDRepNet head-pose model. */
     CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Create the camera subscriptions and start the image-timeout monitor. */
     CallbackReturn on_activate  (const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Destroy the camera subscriptions. */
     CallbackReturn on_deactivate(const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Release the loaded ONNX models. */
     CallbackReturn on_cleanup   (const rclcpp_lifecycle::State& state) override;
 
 protected:
@@ -211,12 +223,15 @@ protected:
 private:
     void drawAxis(cv::Mat& img, double yaw, double pitch, double roll, double tdx, double tdy, double size = 100.0);
 
+    /** @brief One detected face awaiting assignment to a tracked person. */
     struct FaceCandidate {
         double x1, y1, x2, y2;
         double cx, cy;
         double w, h;
         float score;
     };
+
+    /** @brief One tracked person available to receive a detected face. */
     struct PersonCandidate {
         std::string tracking_id;
         double x1, y1, x2, y2;

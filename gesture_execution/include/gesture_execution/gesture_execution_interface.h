@@ -11,37 +11,19 @@
  * publish RViz markers showing the target point, shoulder position, and
  * pointing vector.
  *
- * Subscribers:
- *   /joint_states (sensor_msgs/JointState)
- *     Current joint positions, used to track the robot's arm/head/leg state.
- *   /localization (nav_msgs/Odometry)
- *     Fused map->base_footprint robot pose (from lio_localization's
- *     transform_fusion), used to compute pointing direction.
- *
- * Publishers:
- *   /joint_angles_trajectory (naoqi_bridge_msgs/JointAnglesTrajectory)
- *     Joint angle trajectories sent to the robot to perform gestures.
- *   /gesture_execution/visualization (visualization_msgs/Marker)
- *     Markers visualizing deictic gesture targets, shoulder, and pointing arrow.
- *
- * Actions:
- *   /gesture_execution (dec_interfaces/action/Gesture)
- *     Executes a named or typed gesture (deictic, iconic, bow, nod) with
- *     feedback on elapsed time and a success/failure result.
- *
- * Parameters (config/gesture_execution_configuration.yaml, under
- * gesture_action_server/ros__parameters):
- *   verbose_mode (bool, default: false)
- * Gesture and topic data always load from fixed paths (data/gesture.yaml,
- * data/pepper_topics.yaml) — not configurable via parameters.
+ * The node's complete ROS2 interface (subscribers, publishers,
+ * services, actions, parameters, and lifecycle transitions) is
+ * documented in gesture_execution_application.cpp.
  *
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa
  * Email: yohatad123@gmail.com
- * Date: Jul 05, 2026
+ * Date: July 5, 2026
  * Version: v1.0
  *
  * Copyright (C) 2025 Carnegie Mellon University Africa
+ * This software is provided 'as-is' for research and educational purposes
+ * within the DEC project.
  */
 
 #pragma once
@@ -99,27 +81,36 @@ constexpr double HEAD_YAW_MAX = 2.0857;
 constexpr double HEAD_PITCH_MIN = -0.7068;
 constexpr double HEAD_PITCH_MAX = 0.6371;
 
+/** @brief The robot's 2D pose in the map frame, used to aim deictic gestures. */
 struct RobotPose {
     double x = 0.0;
     double y = 0.0;
     double theta = 0.0;
 };
 
-// One gesture's per-arm waypoint data, as loaded from data/gesture.yaml.
+/**
+ * @brief One gesture's per-arm waypoint data, as loaded from data/gesture.yaml.
+ */
 struct ArmWaypoints {
     std::vector<std::string> joint_names;
     std::vector<std::vector<double>> waypoints;  // one entry per waypoint, one value per joint_name
     std::vector<double> times;                   // one entry per waypoint
 };
 
-// A single named gesture descriptor (e.g. "welcome", "wave", "shake").
+/**
+ * @brief A single named gesture descriptor (e.g.
+ *
+ * "welcome", "wave", "shake").
+ */
 struct GestureDescriptor {
     std::vector<std::string> arms;  // e.g. {"LArm", "RArm", "Leg"}
     std::unordered_map<std::string, ArmWaypoints> per_arm;
 };
 
-// Home-pose joint angles per limb, used both to seed joint_states_ and as the
-// resting position for deictic/bow/nod gestures.
+/**
+ * @brief Home-pose joint angles per limb, used both to seed joint_states_ and as
+ *        the resting position for deictic/bow/nod gestures.
+ */
 struct HomePositions {
     std::vector<double> r_arm{1.7410, -0.09664, 1.6981, 0.09664, -0.05679};
     std::vector<double> l_arm{1.7625, 0.09970, -1.7150, -0.1334, 0.06592};
@@ -135,8 +126,11 @@ struct HomePositions {
  */
 std::unordered_map<std::string, GestureDescriptor> loadGestureDescriptors(const std::string& yaml_path);
 
-// Loads the robot topic mapping from data/pepper_topics.yaml (falls back to
-// hardcoded defaults for any missing key, mirroring the Python ConfigManager).
+/**
+ * @brief Loads the robot topic mapping from data/pepper_topics.yaml (falls back to
+ *        hardcoded defaults for any missing key, mirroring the Python
+ *        ConfigManager).
+ */
 struct RobotTopics {
     std::string joint_states = "/joint_states";
     std::string robot_pose = "/localization";
@@ -165,6 +159,14 @@ RobotTopics loadRobotTopics(const std::string& yaml_path);
 //                                 action server.
 //=============================================================================
 
+/**
+ * @class GestureExecutionNode
+ * @brief ROS2 lifecycle node serving Pepper's gesture action server.
+ *
+ * Computes and streams the joint trajectories for deictic, iconic, bowing, and
+ * nodding gestures (deictic pointing via inverse kinematics), reporting
+ * elapsed-time feedback while a gesture runs.
+ */
 class GestureExecutionNode : public rclcpp_lifecycle::LifecycleNode {
 public:
     using CallbackReturn =
@@ -174,11 +176,21 @@ public:
 
     GestureExecutionNode();
 
-    // ── Lifecycle callbacks ─────────────────────────────────────────────────
+    /** @brief Load the gesture and topic YAML data and create the trajectory
+     *         and marker publishers plus the action server. */
     CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Activate the publishers and subscribe to /joint_states and
+     *         /localization. */
     CallbackReturn on_activate  (const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Destroy the joint-state and pose subscriptions. */
     CallbackReturn on_deactivate(const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Destroy the lifecycle publishers and the action server. */
     CallbackReturn on_cleanup   (const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Log that the node is shutting down. */
     CallbackReturn on_shutdown  (const rclcpp_lifecycle::State& state) override;
 
 private:

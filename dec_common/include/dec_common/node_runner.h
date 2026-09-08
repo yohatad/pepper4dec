@@ -12,10 +12,13 @@
  *
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa
- * Date: Jul 18, 2026
+ * Email: yohatad123@gmail.com
+ * Date: July 18, 2026
  * Version: v1.0
  *
  * Copyright (C) 2025 Carnegie Mellon University Africa
+ * This software is provided 'as-is' for research and educational purposes
+ * within the DEC project.
  */
 
 #pragma once
@@ -28,6 +31,7 @@
 
 namespace dec_common {
 
+/** @brief Startup options for runNode(): banner, logger name, and executor threads. */
 struct NodeRunOptions {
     // Logged once after rclcpp::init when non-null (one-liner or full banner).
     const char* banner = nullptr;

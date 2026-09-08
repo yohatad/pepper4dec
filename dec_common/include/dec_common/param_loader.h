@@ -13,6 +13,13 @@
  *
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa
+ * Email: yohatad123@gmail.com
+ * Date: July 23, 2026
+ * Version: v1.0
+ *
+ * Copyright (C) 2025 Carnegie Mellon University Africa
+ * This software is provided 'as-is' for research and educational purposes
+ * within the DEC project.
  */
 
 #pragma once

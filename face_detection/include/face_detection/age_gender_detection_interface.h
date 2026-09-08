@@ -10,39 +10,19 @@
  * crop, applies temporal smoothing across repeated estimates, and publishes
  * the resulting per-person profile as a JSON string.
  *
- * Subscribers:
- *   <image_topic> (sensor_msgs/Image)
- *     Raw color camera frames, cached for crop extraction.
- *   <face_topic> (dec_interfaces/FaceDetection)
- *     Per-frame face tracking results, incl. mutual_gaze flag.
- *   <person_topic> (dec_interfaces/PersonDetection)
- *     Tracked person detections, used for the body crop.
- *
- * Publishers:
- *   <output_topic> (std_msgs/String)
- *     Per-person JSON profile: label_id, age, gender, gender_confidence,
- *     estimation_count, person_bbox.
- *
- * Parameters (ROS2 parameters, loaded from
- * age_gender_detection_configuration.yaml via the launch file):
- *   mivolo_model_path, device, face_only, face_topic, person_topic,
- *   image_topic, output_topic, max_cache_age_sec, min_estimate_interval_sec,
- *   re_estimate_interval_sec, person_class_name, max_depth_m.
- *
- * Lifecycle:
- *   configure  -> load the MiVOLO ONNX model, reset caches
- *   activate   -> create publisher + subscriptions, start the estimation
- *                 worker thread, start the cleanup/debug timers
- *   deactivate -> destroy subscriptions, stop and join the worker thread
- *   cleanup    -> release the ONNX session, clear caches
- *   shutdown   -> log shutdown
+ * The node's complete ROS2 interface (subscribers, publishers,
+ * services, actions, parameters, and lifecycle transitions) is
+ * documented in age_gender_detection_application.cpp.
  *
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa
- * Date: Jul 29, 2026
+ * Email: yohatad123@gmail.com
+ * Date: July 29, 2026
  * Version: v1.0
  *
  * Copyright (C) 2025 Carnegie Mellon University Africa
+ * This software is provided 'as-is' for research and educational purposes
+ * within the DEC project.
  */
 
 #pragma once
@@ -73,6 +53,7 @@
 #include <unordered_map>
 #include <vector>
 
+/** @brief Tunable settings for the age/gender node (see the YAML config). */
 struct AgeGenderDetectionConfig {
     std::string mivolo_model_path;
     std::string device = "cuda";
@@ -106,8 +87,17 @@ AgeGenderDetectionConfig loadAgeGenderConfiguration(rclcpp_lifecycle::LifecycleN
 // is [1, 3]: (gender_male_logit, gender_female_logit, age_normalized).
 //=============================================================================
 
+/**
+ * @class MiVOLOONNX
+ * @brief ONNX Runtime wrapper around the MiVOLO face+body age/gender model.
+ *
+ * Input is a single 6-channel [1, 6, 224, 224] tensor (face crop in channels
+ * 0-2, body crop in channels 3-5, each letterboxed and ImageNet-normalized);
+ * output is [1, 3]: (gender_male_logit, gender_female_logit, age_normalized).
+ */
 class MiVOLOONNX {
 public:
+    /** @brief One age/gender estimate returned by the model. */
     struct Estimate {
         double age = 0.0;
         std::string gender;
@@ -146,7 +136,9 @@ private:
 // Data structures
 //=============================================================================
 
-// Snapshot of a face or person detection, cached for later crop extraction.
+/**
+ * @brief Snapshot of a face or person detection, cached for later crop extraction.
+ */
 struct AgeGenderBoundingBox {
     double x1 = 0.0, y1 = 0.0, x2 = 0.0, y2 = 0.0;
     double depth = 0.0;        // metres (z of centroid), 0.0 if unavailable
@@ -157,8 +149,10 @@ struct AgeGenderBoundingBox {
                                              bool mutual_gaze = false);
 };
 
-// Stores age/gender estimates with temporal smoothing (median age, confidence-
-// weighted majority gender vote over the last 5 estimates).
+/**
+ * @brief Stores age/gender estimates with temporal smoothing (median age,
+ *        confidence- weighted majority gender vote over the last 5 estimates).
+ */
 struct AgeGenderPersonProfile {
     static constexpr size_t kHistoryMaxLen = 5;
 
@@ -185,6 +179,14 @@ struct AgeGenderPersonProfile {
 // AgeGenderDetectionNode
 //=============================================================================
 
+/**
+ * @class AgeGenderDetectionNode
+ * @brief ROS2 lifecycle node estimating age and gender of engaged visitors.
+ *
+ * Caches recent face/person detections and camera frames, queues a track ID
+ * for inference whenever that person shows mutual gaze within range, and
+ * publishes the smoothed per-person profile as JSON.
+ */
 class AgeGenderDetectionNode : public rclcpp_lifecycle::LifecycleNode {
 public:
     using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
@@ -192,12 +194,23 @@ public:
     explicit AgeGenderDetectionNode(const std::string& node_name = "age_gender_detection");
     ~AgeGenderDetectionNode() override;
 
+    /** @brief Load the MiVOLO ONNX model and reset the detection caches. */
     CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Create the publisher and subscriptions and start the estimation
+     *         worker thread and the cleanup timers. */
     CallbackReturn on_activate  (const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Destroy the subscriptions and stop and join the worker thread. */
     CallbackReturn on_deactivate(const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Release the ONNX session and clear the caches. */
     CallbackReturn on_cleanup   (const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Log that the node is shutting down. */
     CallbackReturn on_shutdown  (const rclcpp_lifecycle::State& state) override;
 
+    /** @brief Stop the estimation worker thread before the process exits. */
     void cleanup();
 
 private:

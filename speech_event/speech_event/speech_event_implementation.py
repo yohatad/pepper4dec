@@ -25,6 +25,10 @@ Affiliation: Carnegie Mellon University Africa
 Email: yohatad123@gmail.com
 Date: November 8, 2025
 Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
 """
 
 import math
@@ -51,7 +55,25 @@ from .speech_event_denoiser import SpeechDenoiser
 
 
 class OnnxWrapper():
+    """ONNX Runtime wrapper around the Silero VAD model.
+
+    Holds the inference session and the model's recurrent state, and exposes
+    per-chunk speech-probability inference at a fixed 16 kHz sample rate.
+
+    Attributes:
+        session (onnxruntime.InferenceSession): Loaded Silero VAD session.
+        sample_rate (int): Sample rate the model expects (16000 Hz).
+    """
+
     def __init__(self, path, force_onnx_cpu=False, logger=None):
+        """Load the Silero VAD ONNX model and reset its recurrent state.
+
+        Args:
+            path (str): Path to the Silero VAD .onnx model file.
+            force_onnx_cpu (bool): Run on CPU even when CUDA is available.
+            logger (rclpy.impl.rcutils_logger.RcutilsLogger): Optional logger
+                used to report the selected execution provider.
+        """
         opts = onnxruntime.SessionOptions()
         opts.inter_op_num_threads = 4
         opts.intra_op_num_threads = 4
@@ -97,6 +119,12 @@ class OnnxWrapper():
         self.reset_states()
 
     def reset_states(self, batch_size=1):
+        """Zero the model's recurrent state between speech segments.
+
+        Args:
+            batch_size (int): Number of independent audio streams to size the
+                state for.
+        """
         with self._lock:
             self._state = torch.zeros((2, batch_size, 128)).float()
             self._context = torch.zeros(batch_size, 64)  # context_size = 64 for 16kHz
@@ -156,6 +184,12 @@ class SpeechRecognitionNode(LifecycleNode):
     """Lifecycle node that performs voice-activity detection and speech-to-text transcription."""
 
     def __init__(self):
+        """Declare parameters only; model loading is deferred to on_configure().
+
+        Declaring them here (rather than reading a pre-loaded config dict)
+        means they survive repeated configure/cleanup cycles and can be
+        overridden with `ros2 param set`.
+        """
         super().__init__("speech_recognition")
 
         # Declare parameters in __init__ so they are settable from launch/CLI before configure
@@ -464,6 +498,7 @@ class SpeechRecognitionNode(LifecycleNode):
         self.publish_feedback("waiting")
 
         def cleanup():
+            """Restore the pre-goal listening state when the goal ends."""
             with self.action_server_lock:
                 self.action_started = False
                 self._current_goal_handle = None
@@ -566,6 +601,7 @@ class SpeechRecognitionNode(LifecycleNode):
 
             # Extract front-left channel (primary microphone)
             def get_chan(enum_val, fallback=None):
+                """Return one microphone channel, or *fallback* if absent."""
                 if enum_val in channel_map:
                     idx = channel_map.index(enum_val)
                     return frames[:, idx]

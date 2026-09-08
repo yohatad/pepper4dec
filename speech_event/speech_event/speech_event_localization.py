@@ -48,6 +48,10 @@ Affiliation: Carnegie Mellon University Africa
 Email: yohatad123@gmail.com
 Date: January 2026
 Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
 """
 
 import numpy as np
@@ -68,6 +72,13 @@ class SoundLocalizationNode(Node):
     """Node that estimates sound source azimuth from 4-microphone audio using SRP-PHAT."""
 
     def __init__(self):
+        """Declare and read parameters, then create the publishers and the
+        microphone subscription.
+
+        This is a secondary (non-orchestrated) helper node, so it uses a plain
+        rclpy Node rather than the lifecycle pattern used by the package's
+        primary node.
+        """
         super().__init__("sound_localization")
 
         # =====================================================
@@ -293,6 +304,7 @@ class SoundLocalizationNode(Node):
                           channels].reshape(num_frames, channels).astype(np.float32) / 32767.0
 
             def get_chan(enum_val, fallback=None):
+                """Return one microphone channel, or *fallback* if absent."""
                 if enum_val in channel_map:
                     idx = channel_map.index(enum_val)
                     return frames[:, idx]
@@ -565,6 +577,11 @@ class SoundLocalizationNode(Node):
 
 
 def main(args=None):
+    """Entry point for the sound_localization ROS2 node.
+
+    Initializes rclpy, instantiates the SoundLocalizationNode, and spins it
+    until shutdown.
+    """
     import rclpy
     rclpy.init(args=args)
 

@@ -21,23 +21,45 @@ Actions:
         "searching" | "generating", result carries success, response,
         intent, and confidence
 
-Parameters (declared here, populated from config/converation_manager_configuration.yaml
-via the launch file's parameters=[...]; run `ros2 param get/set /conversation_manager
-<name>` to inspect or override at runtime):
-    collection_name (str), verbose (bool), llm_base_url (str), llm_model (str),
-    embedding_model (str), retrieval_mode (str), similarity_threshold (float),
-    top_k (int), max_history_turns (int), context_turns (int),
-    max_response_sentences (int), data_default_path (str)
+Parameters (declared as ROS2 parameters in the constructor; populated from
+config/converation_manager_configuration.yaml via the launch file's
+parameters=[...], or `ros2 param set` at runtime):
+    collection_name (str, default: "upanzi_knowledge")
+    verbose (bool, default: False)
+    llm_base_url (str, default: "http://localhost:8080/v1")
+    llm_model (str, default: "HuggingFaceTB/SmolLM3-3B")
+    embedding_model (str, default: "all-MiniLM-L6-v2")
+    retrieval_mode (str, default: "rag")
+    similarity_threshold (float, default: 0.15)
+    top_k (int, default: 10)
+    max_history_turns (int, default: 15)
+    context_turns (int, default: 10)
+    max_response_sentences (int, default: 3)
+    data_default_path (str, default: <package share>/data/upanzi_data.json)
 
     LLM_API_KEY is never a ROS parameter -- it must be exported as an
     environment variable, since ROS parameters are visible via `ros2 param
     dump`/introspection tools.
+
+Lifecycle:
+    configure  -> build the RAG configuration from ROS parameters, initialize
+                  (or build) the ChromaDB collection, and create the action
+                  server
+    activate   -> log that the node is ready to answer queries
+    deactivate -> log that the node has stopped answering queries
+    cleanup    -> destroy the action server and clear the collection and
+                  conversation history
+    shutdown   -> log that the node is shutting down
 
 Author: Yohannes Tadesse Haile
 Affiliation: Carnegie Mellon University Africa
 Email: yohatad123@gmail.com
 Date: February 28, 2026
 Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
 """
 
 import rclpy
@@ -80,6 +102,12 @@ class ConversationManagerNode(LifecycleNode):
     """Lifecycle node that answers conversational queries via RAG and streams responses to TTS."""
 
     def __init__(self):
+        """Declare parameters only; heavy setup is deferred to on_configure().
+
+        Declaring the parameters here (rather than reading a pre-loaded config
+        dict) means they survive repeated configure/cleanup cycles and can be
+        overridden with `ros2 param set`.
+        """
         super().__init__('conversation_manager')
 
         # Declare parameters — heavy initialisation deferred to on_configure.
@@ -177,13 +205,13 @@ class ConversationManagerNode(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_activate(self, _state) -> TransitionCallbackReturn:
-        """Activate the managed text-to-speech publisher so the node is ready to answer queries."""
+        """Mark the node active; the action server is ready to answer queries."""
         super().on_activate(_state)
         self.get_logger().info("conversation_manager: activated — ready to answer queries")
         return TransitionCallbackReturn.SUCCESS
 
     def on_deactivate(self, _state) -> TransitionCallbackReturn:
-        """Deactivate the managed text-to-speech publisher."""
+        """Mark the node inactive; queued goals are no longer served."""
         super().on_deactivate(_state)
         self.get_logger().info("conversation_manager: deactivated")
         return TransitionCallbackReturn.SUCCESS
@@ -263,6 +291,7 @@ class ConversationManagerNode(LifecycleNode):
 
     @property
     def verbose(self) -> bool:
+        """Whether verbose logging is enabled in the active RAG configuration."""
         return get_config().verbose
 
     def log_verbose(self, message: str) -> None:
@@ -378,6 +407,14 @@ class ConversationManagerNode(LifecycleNode):
 # ---------------------------------------------------------------------------
 
 def main(args=None):
+    """Entry point for the conversation_manager ROS2 node.
+
+    Initializes rclpy, instantiates the ConversationManagerNode, and spins
+    until shutdown. The node starts in the UNCONFIGURED lifecycle state; the
+    transition callbacks (driven by a lifecycle manager, not by this entry
+    point) read the declared parameters and acquire/release resources as the
+    node is brought up and torn down.
+    """
     node = None
     try:
         rclpy.init(args=args)
