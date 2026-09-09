@@ -1,18 +1,19 @@
 """
-dec_robot.launch.py: bring up the whole physical layer in one command.
+dec_robot.launch.py: bring up the sensor layer in one command.
 
-That is the Unitree L2 LiDAR, the bottom RealSense, and the robot itself.
+That is the Unitree L2 LiDAR and the bottom RealSense. It is drivers only.
 
-This replaces the three-command sequence in pepper_navigation/README.md
-("Always start the sensors first"). It is drivers only.
+The NAOqi bridge to Pepper is NOT started here — launch it separately when
+you need it:
+
+    ros2 launch dec_launch naoqi_driver.launch.py nao_ip:=<robot ip>
 
 Launch files included:
     dec_launch/l2lidar.launch.py — the L2 driver (/points, /imu/data).
     dec_launch/realsense_bottom.launch.py — the bottom RealSense.
-    dec_launch/naoqi_driver.launch.py — the NAOqi bridge to Pepper.
 
 Nodes started:
-    None directly; everything comes from the three included launch files.
+    None directly; everything comes from the two included launch files.
 
 NO STATIC TF HERE — AND WHY
     The transforms that put the L2 and the RealSense in one tree
@@ -36,18 +37,10 @@ NO STATIC TF HERE — AND WHY
     driver publishes its own internal extrinsics.
 
 Launch arguments:
-    enable_lidar / enable_camera / enable_robot (default: "true")
+    enable_lidar / enable_camera (default: "true")
         Turn each driver off individually.
     l2_ip / l2_port / host_ip / host_port
         Forwarded to l2lidar.launch.py. Factory 192.168.1.0/24 defaults.
-    nao_ip / nao_port / user / password / network_interface / qi_listen_url
-        Forwarded to naoqi_driver.launch.py. NOTE nao_ip defaults to the
-        CMU-Pepper router address; on the PepperNet AP pass
-        nao_ip:=10.42.0.204.
-    use_camera (default: "false")
-        Forwarded to naoqi_driver.launch.py — the gscam2 Pepper FRONT
-        camera, which is separate from the bottom RealSense and needs the
-        stream started on the robot by hand. Off by default.
 
     Each included file documents its own arguments; this file only re-declares
     the ones worth setting from here.
@@ -56,13 +49,12 @@ Configuration:
     None of its own; each driver's YAML lives in its own package.
 
 Prerequisites:
-    The L2 reachable at l2_ip, a RealSense on USB, and the robot awake at
-    nao_ip. Any subset works — switch the others off.
+    The L2 reachable at l2_ip and a RealSense on USB. Either subset works --
+    switch the other off.
 
 Usage:
     ros2 launch dec_launch dec_robot.launch.py
-    ros2 launch dec_launch dec_robot.launch.py enable_robot:=false
-    ros2 launch dec_launch dec_robot.launch.py nao_ip:=10.42.0.204
+    ros2 launch dec_launch dec_robot.launch.py enable_camera:=false
 
     Then bring up an estimator or the full system, which brings the sensor-rig
     TF with it:
@@ -122,9 +114,6 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'enable_camera', default_value='true',
             description='Start the bottom RealSense.'),
-        DeclareLaunchArgument(
-            'enable_robot', default_value='true',
-            description='Start the NAOqi driver (the bridge to Pepper).'),
 
         # ------------------------------------------------------------
         # L2 network (forwarded to l2lidar.launch.py)
@@ -138,32 +127,6 @@ def generate_launch_description():
                                           'be a real local interface.'),
         DeclareLaunchArgument('host_port', default_value='6201',
                               description='Host UDP port.'),
-
-        # ------------------------------------------------------------
-        # Robot connection (forwarded to naoqi_driver.launch.py)
-        # ------------------------------------------------------------
-        DeclareLaunchArgument('nao_ip', default_value='172.29.111.240',
-                              description='Robot IP. 172.29.111.240 on the '
-                                          'CMU-Pepper router, 10.42.0.204 on '
-                                          'the PepperNet AP.'),
-        DeclareLaunchArgument('nao_port', default_value='9559',
-                              description='NAOqi port.'),
-        DeclareLaunchArgument('user', default_value='nao',
-                              description='Username for the connection.'),
-        DeclareLaunchArgument('password', default_value='no_password',
-                              description='Password for the connection.'),
-        DeclareLaunchArgument('network_interface', default_value='eth0',
-                              description='LOCAL interface handed to NAOqi for '
-                                          'the return connection. The node '
-                                          'throws if the name does not exist -- '
-                                          'check `ip -br addr`.'),
-        DeclareLaunchArgument('qi_listen_url', default_value='tcp://0.0.0.0:0',
-                              description='Endpoint NAOqi connects back to '
-                                          '(audio).'),
-        DeclareLaunchArgument('use_camera', default_value='false',
-                              description="Also start the gscam2 Pepper FRONT "
-                                          "camera. Not the bottom RealSense; "
-                                          "needs ~/start_camera.sh on the robot."),
 
         # ------------------------------------------------------------
         # 1) Unitree L2 -> /points + /imu/data
@@ -185,22 +148,4 @@ def generate_launch_description():
         GroupAction([
             _include('dec_launch', 'realsense_bottom.launch.py'),
         ], condition=IfCondition(LaunchConfiguration('enable_camera'))),
-
-        # ------------------------------------------------------------
-        # 3) The robot. publish_wheel_odom_tf is NOT passed anywhere in this
-        #    chain: it is defined once, in naoqi_driver.launch.py, and must
-        #    stay false while FAST-LIO owns odom -> base_footprint.
-        # ------------------------------------------------------------
-        GroupAction([
-            _include('dec_launch', 'naoqi_driver.launch.py',
-                     launch_arguments={
-                         'nao_ip': LaunchConfiguration('nao_ip'),
-                         'nao_port': LaunchConfiguration('nao_port'),
-                         'user': LaunchConfiguration('user'),
-                         'password': LaunchConfiguration('password'),
-                         'network_interface': LaunchConfiguration('network_interface'),
-                         'qi_listen_url': LaunchConfiguration('qi_listen_url'),
-                         'use_camera': LaunchConfiguration('use_camera'),
-                     }.items()),
-        ], condition=IfCondition(LaunchConfiguration('enable_robot'))),
     ])

@@ -141,8 +141,9 @@ order:
 ```bash
 source ~/ros2_ws/install/setup.bash
 
-# All three drivers at once (each has an enable_* argument). It publishes no
-# TF of its own -- the stacks below nest the sensor-rig static TF:
+# Both sensors at once (each has an enable_* argument). It publishes no
+# TF of its own -- the stacks below nest the sensor-rig static TF. It does
+# NOT start naoqi_driver; launch that separately (step 3 below):
 ros2 launch dec_launch dec_robot.launch.py
 ```
 
