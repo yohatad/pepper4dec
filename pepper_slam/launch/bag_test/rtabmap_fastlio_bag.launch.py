@@ -155,5 +155,5 @@ def generate_launch_description():
                     "internal chain, needed when the bag's /tf_static is not "
                     "replayed. Use 'mount' on the live robot.")
 
-    return LaunchDescription([declare_publisher_cmd,
-        declare_scope_cmd, fast_lio, rtabmap])
+    return LaunchDescription([
+        declare_publisher_cmd, declare_scope_cmd, fast_lio, rtabmap])
