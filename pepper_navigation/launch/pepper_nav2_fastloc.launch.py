@@ -56,10 +56,6 @@ Launch arguments:
         or l2.yaml (the L2's own).
     lidar_imu_frame (default: "camera_imu_optical_frame")
         Body frame matching config_file; l2lidar_frame_imu for l2.yaml.
-    init_require_motion (default: "false")
-        Require ~0.5 m of motion between the agreeing initial estimates
-        before accepting a pose lock. Off by default: a lock is available
-        standing still.
     rviz_config (default: <share>/rviz/nav2_fastloc.rviz)
         Pass nav2_fastloc_voxel.rviz for the 3D voxel-map view (needs the
         voxel marker converters this file launches, and z_voxels <= 16 in the
@@ -89,7 +85,11 @@ Usage (real robot):
     No initial pose needed: ScanContext finds it. Call /relocalize if lost.
 
 Usage (bag replay):
-    ros2 launch pepper_navigation pepper_nav2_fastloc.launch.py use_sim_time:=true
+    sensor_tf_scope now defaults to 'mount' (live is the zero-argument case
+    this file optimizes for) -- a bag without the RealSense's own internal
+    /tf_static (no live camera driver to publish it) needs 'all' explicitly:
+    ros2 launch pepper_navigation pepper_nav2_fastloc.launch.py \
+        use_sim_time:=true sensor_tf_scope:=all
     ros2 bag play <bag> --clock \
         --qos-profile-overrides-path config/play_qos.yaml \
         --read-ahead-queue-size 2000
@@ -138,10 +138,12 @@ def generate_launch_description():
         description="Publish the sensor rig. 'urdf' also gives RViz a "
                     "RobotModel; 'none' if the bag already provides /tf_static.")
     declare_sensor_tf_scope_cmd = DeclareLaunchArgument(
-        'sensor_tf_scope', default_value='all', choices=['mount', 'all'],
-        description="'all' publishes the RealSense internal extrinsics too, "
-                    "needed when the bag's /tf_static is unavailable. Use "
-                    "'mount' live, where the RealSense driver publishes its own.")
+        'sensor_tf_scope', default_value='mount', choices=['mount', 'all'],
+        description="'mount' (default) is correct live: the RealSense driver "
+                    "publishes its own internal extrinsics, and a second copy "
+                    "here would give those edges two publishers with whichever "
+                    "lands last silently in force. Pass 'all' only for a bag "
+                    "recorded without /tf_static.")
 
     declare_map_dir_cmd = DeclareLaunchArgument(
         'map_dir', default_value=os.path.join(pkg_share, 'pcd'),
@@ -179,26 +181,6 @@ def generate_launch_description():
         'lidar_imu_frame', default_value='camera_imu_optical_frame',
         description='Body frame matching config_file. camera_imu_optical_frame '
                     'for l2_rsimu.yaml, l2lidar_frame_imu for l2.yaml.')
-    # Declared here even though it matches localization_l2.launch.py's own
-    # default, so the knob is visible in --show-args at the nav level: it was
-    # previously set only inside the include, where this file's header promised
-    # motion was required and nothing was enforcing it.
-    #
-    # Left OFF deliberately. Turning it on trades one failure for another rather
-    # than removing one. Off, agreement between the two ScanContext estimates can
-    # be vacuous -- two matches can agree on the SAME wrong place without ever
-    # being forced apart in space (MEASURED: 41 m off in a corridor). On, there is
-    # no pose at all until the robot drives ~0.5 m, which stalls bringup entirely
-    # (wait_for_map_then_start never fires) on a stationary start or a bag that
-    # begins parked. The post-lock health check and localization_watchdog already
-    # cover the wrong-lock case downstream; nothing covers never starting.
-    declare_init_require_motion_cmd = DeclareLaunchArgument(
-        'init_require_motion', default_value='false',
-        description='Require init_motion_min (0.5 m) of motion between the '
-                    'agreeing initial estimates before accepting a pose lock. '
-                    'Off by default: a lock is available standing still. Set '
-                    'true to harden startup against a wrong lock, at the cost '
-                    'of no pose at all until the robot has driven ~0.5 m.')
     declare_rviz_config_cmd = DeclareLaunchArgument(
         'rviz_config',
         default_value=os.path.join(pkg_share, 'rviz', 'nav2_fastloc.rviz'),
@@ -254,7 +236,6 @@ def generate_launch_description():
                 'map_dir': LaunchConfiguration('map_dir'),
                 'map_pose_file': LaunchConfiguration('map_pose_file'),
                 'map_scan_dir': LaunchConfiguration('map_scan_dir'),
-                'init_require_motion': LaunchConfiguration('init_require_motion'),
                 'rviz': 'false',
             }.items(),
         ),
@@ -396,9 +377,26 @@ def generate_launch_description():
     # while it says it is lost. Only wired into this profile: amcl and rtabmap
     # publish no comparable signal, so there is nothing for it to watch there.
     #
-    # call_recovery stays FALSE: fastlio_localization already re-arms its own
-    # search (auto_relocalize), so calling /localization_recover on top would
-    # restart a search that is already running.
+    # call_recovery TRUE: on LOST, stop the robot and then ask for a re-search.
+    #
+    # This replaces fastlio_localization's own auto_relocalize, which was
+    # REMOVED -- it re-armed while the robot kept driving, and the next
+    # handover carried the velocity from that unconstrained window in at full
+    # confidence, so attempts compounded instead of converging. Recovering
+    # from HERE is not the same thing: cancel_goals fires first, so the robot
+    # is stopped before the search restarts, and it fires once per LOST
+    # episode rather than every few seconds.
+    #
+    # treat_warn_as_lost stays at its default FALSE, and that is load-bearing.
+    # The localizer reports WARN while it has never yet localized and ERROR
+    # once it has lost a lock it previously held. Only ERROR counting as lost
+    # gives both halves: navigation is held for the whole re-arm (the node
+    # keeps reporting ERROR until the new lock lands), while startup does NOT
+    # fire a recovery call into the initial search that is already running.
+    #
+    # Recovery is still "stop and try once", not a guarantee: /relocalize
+    # re-runs the same ScanContext search, and in self-similar geometry it can
+    # re-acquire the same wrong place.
     localization_watchdog = Node(
         package='pepper_navigation',
         executable='localization_watchdog.py',
@@ -410,7 +408,7 @@ def generate_launch_description():
             'status_name': 'fastlio_localization: pose lock',
             'lost_duration': 5.0,
             'cancel_goals': True,
-            'call_recovery': False,
+            'call_recovery': True,
         }],
     )
 
@@ -426,9 +424,8 @@ def generate_launch_description():
             # localizer that frame appears only after ScanContext locks. That
             # lock waits on the world, not the clock -- enough scan overlap
             # with the prior map, and init_agree_count estimates agreeing on
-            # where it is -- so the wait is unbounded (longer still with
-            # init_require_motion:=true, which also needs ~0.5 m of driving)
-            # and autostart stalls the whole bringup. wait_for_map_then_start
+            # where it is -- so the wait is unbounded and autostart would
+            # stall the whole bringup. wait_for_map_then_start
             # calls STARTUP the moment the frame is up.
             'autostart': False,
             'bond_timeout': 4.0,
@@ -454,7 +451,6 @@ def generate_launch_description():
         declare_map_cmd,
         declare_config_file_cmd,
         declare_lidar_imu_frame_cmd,
-        declare_init_require_motion_cmd,
         declare_rviz_cmd,
         declare_rviz_config_cmd,
         declare_watchdog_cmd,

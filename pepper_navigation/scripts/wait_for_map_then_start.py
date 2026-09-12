@@ -6,12 +6,16 @@ for a transform to its global_frame. With fastlio_localization that frame does
 not exist yet: the node publishes map -> base_footprint only after ScanContext
 locks, and that lock waits on the world rather than on the clock -- enough scan
 overlap with the prior map, and init_agree_count estimates agreeing on where it
-is. So the wait is unbounded even standing still, and longer still if the stack
-is run with init_require_motion:=true, which additionally requires ~0.5 m of
-driving. Left to autostart, the bringup stalls with
+is, then the candidate must hold up over lock_verify_scans live scans before
+it is applied. So the wait is unbounded even standing still. Left to autostart,
+the bringup stalls waiting for that transform.
 
-    Timed out waiting for transform from base_footprint to map to become
-    available, tf error: Invalid frame ID "map" ... frame does not exist
+NOTE the node now publishes a STATIC map -> lio_init anchor at startup, so the
+map frame itself exists immediately (RViz needs a Fixed Frame to draw the prior
+map while searching). That anchor deliberately stops there -- nothing publishes
+lio_init -> base_footprint -- so the lookup_transform below still blocks until
+a real lock, which is the whole point of this node. Do not "simplify" it to a
+frame-exists check.
 
 and planner/controller/bt_navigator sit inactive forever.
 

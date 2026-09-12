@@ -34,10 +34,6 @@ Launch arguments:
         Prior map location. Defaults match fast_lio's own (pepper_navigation's
         shipped map). See localization_l2.launch.py for the full set of
         ScanContext/init_* tuning arguments this file does not forward.
-    init_require_motion (default: "false")
-        Require ~0.5 m of travel before accepting a lock (see
-        localization_l2.launch.py). Off by default: with an operator present,
-        the overlap check needs no forced motion.
 
 Usage:
     ros2 launch pepper_slam fastlio_localization.launch.py
@@ -115,11 +111,6 @@ def generate_launch_description():
             get_package_share_directory('pepper_navigation'),
             'pcd', 'sc_pcd_20260823'),
         description='Directory holding the per-keyframe <N>.pcd clouds.')
-    declare_init_require_motion_cmd = DeclareLaunchArgument(
-        'init_require_motion', default_value='false',
-        description='Require ~0.5 m of travel before accepting a ScanContext '
-                    'lock. Off by default: with an operator present, the '
-                    'overlap check needs no forced motion.')
 
     sensor_tf_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -140,7 +131,6 @@ def generate_launch_description():
             'map_dir': LaunchConfiguration('map_dir'),
             'map_pose_file': LaunchConfiguration('map_pose_file'),
             'map_scan_dir': LaunchConfiguration('map_scan_dir'),
-            'init_require_motion': LaunchConfiguration('init_require_motion'),
         }.items())
 
     ld = LaunchDescription()
@@ -152,7 +142,6 @@ def generate_launch_description():
     ld.add_action(declare_map_dir_cmd)
     ld.add_action(declare_map_pose_file_cmd)
     ld.add_action(declare_map_scan_dir_cmd)
-    ld.add_action(declare_init_require_motion_cmd)
     # AFTER every DeclareLaunchArgument: the echo reads use_sim_time/publisher/
     # scope, which do not exist in the context until their declares have run.
     ld.add_action(OpaqueFunction(function=_echo_resolved))
