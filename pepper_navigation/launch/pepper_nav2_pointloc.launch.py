@@ -49,8 +49,6 @@ Launch arguments:
         Point-LIO config.
     body_frame (default: "camera_imu_optical_frame")
         Body frame matching config_file.
-    init_require_motion (default: "false")
-        Require ~0.5 m of motion before accepting a pose lock.
     rviz_config (default: <share>/rviz/nav2_fastloc.rviz)
     rviz (default: "true")
         Open RViz2 pre-configured for this nav stack.
@@ -164,13 +162,6 @@ def generate_launch_description():
         description='Frame the filter estimates, matching config_file. '
                     'camera_imu_optical_frame for l2lidar_rsimu.yaml, '
                     'l2lidar_frame_imu for l2lidar_node.yaml.')
-    declare_init_require_motion_cmd = DeclareLaunchArgument(
-        'init_require_motion', default_value='false',
-        description='Require init_motion_min (0.5 m) of motion between the '
-                    'agreeing initial estimates before accepting a pose lock. '
-                    'Off by default: a lock is available standing still. Set '
-                    'true to harden startup against a wrong lock, at the cost '
-                    'of no pose at all until the robot has driven ~0.5 m.')
     declare_rviz_config_cmd = DeclareLaunchArgument(
         'rviz_config',
         default_value=os.path.join(pkg_share, 'rviz', 'nav2_fastloc.rviz'),
@@ -222,7 +213,6 @@ def generate_launch_description():
                 'map_dir': LaunchConfiguration('map_dir'),
                 'map_pose_file': LaunchConfiguration('map_pose_file'),
                 'map_scan_dir': LaunchConfiguration('map_scan_dir'),
-                'init_require_motion': LaunchConfiguration('init_require_motion'),
                 'rviz': 'false',
             }.items(),
         ),
@@ -363,9 +353,14 @@ def generate_launch_description():
     # while it says it is lost. status_name must match what the node publishes
     # -- Point-LIO reports under its own name, not fastlio's.
     #
-    # call_recovery stays FALSE: the node already re-arms its own search
-    # (auto_relocalize), so calling /localization_recover on top would restart
-    # a search that is already running.
+    # call_recovery TRUE, replacing the node's own auto_relocalize, which was
+    # removed for the same reason as fastlio's: it re-armed while the robot
+    # kept driving and the next handover inherited that velocity at full
+    # confidence, so attempts compounded. The watchdog stops the robot first
+    # (cancel_goals) and fires once per LOST episode. treat_warn_as_lost
+    # stays FALSE: the node reports WARN while never yet localized and ERROR
+    # once a lock is lost, so only ERROR counting holds navigation through a
+    # re-arm without firing recovery into the initial search at startup.
     localization_watchdog = Node(
         package='pepper_navigation',
         executable='localization_watchdog.py',
@@ -377,7 +372,7 @@ def generate_launch_description():
             'status_name': 'point_lio_localization: pose lock',
             'lost_duration': 5.0,
             'cancel_goals': True,
-            'call_recovery': False,
+            'call_recovery': True,
         }],
     )
 
@@ -417,7 +412,6 @@ def generate_launch_description():
         declare_map_cmd,
         declare_config_file_cmd,
         declare_body_frame_cmd,
-        declare_init_require_motion_cmd,
         declare_rviz_cmd,
         declare_rviz_config_cmd,
         declare_watchdog_cmd,
