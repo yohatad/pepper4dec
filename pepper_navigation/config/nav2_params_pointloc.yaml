@@ -202,7 +202,14 @@ local_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 4.0
-        inflation_radius: 0.20
+        # 0.35, not 0.20. robot_radius 0.20 plus Nav2's default 0.01 m
+        # footprint_padding gives a 16-gon whose inscribed radius is 0.206 m,
+        # so at 0.20 the inflation sat INSIDE the robot's own body and both
+        # costmaps logged "inflation radius (0.200) is smaller than the
+        # computed inscribed radius (0.206)": the planner could path the robot
+        # closer to an obstacle than its own radius. 0.35 keeps ~14 cm of real
+        # clearance without making doorways impassable.
+        inflation_radius: 0.35
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -305,7 +312,14 @@ global_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 4.0
-        inflation_radius: 0.20
+        # 0.35, not 0.20. robot_radius 0.20 plus Nav2's default 0.01 m
+        # footprint_padding gives a 16-gon whose inscribed radius is 0.206 m,
+        # so at 0.20 the inflation sat INSIDE the robot's own body and both
+        # costmaps logged "inflation radius (0.200) is smaller than the
+        # computed inscribed radius (0.206)": the planner could path the robot
+        # closer to an obstacle than its own radius. 0.35 keeps ~14 cm of real
+        # clearance without making doorways impassable.
+        inflation_radius: 0.35
       always_send_full_costmap: True
 
 planner_server:
