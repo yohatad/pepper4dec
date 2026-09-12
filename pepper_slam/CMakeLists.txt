@@ -36,6 +36,11 @@ install(PROGRAMS
   # pepper_navigation all ran them out of fast_lio without declaring a
   # dependency on it.
   scripts/lio_odom_bridge.py
+  # Imported by lio_odom_bridge.py rather than run directly. It must install
+  # alongside it: Python puts the running script's own directory on sys.path,
+  # and under --symlink-install that resolves to a directory holding both,
+  # whether it lands on install/lib/pepper_slam or back on scripts/.
+  scripts/lio_odom_guard.py
   scripts/pgo_map_odom_bridge.py
   scripts/cloud_range_filter.py
   scripts/cloud_to_odom_frame.py
@@ -88,6 +93,11 @@ if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_leveling_frame_contract
     "${CMAKE_CURRENT_SOURCE_DIR}/test/test_leveling_frame_contract.py")
+
+  # The divergence guard is plain numpy with no ROS imports, so it tests
+  # without a spin, a bag or a running estimator.
+  ament_add_pytest_test(test_lio_odom_guard
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/test_lio_odom_guard.py")
 endif()
 
 ament_package()

@@ -58,8 +58,11 @@ import time
 import numpy as np
 import rclpy
 from rclpy.node import Node
+from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 from nav_msgs.msg import Odometry
+from std_msgs.msg import Float64
 from geometry_msgs.msg import TransformStamped
+from lio_odom_guard import ACCEPT, FAULT, HOLD, OdomGuard
 from tf2_ros import (
     Buffer,
     StaticTransformBroadcaster,
@@ -204,6 +207,45 @@ class LioMapOdomBridge(Node):
         # know which direction is actually "up" in the raw (tilted) odom frame.
         self.declare_parameter('flatten_base_frame', False)
 
+        # --- Divergence guard (see lio_odom_guard.py) -------------------------
+        # OFF by default: enabling it changes what lands on odom ->
+        # base_footprint, so every existing launch keeps its exact behaviour
+        # until it asks for the guard.
+        self.declare_parameter('guard_enable', False)
+        # Physical bounds, not tuning knobs. Nav2 commands at most 0.5 m/s and
+        # 0.5 rad/s (pepper_navigation/config/nav2_params.yaml:133-137), so
+        # these sit above what the base can be told to do, with margin. Anything
+        # faster is a broken estimate, not a fast robot.
+        self.declare_parameter('max_linear_speed', 0.7)
+        self.declare_parameter('max_angular_speed', 1.0)
+        # Wheel odometry, used to dead reckon through a rejected window and as
+        # the zero-velocity reference. naoqi_driver2 publishes this.
+        self.declare_parameter('wheel_odom_topic', '/pepper_odom')
+        # Seconds the pose may coast on wheels before the guard escalates to
+        # FAULT. Bounded on purpose: a persistent fault must become visible, not
+        # decay into unbounded silent dead reckoning.
+        self.declare_parameter('max_hold_duration', 3.0)
+        self.declare_parameter('zero_velocity_eps', 0.02)
+        self.declare_parameter('zero_velocity_lio_eps', 0.10)
+        # pepper_odom_covariance subscribes to this; its README defines <1 as
+        # "trust wheel odometry MORE", which is what a degenerate LIO warrants.
+        self.declare_parameter('trust_scale_topic',
+                               '/localization/wheel_trust_scale')
+        # Scale at the INSTANT a hold starts: wheels are clearly better than a
+        # diverged LIO, so trust them more. It then RAMPS with the distance
+        # dead reckoned, because a held pose that has covered ground on wheels
+        # alone is progressively less certain:
+        #     scale(d) = degraded_trust_scale + (hold_drift_k * d)^2
+        # Same quadratic form pepper_odom_covariance grows its own variance by,
+        # so the two models agree in shape. They compose rather than duplicate:
+        # that node models drift since its last reset, this models having no
+        # exteroceptive correction AT ALL right now.
+        self.declare_parameter('degraded_trust_scale', 0.5)
+        # 1.0 /m puts the scale near 3 after ~1.5 m, which is as far as the base
+        # can travel inside the default max_hold_duration at Nav2's 0.5 m/s cap.
+        self.declare_parameter('hold_drift_k', 1.0)
+        self.declare_parameter('max_trust_scale', 10.0)
+
         self.odom_frame = self.get_parameter('odom_frame').value
         self.base_frame = self.get_parameter('base_frame').value
         self.lidar_imu_frame = self.get_parameter('lidar_imu_frame').value
@@ -219,6 +261,10 @@ class LioMapOdomBridge(Node):
                 f"'odometry'; falling back to 'calibration'.")
             self.level_source = 'calibration'
         self.flatten_base_frame = self.get_parameter('flatten_base_frame').value
+        self.guard_enable = self.get_parameter('guard_enable').value
+        self.degraded_trust_scale = self.get_parameter('degraded_trust_scale').value
+        self.hold_drift_k = self.get_parameter('hold_drift_k').value
+        self.max_trust_scale = self.get_parameter('max_trust_scale').value
 
         if self.flatten_base_frame and not self.publish_level:
             self.get_logger().error(
@@ -247,6 +293,36 @@ class LioMapOdomBridge(Node):
 
         self.sub = self.create_subscription(
             Odometry, self.odom_topic, self.on_odom, 10)
+
+        # Divergence guard. Everything below stays None while disabled, so the
+        # publish path is byte-for-byte what it was before.
+        self.guard = None
+        self.wheel_sub = None
+        self.trust_pub = None
+        self.diag_pub = None
+        self._wheel_pose = None
+        self._wheel_speed = None
+        self._last_verdict = ACCEPT
+        if self.guard_enable:
+            self.guard = OdomGuard(
+                max_linear_speed=self.get_parameter('max_linear_speed').value,
+                max_angular_speed=self.get_parameter('max_angular_speed').value,
+                max_hold_duration=self.get_parameter('max_hold_duration').value,
+                zero_velocity_eps=self.get_parameter('zero_velocity_eps').value,
+                zero_velocity_lio_eps=self.get_parameter(
+                    'zero_velocity_lio_eps').value,
+            )
+            wheel_topic = self.get_parameter('wheel_odom_topic').value
+            self.wheel_sub = self.create_subscription(
+                Odometry, wheel_topic, self.on_wheel_odom, 50)
+            self.trust_pub = self.create_publisher(
+                Float64, self.get_parameter('trust_scale_topic').value, 10)
+            self.diag_pub = self.create_publisher(DiagnosticArray, '/diagnostics', 10)
+            self.get_logger().info(
+                f"guard ENABLED: rejecting poses above "
+                f"{self.guard.max_linear_speed:.2f} m/s / "
+                f"{self.guard.max_angular_speed:.2f} rad/s, dead reckoning on "
+                f"{wheel_topic} for up to {self.guard.max_hold_duration:.1f} s.")
 
         # With level_source='calibration' the leveling depends only on the
         # static TF, so publish it as soon as that resolves rather than waiting
@@ -440,6 +516,11 @@ class LioMapOdomBridge(Node):
         if self.flatten_base_frame and self._level_rotation is not None:
             m_odom_base = self._flatten_to_level(m_odom_base)
 
+        # Gate last, on the pose that will actually be broadcast: this is the
+        # one chokepoint every downstream consumer passes through.
+        if self.guard is not None:
+            m_odom_base = self._apply_guard(m_odom_base, stamp)
+
         translation, quaternion = matrix_to_translation_quaternion(m_odom_base)
 
         out = TransformStamped()
@@ -455,6 +536,92 @@ class LioMapOdomBridge(Node):
         out.transform.rotation.w = float(quaternion[3])
 
         self.tf_broadcaster.sendTransform(out)
+
+    def on_wheel_odom(self, msg):
+        """Cache wheel odometry as the dead-reckoning and zero-velocity source."""
+        self._wheel_pose = pose_to_matrix(msg.pose.pose.position,
+                                          msg.pose.pose.orientation)
+        v = msg.twist.twist.linear
+        self._wheel_speed = float(np.hypot(v.x, v.y))
+
+    def _apply_guard(self, m_odom_base, stamp):
+        """Validate the pose, substituting a dead-reckoned one when it fails."""
+        t = stamp.sec + stamp.nanosec * 1e-9
+        verdict, pose = self.guard.check(
+            m_odom_base, t, wheel_pose=self._wheel_pose,
+            wheel_speed=self._wheel_speed)
+
+        if verdict != ACCEPT:
+            level = (self.get_logger().error if verdict == FAULT
+                     else self.get_logger().warn)
+            level(f"LIO pose rejected ({self.guard.last_reason}); "
+                  f"dead reckoning on wheel odometry.",
+                  throttle_duration_sec=1.0)
+        elif self._last_verdict != ACCEPT:
+            self.get_logger().info("LIO pose accepted again; guard released.")
+
+        if self._wheel_pose is None and verdict != ACCEPT:
+            self.get_logger().error(
+                "No wheel odometry: the held pose is FROZEN, not dead reckoned.",
+                throttle_duration_sec=5.0)
+
+        # An over-tight gate rejects exactly the measurements that would correct
+        # it, so a high rate convicts the guard rather than the estimator.
+        if self.guard.rejection_rate > 0.5:
+            self.get_logger().error(
+                f"Guard rejecting {self.guard.rejection_rate:.0%} of poses -- "
+                f"suspect the thresholds, not the estimator (gate lockout).",
+                throttle_duration_sec=10.0)
+
+        self._last_verdict = verdict
+        self._publish_health(verdict, stamp)
+        return pose
+
+    def _trust_scale(self, verdict):
+        """Wheel covariance multiplier: ramps with the distance held on wheels.
+
+        Not a function of the verdict alone. FAULT is deliberately NOT pinned to
+        the maximum: it means "held longer than max_hold_duration", and a long
+        hold that covered no ground has added no error, so the scale would be
+        lying. Elapsed time is already carried by the verdict and the diagnostic
+        level; this reports pose uncertainty, which is distance driven.
+        """
+        if verdict == ACCEPT:
+            return 1.0
+        drift = self.hold_drift_k * self.guard.held_distance
+        return min(self.degraded_trust_scale + drift * drift, self.max_trust_scale)
+
+    def _publish_health(self, verdict, stamp):
+        """Report the verdict as a trust scale and a diagnostic status."""
+        scale = Float64()
+        scale.data = self._trust_scale(verdict)
+        self.trust_pub.publish(scale)
+
+        status = DiagnosticStatus()
+        status.name = 'lio_odom_bridge: LIO pose validation'
+        status.hardware_id = self.odom_topic
+        if verdict == ACCEPT:
+            status.level = DiagnosticStatus.OK
+            status.message = 'LIO pose accepted'
+        elif verdict == HOLD:
+            status.level = DiagnosticStatus.WARN
+            status.message = f'holding on wheel odometry: {self.guard.last_reason}'
+        else:
+            status.level = DiagnosticStatus.ERROR
+            status.message = (f'held longer than max_hold_duration; pose is NOT '
+                              f'trustworthy: {self.guard.last_reason}')
+        status.values = [
+            KeyValue(key='verdict', value=verdict),
+            KeyValue(key='held_distance_m', value=f'{self.guard.held_distance:.3f}'),
+            KeyValue(key='trust_scale', value=f'{scale.data:.3f}'),
+            KeyValue(key='rejection_rate', value=f'{self.guard.rejection_rate:.3f}'),
+            KeyValue(key='wheel_odom',
+                     value='yes' if self._wheel_pose is not None else 'MISSING'),
+        ]
+        diag = DiagnosticArray()
+        diag.header.stamp = stamp
+        diag.status = [status]
+        self.diag_pub.publish(diag)
 
 
 def main(args=None):

@@ -64,6 +64,76 @@ initial-IMU frame — the L2 IMU reads gravity along +X, so `odom` looks tilted
 higher layer owns `odom`'s parent, or `odom` gets two parents and the TF tree
 breaks.
 
+## Divergence guard (`guard_enable`)
+
+When FAST-LIO's plane correspondences collapse — feature-poor corridor, blank
+wall, body-occluded lidar — the iEKF stops correcting but keeps propagating on
+IMU. Accel bias and gravity misalignment get *double* integrated, so the pose
+does not drift, it accelerates: the estimate sprints out of the map. Unguarded,
+`lio_odom_bridge` republishes that straight onto `odom -> base_footprint`, i.e.
+inside Nav2's control loop. Nav2's `max_vel_x` does not help — it clamps
+*commanded* velocity and never inspects the pose.
+
+```bash
+ros2 launch pepper_slam fastlio_odometry.launch.py guard_enable:=true
+```
+
+The guard rejects any pose implying motion the base physically cannot perform
+(`max_linear_speed` 0.7 m/s, `max_angular_speed` 1.0 rad/s — above Nav2's own
+0.5 command caps, with margin), plus a zero-velocity cross-check: if the wheels
+report stationary and LIO reports motion, LIO is wrong unconditionally.
+
+**Rejected, never clipped.** Saturating a bad pose to the limit would
+manufacture a plausible-looking but wrong estimate, which is strictly harder to
+detect downstream than an obviously broken one. Clamping is right for an
+actuator command, which must be feasible; wrong for a measurement, which must be
+honest or absent.
+
+While rejecting, the pose is carried forward on `wheel_odom_topic`
+(`/pepper_odom`) rather than frozen — a frozen `odom` makes obstacles stream
+past a robot that reports standing still. Only the wheel *delta* is borrowed, so
+`pepper_odom` and `odom` staying disconnected trees is fine. Coasting is bounded
+by `max_hold_duration` (3 s), after which the guard escalates to FAULT rather
+than dead reckoning silently forever.
+
+Two signals come out. `/localization/wheel_trust_scale` (`std_msgs/Float64`) is
+the multiplier `pepper_odom_covariance` already subscribes to, where `<1` means
+"trust wheels more". It is not a step: it starts at `degraded_trust_scale` (0.5
+— wheels beat a diverged LIO) and **ramps with the distance dead reckoned**,
+
+```
+scale(d) = degraded_trust_scale + (hold_drift_k · d)²
+```
+
+the same quadratic form `pepper_odom_covariance` grows its own variance by, so
+the two compose rather than duplicate: that node models drift since its last
+reset, this one models having no exteroceptive correction at all right now. At
+the defaults the scale crosses 1.0 at ~0.7 m — up to there the wheels are still
+net *more* trustworthy than the rejected estimate; past it accumulated drift
+dominates and the reported uncertainty inflates.
+
+`d` is **path length, not displacement**: drift accrues with ground covered, so
+a there-and-back excursion still counts. And the ramp is distance-driven, not
+time-driven, because dead reckoning a stationary robot is exact — a long hold
+that covered no ground has added no error. That is also why FAULT is not pinned
+to the maximum; elapsed time is carried by the verdict and the diagnostic level
+instead.
+
+The second signal is a `/diagnostics` status carrying the verdict, held
+distance, current scale, and the rolling rejection rate. A high rejection rate
+convicts the guard's thresholds, not the estimator — an over-tight gate rejects
+exactly the measurements that would correct it.
+
+This is Tier 1 only: a hard physical bound, so no baseline, warm-up or tuning.
+Statistical degeneracy detection (covariance spike, `effct_feat_num` collapse —
+see `utils/lio_health.py`) is a separate tier, and must inform rather than reject
+on its own, because those signals look healthy after a confidently-wrong relock.
+
+**Known gap:** `pointlio_odometry.launch.py` reaches the bridge through
+`point_lio`'s own launch file, which declares the `lio_odom_bridge` node itself
+and does not forward these arguments. The guard defaults off there. Set the
+parameters on that node directly, or add the passthrough in `point_lio`.
+
 ## 🚀 Running
 
 ```bash
@@ -185,6 +255,7 @@ pepper_slam/
 │   (compute_lidar_camera_bridge.py moved to ros2_ws/utils/)
 ├── scripts/
 │   ├── check_frame_contract.py                # asserts the LIO frame contract holds, whichever backend runs
+│   ├── lio_odom_guard.py                      # divergence gate: reject implausible LIO poses, dead reckon on wheels
 │   ├── leveled_odometry_publisher.py          # republishes LIO odometry rotated into the gravity-level odom frame
 │   ├── pepper_odom_relabel.py                 # republishes /pepper_odom with frame_id overridden to odom
 │   └── static_tf_publisher.py                 # publishes a whole static TF chain from one node

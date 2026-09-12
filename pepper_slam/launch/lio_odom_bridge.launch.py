@@ -131,6 +131,24 @@ def generate_launch_description():
             description='Zero the leveled z/roll/pitch every cycle (keep x, y, '
                         'yaw). Safe here: Pepper is flat-floor only.'),
         DeclareLaunchArgument('odom_topic', default_value='/odom_lio'),
+        DeclareLaunchArgument(
+            'guard_enable', default_value='false',
+            description='Reject LIO poses that break a physical speed bound and '
+                        'dead reckon on wheel odometry instead. Off by default: '
+                        'it changes what lands on odom -> base_footprint.'),
+        DeclareLaunchArgument(
+            'wheel_odom_topic', default_value='/pepper_odom',
+            description='Wheel odometry the guard dead reckons on and uses as '
+                        'its zero-velocity reference.'),
+        DeclareLaunchArgument(
+            'max_linear_speed', default_value='0.7',
+            description='m/s the base cannot exceed; above this the estimate is '
+                        'broken, not fast. Nav2 commands at most 0.5.'),
+        DeclareLaunchArgument('max_angular_speed', default_value='1.0'),
+        DeclareLaunchArgument(
+            'max_hold_duration', default_value='3.0',
+            description='Seconds the pose may coast on wheels before the guard '
+                        'escalates to FAULT.'),
 
         # AFTER the declares: the resolver reads config_path/config_file.
         OpaqueFunction(function=_resolve_body_frame),
@@ -147,6 +165,11 @@ def generate_launch_description():
                 'flatten_base_frame': LaunchConfiguration('flatten_base_frame'),
                 'publish_level_frame': LaunchConfiguration('bridge_level_frame'),
                 'level_frame_as_child': LaunchConfiguration('level_frame_as_child'),
+                'guard_enable': LaunchConfiguration('guard_enable'),
+                'wheel_odom_topic': LaunchConfiguration('wheel_odom_topic'),
+                'max_linear_speed': LaunchConfiguration('max_linear_speed'),
+                'max_angular_speed': LaunchConfiguration('max_angular_speed'),
+                'max_hold_duration': LaunchConfiguration('max_hold_duration'),
             }],
         ),
     ])

@@ -40,6 +40,12 @@ Launch arguments:
     flatten_base_frame (default: "true")
         Clamp z, roll, and pitch to zero. Pass false to see FAST-LIO's own
         drifting estimate, e.g. when feeding ekf_fusion.launch.py.
+    guard_enable (default: "false")
+        Reject LIO poses above a physical speed bound and dead reckon on wheel
+        odometry through the gap, rather than republishing a diverged estimate
+        onto odom -> base_footprint. Needs wheel_odom_topic flowing.
+    wheel_odom_topic (default: "/pepper_odom")
+        Wheel odometry the guard dead reckons on. Unused unless guard_enable.
 
 Configuration:
     FAST-LIO's config directory, selected by config_file.
@@ -93,6 +99,7 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
     bridge_level_frame = LaunchConfiguration('bridge_level_frame')
     flatten_base_frame = LaunchConfiguration('flatten_base_frame')
+    guard_enable = LaunchConfiguration('guard_enable')
 
     declare_rviz_cmd = DeclareLaunchArgument('rviz', default_value='true')
     declare_publish_map_identity_cmd = DeclareLaunchArgument(
@@ -144,6 +151,18 @@ def generate_launch_description():
                     'is confirmed flat-floor-only. Set false to see FAST-LIO\'s '
                     'own (drifting) z/roll/pitch instead.'
     )
+    declare_guard_enable_cmd = DeclareLaunchArgument(
+        'guard_enable', default_value='false',
+        description='Reject LIO poses that break a physical speed bound and '
+                    'dead reckon on wheel odometry through the gap, instead of '
+                    'republishing a diverged estimate onto odom -> '
+                    'base_footprint. Needs wheel_odom_topic flowing.'
+    )
+    declare_wheel_odom_topic_cmd = DeclareLaunchArgument(
+        'wheel_odom_topic', default_value='/pepper_odom',
+        description='Wheel odometry the guard dead reckons on. Unused unless '
+                    'guard_enable is true.'
+    )
 
     sensor_tf_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -191,6 +210,8 @@ def generate_launch_description():
             'lidar_imu_frame': LaunchConfiguration('lidar_imu_frame'),
             'bridge_level_frame': bridge_level_frame,
             'flatten_base_frame': flatten_base_frame,
+            'guard_enable': guard_enable,
+            'wheel_odom_topic': LaunchConfiguration('wheel_odom_topic'),
         }.items())
 
     ld = LaunchDescription()
@@ -201,6 +222,8 @@ def generate_launch_description():
     ld.add_action(declare_use_sim_time_cmd)
     ld.add_action(declare_bridge_level_frame_cmd)
     ld.add_action(declare_flatten_base_frame_cmd)
+    ld.add_action(declare_guard_enable_cmd)
+    ld.add_action(declare_wheel_odom_topic_cmd)
     # AFTER every DeclareLaunchArgument: the echo reads use_sim_time,
     # which does not exist in the context until its declare has run.
     ld.add_action(OpaqueFunction(function=_echo_resolved))
