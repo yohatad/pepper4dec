@@ -115,11 +115,20 @@ class CloudRangeFilter(Node):
             self.tf_buffer = Buffer()
             self.tf_listener = TransformListener(self.tf_buffer, self)
 
-        qos = QoSProfile(depth=5, history=HistoryPolicy.KEEP_LAST,
-                         reliability=ReliabilityPolicy.RELIABLE,
-                         durability=DurabilityPolicy.VOLATILE)
-        self.pub = self.create_publisher(PointCloud2, self.out_topic, qos)
-        self.sub = self.create_subscription(PointCloud2, in_topic, self.cb, qos)
+        pub_qos = QoSProfile(depth=5, history=HistoryPolicy.KEEP_LAST,
+                             reliability=ReliabilityPolicy.RELIABLE,
+                             durability=DurabilityPolicy.VOLATILE)
+        # BEST_EFFORT, not RELIABLE: the L2 driver publishes /points and
+        # /imu/data BEST_EFFORT (see dec_robot.launch.py's design notes). A
+        # RELIABLE subscriber here silently receives nothing -- MEASURED:
+        # /points_safety never published a single message with this on
+        # RELIABLE, which starves collision_monitor's entire safety-stop
+        # layer of input.
+        sub_qos = QoSProfile(depth=5, history=HistoryPolicy.KEEP_LAST,
+                              reliability=ReliabilityPolicy.BEST_EFFORT,
+                              durability=DurabilityPolicy.VOLATILE)
+        self.pub = self.create_publisher(PointCloud2, self.out_topic, pub_qos)
+        self.sub = self.create_subscription(PointCloud2, in_topic, self.cb, sub_qos)
         ror = (f", ROR >={self.ror_k} nbrs in {self.ror_r} m"
                if self.ror_k > 0 else ", ROR off")
         ground = (f", ground-plane removal vs {self.ground_frame}"
