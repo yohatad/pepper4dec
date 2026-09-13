@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 
-"""age_gender_detection.launch.py
-
-Launch the age_gender_detection node only.
+"""
+age_gender_detection.launch.py: launch the age_gender_detection node only.
 
 Nodes started:
     face_detection/age_gender_detection (node: age_gender_detection)

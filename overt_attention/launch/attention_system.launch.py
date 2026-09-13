@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""attention_system.launch.py
-
-Bring up the full overt attention stack: camera, perception, and control.
+"""
+attention_system.launch.py: bring up the overt attention stack (camera, perception, control).
 
 Nodes started:
     overt_attention/overt_attention_saliency (node: saliency_node)

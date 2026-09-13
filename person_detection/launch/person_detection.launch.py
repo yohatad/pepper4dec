@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 
-"""person_detection.launch.py
-
-Launch the person_detection node only.
+"""
+person_detection.launch.py: launch the person_detection node only.
 
 Nodes started:
     person_detection/person_detection (node: person_detection)

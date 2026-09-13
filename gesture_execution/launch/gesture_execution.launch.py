@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""gesture_execution.launch.py
-
-Launch the gesture_execution node with its package configuration.
+"""
+gesture_execution.launch.py: launch the gesture_execution node with its package configuration.
 
 Nodes started:
     gesture_execution/gesture_execution (node: gesture_action_server)

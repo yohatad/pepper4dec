@@ -125,8 +125,8 @@ class CloudRangeFilter(Node):
         # RELIABLE, which starves collision_monitor's entire safety-stop
         # layer of input.
         sub_qos = QoSProfile(depth=5, history=HistoryPolicy.KEEP_LAST,
-                              reliability=ReliabilityPolicy.BEST_EFFORT,
-                              durability=DurabilityPolicy.VOLATILE)
+                             reliability=ReliabilityPolicy.BEST_EFFORT,
+                             durability=DurabilityPolicy.VOLATILE)
         self.pub = self.create_publisher(PointCloud2, self.out_topic, pub_qos)
         self.sub = self.create_subscription(PointCloud2, in_topic, self.cb, sub_qos)
         ror = (f", ROR >={self.ror_k} nbrs in {self.ror_r} m"

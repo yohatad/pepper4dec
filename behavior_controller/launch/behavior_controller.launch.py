@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""behavior_controller.launch.py
-
-Launch the behavior_controller node with its package configuration.
+"""
+behavior_controller.launch.py: launch the behavior_controller node with its package configuration.
 
 Nodes started:
     behavior_controller/behavior_controller (node: behavior_controller)
