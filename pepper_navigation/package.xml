@@ -41,6 +41,10 @@
   <!-- pepper_nav2_fastloc.launch.py includes fast_lio's
        localization_l2.launch.py, which runs fastlio_localization. -->
   <exec_depend>fast_lio</exec_depend>
+  <!-- pepper_nav2_pointloc.launch.py does the same with point_lio's. -->
+  <exec_depend>point_lio</exec_depend>
+  <!-- Every pepper_nav2_* bringup starts RViz. -->
+  <exec_depend>rviz2</exec_depend>
   <!-- pepper_nav2_amcl.launch.py only: flattens the L2's 360 deg /points into
        the LaserScan amcl requires. Not a Nav2 dependency, so it is NOT pulled
        in by nav2_bringup above; install it with
