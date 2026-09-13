@@ -1,6 +1,5 @@
-"""animate_behavior.launch.py
-
-Launch the animate_behavior node with its package configuration.
+"""
+animate_behavior.launch.py: launch the animate_behavior node with its package configuration.
 
 Nodes started:
     animate_behavior/animate_behavior (node: animate_behavior)
