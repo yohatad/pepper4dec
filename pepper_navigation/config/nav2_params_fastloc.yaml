@@ -1,54 +1,24 @@
-# Nav2 params for pepper_nav2_fastloc.launch.py -- FAST-LIO with the prior map
-# inside the filter (fast_lio's fastlio_localization).
+# Nav2 params for pepper_nav2_fastloc.launch.py. fastlio_localization keeps the
+# prior map inside the filter and publishes map -> base_footprint directly, so
+# there is no amcl and no map -> odom split; nav2_map_server serves the matching
+# 2D grid for the static layer. Obstacle sources are PointCloud2, not LaserScan.
 #
-# Localization publishes map -> base_footprint directly; nav2_map_server serves
-# the matching 2D grid as /map for the global costmap's static layer. No amcl:
-# the pose comes from the localizer, not from particle filtering the grid.
-#
-# Controller/planner/behavior tuning below is carried over from nav2_params.yaml
-# (tuned against the real robot). What differs is frames and the costmap
-# observation source: PointCloud2 on /points, not the LaserScan the AMCL-era
-# config expected, so no pointcloud_to_laserscan flattening step.
-#
-# NOT carried over: the keepout_filter zone. keepout_zone.yaml's mask was
-# authored against an older map's frame (rtabmap_march_28, since deleted), so it
-# does not line up with map/pepper_map_lc.yaml -- re-generate it with
-# utils/generate_keepout.py against the current map before re-enabling
-# that layer.
+# keepout_filter is NOT enabled: keepout_zone.yaml's mask targets a deleted map
+# (rtabmap_march_28). Regenerate with utils/generate_keepout.py first.
 
 bt_navigator:
   ros__parameters:
     use_sim_time: False
     global_frame: map
     robot_base_frame: base_footprint
-      # odom_topic is a bt_navigator parameter ONLY -- the controller does not
-      # read it. It feeds an OdomSmoother consumed by SpeedController /
-      # IsStuck / DistanceTraveled, and the active BT
-      # (navigate_to_pose_w_replanning_and_recovery.xml) uses NONE of those:
-      # it uses GoalUpdated, which reads the blackboard. So this is currently
-      # inert, and its value cannot affect navigation today.
-      #
-      # Pointed at /localization/pose regardless, because that is the correctly
-      # framed one if the BT ever changes. /Odometry and /odom_lio carry
-      # child_frame_id = camera_imu_optical_frame -- the IMU on the mast -- with
-      # the twist in those axes. Harmless for the velocity-MAGNITUDE checks
-      # above, since rotation preserves magnitude, but wrong for anything
-      # directional.
-    # /localization/pose, NOT /Odometry. Both carry the same pose, but
-    # /Odometry keeps stock FAST-LIO semantics: child_frame_id is the IMU on
-    # the mast and the twist is in those axes, so a consumer that assumes
-    # child_frame_id is robot_base_frame reads a velocity rotated by the mount
-    # (~64 deg of yaw on this rig). /localization/pose is composed into
-    # base_footprint, twist included, matching the TF edge and robot_base_frame.
+    # Inert today: odom_topic is bt_navigator-only and feeds an OdomSmoother the
+    # active BT never reads. Set to /localization/pose anyway -- it is framed in
+    # base_footprint, while /Odometry and /odom_lio use the mast IMU frame
+    # (~64 deg of yaw off), so their twist is wrong for anything directional.
     odom_topic: /localization/pose
-    # 50 ms = 20 Hz, matching controller_frequency. Was 2 (500 Hz), then 10
-    # (Nav2's default, 100 Hz) -- and BOTH were exceeded on this Jetson,
-    # MEASURED at load average ~5.8 on 6 cores with the full stack up
-    # (fastlio_localization, DWB at 20 Hz, two costmaps, the RealSense
-    # pipeline, RViz over NoMachine). The tree only sequences actions and
-    # waits on a 20 Hz controller, so ticking faster than that buys nothing;
-    # at 50 ms a "tick rate exceeded" warning means a genuine stall, not
-    # background noise.
+    # 20 Hz, matching controller_frequency. 500 Hz and Nav2's default 100 Hz
+    # were both exceeded on this Jetson under full load, and the tree only waits
+    # on a 20 Hz controller. A "tick rate exceeded" warning here is a real stall.
     bt_loop_duration: 50
     default_server_timeout: 20
     wait_for_service_timeout: 5
@@ -123,8 +93,8 @@ controller_server:
       xy_goal_tolerance: 0.15
       yaw_goal_tolerance: 0.15
 
-    # DWB tuning unchanged from nav2_params.yaml -- already tuned against
-    # the real robot, no reason to re-derive it.
+    # From nav2_params.yaml, then slowed in 2dd781e: max_vel_x 0.5 -> 0.35,
+    # max_vel_theta 0.5 -> 0.3, accel limits halved.
     FollowPath:
       plugin: "dwb_core::DWBLocalPlanner"
       debug_trajectory_details: False
@@ -153,15 +123,9 @@ controller_server:
       trans_stopped_velocity: 0.1
       short_circuit_trajectory_evaluation: True
       stateful: True
-      # NO Twirling. It was added at scale 10.0 to prefer rotate-then-drive over
-      # arcing turns, on the belief that it penalises vel_theta only when
-      # commanded together with translation. It does not: scoreTrajectory()
-      # returns fabs(traj.velocity.theta), so it taxes EVERY rotating
-      # trajectory, pure in-place rotation included -- which is the only way
-      # this base turns. It is meant for holonomic robots that spin needlessly
-      # on the way to a goal. The rotate-then-drive preference comes from
-      # PathAlign/GoalAlign with a short forward_point_distance, already set
-      # below; Twirling cannot express it.
+      # NO Twirling: it scores fabs(traj.velocity.theta), so it taxes every
+      # rotating trajectory, pure in-place rotation included -- the only way this
+      # base turns. Rotate-then-drive comes from PathAlign/GoalAlign below.
       critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
       BaseObstacle.scale: 0.02
       PathAlign.scale: 20.0
@@ -179,29 +143,17 @@ local_costmap:
     ros__parameters:
       update_frequency: 15.0
       publish_frequency: 2.0
-      # The height bands below slice the cloud along this frame's z, so it must
-      # be gravity-aligned and floor-referenced. map is both -- it was levelled
-      # when the prior map was built. Raw lio_init would not be: FAST-LIO leaves
-      # it at the IMU mount orientation, ~90 deg off gravity here.
-      # map, not odom. fastlio_localization has no map->odom split: after the
-      # handover its state IS the map pose, so there is no separate odometry
-      # frame to roll the local costmap in, and nothing else publishes one --
-      # the bag's /tf is the robot's joint tree rooted at base_footprint, and
-      # wheel odometry is a topic (/pepper_odom), not a TF edge.
-      #
-      # The usual reason a local costmap uses odom is that map jumps and odom
-      # does not. That reason does not apply here: MEASURED over 4 minutes of
-      # tracking, the map pose stepped a median 2.1 cm with a 4.5 cm maximum
-      # and ZERO steps over 0.30 m. It is smoother than the AMCL-style map
-      # frame this convention exists to protect against.
+      # map, not odom: this stack has no odom frame (the localizer's state IS
+      # the map pose). The usual "map jumps, odom does not" objection does not
+      # apply -- measured 2.1 cm median step, 4.5 cm max, none over 0.30 m. map
+      # is also gravity-aligned and floor-referenced, which the height bands
+      # below require; raw lio_init is ~90 deg off gravity.
       global_frame: map
       robot_base_frame: base_footprint
       use_sim_time: False
       rolling_window: true
-      # 6, not 3: width/height is the FULL window span, so 3 only reached
-      # 1.5 m in any direction -- inside both sensors' obstacle_max_range
-      # (3-4 m below), wasting the range they can actually see. 6 gives a
-      # true 3 m radius.
+      # Full span, not radius: 6 gives a true 3 m reach, matching the sensors'
+      # obstacle_max_range below.
       width: 6
       height: 6
       resolution: 0.05
@@ -210,91 +162,61 @@ local_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 4.0
-        # 0.35, not 0.20. robot_radius 0.20 plus Nav2's default 0.01 m
-        # footprint_padding gives a 16-gon whose inscribed radius is 0.206 m,
-        # so at 0.20 the inflation sat INSIDE the robot's own body and both
-        # costmaps logged "inflation radius (0.200) is smaller than the
-        # computed inscribed radius (0.206)": the planner could path the robot
-        # closer to an obstacle than its own radius. 0.35 keeps ~14 cm of real
-        # clearance without making doorways impassable.
+        # Must exceed the inscribed radius (robot_radius 0.20 + 0.01 footprint
+        # padding = 0.206 m), or inflation sits inside the robot's own body and
+        # the planner paths closer than its radius. 0.35 leaves ~14 cm.
         inflation_radius: 0.35
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
-        # VoxelLayer (not ObstacleLayer): keeps a 3D voxel column grid and
-        # clears per-voxel, so a tilted 360 deg 3D lidar + moving obstacles
-        # (people) clear -- eventually. The voxel grid spans the obstacle
-        # band: origin_z .. origin_z + z_voxels*z_res.
+        # VoxelLayer, not ObstacleLayer: per-voxel 3D clearing, needed for a
+        # tilted 3D lidar and moving obstacles. Grid spans origin_z ..
+        # origin_z + z_voxels*z_resolution.
         publish_voxel_map: True
-        # FLOOR-referenced (global_frame is map, which is floor-levelled): plain heights
-        # above the ground. Old raw-odom values +0.30. z_voxels max is 16 --
-        # nav2's VoxelGrid packs a column into a 32-bit word.
-        origin_z: -0.30            # 0.30 m BELOW the floor: keeps the sensor
-                                   # origin (L2 ~0.25 m up, plus drift) inside
-                                   # the grid so VoxelLayer can raytrace-clear.
-        # 8 bins at 0.25 m, not 16 at 0.125 m (same 2.0 m span): a column only
-        # clears once a ray re-sweeps EVERY bin a real object marked, and a
-        # standing person spans most of the band, so 16 fine bins meant 16
-        # independent ray-passes needed before the mark actually vacated --
-        # MEASURED: stuck in both costmaps well after the person walked away,
-        # cleared only by calling clear_entirely_*_costmap by hand. Half the
-        # bins means half the ray-passes to fully clear a column, at the cost
-        # of coarser vertical discrimination (2D occupancy is unaffected).
+        # Heights above the floor (global_frame map is levelled). z_voxels max
+        # is 16: nav2 packs a column into a 32-bit word.
+        origin_z: -0.30            # below the floor, so the sensor origin stays
+                                   # inside the grid and can raytrace-clear
+        # 8 coarse bins, not 16 fine (same 2.0 m span): a column clears only
+        # once a ray re-sweeps every bin the object marked, so fine bins left
+        # people stuck in both costmaps until cleared by hand.
         z_resolution: 0.25         # voxel height
         z_voxels: 8                # 8 * 0.25 = 2.0 m -> covers -0.30 .. 1.70
         max_obstacle_height: 1.70
-        # 3, not 1: at 1, a single stray marked voxel (dust, a passing
-        # reflection, a transient false return) flags the whole 2D column,
-        # and clearing it back out needs a ray to re-sweep that EXACT height
-        # bin -- not guaranteed every revolution on a tilted rotating lidar.
-        # MEASURED: a phantom obstacle stuck in both costmaps with nothing
-        # physically there. 3 needs multiple simultaneous height-bins marked
-        # before a column counts as occupied.
+        # 3, not 1: one stray voxel (dust, a reflection) would flag the whole
+        # 2D column and need a ray through that exact bin to clear -- not
+        # guaranteed on a tilted rotating lidar. Caused stuck phantom obstacles.
         mark_threshold: 3          # marked voxels in a column to flag the 2D cell (0 = any)
         unknown_threshold: 15
-        # 0 (Overwrite), not 1 (Max). Per costmap_layer.hpp: Max sets the
-        # master grid cell to max(existing master value, this layer's fresh
-        # value) -- so once a cell is EVER marked LETHAL, a later genuine
-        # clear (value 0, not NO_INFORMATION) can never win against it again,
-        # forever, regardless of how correctly this layer re-clears
-        # internally. MEASURED: a person standing then leaving stayed stuck
-        # even directly in RealSense's dense 30 Hz FOV, which should clear
-        # near-instantly -- this is why. Overwrite writes this layer's
-        # CURRENT value straight through, which is what a layer meant to
-        # track moving obstacles needs.
+        # 0 (Overwrite), not 1 (Max): Max takes max(master, layer), so a cell
+        # ever marked LETHAL can never be cleared again -- people stayed stuck
+        # even in RealSense's dense FOV. Overwrite writes the current value,
+        # which is what tracking moving obstacles needs.
         combination_method: 0
-        # L2 lidar = primary all-around (360 deg) obstacle source; RealSense
-        # depth = complementary DENSE forward source for the low/small/overhang
-        # obstacles the sparse tilted L2 sweep misses. See obstacle_min_range
-        # notes below -- the low-mounted L2 sees Pepper's own body up close.
+        # L2 = primary 360 deg source; RealSense depth = dense forward
+        # complement for low/small/overhang obstacles the sparse L2 sweep
+        # misses. The low-mounted L2 also sees Pepper's own body up close.
         observation_sources: points realsense
         points:
           topic: /points
           data_type: "PointCloud2"
           clearing: True
           marking: True
-          # Height band is evaluated in this costmap's global_frame (map),
-          # which is FLOOR-referenced here -- z=0 IS the ground plane, because
-          # the prior map was levelled -- so these read directly as height
-          # above the floor. min_obstacle_height MUST stay above the floor or the floor
-          # is marked as an obstacle; keep it low enough (0.10 m) to still
-          # catch low objects/chair legs.
+          # Heights above the floor (evaluated in global_frame map, levelled so
+          # z=0 is the ground). min_obstacle_height must stay above the floor or
+          # the floor marks as an obstacle, but low enough to catch chair legs.
           min_obstacle_height: 0.20
           max_obstacle_height: 1.70
-          # raytrace_max_range MUST be >= obstacle_max_range: marks beyond the
-          # raytrace range can never be cleared once the obstacle moves away
-          # (the clearing ray stops short of them), leaving a permanent ghost
-          # mark. Was 3.0/4.0 -- mismatched, unlike the matched realsense
-          # source below and the global costmap's identical points source.
+          # raytrace_max_range must be >= obstacle_max_range, or marks beyond
+          # the raytrace range can never be cleared and leave permanent ghosts.
           raytrace_max_range: 4.0
           raytrace_min_range: 0.5
           obstacle_max_range: 4.0
           obstacle_min_range: 0.5
         realsense:
-          # RealSense D435i depth cloud. Requires the driver launched with
-          # pointcloud.enable:=true (it is disabled during recording). Narrow
-          # ~87 deg forward FOV, so it only COMPLEMENTS the L2 -- never make it
-          # the sole source (blind to the sides/rear).
+          # D435i depth. Needs the driver launched with pointcloud.enable:=true
+          # (off during recording). ~87 deg forward FOV -- complement only,
+          # blind to the sides and rear.
           topic: /camera/depth/color/points
           data_type: "PointCloud2"
           clearing: True
@@ -331,13 +253,10 @@ global_costmap:
         max_obstacle_height: 1.70
         mark_threshold: 3          # see local costmap: stuck-ghost fix
         unknown_threshold: 15
-        # Left at 1 (Max), unlike local costmap: this layer sits alongside
-        # static_layer here, and Overwrite would let a live "free" reading
-        # (partial occlusion, calibration drift, a doorway edge) erase a
-        # real wall the static map correctly recorded. Max never lets live
-        # data override the map, at the cost of the same stuck-ghost
-        # behavior the local costmap had -- acceptable tradeoff here since
-        # the static map is what global planning should trust.
+        # 1 (Max) here, unlike the local costmap: this layer sits alongside
+        # static_layer, and Overwrite would let a live "free" reading erase a
+        # real wall the static map recorded. Accepts the stuck-ghost behaviour
+        # in exchange.
         combination_method: 1
         observation_sources: points
         points:
@@ -357,15 +276,9 @@ global_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 4.0
-        # Not 0.20: robot_radius 0.20 plus Nav2's default 0.01 m
-        # footprint_padding gives a 16-gon whose inscribed radius is 0.206 m,
-        # so at 0.20 the inflation sat INSIDE the robot's own body and both
-        # costmaps logged "inflation radius (0.200) is smaller than the
-        # computed inscribed radius (0.206)": the planner could path the robot
-        # closer to an obstacle than its own radius. 0.30, not local
-        # costmap's 0.35 -- live-tuned lower here for the global planner
-        # specifically, still ~10 cm of real clearance without making
-        # doorways impassable.
+        # Same inscribed-radius rule as the local costmap (must exceed
+        # 0.206 m). 0.30 rather than 0.35, live-tuned for the global planner;
+        # still ~10 cm of clearance.
         inflation_radius: 0.30
       always_send_full_costmap: True
 
@@ -399,32 +312,19 @@ behavior_server:
       plugin: "nav2_behaviors/Wait"
 
 # ---------------------------------------------------------------------------
-# Collision Monitor -- independent safety layer that reads the L2 lidar
-# directly and slows/stops the robot regardless of the costmap or planner.
-# Sits in the cmd_vel chain: controller/behavior -> cmd_vel_raw -> monitor ->
-# cmd_vel (what Pepper actually drives on).
-#
-# SELF-HITS: it consumes /points_safety (the L2 range-filtered to drop Pepper's
-# own body < 0.8 m), NOT raw /points -- otherwise the robot's own structure sits
-# inside the stop zone and freezes it. min_height/max_height are in the
-# base_footprint frame (floor at z=0), so 0.10..1.80 skips floor and ceiling.
+# Collision Monitor -- safety layer in the cmd_vel chain, independent of the
+# costmap and planner: controller/behavior -> cmd_vel_raw -> monitor -> cmd_vel.
+# Reads /points_safety (L2 filtered to drop Pepper's own body < 0.8 m), NOT raw
+# /points, or the robot's own structure freezes it. min/max_height are in
+# base_footprint with the floor at z=0.
 # ---------------------------------------------------------------------------
 collision_monitor:
   ros__parameters:
     use_sim_time: False
     base_frame_id: "base_footprint"
-    # map, not odom: this stack has no odom frame at all. After the handover
-    # fastlio_localization's state IS the map pose, so there is no separate
-    # odometry estimate and nothing publishes map -> odom. The lookup failed,
-    # base_shift_correction below could not transform, and the monitor never
-    # got far enough to publish its polygons -- MEASURED, /polygon_stop and
-    # /polygon_slowdown were silent while /points_safety flowed at 11.3 Hz.
-    #
-    # base_shift_correction needs a frame that is CONTINUOUS over the ~0.1 s
-    # between sensing a point and evaluating the polygon; it is named for odom
-    # because that is conventionally the only such frame, not because it must
-    # be odometry. map qualifies here: measured 2.1 cm median step, 4.5 cm max,
-    # zero steps over 0.30 m.
+    # map: this stack has no odom frame, and with the lookup failing the
+    # monitor published no polygons at all. base_shift_correction only needs a
+    # frame continuous over ~0.1 s, which map is here (2.1 cm median step).
     odom_frame_id: "map"
     cmd_vel_in_topic: "cmd_vel_raw"
     cmd_vel_out_topic: "cmd_vel"
