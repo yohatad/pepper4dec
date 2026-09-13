@@ -33,6 +33,16 @@
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>diagnostic_msgs</exec_depend>
 
+  <!-- ekf_fusion.launch.py runs its ekf_node. -->
+  <exec_depend>robot_localization</exec_depend>
+
+  <!-- NOT declared, deliberately: point_lio, fastlio_lc_pgo and
+       pepper_navigation all already exec_depend on pepper_slam, so declaring
+       them here would make the dependency graph cyclic and colcon would refuse
+       to order the build. The launch files here that reach into them
+       (pointlio_*, fastlio_*, the prior-map paths under pepper_navigation/pcd)
+       are entry points you run once those packages are present. -->
+
   <exec_depend>robot_state_publisher</exec_depend>
   <exec_depend>joint_state_publisher_gui</exec_depend>
   <exec_depend>xacro</exec_depend>

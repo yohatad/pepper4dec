@@ -508,7 +508,7 @@ def launch_setup(context, *args, **kwargs):
 
             # Node(
             #     package='robot_localization',
-            #     executable='robot_localization',
+            #     executable='ekf_node',
             #     name='ekf_filter_node',
             #     output='screen',
             #     parameters=[{

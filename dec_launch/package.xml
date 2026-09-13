@@ -53,6 +53,10 @@
   <exec_depend>rtabmap_viz</exec_depend>
   <exec_depend>rtabmap_util</exec_depend>
   <exec_depend>rviz2</exec_depend>
+  <!-- dec_robot.launch.py brings up the L2 driver; naoqi_driver.launch.py
+       wraps the NAOqi bridge. -->
+  <exec_depend>l2lidar_node</exec_depend>
+  <exec_depend>naoqi_driver</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
