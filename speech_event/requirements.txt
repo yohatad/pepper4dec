@@ -12,5 +12,7 @@ faster-whisper==1.2.1
 # Sound localization (SRP-PHAT beamforming)
 pyroomacoustics==0.7.3
 
-# NOTE: PyTorch installation is not included here due to CUDA version dependencies.
-# See README.md for PyTorch installation instructions.
+# PyTorch is deliberately NOT required. The Silero VAD runs on onnxruntime and
+# faster-whisper runs on CTranslate2 -- both native runtimes. torch was
+# previously imported only to hold the VAD's recurrent state as tensors (numpy
+# does that) and to print the CUDA device name in a single log line.

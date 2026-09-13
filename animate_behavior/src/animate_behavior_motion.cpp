@@ -7,10 +7,13 @@
  *
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa
- * Date: Aug 16, 2026
+ * Email: yohatad123@gmail.com
+ * Date: August 16, 2026
  * Version: v1.0
  *
  * Copyright (C) 2025 Carnegie Mellon University Africa
+ * This software is provided 'as-is' for research and educational purposes
+ * within the DEC project.
  */
 
 #include "animate_behavior/animate_behavior_motion.h"

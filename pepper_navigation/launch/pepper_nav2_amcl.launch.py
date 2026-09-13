@@ -1,46 +1,81 @@
-# Nav2 bringup for Pepper on AMCL + map_server, over FAST-LIO odometry.
-#
-# The localization BASELINE, to compare against the two LIO paths:
-#   * this file                         -- amcl (particle filter vs a 2D grid)
-#   * pepper_nav2_fastlio_loc.launch.py -- lio_localization (3D ICP vs .pcd)
-#   * pepper_nav2_rtabmap_loc.launch.py -- RTAB-Map localization mode (.db)
-# Everything downstream of localization (costmaps, DWB, collision monitor) is
-# identical across the three, so a behavioural difference is a localization
-# difference.
-#
-# AMCL needs two things Pepper's sensor rig doesn't provide directly:
-#   1. LEVEL odom -> base_footprint dead reckoning. FAST-LIO supplies it (NOT
-#      naoqi's wheel odom, which lives on the separate 'pepper_odom' frame --
-#      see config/README.md), but its raw 'odom' is the initial-IMU frame,
-#      tilted ~90deg on Pepper's mount. amcl needs a level frame, so
-#      mapping.launch.py runs with bridge_level_frame:=true and amcl corrects
-#      'odom'. Getting this wrong makes the pose jump on every update.
-#   2. a sensor_msgs/LaserScan. The L2 is a 360 deg PointCloud2, so
-#      pointcloud_to_laserscan flattens /points -> /scan in a height band. The
-#      costmaps still take the full 3D /points; the scan is localization-only.
-#
-# Frames:  map --(amcl)--> odom --(bridge, static)--> odom
-#          --(lio_odom_bridge)--> base_footprint
-#          --(pepper_sensor_tf, static)--> l2lidar_frame / cams
-#
-# Usage (real robot):
-#   ros2 launch l2lidar_node l2lidar.launch.py            # /points + /imu/data
-#   ros2 launch pepper_navigation pepper_nav2_amcl.launch.py \
-#       map:=<path to a .yaml>     # defaults to this package's map/
-#   Then set the initial pose in RViz (2D Pose Estimate) -- amcl starts
-#   UNLOCALIZED (set_initial_pose: false) and the particle cloud will not
-#   converge until you do.
-#
-# Usage (bag replay sanity-check):
-#   ros2 launch pepper_navigation pepper_nav2_amcl.launch.py use_sim_time:=true
-#   ros2 bag play <bag> --clock --topics /points /imu/data
-#
-# Requires ros-humble-pointcloud-to-laserscan (not a default Nav2 dependency):
-#   sudo apt install ros-humble-pointcloud-to-laserscan
-#
-# RViz2 (rviz/nav2_amcl.rviz) opens by default -- as the ICP stack's config,
-# plus the flattened /scan and amcl's /particle_cloud so you can watch the
-# filter converge. Pass rviz:=false to run headless.
+"""pepper_nav2_amcl.launch.py
+
+Nav2 bringup for Pepper: AMCL + map_server, over FAST-LIO odometry.
+
+Compare against pepper_nav2_fastloc.launch.py (fastlio_localization) and
+pepper_nav2_rtabmap_loc.launch.py (RTAB-Map) — everything downstream of
+localization is identical, so a behavioural difference is a localization one.
+
+AMCL needs a LEVEL odom -> base_footprint TF (FAST-LIO's raw odom is tilted
+~90 deg on Pepper's mount, so mapping.launch.py runs with
+bridge_level_frame:=true) and a LaserScan (pointcloud_to_laserscan flattens
+the L2's 360 deg /points into /scan; the costmaps still use the full /points).
+
+Launch files included:
+    pepper_slam/pepper_sensor_tf.launch.py — the sensor rig TF.
+    fast_lio/mapping.launch.py — FAST-LIO odometry.
+    pepper_slam/lio_odom_bridge.launch.py — the gravity-leveled odom frame.
+
+Nodes started:
+    pointcloud_to_laserscan/pointcloud_to_laserscan_node — /points -> /scan.
+    nav2_map_server/map_server, nav2_amcl/amcl,
+    nav2_controller/controller_server, nav2_planner/planner_server,
+    nav2_behaviors/behavior_server, nav2_bt_navigator/bt_navigator.
+    pepper_slam/cloud_range_filter.py x2 (points_safety_filter,
+    points_costmap_filter) — range-limited clouds for the safety chain and
+    the costmaps.
+    nav2_collision_monitor/collision_monitor.
+    nav2_costmap_2d/nav2_costmap_2d_markers x2 — voxel visualization.
+    pepper_navigation/localization_recovery.py.
+    rviz2/rviz2 — only when rviz is true.
+    nav2_lifecycle_manager/lifecycle_manager (node:
+    lifecycle_manager_navigation).
+
+Launch arguments:
+    use_sim_time (default: "false")
+        Use bag/simulation clock instead of wall time.
+    map (default: <share>/map/pepper_map_lc.yaml)
+        2D occupancy grid served as /map, for amcl and the global costmap
+        static layer. MUST exist: map_server fails to configure otherwise and
+        the lifecycle manager aborts the whole nav2 bringup.
+    scan_min_height (default: "0.20")
+        Bottom of the /points slice flattened into /scan.
+    scan_max_height (default: "1.50")
+        Top of the /points slice flattened into /scan.
+    rviz_config (default: <share>/rviz/nav2_amcl.rviz)
+        nav2_amcl_voxel.rviz gives the 3D voxel view (needs z_voxels <= 16 in
+        the nav2 params).
+    rviz (default: "true")
+        Open RViz2 pre-configured for this stack.
+
+Configuration:
+    config/nav2_params_amcl.yaml, map/pepper_map_lc.yaml, and FAST-LIO's
+    l2.yaml.
+
+Prerequisites:
+    sudo apt install ros-humble-pointcloud-to-laserscan
+
+Usage (real robot):
+    ros2 launch l2lidar_node l2lidar.launch.py
+    ros2 launch pepper_navigation pepper_nav2_amcl.launch.py map:=<path>
+
+    Set the initial pose in RViz (2D Pose Estimate) — amcl starts
+    unlocalized.
+
+Usage (bag replay):
+    ros2 launch pepper_navigation pepper_nav2_amcl.launch.py use_sim_time:=true
+    ros2 bag play <bag> --clock --topics /points /imu/data
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
 
 import os
 
@@ -74,50 +109,34 @@ def generate_launch_description():
     declare_map_cmd = DeclareLaunchArgument(
         'map',
         default_value=os.path.join(pkg_share, 'map', 'pepper_map_lc.yaml'),
-        description='2D occupancy grid served as /map -- both what amcl matches '
-                    'the flattened scan against and the global costmap static layer. '
-                    'Defaults to the copy shipped in this package (map/), so the '
-                    'stack comes up on a fresh checkout with no absolute paths. '
-                    'MUST exist: map_server fails to configure otherwise, and the '
-                    'lifecycle manager then aborts the WHOLE nav2 bringup. '
-                    'Was pepper_map_lc_clean, an older run that has been removed; '
-                    'pepper_map_lc is the current grid, and the one paired with '
-                    'pcd/pepper_map_lc.pcd and pcd/pepper_map_lc_poses.txt.')
-    # The two knobs to reach for first if amcl will not converge. The band is in
-    # base_footprint (floor at z=0). Too low and the flattened floor returns
-    # swamp the wall hits; too high and tables/desks/people appear in the scan
-    # but not in the grid, so every beam mismatches.
+        description='2D occupancy grid served as /map, for amcl and the global '
+                    'costmap static layer. MUST exist: map_server fails to '
+                    'configure otherwise and the lifecycle manager aborts the '
+                    'whole nav2 bringup.')
+    # Reach for these first if amcl won't converge (band is in base_footprint,
+    # floor at z=0): too low and floor returns swamp wall hits, too high and
+    # unmapped furniture/people mismatch every beam.
     declare_scan_min_height_cmd = DeclareLaunchArgument(
         'scan_min_height', default_value='0.20',
-        description='Bottom of the /points slice flattened into /scan, in '
-                    'base_footprint (floor at z=0). Raise it if floor returns '
-                    'leak into the scan.')
+        description='Bottom of the /points slice flattened into /scan.')
     declare_scan_max_height_cmd = DeclareLaunchArgument(
         'scan_max_height', default_value='1.50',
-        description='Top of the /points slice flattened into /scan. Lower it if '
-                    'furniture absent from the 2D grid is confusing amcl.')
+        description='Top of the /points slice flattened into /scan.')
     declare_rviz_config_cmd = DeclareLaunchArgument(
         'rviz_config',
         default_value=os.path.join(pkg_share, 'rviz', 'nav2_amcl.rviz'),
-        description='RViz config. Default is the standard view; pass '
-                    'nav2_amcl_voxel.rviz for the 3D voxel-map view '
-                    '(needs the voxel marker converters this file launches, '
-                    'and z_voxels <= 16 in the nav2 params).')
+        description='RViz config. nav2_amcl_voxel.rviz gives the 3D voxel view '
+                    '(needs z_voxels <= 16 in the nav2 params).')
     declare_rviz_cmd = DeclareLaunchArgument(
         'rviz', default_value='true',
-        description='Open RViz2 pre-configured for this stack (map, particle '
-                    'cloud, flattened scan, costmaps, plans, safety zones).')
+        description='Open RViz2 pre-configured for this stack.')
 
-    # NOTE ON GroupAction: IncludeLaunchDescription does NOT scope its
-    # launch_arguments -- it emits plain SetLaunchConfiguration actions into the
-    # CURRENT context, so 'rviz': 'false' below would otherwise overwrite THIS
-    # file's own 'rviz' configuration and silently suppress rviz_node (whose
-    # IfCondition is evaluated later). GroupAction is scoped by default, which
-    # keeps each include's arguments to itself.
+    # GroupAction scopes each include's launch_arguments to itself -- plain
+    # IncludeLaunchDescription would leak them into this file's own context
+    # (e.g. rviz:=false below would silently suppress rviz_node).
 
-    # base_footprint -> l2lidar_frame (+ cams). NOT included by
-    # mapping.launch.py, and pointcloud_to_laserscan needs it to reproject the
-    # cloud into base_footprint, so it must be launched here.
+    # base_footprint -> l2lidar_frame (+ cams). Not included by
+    # mapping.launch.py; pointcloud_to_laserscan needs it.
     sensor_tf = GroupAction([
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
@@ -126,17 +145,10 @@ def generate_launch_description():
         ),
     ])
 
-    # FAST-LIO odometry. bridge_level_frame:=TRUE is REQUIRED here, and amcl
-    # corrects odom (not odom) -- see nav2_params_amcl.yaml's header.
-    # FAST-LIO's raw 'odom' is the initial-IMU frame, which on Pepper's mount is
-    # tilted ~90deg (its Z axis runs along base_footprint's +X). amcl's motion
-    # model reads (x, y, yaw) out of odom_frame -> base_frame and assumes that
-    # frame is level: in the raw frame forward travel barely registers in x-y and
-    # the yaw is about a horizontal axis, so the filter cannot track and the pose
-    # jumps on every scan update. The bridge's odom IS gravity-aligned.
-    #
-    # This still leaves every frame with exactly one parent:
-    #   map --(amcl)--> odom --(bridge, static)--> odom --(bridge)--> base_footprint
+    # FAST-LIO odometry. bridge_level_frame:=TRUE is REQUIRED: FAST-LIO's raw
+    # 'odom' is tilted ~90deg on Pepper's mount, so amcl's level-frame motion
+    # model can't track it and the pose jumps on every update. See
+    # nav2_params_amcl.yaml's header for the frame chain.
     fast_lio = GroupAction([
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
@@ -147,9 +159,7 @@ def generate_launch_description():
                 'use_sim_time': use_sim_time,
             }.items(),
         ),
-        # odom -> base_footprint. FAST_LIO's mapping.launch.py no longer starts this
-        # (see FAST_LIO d8b274c): it was Pepper glue in a launch file shared with
-        # every other FAST-LIO sensor config.
+        # odom -> base_footprint (FAST_LIO's own launch file no longer starts this).
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(get_package_share_directory('pepper_slam'),
@@ -173,16 +183,15 @@ def generate_launch_description():
             'use_sim_time': use_sim_time,
             'target_frame': 'base_footprint',
             'transform_tolerance': 0.05,
-            # value_type=float: a bare LaunchConfiguration would arrive as a
-            # string and the node would reject the parameter type.
+            # value_type=float: a bare LaunchConfiguration arrives as a string.
             'min_height': ParameterValue(scan_min_height, value_type=float),
             'max_height': ParameterValue(scan_max_height, value_type=float),
             'angle_min': -3.141592653589793,   # full 360 deg, like the L2
             'angle_max': 3.141592653589793,
             'angle_increment': 0.008726646259971648,   # 0.5 deg -> 720 beams
             'scan_time': 0.1,
-            # 0.8 m matches amcl's laser_min_range and the costmaps'
-            # obstacle_min_range: below it the low-mounted L2 sees Pepper itself.
+            # Matches amcl's laser_min_range / costmaps' obstacle_min_range --
+            # below it the low-mounted L2 sees Pepper itself.
             'range_min': 0.8,
             'range_max': 20.0,
             'use_inf': True,
@@ -254,8 +263,8 @@ def generate_launch_description():
         parameters=[configured_params],
     )
 
-    # Self-hit filter feeding the safety layer: strip Pepper's own body (< 0.8 m)
-    # from the raw L2 /points so the collision monitor doesn't freeze on it.
+    # Strips Pepper's own body (< 0.8 m) so the collision monitor doesn't
+    # freeze on self-hits.
     points_safety_filter = Node(
         package='pepper_slam',
         executable='cloud_range_filter.py',
@@ -270,17 +279,11 @@ def generate_launch_description():
         }],
     )
 
-    # Self-hit + adaptive ground-plane filter feeding the COSTMAPS specifically
-    # (separate instance from points_safety_filter above -- the collision
-    # monitor's safety-critical stop zone stays on the simpler, cheaper filter
-    # untouched by this). The costmaps' voxel_layer marks obstacles with a
-    # FIXED height band evaluated in their global_frame (odom/map),
-    # whose leveling is a one-time snapshot that can drift enough over a long
-    # run to mis-mark the real floor as an obstacle. RANSAC-fitting the ground
-    # plane per scan in base_footprint (continuously re-anchored to FAST-LIO's
-    # live, gravity-referenced attitude) instead -- the same idea used to build
-    # this map via octomap_server's filter_ground_plane -- removes that failure
-    # mode instead of just giving it more margin to drift into.
+    # Self-hit + ground-plane filter feeding the costmaps (separate instance
+    # from points_safety_filter -- the safety-critical stop zone stays on the
+    # simpler filter). RANSAC-fits the ground plane per scan in base_footprint
+    # instead of the costmap voxel_layer's fixed height band, which can drift
+    # into mis-marking the real floor as an obstacle over a long run.
     points_costmap_filter = Node(
         package='pepper_slam',
         executable='cloud_range_filter.py',
@@ -296,18 +299,9 @@ def generate_launch_description():
             'ground_frame': 'base_footprint',
             'ground_distance_thresh': 0.05,
             'ground_angle_thresh': 0.15,
-            # MEASURED: with the defaults (z_thresh 0.12, 60 iterations) roughly
-            # HALF the scans logged "0 dropped as floor" -- RANSAC found no
-            # acceptable plane and fell back to keep-everything, so ground
-            # removal was silently only working half the time and the costmap
-            # height band was quietly doing the job instead.
-            #   * z_thresh 0.12 sat right at the measured base_footprint z drift
-            #     (-0.04 .. +0.13 m): past 0.12 the real floor looks too far from
-            #     z=0 and EVERY candidate plane is rejected. 0.20 clears it.
-            #   * 60 iterations is thin when the floor is only ~15% of a ~4k-point
-            #     scan -- the chance of drawing 3 floor points in one sample is
-            #     ~0.3%, so 60 tries misses more often than not. It is pure NumPy
-            #     over the scan, so 300 is still cheap.
+            # Defaults (0.12, 60 iters) silently found no plane on ~half the
+            # scans -- 0.20 clears measured base_footprint z drift, and 300
+            # iterations reliably samples 3 floor points from a ~4k-point scan.
             'ground_z_thresh': 0.20,
             'ground_ransac_iterations': 300,
         }],
@@ -321,13 +315,8 @@ def generate_launch_description():
         parameters=[configured_params],
     )
 
-    # The costmaps' VoxelLayer publishes nav2_msgs/VoxelGrid on
-    # <costmap>/voxel_grid, which RViz has NO display for -- so the 3D voxel
-    # map was invisible no matter what you added to the RViz config. These
-    # converters turn it into a MarkerArray RViz can draw. Without them the
-    # rviz config's "Local/Global Voxel Grid" displays subscribe to a topic
-    # nobody publishes. (Also requires z_voxels <= 16 in nav2_params_amcl.yaml
-    # -- above that the layer refuses to build its grid at all.)
+    # Converts VoxelLayer's nav2_msgs/VoxelGrid (no RViz display exists for it)
+    # into a MarkerArray RViz can draw. Needs z_voxels <= 16 in the nav2 params.
     local_voxel_markers = Node(
         package='nav2_costmap_2d',
         executable='nav2_costmap_2d_markers',
@@ -356,6 +345,17 @@ def generate_launch_description():
         arguments=['-d', rviz_config],
         parameters=[{'use_sim_time': use_sim_time}],
         condition=IfCondition(rviz),
+    )
+
+    # One /localization_recover entry point, identical across all three nav
+    # profiles, so recovering does not depend on remembering which backend is
+    # up. Here it forwards to amcl's /reinitialize_global_localization.
+    localization_recovery = Node(
+        package='pepper_navigation',
+        executable='localization_recovery.py',
+        name='localization_recovery',
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time, 'backend': 'amcl'}],
     )
 
     lifecycle_manager = Node(
@@ -404,4 +404,5 @@ def generate_launch_description():
         global_voxel_markers,
         rviz_node,
         lifecycle_manager,
+        localization_recovery,
     ])

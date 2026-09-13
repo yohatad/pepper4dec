@@ -16,6 +16,10 @@ behavior_controller:
 
     # Name of the behavior tree XML to build at configure time, without the
     # .xml extension. Resolved against the package share directory.
+    #
+    # lab_tour and dec_Tour additionally require speech_event to run with
+    # action_server: false — they read visitor speech from /speech_event/text,
+    # which is not published in action-server mode.
     scenario_specification: "asr_cm_tts_pipeline"
 
     # =========================================================================

@@ -1,18 +1,31 @@
-# RTAB-Map on a recorded bag (slam_session_*): RGB-D SLAM on Pepper's wheel
-# odometry, everything read from the bag instead of the live robot.
-#
-# Wraps rtabmap_base.launch.py (unchanged) with bag-specific overrides:
-#   - bag topic names (the robot launch defaults to the *_custom republished ones)
-#   - odometry from the bag's TF tree (pepper_odom -> base_footprint), so no
-#     visual/icp odometry node is started
-#   - sim time driven by `ros2 bag play --clock`
-#   - a throwaway database so recorded maps (rtabmap_march_28.db, ...) are safe
-#
-# Usage:
-#   ros2 launch pepper_slam rtabmap_rgbd_wheel_bag.launch.py
-#   ros2 bag play <bag> --clock --topics /camera/color/image_raw \
-#       /camera/aligned_depth_to_color/image_raw /camera/color/camera_info \
-#       /tf /tf_static
+r"""rtabmap_rgbd_wheel_bag.launch.py
+
+RTAB-Map on a recorded bag (slam_session_*): RGB-D SLAM on Pepper's wheel
+odometry, everything read from the bag instead of the live robot.
+
+Wraps rtabmap_base.launch.py (unchanged) with bag-specific overrides:
+  - bag topic names (the robot launch defaults to the *_custom republished ones)
+  - odometry from the bag's TF tree (pepper_odom -> base_footprint), so no
+    visual/icp odometry node is started
+  - sim time driven by `ros2 bag play --clock`
+  - a throwaway database so recorded maps (rtabmap_march_28.db, ...) are safe
+
+Usage:
+  ros2 launch pepper_slam rtabmap_rgbd_wheel_bag.launch.py
+  ros2 bag play <bag> --clock --topics /camera/color/image_raw \
+      /camera/aligned_depth_to_color/image_raw /camera/color/camera_info \
+      /tf /tf_static
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
 
 import os
 

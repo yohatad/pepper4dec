@@ -136,7 +136,6 @@ WORKDIR ${WS}
 # the apt package standalone and checking `dpkg -L`. Not our bug to work
 # around; revisit if a newer apt release fixes it upstream.
 RUN git clone --depth 1 https://github.com/yohatad/naoqi_driver2.git src/naoqi_driver2 && \
-    git clone --depth 1 https://github.com/yohatad/lio_localization.git src/lio_localization && \
     git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/yohatad/FAST_LIO_ROS2.git src/fast_lio && \
     git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/yohatad/point_lio_ros2.git src/point_lio && \
     git clone --depth 1 https://github.com/yohatad/fastlio_lc_pgo.git src/fastlio_lc_pgo && \

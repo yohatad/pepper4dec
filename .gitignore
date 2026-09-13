@@ -31,3 +31,51 @@ __pycache__/
 
 # CycloneDDS drops this wherever a node is launched from
 cyclonedds.log
+
+# ---------------------------------------------------------------------------
+# Consolidated from the per-package .gitignore files that used to live in
+# pepper_navigation/, pepper_navigation/map/ and pepper_navigation/pcd/.
+# One file at the repo root is easier to audit than four scattered ones; the
+# reasoning each of them carried is kept below rather than dropped.
+# ---------------------------------------------------------------------------
+
+# colcon scratch. NOT anchored with a leading slash on purpose: colcon drops
+# these wherever it is run, and a build started from e.g.
+# pepper_navigation/rviz/ put build/, install/ and log/ THERE. Anchored rules
+# matched only the package root, so those nested copies were
+# untracked-but-not-ignored and got committed by a `git add -A` (268ced6).
+# Matching at any depth stops that.
+#
+# Now repo-wide rather than pepper_navigation-only: the reason above is a
+# property of colcon, not of that one package, and pepper_slam/build/ was
+# equally committable before this.
+build/
+install/
+log/
+
+# Editor/tool backups, also repo-wide for the same reason. nav2_config writes
+# <file>.yaml.bak before each save (one level only -- each save overwrites it),
+# and utils/align_map.py writes .bak beside the map artifacts it rotates.
+# Neither belongs in the repo, and without this a `git add -A` sweeps them in.
+*.bak
+
+# The 3D prior maps are binary that changes wholesale on every mapping run, so
+# they are deliberately NOT tracked -- copy them to a new machine instead:
+#   scp <file>.pcd <host>:~/ros2_ws/src/pepper4dec/pepper_navigation/<dir>/
+# then colcon build, which installs them into the package share where the
+# launch defaults look. The 2D grids, *_poses.txt and the ScanContext
+# pose .json ARE tracked: they are small and they identify the map.
+#
+# The ** matters: pcd/ holds sc_pcd_<run>/ subdirectories of per-keyframe
+# clouds (2735 files, 75 MB for the current run), and a plain
+# /pepper_navigation/pcd/*.pcd would match only the top level and let those
+# through. Scoped to these two directories rather than repo-wide so a small
+# .pcd committed deliberately elsewhere is not silently swallowed.
+/pepper_navigation/map/**/*.pcd
+/pepper_navigation/pcd/**/*.pcd
+
+# pytest writes .pytest_cache/ with its own self-ignoring .gitignore inside.
+# Those inner files are regenerated on every run, so they are left alone;
+# this makes the whole directory ignored regardless of whether pytest's own
+# file is present.
+.pytest_cache/

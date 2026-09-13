@@ -1,21 +1,69 @@
-# Plain FAST-LIO ODOMETRY on the Pepper L2 rig, with its required static TF.
-#
-# ODOMETRY, not SLAM. "mapping" is upstream's word for the ikd-Tree the
-# estimator aligns each scan against -- there is no loop closure and nothing
-# ever revisits a pose, so returning to a place after N metres of drift lays
-# the same wall down twice, permanently. For a map worth keeping use
-# fastlio_lc_pgo's fastlio_lc_l2.launch.py or bag_test/rtabmap_fastlio_bag.
-# This file is the right tool for MEASURING odometry, precisely because
-# nothing here hides the drift.
-#
-# It exists because fast_lio's own mapping.launch.py is not standalone-usable
-# here: the bridge needs the static base_footprint -> l2lidar_frame_imu chain
-# that only pepper_sensor_tf.launch.py provides, and mapping.launch.py is
-# shared with every other FAST-LIO sensor config so it cannot bake that in.
-# Forgetting the second launch file is a silent hang.
-#
-#   ros2 launch pepper_slam fastlio_odometry.launch.py
-#   ros2 bag play <bag> --clock --topics /points /imu/data /tf /tf_static
+"""fastlio_odometry.launch.py
+
+Plain FAST-LIO ODOMETRY on the Pepper L2 rig, with its required static TF.
+
+ODOMETRY, not SLAM. "mapping" is upstream's word for the ikd-Tree the
+estimator aligns each scan against — there is no loop closure and nothing ever
+revisits a pose, so returning to a place after N metres of drift lays the same
+wall down twice, permanently. For a map worth keeping use fastlio_lc_pgo's
+fastlio_lc_l2.launch.py or bag_test/rtabmap_fastlio_bag.launch.py. This file is
+the right tool for MEASURING odometry, precisely because nothing here hides the
+drift.
+
+It exists because fast_lio's own mapping.launch.py is not standalone-usable
+here: the bridge needs the static base_footprint -> l2lidar_frame_imu chain
+that only pepper_sensor_tf.launch.py provides, and mapping.launch.py is shared
+with every other FAST-LIO sensor config so it cannot bake that in. Forgetting
+the second launch file is a silent hang.
+
+Launch files included:
+    pepper_sensor_tf.launch.py — the rig's static TF.
+    fast_lio/mapping.launch.py — the estimator.
+    lio_odom_bridge.launch.py — odom -> base_footprint.
+
+Nodes started:
+    tf2_ros/static_transform_publisher (node: map_odom_identity)
+        map -> odom identity, only when publish_map_identity is true.
+
+Launch arguments:
+    rviz (default: "true")
+    rviz_cfg (default: <fast_lio share>/rviz/fastlio.rviz)
+    publish_map_identity (default: "true")
+        Publish the map -> odom identity transform.
+    use_sim_time (default: "false")
+    bridge_level_frame (default: "true")
+        Publish the gravity-leveled odom frame from the bridge.
+    config_file (default: "l2_rsimu.yaml")
+        FAST-LIO config (RealSense IMU); l2.yaml uses the L2's own.
+    lidar_imu_frame (default: "camera_imu_optical_frame")
+        Body frame matching config_file.
+    flatten_base_frame (default: "true")
+        Clamp z, roll, and pitch to zero. Pass false to see FAST-LIO's own
+        drifting estimate, e.g. when feeding ekf_fusion.launch.py.
+    guard_enable (default: "false")
+        Reject LIO poses above a physical speed bound and dead reckon on wheel
+        odometry through the gap, rather than republishing a diverged estimate
+        onto odom -> base_footprint. Needs wheel_odom_topic flowing.
+    wheel_odom_topic (default: "/pepper_odom")
+        Wheel odometry the guard dead reckons on. Unused unless guard_enable.
+
+Configuration:
+    FAST-LIO's config directory, selected by config_file.
+
+Usage:
+    ros2 launch pepper_slam fastlio_odometry.launch.py
+    ros2 bag play <bag> --clock --topics /points /imu/data /tf /tf_static
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
 
 import os
 
@@ -51,6 +99,7 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
     bridge_level_frame = LaunchConfiguration('bridge_level_frame')
     flatten_base_frame = LaunchConfiguration('flatten_base_frame')
+    guard_enable = LaunchConfiguration('guard_enable')
 
     declare_rviz_cmd = DeclareLaunchArgument('rviz', default_value='true')
     declare_publish_map_identity_cmd = DeclareLaunchArgument(
@@ -102,6 +151,18 @@ def generate_launch_description():
                     'is confirmed flat-floor-only. Set false to see FAST-LIO\'s '
                     'own (drifting) z/roll/pitch instead.'
     )
+    declare_guard_enable_cmd = DeclareLaunchArgument(
+        'guard_enable', default_value='false',
+        description='Reject LIO poses that break a physical speed bound and '
+                    'dead reckon on wheel odometry through the gap, instead of '
+                    'republishing a diverged estimate onto odom -> '
+                    'base_footprint. Needs wheel_odom_topic flowing.'
+    )
+    declare_wheel_odom_topic_cmd = DeclareLaunchArgument(
+        'wheel_odom_topic', default_value='/pepper_odom',
+        description='Wheel odometry the guard dead reckons on. Unused unless '
+                    'guard_enable is true.'
+    )
 
     sensor_tf_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -149,6 +210,8 @@ def generate_launch_description():
             'lidar_imu_frame': LaunchConfiguration('lidar_imu_frame'),
             'bridge_level_frame': bridge_level_frame,
             'flatten_base_frame': flatten_base_frame,
+            'guard_enable': guard_enable,
+            'wheel_odom_topic': LaunchConfiguration('wheel_odom_topic'),
         }.items())
 
     ld = LaunchDescription()
@@ -159,6 +222,8 @@ def generate_launch_description():
     ld.add_action(declare_use_sim_time_cmd)
     ld.add_action(declare_bridge_level_frame_cmd)
     ld.add_action(declare_flatten_base_frame_cmd)
+    ld.add_action(declare_guard_enable_cmd)
+    ld.add_action(declare_wheel_odom_topic_cmd)
     # AFTER every DeclareLaunchArgument: the echo reads use_sim_time,
     # which does not exist in the context until its declare has run.
     ld.add_action(OpaqueFunction(function=_echo_resolved))

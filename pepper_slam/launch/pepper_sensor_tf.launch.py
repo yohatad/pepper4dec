@@ -1,33 +1,59 @@
-# Static TF tree for the Pepper sensor rig: Unitree L2 + RealSense.
-#
-# Publishes 10 transforms rooted at base_footprint:
-#   base_footprint -> l2lidar_frame -> {l2lidar_frame_imu, camera_camera_link -> ...}
-#
-#   ros2 launch pepper_slam pepper_sensor_tf.launch.py
-#
-# ARGUMENTS
-#   publisher   urdf (default) -- robot_state_publisher over
-#               urdf/pepper_sensor_rig.urdf.xacro; also gives an RViz
-#               RobotModel, so a wrong mount shows as geometry not bare axes.
-#               yaml -- static_tf_publisher over config/sensor_tf.yaml.
-#               ANY OTHER VALUE (e.g. none) starts neither and publishes
-#               nothing -- correct for a bag that carries its own /tf_static.
-#   scope       mount (default) -- only the rig edges. 'all' adds the seven
-#               RealSense-internal edges, for a bag recorded without them.
-#               On the robot the camera driver publishes its own, and a second
-#               copy leaves whichever /tf_static lands last silently in force.
-#
-# The URDF is GENERATED from the YAML, so both publishers emit identical
-# geometry. THE GEOMETRY IS NOT EDITED HERE -- config/sensor_tf.yaml is the
-# calibration source of truth and carries the provenance, including which DOF
-# remain unverified. Regenerate the URDF after editing it.
-#
-# The rig is its own description rather than an extension of naoqi's
-# pepper.urdf, which roots at base_link and would give base_footprint two
-# parents. See the URDF header.
-#
-# Replaying /tf from a bag is safe and wanted -- see launch/bag_test/README.md,
-# which also covers which of publisher/scope your bag needs.
+"""pepper_sensor_tf.launch.py
+
+Static TF tree for the Pepper sensor rig: Unitree L2 + RealSense.
+
+Publishes 10 transforms rooted at base_footprint:
+    base_footprint -> l2lidar_frame -> {l2lidar_frame_imu,
+                                        camera_camera_link -> ...}
+
+Nodes started:
+    robot_state_publisher/robot_state_publisher (node: pepper_sensor_tf)
+        When publisher is 'urdf'.
+    pepper_slam/static_tf_publisher.py (node: pepper_sensor_tf)
+        When publisher is 'yaml'.
+
+Launch arguments:
+    use_sim_time (default: "false")
+    publisher (default: "urdf")
+        'urdf' — robot_state_publisher over urdf/pepper_sensor_rig.urdf.xacro;
+        also gives an RViz RobotModel, so a wrong mount shows as geometry
+        rather than bare axes. 'yaml' — static_tf_publisher over
+        config/sensor_tf.yaml. ANY OTHER VALUE (e.g. none) starts neither and
+        publishes nothing — correct for a bag that carries its own /tf_static.
+    scope (default: "mount")
+        'mount' — only the rig edges. 'all' adds the seven RealSense-internal
+        edges, for a bag recorded without them. On the robot the camera driver
+        publishes its own, and a second copy leaves whichever /tf_static lands
+        last silently in force.
+    transforms_file (default: <share>/config/sensor_tf.yaml)
+    urdf_file (default: <share>/urdf/pepper_sensor_rig.urdf.xacro)
+
+Configuration:
+    The URDF is GENERATED from the YAML, so both publishers emit identical
+    geometry. THE GEOMETRY IS NOT EDITED HERE — config/sensor_tf.yaml is the
+    calibration source of truth and carries the provenance, including which
+    DOF remain unverified. Regenerate the URDF after editing it.
+
+    The rig is its own description rather than an extension of naoqi's
+    pepper.urdf, which roots at base_link and would give base_footprint two
+    parents. See the URDF header.
+
+Usage:
+    ros2 launch pepper_slam pepper_sensor_tf.launch.py
+
+Replaying /tf from a bag is safe and wanted — see launch/bag_test/README.md,
+which also covers which of publisher/scope your bag needs.
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
 
 import os
 

@@ -30,10 +30,13 @@
  *
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa
- * Date: Jul 18, 2026
+ * Email: yohatad123@gmail.com
+ * Date: July 18, 2026
  * Version: v1.0
  *
  * Copyright (C) 2025 Carnegie Mellon University Africa
+ * This software is provided 'as-is' for research and educational purposes
+ * within the DEC project.
  */
 
 #pragma once
@@ -58,6 +61,13 @@
 
 namespace dec_common {
 
+/**
+ * @brief The deliberate behavioral differences between the camera nodes.
+ *
+ * Captures where face_detection and person_detection legitimately diverge
+ * (depth statistic, debug-image gating, imshow quit key) instead of papering
+ * over them in the shared base.
+ */
 struct CameraNodeBehavior {
     // Package whose share/<pkg>/data/pepper_topics.yaml resolves camera topics.
     std::string topics_package;
@@ -72,6 +82,15 @@ struct CameraNodeBehavior {
     bool quit_on_q = false;
 };
 
+/**
+ * @class CameraLifecycleNode
+ * @brief Shared lifecycle base for the camera-driven perception nodes.
+ *
+ * Owns topic resolution from pepper_topics.yaml, the synchronized color/depth
+ * (raw or compressed) subscriptions, depth decoding, the debug visualization
+ * pipeline, the image-timeout monitor, and depth-in-region lookup. Derived
+ * nodes keep their own lifecycle callbacks and call the helpers here.
+ */
 class CameraLifecycleNode : public rclcpp_lifecycle::LifecycleNode {
 public:
     using CallbackReturn =

@@ -15,7 +15,7 @@ setup(
     tests_require=["pytest"],
     zip_safe=True,
     maintainer="Yohannes",
-    maintainer_email="yohanneh@alumni.cmu.edu",
+    maintainer_email="yohatad123@gmail.com",
     description="Speech recognition node",
     license="",
     scripts=[

@@ -1,30 +1,43 @@
-# FAST-LIO odometry on a recorded bag.
-#
-# Thin wrapper over pepper_slam/launch/fastlio_odometry.launch.py -- the live
-# entry point -- with use_sim_time forced true. Nothing is duplicated here.
-#
-#   ros2 launch pepper_slam fastlio_odometry_bag.launch.py
-#   ros2 bag play <bag> --clock \
-#     --qos-profile-overrides-path config/play_qos.yaml \
-#     --read-ahead-queue-size 2000 --disable-keyboard-controls \
-#     --topics /points /camera/imu /imu/data /tf /tf_static
-#
-# ARGUMENTS THIS FILE HONOURS  (--show-args lists ~10 more that leak up from the
-# include tree and are not all meaningful here):
-#
-#   config_file         l2_rsimu.yaml = RealSense IMU (default) | l2.yaml = L2's
-#   rviz, rviz_cfg      open RViz, and with which config
-#   publisher           none (DEFAULT HERE) = publish no rig transforms, for
-#                       a bag that carries its own /tf_static. Pass urdf for
-#                       a legacy bag that does not.
-#   scope               mount (default) | all -- 'all' only for legacy bags,
-#                       and only alongside publisher:=urdf
-#   flatten_base_frame  zero the leveled z/roll/pitch (default true)
-#   use_sim_time        FORCED true here; do not pass it
-#
-# README.md in this directory covers the four things that otherwise waste an
-# afternoon: play_qos.yaml, publisher/scope, replaying /tf, and
-# --disable-keyboard-controls when backgrounding the player.
+r"""fastlio_odometry_bag.launch.py
+
+FAST-LIO odometry on a recorded bag.
+
+Thin wrapper over pepper_slam/launch/fastlio_odometry.launch.py -- the live
+entry point -- with use_sim_time forced true. Nothing is duplicated here.
+
+  ros2 launch pepper_slam fastlio_odometry_bag.launch.py
+  ros2 bag play <bag> --clock \
+    --qos-profile-overrides-path config/play_qos.yaml \
+    --read-ahead-queue-size 2000 --disable-keyboard-controls \
+    --topics /points /camera/imu /imu/data /tf /tf_static
+
+Launch arguments (--show-args lists ~10 more that leak up from the
+include tree and are not all meaningful here):
+
+  config_file         l2_rsimu.yaml = RealSense IMU (default) | l2.yaml = L2's
+  rviz, rviz_cfg      open RViz, and with which config
+  publisher           none (DEFAULT HERE) = publish no rig transforms, for
+                      a bag that carries its own /tf_static. Pass urdf for
+                      a legacy bag that does not.
+  scope               mount (default) | all -- 'all' only for legacy bags,
+                      and only alongside publisher:=urdf
+  flatten_base_frame  zero the leveled z/roll/pitch (default true)
+  use_sim_time        FORCED true here; do not pass it
+
+README.md in this directory covers the four things that otherwise waste an
+afternoon: play_qos.yaml, publisher/scope, replaying /tf, and
+--disable-keyboard-controls when backgrounding the player.
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
 
 import os
 

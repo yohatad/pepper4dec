@@ -14,6 +14,10 @@ Affiliation: Carnegie Mellon University Africa
 Email: yohatad123@gmail.com
 Date: April 2025
 Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
 """
 
 import io
@@ -192,6 +196,7 @@ def iter_robot_chunks(
     up, down = ROBOT_RATE // _g, api_rate // _g
 
     def _flush(src_buf: np.ndarray) -> Tuple[List[int], float]:
+        """Resample one buffered chunk to the robot rate and return it."""
         resampled = resample_poly(src_buf, up, down).astype(np.float32)
         stereo = (
             np.column_stack([resampled, resampled]).flatten() * 32767 * stream_volume
@@ -251,6 +256,17 @@ ELEVENLABS_PCM_RATES = {16000, 22050, 24000, 44100}
 
 
 def elevenlabs_client(api_key: str):
+    """Construct an ElevenLabs API client.
+
+    Args:
+        api_key (str): ElevenLabs API key.
+
+    Returns:
+        elevenlabs.client.ElevenLabs: Client for the streaming/batch TTS calls.
+
+    Raises:
+        RuntimeError: If the ElevenLabs SDK is not installed.
+    """
     try:
         from elevenlabs.client import ElevenLabs  # type: ignore
     except ImportError as exc:
@@ -288,6 +304,7 @@ def stream_elevenlabs(
     api_rate = min(ELEVENLABS_PCM_RATES, key=lambda r: abs(r - sample_rate))
 
     def _gen():
+        """Yield PCM chunks from the ElevenLabs streaming endpoint."""
         client = elevenlabs_client(api_key)
         logger.info(
             f"ElevenLabs stream: voice={voice_id}, model={model_id}, "
@@ -358,6 +375,13 @@ class AudioPlayer:
     CHUNK_DURATION_S = 0.05
 
     def __init__(self, sample_rate: int, output_device: Optional[int] = None):
+        """Configure the output stream.
+
+        Args:
+            sample_rate (int): Playback sample rate (Hz).
+            output_device (Optional[int]): sounddevice output device index;
+                None or a negative value selects the system default.
+        """
         self.sample_rate = sample_rate
         self.output_device = (
             None if (output_device is None or output_device < 0) else output_device

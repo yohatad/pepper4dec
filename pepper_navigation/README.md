@@ -13,9 +13,9 @@ and the saved maps those consume.
 ## ✨ Key Features
 - **ROS2 Native**: Built for ROS2 Humble
 - **Nav2 Stack**: Full autonomous navigation with path planning and obstacle avoidance
-- **Three interchangeable localization stacks**: AMCL, 3D ICP against a prior
-  point cloud, or RTAB-Map — same costmaps and tuning behind each, so they can be
-  compared directly
+- **Three interchangeable localization stacks**: AMCL, a prior map carried
+  inside FAST-LIO's filter (`fastlio_localization`), or RTAB-Map — same costmaps
+  and tuning behind each, so they can be compared directly
 - **3D obstacle avoidance**: costmaps consume the L2's 360° `PointCloud2` directly
   through voxel layers, with no flattening step
 - **Independent safety layer**: a collision monitor gates every velocity command
@@ -82,7 +82,7 @@ source install/setup.bash
 
 | Component | Description |
 |-----------|-------------|
-| `map_server` | Serves a saved 2D grid as `/map` (AMCL stacks + the ICP stack; RTAB-Map serves its own) |
+| `map_server` | Serves a saved 2D grid as `/map` (AMCL and fastloc stacks; RTAB-Map serves its own) |
 | `amcl` | Adaptive Monte Carlo Localization — owns `map → odom` when used |
 | `bt_navigator` | Behavior tree-based navigation, serves `/navigate_to_pose` |
 | `controller_server` | Local path follower (DWB controller) |
@@ -101,11 +101,17 @@ difference between them is a *localization* difference and nothing else.
 |-------------|---------|--------------|
 | `nav2_params.yaml` | `pepper_navigation.launch.py` | AMCL on wheel odom (`pepper_odom`), legacy |
 | `nav2_params_amcl.yaml` | `pepper_nav2_amcl.launch.py` | AMCL on FAST-LIO odom |
-| `nav2_params_fastlio_loc.yaml` | `pepper_nav2_fastlio_loc.launch.py` | `lio_localization` ICP vs a prior `.pcd` |
+| `nav2_params_fastloc.yaml` | `pepper_nav2_fastloc.launch.py` | `fastlio_localization`: prior map inside the iEKF |
 | `nav2_params_rtabmap_loc.yaml` | `pepper_nav2_rtabmap_loc.launch.py` | RTAB-Map localization mode vs a `.db` |
+| `nav2_params_wheel_odom.yaml` | not launched by default | wheel-odometry variant, kept for comparison |
+
+`test/test_shared_nav2_params.py` guards the three node blocks
+(`behavior_server`, `controller_server`, `planner_server`) that are meant to be
+byte-identical across all five, so tuning a gain in four files and forgetting
+the fifth is caught rather than discovered later on the robot.
 
 The **keepout filter is not carried into the three current stacks**:
-`keepout_zone.yaml`'s mask was authored against `map/rtabmap_march_28.yaml`'s
+`keepout_zone.yaml`'s mask was authored against an older map's
 frame, so it has to be re-generated (`ros2_ws/utils/generate_keepout.py`) against the
 current map before that layer can be re-enabled.
 
@@ -119,11 +125,11 @@ FAST-LIO dead reckoning. They differ only in what corrects the drift:
 | Launch file | Localization | Prior map | Cost |
 |-------------|--------------|-----------|------|
 | `pepper_nav2_amcl.launch.py` | AMCL particle filter over a flattened `/scan` | 2D grid (`.yaml`/`.pgm`) | Cheapest; 2D only |
-| `pepper_nav2_fastlio_loc.launch.py` | `lio_localization`, 3D ICP against a point cloud | 3D `.pcd` **+** a matching 2D grid | Light — no Open3D, no PGO at runtime |
+| `pepper_nav2_fastloc.launch.py` | `fastlio_localization`, prior map loaded into the iEKF's ikd-Tree | keyframe `pose.json` + clouds **+** a matching 2D grid | Light — no Open3D, no PGO at runtime |
 | `pepper_nav2_rtabmap_loc.launch.py` | RTAB-Map localization mode (ICP + appearance) | RTAB-Map `.db` | Heaviest; also needs RGB |
 
 `pepper_navigation.launch.py` is the legacy fourth path — AMCL on naoqi's wheel
-odometry (`pepper_odom`) against `map/rtabmap_march_28.yaml`, from the 2D-lidar
+odometry (`pepper_odom`) against `map/pepper_map_lc.yaml`, from the 2D-lidar
 era. It expects a `/scan` that nothing in the current rig publishes, so start
 from `pepper_nav2_amcl.launch.py` instead unless you specifically want it.
 
@@ -135,12 +141,23 @@ order:
 ```bash
 source ~/ros2_ws/install/setup.bash
 
+# Both sensors at once (each has an enable_* argument). It publishes no
+# TF of its own -- the stacks below nest the sensor-rig static TF. It does
+# NOT start naoqi_driver; launch that separately (step 3 below):
+ros2 launch dec_launch dec_robot.launch.py
+```
+
+or individually:
+
+```bash
+source ~/ros2_ws/install/setup.bash
+
 # 1. L2 lidar -> /points + /imu/data. Everything downstream needs both.
 ros2 launch l2lidar_node l2lidar.launch.py
 
-# 2. RealSense. Optional for the AMCL/ICP stacks (a second, dense forward
+# 2. RealSense. Optional for the AMCL/fastloc stacks (a second, dense forward
 #    obstacle source); REQUIRED for the RTAB-Map stack, which subscribes to RGB.
-ros2 launch dec_launch my_realsense_bottom.launch.py
+ros2 launch dec_launch realsense_bottom.launch.py
 
 # 3. The robot itself, if it should actually move: naoqi_driver2 consumes the
 #    /cmd_vel the collision monitor emits.
@@ -148,15 +165,18 @@ ros2 launch naoqi_driver pepper_bringup.launch.py nao_ip:=<robot-ip>
 ```
 
 Then bring up one of the stacks below. Each opens RViz with the right config
-(`rviz:=false` to run headless) and each expects you to seed the pose with RViz's
-**2D Pose Estimate** — none of them start localized.
+(`rviz:=false` to run headless). AMCL and RTAB-Map expect you to seed the pose
+with RViz's **2D Pose Estimate**; fastloc does not — ScanContext finds its own
+initial pose, and `/relocalize` re-arms that search if it is ever wrong.
 
 ### Option 1: AMCL on FAST-LIO odometry
 
 ```bash
-ros2 launch pepper_navigation pepper_nav2_amcl.launch.py \
-    map:=/home/yoha/maps/pepper_clean.yaml
+ros2 launch pepper_navigation pepper_nav2_amcl.launch.py
 ```
+
+The `map` argument defaults to the packaged `map/pepper_map_lc.yaml`; pass
+`map:=<path to a .yaml>` to use a different grid.
 
 AMCL corrects FAST-LIO's `odom` (**not** `pepper_odom`), and
 `pointcloud_to_laserscan` flattens the L2's 360° `/points` into the `/scan` it
@@ -169,25 +189,48 @@ ros2 launch pepper_navigation pepper_nav2_amcl.launch.py \
     scan_min_height:=0.30 scan_max_height:=1.20
 ```
 
-### Option 2: FAST-LIO + lio_localization (prior `.pcd`)
+### Option 2: FAST-LIO + fastlio_localization (prior keyframe map)
 
-The lightest localization stack — 3D ICP against a saved cloud, no Open3D, no
-PGO at runtime, which matters on the Jetson CPU budget:
+The lightest localization stack — the prior map is loaded straight into the
+ikd-Tree the iEKF registers against, so the map constrains the estimate at scan
+rate with no separate correction node, no Open3D and no PGO at runtime, which
+matters on the Jetson CPU budget. ScanContext finds the initial pose, so no
+`/initialpose` is needed:
 
 ```bash
-ros2 launch pepper_navigation pepper_nav2_fastlio_loc.launch.py \
-    map_pcd:=/home/yoha/Lidar/run_l2_lc/pgo_output/map_batch.pcd \
-    map:=/home/yoha/maps/pepper_clean.yaml
+ros2 launch pepper_navigation pepper_nav2_fastloc.launch.py
 ```
 
-It needs **both** maps of the same environment: the `.pcd` that ICP registers
-against, and the 2D grid `map_server` publishes for the global costmap's static
-layer. Lower `localization_th` (default `0.90`) if the L2 scan only partly
-overlaps the prior map.
+It needs **both** maps of the same environment: the per-keyframe clouds and
+poses that ScanContext and the iEKF register against (`map_scan_dir` +
+`map_pose_file`), and the 2D grid `map_server` publishes for the global
+costmap's static layer (`map`). If the L2 scan only partly overlaps the prior
+map, lower `init_min_overlap` (default `0.70`) to accept a lock at startup, or
+`health_min_overlap` (default `0.45`) to stop the post-lock health check
+declaring itself lost mid-run.
 
-> The `map_pcd` default points at the loop-closed PGO output. That file is
-> produced by `fastlio_lc_pgo`'s batch re-optimization service — if it is
-> missing, re-run the mapping pipeline before using this stack.
+A lock is accepted standing still. `init_require_motion` defaults to `false`
+here, so ScanContext can converge from a parked start — which is what keeps a
+stationary bag or an undriveable robot from stalling bringup entirely, since
+nothing publishes `map → base_footprint` until the lock and
+`wait_for_map_then_start` waits on exactly that.
+
+The cost is that two estimates taken standing still can agree on the same wrong
+place without ever being forced apart in space (measured 41 m off in a
+corridor). Pass `init_require_motion:=true` to require ~0.5 m of driving
+between them if you would rather fail to start than start in the wrong place —
+worth doing for unattended deployment, where nobody is watching the first lock.
+Either way the post-lock health check and `localization_watchdog` catch a wrong
+lock afterwards; the argument only decides whether one is caught *before* it is
+used.
+
+> `map_scan_dir` defaults to `pcd/sc_pcd_20260823/` — the keyframe clouds
+> `utils/pgo_to_scancontext_map.py` writes from a `fastlio_lc_pgo` run. They are
+> gitignored (75 MB) and are **not in a fresh checkout**; copy them in first.
+> Without them `fastlio_localization` fails `on_configure` and exits, and
+> because nothing then publishes `map → base_footprint`,
+> `wait_for_map_then_start` never fires and the whole Nav2 bringup sits inactive
+> with no other symptom.
 
 ### Option 3: FAST-LIO + RTAB-Map localization (`.db`)
 
@@ -227,13 +270,13 @@ odometry frame and the global costmap lives in `map`:
 | Stack | `map → odom` | `odom → base_footprint` | Local costmap frame |
 |-------|--------------|-------------------------|---------------------|
 | `pepper_nav2_amcl` | `amcl` | `lio_odom_bridge` (FAST-LIO) | `odom` |
-| `pepper_nav2_fastlio_loc` | `transform_fusion` | `lio_odom_bridge` | `odom` |
+| `pepper_nav2_fastloc` | `fastlio_localization` (publishes `map → base_footprint`; no `odom` edge) | — | `map` |
 | `pepper_nav2_rtabmap_loc` | `rtabmap` (to `odom`) | `lio_odom_bridge` | `odom` |
 | `pepper_navigation` (legacy) | `amcl` | `naoqi_driver2` (`pepper_odom`) | `pepper_odom` |
 
 The static sensor chain (`base_footprint → l2lidar_frame → cameras`) comes from
 `pepper_slam`'s `pepper_sensor_tf.launch.py`. **Exactly one node may own
-`map → odom`** — this is why the AMCL and ICP stacks run FAST-LIO with
+`map → odom`** — this is why the AMCL and RTAB-Map stacks run FAST-LIO with
 `bridge_level_frame:=false`: the bridge's static `odom → odom` would
 otherwise give `odom` a second parent. See `config/README.md` on why wheel odom
 is deliberately named `pepper_odom` and never plain `odom`.
@@ -268,6 +311,34 @@ Camera RGB topics are subscribed by RTAB-Map (via `pepper_slam`) in that stack o
 | `/global_costmap/costmap` | `nav_msgs/OccupancyGrid` | Global costmap |
 | `/local_costmap/costmap` | `nav_msgs/OccupancyGrid` | Local costmap |
 | `/plan` | `nav_msgs/Path` | Current planned global path |
+| `/localization/overlap` | `std_msgs/Float32` | fastloc only: fraction of the live scan landing on the prior map, 1 Hz |
+| `/diagnostics` | `diagnostic_msgs/DiagnosticArray` | fastloc only: `fastlio_localization: pose lock` status (OK / WARN / ERROR) |
+
+### Services
+
+| Service | Type | Description |
+|---------|------|-------------|
+| `/localization_recover` | `std_srvs/Trigger` | "I am lost, fix it", same call on every profile — dispatches to whichever backend is running |
+| `/relocalize` | `std_srvs/Trigger` | fastloc only: re-arms the ScanContext search from scratch (what `/localization_recover` forwards to) |
+| `/reinitialize_global_localization` | `std_srvs/Empty` | AMCL only: re-scatters particles globally |
+
+### Losing localization
+
+`fastlio_localization` re-checks its own lock at 1 Hz by scoring the live scan
+against the prior map, because a wrong-but-confident lock has no other symptom —
+a self-similar corridor still produces plausible scan matches at the wrong
+place. Sustained low overlap re-arms its search automatically, and
+`localization_watchdog` cancels the active navigation goal while it lasts, so
+the robot stops driving toward a goal computed from a pose it no longer trusts.
+
+Only sustained badness counts: a single low reading is normal when turning a
+corner into unmapped space or when someone walks through the scan. Pass
+`watchdog:=false` to monitor without ever holding navigation.
+
+```bash
+ros2 service call /localization_recover std_srvs/srv/Trigger   # any profile
+ros2 topic echo /localization/overlap                          # fastloc health
+```
 
 ### The velocity chain
 
@@ -319,28 +390,26 @@ ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
 
 ## Pre-built Maps
 
-Maps shipped in this package's `map/` directory — all from the 2D-lidar/RTAB-Map
-era, consumed by the legacy `pepper_navigation.launch.py`:
-
-| File | Description |
-|------|-------------|
-| `rtabmap_march_28.yaml` | Map built with RTAB-Map (legacy stack default) |
-| `rtabmap_feb_15.yaml`, `rtabmap_feb_26.yaml` | Earlier RTAB-Map captures |
-| `map.yaml` | General-purpose map |
-| `my_map.yaml` | Alternative saved map |
-| `keepout_zone.yaml` | Keepout zone filter mask (authored against `rtabmap_march_28`) |
-
-The three current stacks default to maps **outside** the package, since they are
-outputs of the L2 mapping pipeline rather than versioned assets:
+Shipped in this package, so every stack but RTAB-Map comes up on a fresh
+checkout with no absolute paths:
 
 | Path | Used by |
 |------|---------|
-| `/home/yoha/maps/pepper_clean.yaml` | `map` arg of the AMCL and ICP stacks (2D grid) |
-| `/home/yoha/Lidar/run_l2_lc/pgo_output/map_batch.pcd` | `map_pcd` arg of the ICP stack (3D cloud) |
+| `map/pepper_map_lc.yaml` (+ `.pgm`) | `map` arg of the AMCL and fastloc stacks, and the legacy stack's hardcoded map (2D grid) |
+| `map/keepout_zone.yaml` (+ `.pgm`) | keepout filter mask, legacy stack only |
+| `pcd/sc_pose_20260823.json` | `map_pose_file` of the fastloc stack — per-keyframe poses |
+| `pcd/pepper_map_lc.pcd`, `pcd/pepper_map_lc_poses.txt` | the PGO run's 3D map product; not a runtime input any more |
+
+Two things are **not** in the package:
+
+| Path | Used by |
+|------|---------|
+| `pcd/sc_pcd_20260823/` (2735 clouds, 75 MB) | `map_scan_dir` of the fastloc stack — gitignored; copy it alongside a checkout |
 | `~/.ros/rtabmap_fastlio_refined.db` | `database_path` arg of the RTAB-Map stack |
 
-Pass the arguments explicitly if your paths differ — the defaults are one
-person's workstation layout, not a contract.
+The keepout mask was authored against an older map's frame and does **not** line
+up with `pepper_map_lc.yaml` — regenerate it with `utils/generate_keepout.py`
+before re-enabling that layer.
 
 ### Saving a New Map
 
@@ -352,7 +421,7 @@ ros2 run nav2_map_server map_saver_cli -f ~/ros2_ws/src/pepper4dec/pepper_naviga
 
 # Or alongside the other L2-era maps, and point the launch arg at it
 ros2 run nav2_map_server map_saver_cli -f ~/maps/my_new_map
-ros2 launch pepper_navigation pepper_nav2_amcl.launch.py map:=/home/yoha/maps/my_new_map.yaml
+ros2 launch pepper_navigation pepper_nav2_amcl.launch.py map:=<path to your new .yaml>
 ```
 
 Either works — the current stacks take an absolute `map:=` path, so nothing has
@@ -369,22 +438,27 @@ pepper_navigation/
 ├── config/
 │   ├── nav2_params.yaml                      # Nav2 stack parameters (AMCL + static map, wheel odom)
 │   ├── nav2_params_amcl.yaml                 # Nav2 params for AMCL on FAST-LIO odom
-│   ├── nav2_params_fastlio_loc.yaml          # Nav2 params for the lio_localization (ICP) stack
+│   ├── nav2_params_fastloc.yaml              # Nav2 params for the fastlio_localization stack
 │   ├── nav2_params_rtabmap_loc.yaml          # Nav2 params for the RTAB-Map localization stack
 │   ├── ekf_nav.yaml                          # robot_localization EKF parameters (not yet launched)
 │   └── README.md
 ├── launch/
 │   ├── pepper_navigation.launch.py           # Nav2 + AMCL against a static map
 │   ├── pepper_nav2_amcl.launch.py            # Nav2 + AMCL on FAST-LIO odom (localization baseline)
-│   ├── pepper_nav2_fastlio_loc.launch.py     # Nav2 + FAST-LIO + lio_localization (prior .pcd)
+│   ├── pepper_nav2_fastloc.launch.py         # Nav2 + fastlio_localization (prior map in the iEKF)
 │   ├── pepper_nav2_rtabmap_loc.launch.py     # Nav2 + FAST-LIO + RTAB-Map localization (.db)
 │   └── odom_test.launch.py
 ├── map/
-│   ├── rtabmap_march_28.yaml     # default RTAB-Map map (used by Nav2); .pgm alongside
-│   ├── map.yaml, my_map.yaml     # general-purpose saved maps; .pgm alongside
-│   ├── rtabmap_feb_15.yaml, rtabmap_feb_26.yaml  # earlier RTAB-Map captures; .pgm alongside
-│   ├── keepout_zone.yaml         # keepout filter mask; .pgm alongside
+│   ├── pepper_map_lc.yaml        # the 2D grid every current stack defaults to; .pgm alongside
+│   ├── keepout_zone.yaml         # keepout filter mask, legacy stack only; .pgm alongside
 │   └── *.png                     # map preview renders
+├── pcd/                          # fastloc's prior map (poses tracked, clouds gitignored)
+│   ├── sc_pose_20260823.json     # per-keyframe poses, read by fastlio_localization
+│   └── pepper_map_lc.pcd, pepper_map_lc_poses.txt   # the PGO run's 3D map product
+├── scripts/                      # rclpy helper nodes, installed as executables
+│   ├── wait_for_map_then_start.py # starts nav2 once the map frame exists
+│   ├── localization_recovery.py   # /localization_recover, one entry point per profile
+│   └── localization_watchdog.py   # holds navigation while localization is lost
 ├── src/tools/                    # dev/debug tooling, not the production pipeline
 │   ├── send_goal.cpp             # CLI utility to send Nav2 goals
 │   └── odom_path_publisher.cpp   # publishes traversed path for RViz2
@@ -393,7 +467,7 @@ pepper_navigation/
 │                                  # (not a ROS2 node - run manually with python3)
 ├── rviz/
 │   ├── nav2_amcl.rviz            # AMCL stack: map, particle cloud, /scan, costmaps, zones
-│   ├── nav2_fastlio_loc.rviz     # ICP stack: map, costmaps, plans, safety zones
+│   ├── nav2_fastloc.rviz         # fastloc stack: map, costmaps, plans, safety zones
 │   └── odometry_test.rviz
 ├── package.xml
 └── README.md
@@ -429,7 +503,7 @@ The navigation stack integrates four main subsystems:
 3. **Localization Layer** — three interchangeable implementations, one interface
    (`map → odom` + a `/map` for the static layer):
    - **AMCL** over a flattened `/scan`, on FAST-LIO odometry
-   - **`lio_localization`**, 3D ICP against a prior `.pcd`
+   - **`fastlio_localization`**, the prior map registered inside FAST-LIO's iEKF
    - **RTAB-Map** in localization mode against a `.db`, which also publishes `/map`
    - `ekf_nav.yaml` configures `robot_localization`'s `ekf_node` to fuse
      `/pepper_odom_filtered` (and, once wired in, a LIO odometry source) -
@@ -497,7 +571,7 @@ Common failure modes:
 |---------|--------------|
 | Costmaps empty, no plan | `/points` not flowing — the lidar driver isn't running |
 | Robot freezes in place, never moves | Collision monitor stopping on self-hits: check `/points_safety` exists and `points_safety_filter` is running |
-| `map → odom` jitter or TF warnings | Two publishers of the same transform — check `bridge_level_frame` is `false` on the AMCL/ICP stacks |
+| `map → odom` jitter or TF warnings | Two publishers of the same transform — check `bridge_level_frame` is set correctly for the stack you are running |
 | AMCL particles never tighten | Flattened `/scan` doesn't match the grid — retune `scan_min_height`/`scan_max_height` |
 | Global costmap all unknown | `/map` never arrived: wrong `map` path, or `map_server` never activated |
 

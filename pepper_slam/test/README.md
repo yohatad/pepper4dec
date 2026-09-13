@@ -32,8 +32,6 @@ record of behaviour known to be correct.
 | `pl_odom` | `pepper_slam/pointlio_odometry.launch.py` | 4 |
 | `fl_lc` | `fastlio_lc_pgo/fastlio_lc_l2.launch.py` | 7 |
 | `pl_lc` | `fastlio_lc_pgo/pointlio_lc_l2.launch.py` | 7 |
-| `fl_loc` | `lio_localization/fastlio_localization_l2.launch.py` | 6 |
-| `pl_loc` | `lio_localization/pointlio_localization_l2.launch.py` | 6 |
 
 Counts are with default arguments and **conditions evaluated**. An earlier
 version of `resolve_launch.py` did not check `IfCondition`, and so reported both

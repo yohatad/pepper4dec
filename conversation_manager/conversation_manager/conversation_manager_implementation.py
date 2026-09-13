@@ -7,7 +7,7 @@ ConversationManagerNode.
 
 Configuration is held in a module-level ConversationManagerConfig dataclass, built
 by ConversationManagerNode.on_configure() from its ROS parameters (declared in
-__init__, populated from config/converation_manager_configuration.yaml via the
+__init__, populated from config/conversation_manager_configuration.yaml via the
 launch file's parameters=[...]) and applied with set_config(). The LLM_API_KEY
 must be exported as an environment variable — it is never a ROS parameter, since
 those are visible via `ros2 param dump`/introspection tools. Query handling
@@ -21,6 +21,10 @@ Affiliation: Carnegie Mellon University Africa
 Email: yohatad123@gmail.com
 Date: February 28, 2026
 Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
 """
 
 import os

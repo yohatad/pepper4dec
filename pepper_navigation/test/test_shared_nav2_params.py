@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Guard the nav2 param sections that are meant to be identical across modes.
 
-There are four nav2 param files (amcl / fastlio_loc / rtabmap_loc / base). Most
-of their content legitimately differs per mode -- only 3 of 10 top-level nodes
-are true duplicates. Those three are the drift risk: tuning a controller gain
-means editing four files, and nothing tells you if you edit three.
+There are six nav2 param files (amcl / fastloc / pointloc / rtabmap_loc /
+base / wheel_odom). Most of their content legitimately differs per mode -- only 3 of 10
+top-level nodes are true duplicates. Those three are the drift risk: tuning a
+controller gain means editing six files, and nothing tells you if you edit
+five.
 
 Extracting them into a shared base was considered and rejected: it would move 3
 nodes and leave 7 mode-specific, at the cost of a launch-time yaml merge -- a new
@@ -20,12 +21,13 @@ import pytest
 import yaml
 
 SHARED = ("behavior_server", "controller_server", "planner_server")
-FILES = ("nav2_params_amcl.yaml", "nav2_params_fastlio_loc.yaml",
-         "nav2_params_rtabmap_loc.yaml", "nav2_params.yaml")
+FILES = ("nav2_params_amcl.yaml", "nav2_params_fastloc.yaml",
+         "nav2_params_rtabmap_loc.yaml", "nav2_params.yaml",
+         "nav2_params_wheel_odom.yaml", "nav2_params_pointloc.yaml")
 
 
 def _load():
-    """Load the four nav2 param files, returning {filename: parsed yaml}."""
+    """Load the nav2 param files, returning {filename: parsed yaml}."""
     cfg = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "config")
     loaded = {}
     for f in FILES:

@@ -4,10 +4,15 @@
  * config loading, image QoS, topic-name compression-suffix handling, and
  * a face-ID-to-color generator for visualization.
  *
- * Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
+ * Author: Yohannes Tadesse Haile
+ * Affiliation: Carnegie Mellon University Africa
  * Email: yohatad123@gmail.com
  * Date: June 12, 2026
  * Version: v1.0
+ *
+ * Copyright (C) 2025 Carnegie Mellon University Africa
+ * This software is provided 'as-is' for research and educational purposes
+ * within the DEC project.
  */
 
 #include "overt_attention/overt_attention_interface.h"

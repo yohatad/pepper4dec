@@ -1,33 +1,46 @@
-# RTAB-Map on a recorded bag using ALL THREE sensors: RealSense RGB + aligned
-# depth, the RealSense IMU, and the Unitree L2 lidar.
-#
-# Unlike rtabmap_l2_bag (lidar only) and rtabmap_fastlio_bag (FAST-LIO odometry,
-# RGB for appearance), this variant also subscribes to the aligned depth image.
-#
-# ODOMETRY (odom_source arg). Measured median step on slam_recording:
-#   wheel (default)  the bag's own /pepper_odom, 0.35 cm -- by far the
-#       smoothest. It drifts over distance, which loop closure corrects.
-#   icp              rtabmap's icp_odometry on the L2, 5.74 cm, p99 12.52 cm,
-#       with 44-47 cm outliers implying 5.09 m/s against Pepper's 0.35 m/s
-#       ceiling. Icp/MaxTranslation is capped at 0.3 m below to reject those.
-# Only ONE source may parent base_footprint, so with wheel (where the bag's /tf
-# already supplies pepper_odom -> base_footprint) icp_odometry is not started.
-#
-# IMU: /camera/imu carries no orientation, so imu_filter_madgwick fuses it into
-# /imu/filtered before RTAB-Map can use it for gravity. The RealSense is used
-# over the L2's /imu/data, whose timestamps carry a ~17 ms sawtooth.
-#
-# Usage:
-#   ros2 launch pepper_slam rtabmap_fused_bag.launch.py
-#   ros2 launch pepper_slam rtabmap_fused_bag.launch.py odom_source:=icp
-#
-#   ros2 bag play <bag> --clock --read-ahead-queue-size 2000 \
-#     --topics /points /camera/imu /tf \
-#              /camera/color/image_raw /camera/color/camera_info \
-#              /camera/aligned_depth_to_color/image_raw \
-#              /camera/aligned_depth_to_color/camera_info \
-#              /pepper_odom
-#   (/tf and /pepper_odom are required for odom_source:=wheel; harmless otherwise.)
+r"""rtabmap_fused_bag.launch.py
+
+RTAB-Map on a recorded bag using ALL THREE sensors: RealSense RGB + aligned
+depth, the RealSense IMU, and the Unitree L2 lidar.
+
+Unlike rtabmap_l2_bag (lidar only) and rtabmap_fastlio_bag (FAST-LIO odometry,
+RGB for appearance), this variant also subscribes to the aligned depth image.
+
+ODOMETRY (odom_source arg). Measured median step on slam_recording:
+  wheel (default)  the bag's own /pepper_odom, 0.35 cm -- by far the
+      smoothest. It drifts over distance, which loop closure corrects.
+  icp              rtabmap's icp_odometry on the L2, 5.74 cm, p99 12.52 cm,
+      with 44-47 cm outliers implying 5.09 m/s against Pepper's 0.35 m/s
+      ceiling. Icp/MaxTranslation is capped at 0.3 m below to reject those.
+Only ONE source may parent base_footprint, so with wheel (where the bag's /tf
+already supplies pepper_odom -> base_footprint) icp_odometry is not started.
+
+IMU: /camera/imu carries no orientation, so imu_filter_madgwick fuses it into
+/imu/filtered before RTAB-Map can use it for gravity. The RealSense is used
+over the L2's /imu/data, whose timestamps carry a ~17 ms sawtooth.
+
+Usage:
+  ros2 launch pepper_slam rtabmap_fused_bag.launch.py
+  ros2 launch pepper_slam rtabmap_fused_bag.launch.py odom_source:=icp
+
+  ros2 bag play <bag> --clock --read-ahead-queue-size 2000 \
+    --topics /points /camera/imu /tf \
+             /camera/color/image_raw /camera/color/camera_info \
+             /camera/aligned_depth_to_color/image_raw \
+             /camera/aligned_depth_to_color/camera_info \
+             /pepper_odom
+  (/tf and /pepper_odom are required for odom_source:=wheel; harmless otherwise.)
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
 
 import os
 

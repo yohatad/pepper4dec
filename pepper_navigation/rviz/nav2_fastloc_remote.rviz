@@ -55,9 +55,9 @@ Visualization Manager:
     Name: TF
     Show Arrows: false
     Show Axes: true
-    Show Names: true
+    Show Names: false
     Tree: {}
-    Update Interval: 0
+    Update Interval: 0.5
     Value: true
   - Alpha: 1
     Class: rviz_default_plugins/Map
@@ -73,88 +73,13 @@ Visualization Manager:
       Value: /map
     Use Timestamp: false
     Value: true
-  - Alpha: 1.0
-    Autocompute Intensity Bounds: true
-    Axis: Z
-    Channel Name: intensity
-    Class: rviz_default_plugins/PointCloud2
-    Color: 255; 40; 40
-    Color Transformer: FlatColor
-    Decay Time: 0
-    Enabled: true
-    Name: ScanInMap (localization)
-    Position Transformer: XYZ
-    Selectable: true
-    Size (Pixels): 2
-    Size (m): 0.08
-    Style: Flat Squares
-    Topic:
-      Depth: 5
-      Durability Policy: Volatile
-      Filter size: 10
-      History Policy: Keep Last
-      Reliability Policy: Best Effort
-      Value: /cur_scan_in_map
-    Use Fixed Frame: true
-    Use rainbow: true
-    Value: true
-  - Alpha: 0.6
-    Autocompute Intensity Bounds: true
-    Axis: Z
-    Channel Name: intensity
-    Class: rviz_default_plugins/PointCloud2
-    Color: 255; 255; 255
-    Color Transformer: AxisColor
-    Decay Time: 0
-    Enabled: false
-    Name: L2 Lidar (/points)
-    Position Transformer: XYZ
-    Selectable: true
-    Size (Pixels): 2
-    Size (m): 0.02
-    Style: Points
-    Topic:
-      Depth: 5
-      Durability Policy: Volatile
-      Filter size: 10
-      History Policy: Keep Last
-      Reliability Policy: Best Effort
-      Value: /points
-    Use Fixed Frame: true
-    Use rainbow: true
-    Value: true
-  - Alpha: 0.6
-    Autocompute Intensity Bounds: true
-    Axis: Z
-    Channel Name: intensity
-    Class: rviz_default_plugins/PointCloud2
-    Color: 255; 255; 255
-    Color Transformer: RGB8
-    Decay Time: 0
-    Enabled: false
-    Name: RealSense Depth
-    Position Transformer: XYZ
-    Selectable: true
-    Size (Pixels): 2
-    Size (m): 0.02
-    Style: Flat Squares
-    Topic:
-      Depth: 5
-      Durability Policy: Volatile
-      Filter size: 10
-      History Policy: Keep Last
-      Reliability Policy: Best Effort
-      Value: /camera/depth/color/points
-    Use Fixed Frame: true
-    Use rainbow: true
-    Value: false
   - Class: rviz_common/Group
     Displays:
     - Alpha: 0.4
       Class: rviz_default_plugins/Map
       Color Scheme: costmap
       Draw Behind: false
-      Enabled: true
+      Enabled: false
       Name: Global Costmap
       Topic:
         Depth: 1
@@ -303,6 +228,92 @@ Visualization Manager:
       Value: true
     Enabled: true
     Name: Safety
+  - Class: rviz_common/Group
+    Enabled: true
+    Name: Localization (light)
+    Displays:
+    - Angle Tolerance: 0.1
+      Class: rviz_default_plugins/Odometry
+      Covariance:
+        Orientation:
+          Alpha: 0.5
+          Color: 255; 255; 127
+          Color Style: Unique
+          Frame: Local
+          Offset: 1.0
+          Scale: 1.0
+          Value: true
+        Position:
+          Alpha: 0.3
+          Color: 204; 51; 204
+          Scale: 1.0
+          Value: true
+        Value: false
+      Enabled: true
+      Keep: 1
+      Name: Locked pose (arrow = LOCKED; none = searching)
+      Position Tolerance: 0.1
+      Shape:
+        Alpha: 1.0
+        Axes Length: 1.0
+        Axes Radius: 0.1
+        Color: 0; 255; 0
+        Head Length: 0.2
+        Head Radius: 0.12
+        Shaft Length: 0.6
+        Shaft Radius: 0.06
+        Value: Arrow
+      Topic:
+        Depth: 10
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /localization/pose
+      Value: true
+    - Alpha: 1.0
+      Axes Length: 0.5
+      Axes Radius: 0.05
+      Class: rviz_default_plugins/Pose
+      Color: 255; 85; 0
+      Enabled: true
+      Head Length: 0.12
+      Head Radius: 0.08
+      Name: Candidate pose (BEING TESTED)
+      Shaft Length: 0.4
+      Shaft Radius: 0.03
+      Shape: Arrow
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /localization/candidate_pose
+      Value: true
+    - Alpha: 1.0
+      Autocompute Intensity Bounds: true
+      Class: rviz_default_plugins/PointCloud2
+      Color: 255; 85; 0
+      Color Transformer: FlatColor
+      Decay Time: 0.0
+      Enabled: false
+      Name: Candidate scan (burst, enable to judge a lock)
+      Position Transformer: XYZ
+      Selectable: false
+      Size (Pixels): 3
+      Size (m): 0.05
+      Style: Points
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /localization/candidate_scan
+      Use Fixed Frame: true
+      Use rainbow: false
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48

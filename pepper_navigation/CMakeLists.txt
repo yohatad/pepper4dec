@@ -65,22 +65,50 @@ install(TARGETS send_goal
 # Install python helper scripts
 install(PROGRAMS
   scripts/wait_for_map_then_start.py
+  scripts/localization_recovery.py
+  scripts/localization_watchdog.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# Install launch files
+# Install launch files.
+#
+# NOT symlinked, unlike config/ and rviz/ below: `ros2 launch <pkg> <file>`
+# resolves its top-level file argument via ros2launch/api/api.py's
+# os.walk(package_share_directory) with the default followlinks=False, which
+# never descends into a SYMLINKED launch/ directory -- MEASURED: symlinking
+# this one broke `ros2 launch pepper_navigation pepper_nav2_fastloc.launch.py`
+# outright ("file ... was not found"), even though the file plainly existed
+# through the symlink. config/ and rviz/ are safe because they're only ever
+# reached by direct path construction inside a launch file's own Python code
+# (get_package_share_directory() + os.path.join()), never through that
+# top-level os.walk lookup.
 install(DIRECTORY
   launch/
   DESTINATION share/${PROJECT_NAME}/launch
   FILES_MATCHING PATTERN "*.py"
 )
 
-# Install rviz configs
-install(DIRECTORY
-  rviz/
-  DESTINATION share/${PROJECT_NAME}/rviz
-  FILES_MATCHING PATTERN "*.rviz"
-)
+# Install rviz configs. SYMLINKED -- same reasoning as config/ above.
+install(CODE "set(_rviz_src \"${CMAKE_CURRENT_SOURCE_DIR}/rviz\")")
+install(CODE "set(_rviz_pkg \"${PROJECT_NAME}\")")
+install(CODE [[
+  set(_rviz_dst "${CMAKE_INSTALL_PREFIX}/share/${_rviz_pkg}/rviz")
+  get_filename_component(_rviz_parent "${_rviz_dst}" DIRECTORY)
+  file(MAKE_DIRECTORY "${_rviz_parent}")
+  if(EXISTS "${_rviz_dst}" OR IS_SYMLINK "${_rviz_dst}")
+    file(REMOVE_RECURSE "${_rviz_dst}")
+  endif()
+  execute_process(
+    COMMAND ${CMAKE_COMMAND} -E create_symlink "${_rviz_src}" "${_rviz_dst}"
+    RESULT_VARIABLE _rviz_rc ERROR_QUIET)
+  if(_rviz_rc EQUAL 0)
+    message(STATUS "rviz/ symlinked -> ${_rviz_src} (edits are live)")
+  else()
+    message(STATUS "rviz/ symlink failed -- copying instead")
+    file(COPY "${_rviz_src}/" DESTINATION "${_rviz_dst}"
+         FILES_MATCHING PATTERN "*.rviz")
+  endif()
+]])
 
 # Install config files.
 #
@@ -131,24 +159,26 @@ install(DIRECTORY
   PATTERN "*.pgm"
 )
 
-# Install the 3D prior map fastlio_lc_pgo's /pgo_batch_optimize writes
-# (map_pcd_path) -- lio_localization ICPs against it. It shares the levelled,
-# floor-referenced frame with the .pgm/.yaml 2D grid in map/, but lives in its
-# own directory since it is a different artifact (3D prior vs. 2D nav grid).
+# Install the 3D map fastlio_lc_pgo's /pgo_batch_optimize writes
+# (map_pcd_path). It shares the levelled, floor-referenced frame with the
+# .pgm/.yaml 2D grid in map/, but lives in its own directory since it is a
+# different artifact (3D cloud vs. 2D nav grid). Nothing localizes against it
+# directly any more -- fastlio_localization reads the per-keyframe pose.json
+# and clouds below -- but it is still the PGO run's map product.
 install(DIRECTORY
   pcd/
   DESTINATION share/${PROJECT_NAME}/pcd
   FILES_MATCHING
   PATTERN "*.pcd"
-  # Levelled keyframe poses for lio_localization's seedless global search /
-  # /relocalize. Ships beside the .pcd it was written alongside, so map_pcd
-  # and keyframe_poses are ONE package-relative set -- no absolute
-  # /home/<user> path that only resolves on the machine that built the map.
+  # Levelled keyframe poses in KITTI 3x4, written beside the .pcd by the same
+  # PGO run. No longer a runtime input (that was lio_localization's global
+  # search); kept as the run's record, and as the plain-text counterpart to
+  # the pose.json below.
   PATTERN "*_poses.txt"
   # pose.json is the SAME mapping run in the format fastlio_localization reads:
   # per-keyframe quaternion poses, against the KITTI 3x4 in *_poses.txt. It
-  # ships here so the two localization stacks' maps are visibly ONE set rather
-  # than two files that happen to describe the same building. The 2735 keyframe
+  # ships here so every artifact of the run stays visibly ONE set rather
+  # than files that happen to describe the same building. The 2735 keyframe
   # CLOUDS it indexes are 75 MB and deliberately do NOT live in this package --
   # they are in ros2_ws/bags/pcd, addressed by localization.map_scan_dir.
   PATTERN "*.json"

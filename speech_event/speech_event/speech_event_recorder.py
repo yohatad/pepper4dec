@@ -27,6 +27,10 @@ Affiliation: Carnegie Mellon University Africa
 Email: yohatad123@gmail.com
 Date: April 27, 2026
 Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
 """
 
 import os
@@ -55,6 +59,13 @@ class AudioRecorderNode(Node):
     """Records microphone AudioBuffer messages to multichannel and per-channel WAV files."""
 
     def __init__(self):
+        """Declare and read parameters, open the WAV files, and subscribe to
+        the microphone topic.
+
+        This is a secondary (non-orchestrated) helper node, so it uses a plain
+        rclpy Node rather than the lifecycle pattern used by the package's
+        primary node.
+        """
         super().__init__('audio_recorder')
 
         # Declare params
@@ -126,6 +137,7 @@ class AudioRecorderNode(Node):
         return split_handles
 
     def _close_all(self):
+        """Close every open WAV handle, ignoring already-closed files."""
         if self.wave_main is not None:
             try:
                 self.wave_main.close()
@@ -141,12 +153,20 @@ class AudioRecorderNode(Node):
         self.wave_split = []
 
     def _sigint(self, *_):
+        """Stop recording and close the WAV files on Ctrl-C."""
         self.get_logger().info("Ctrl-C received. Stopping recording...")
         self.shutting_down = True
         self._close_all()
 
     # ---------- callback ----------
     def on_audio(self, msg: AudioBuffer):
+        """Append one audio buffer to the WAV files.
+
+        Args:
+            msg (naoqi_bridge_msgs/AudioBuffer): Raw multi-channel microphone
+                audio; the first message also fixes the sample rate and
+                channel layout of the output files.
+        """
         if self.shutting_down:
             return
 
@@ -202,6 +222,12 @@ class AudioRecorderNode(Node):
 
 
 def main():
+    """Entry point for the audio_recorder ROS2 node.
+
+    Initializes rclpy, instantiates the AudioRecorderNode, and spins it until
+    Ctrl-C or the configured max_seconds is reached, closing the WAV files on
+    the way out.
+    """
     rclpy.init()
     node = AudioRecorderNode()
     try:

@@ -1,3 +1,48 @@
+"""
+realsense_bottom.launch.py: launch the bottom-mounted RealSense with its point cloud.
+
+The point cloud is the one this build needs; see Configuration below.
+
+Launch files included:
+    realsense2_camera/rs_launch.py — the stock driver launch, with the
+    profiles, IMU settings, and filter arguments set here.
+
+Nodes started:
+    None directly; everything comes from the included driver launch.
+
+Launch arguments:
+    (none)
+
+Configuration:
+    dec_launch/config/realsense_bottom_pointcloud.yaml, passed as the driver's
+    config_file and merged with HIGHER priority than the launch_arguments
+    below it. This is where the point cloud is actually enabled: this
+    librealsense build exposes the filter as `pointcloud__neon_.*`, so the
+    generic `pointcloud.enable` argument here is a name mismatch that does
+    nothing. Decimation is on at magnitude 2 (~1/4 the points), which keeps
+    the Nav2 VoxelLayer and collision monitor cheap; raise it to 3-4 for a
+    lighter cloud.
+
+Prerequisites:
+    A RealSense device on USB. The l2lidar_frame -> camera_camera_link static
+    transform is NOT published here — it lives in pepper_slam/config/
+    sensor_tf.yaml so there is exactly one owner, since two publishers of a
+    latched /tf_static edge means whichever lands last silently wins.
+
+Usage:
+    ros2 launch dec_launch realsense_bottom.launch.py
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
+
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -62,10 +107,33 @@ def generate_launch_description():
                 'unite_imu_method': '2',
 
                 'rgb_camera.color_profile': '640x480x30',
+                # Default (BGR8) never matches the pointcloud filter's texture
+                # format check (RGB8/Y8 only, see config_file below) -- the
+                # cloud published with no color regardless of stream_filter.
+                # NOTE: an rgb8-sourced image crashes this build's compressed
+                # image transport (OpenCV(4.8.0) alloc.cpp OutOfMemoryError,
+                # MEASURED 2026-09-08) -- if viewing /camera/color/image_raw
+                # in RViz, set that Image display's Image Transport Hint to
+                # 'raw', not 'compressed'.
+                'rgb_camera.color_format': 'RGB8',
                 'depth_module.depth_profile': '640x480x30',
                 'depth_module.infra_profile': '640x480x30',
 
-                'pointcloud.enable': 'true',        # <-- disable during recording
+                # This is a NAME MISMATCH, not a toggle: this node's librealsense
+                # build exposes the point-cloud filter as `pointcloud__neon_.*`,
+                # not the generic `pointcloud.*` this launch arg sets, so setting
+                # it here does nothing (see config_file below, which is what
+                # actually turns the point cloud on/off - flip .enable there).
+                'pointcloud.enable': 'true',
+
+                # Real point-cloud enable/params live here (pointcloud__neon_.*
+                # on this build) - config_file is merged with HIGHER priority
+                # than the launch_arguments dict above.
+                'config_file': PathJoinSubstitution([
+                    FindPackageShare('dec_launch'),
+                    'config',
+                    'realsense_bottom_pointcloud.yaml'
+                ]),
 
                 # Decimation post-processing: downsamples the depth image (and
                 # therefore /camera/depth/color/points) before it is published.

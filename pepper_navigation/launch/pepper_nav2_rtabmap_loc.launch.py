@@ -1,25 +1,62 @@
-# Nav2 bringup for Pepper on FAST-LIO + RTAB-Map (localization mode).
-#
-# Localizes against the saved rtabmap_fastlio_refined.db (today's best
-# validated map -- see project_l2_slam_stack memory) instead of AMCL + a
-# static map_server: RTAB-Map runs with Mem/IncrementalMemory=false, reusing
-# the exact odometry/appearance/ICP pipeline already tuned for mapping, and
-# publishes /map itself. No pointcloud_to_laserscan conversion needed --
-# Nav2's costmaps take /points (PointCloud2) directly.
-#
-# Frames: FAST-LIO's odom -> lio_odom_bridge's gravity-leveled
-# odom -> RTAB-Map's map. See nav2_params_rtabmap_loc.yaml for why
-# local_costmap uses odom (not pepper_odom) as its global_frame.
-#
-# Usage (real robot):
-#   ros2 launch pepper_navigation pepper_nav2_rtabmap_loc.launch.py
-#
-# Usage (bag replay, to sanity-check localization/costmaps without driving):
-#   ros2 launch pepper_navigation pepper_nav2_rtabmap_loc.launch.py use_sim_time:=true
-#   ros2 bag play <bag> --clock --topics /points /imu/data /tf_static \
-#       /camera/color/image_raw /camera/color/camera_info
-#   (Nav2 will localize and build costmaps, but a bag can't react to cmd_vel
-#   -- driving to a goal needs the real robot or a simulator.)
+r"""pepper_nav2_rtabmap_loc.launch.py
+
+Nav2 bringup for Pepper on FAST-LIO + RTAB-Map (localization mode).
+
+Localizes against the saved rtabmap_fastlio_refined.db instead of AMCL and a
+static map_server: RTAB-Map runs with Mem/IncrementalMemory=false, reusing the
+odometry/appearance/ICP pipeline tuned for mapping, and publishes /map itself.
+No pointcloud_to_laserscan — the costmaps take /points directly.
+
+Launch files included:
+    fast_lio/mapping.launch.py — FAST-LIO odometry.
+    pepper_slam/lio_odom_bridge.launch.py — the gravity-leveled odom frame.
+    pepper_slam/rtabmap_base.launch.py — RTAB-Map in localization mode.
+
+Nodes started:
+    nav2_controller/controller_server, nav2_planner/planner_server,
+    nav2_behaviors/behavior_server, nav2_bt_navigator/bt_navigator.
+    pepper_slam/cloud_range_filter.py (node: points_safety_filter).
+    nav2_collision_monitor/collision_monitor.
+    pepper_navigation/localization_recovery.py.
+    nav2_lifecycle_manager/lifecycle_manager x2 — one for navigation
+    (lifecycle_manager_navigation) and a separate one for the collision
+    monitor (lifecycle_manager_collision_monitor).
+
+Launch arguments:
+    use_sim_time (default: "false")
+        Use bag/simulation clock instead of wall time.
+    database_path (default: "~/.ros/rtabmap_fastlio_refined.db")
+        Map database to localize against.
+
+Configuration:
+    config/nav2_params_rtabmap_loc.yaml and FAST-LIO's l2.yaml.
+
+Frames:
+    FAST-LIO odom -> lio_odom_bridge's gravity-leveled odom -> RTAB-Map map.
+    See nav2_params_rtabmap_loc.yaml for why local_costmap uses odom (not
+    pepper_odom) as its global_frame.
+
+Usage (real robot):
+    ros2 launch pepper_navigation pepper_nav2_rtabmap_loc.launch.py
+
+Usage (bag replay, to sanity-check localization/costmaps without driving):
+    ros2 launch pepper_navigation pepper_nav2_rtabmap_loc.launch.py use_sim_time:=true
+    ros2 bag play <bag> --clock --topics /points /imu/data /tf_static \
+        /camera/color/image_raw /camera/color/camera_info
+
+    Nav2 will localize and build costmaps, but a bag can't react to cmd_vel —
+    driving to a goal needs the real robot or a simulator.
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
 
 import os
 
@@ -60,9 +97,7 @@ def generate_launch_description():
         }.items(),
     )
 
-    # odom -> base_footprint. FAST_LIO's mapping.launch.py no longer starts this
-    # (see FAST_LIO d8b274c): it was Pepper glue in a launch file shared with
-    # every other FAST-LIO sensor config.
+    # odom -> base_footprint (FAST_LIO's own launch file no longer starts this).
     lio_bridge = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(get_package_share_directory('pepper_slam'),
@@ -99,11 +134,9 @@ def generate_launch_description():
             'localization': 'true',
             'database_path': database_path,
             # Same ICP/grid tuning validated for mapping (see
-            # pepper_slam's rtabmap_fastlio_bag.launch.py); dropped
-            # --delete_db_on_start
-            # (would erase the map!) and the NeighborLinkRefining/Proximity
-            # params (those govern adding NEW loop-closure links, moot with
-            # Mem/IncrementalMemory=false).
+            # rtabmap_fastlio_bag.launch.py); no --delete_db_on_start
+            # (would erase the map) or NeighborLinkRefining/Proximity params
+            # (govern new loop-closure links, moot with IncrementalMemory=false).
             'rtabmap_args': '--Reg/Strategy 1 '
                             '--Icp/VoxelSize 0.15 --Icp/PointToPlaneK 20 '
                             '--Icp/MaxCorrespondenceDistance 0.5 '
@@ -156,8 +189,8 @@ def generate_launch_description():
         remappings=[('cmd_vel', 'cmd_vel_raw')],
     )
 
-    # Self-hit filter feeding the safety layer: strip Pepper's own body (< 0.8 m)
-    # from the raw L2 /points so the collision monitor doesn't freeze on it.
+    # Strips Pepper's own body (< 0.8 m) so the collision monitor doesn't
+    # freeze on self-hits.
     points_safety_filter = Node(
         package='pepper_slam',
         executable='cloud_range_filter.py',
@@ -204,10 +237,8 @@ def generate_launch_description():
             ],
         }],
     )
-    # Separate lifecycle manager for collision_monitor -- Nav2's own
-    # convention (see nav2_collision_monitor's example bringup), kept out of
-    # the navigation group above so a costmap/planner failure and a collision
-    # monitor failure don't take each other's bond down.
+    # Separate manager so a planner failure and a collision monitor failure
+    # don't take each other's bond down.
     lifecycle_manager_collision_monitor = Node(
         package='nav2_lifecycle_manager',
         executable='lifecycle_manager',
@@ -219,6 +250,19 @@ def generate_launch_description():
             'bond_timeout': 4.0,
             'node_names': ['collision_monitor'],
         }],
+    )
+
+    # One /localization_recover entry point, identical across all three nav
+    # profiles. rtabmap has no forced re-search to forward to (it relocalizes
+    # from loop closure on its own), so here the service exists only to say so
+    # and point at /initialpose -- better than the operator discovering that
+    # by trying whatever worked on the other two profiles.
+    localization_recovery = Node(
+        package='pepper_navigation',
+        executable='localization_recovery.py',
+        name='localization_recovery',
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time, 'backend': 'rtabmap'}],
     )
 
     return LaunchDescription([
@@ -235,4 +279,5 @@ def generate_launch_description():
         collision_monitor,
         lifecycle_manager,
         lifecycle_manager_collision_monitor,
+        localization_recovery,
     ])

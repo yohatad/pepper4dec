@@ -130,18 +130,18 @@ controller_server:
       debug_trajectory_details: False
       min_vel_x: 0.0
       min_vel_y: 0.0
-      max_vel_x: 0.5  # Reduced for smoother motion
+      max_vel_x: 0.35  # Reduced for smoother motion
       max_vel_y: 0.0
-      max_vel_theta: 0.5  # Reduced for stability
+      max_vel_theta: 0.3  # Reduced for stability
       min_speed_xy: 0.0
-      max_speed_xy: 0.5
+      max_speed_xy: 0.35
       min_speed_theta: 0.0
-      acc_lim_x: 2.0  # Gentler acceleration
+      acc_lim_x: 1.0  # Gentler acceleration
       acc_lim_y: 0.0
-      acc_lim_theta: 1.5  # Gentler angular
+      acc_lim_theta: 0.8  # Gentler angular
       decel_lim_x: -1.0
       decel_lim_y: 0.0
-      decel_lim_theta: -1.5
+      decel_lim_theta: -0.8
       vx_samples: 10  # Fewer samples
       vy_samples: 0
       vth_samples: 20  # Fewer angular samples

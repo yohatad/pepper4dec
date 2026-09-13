@@ -1,26 +1,59 @@
-# Fuses leveled LIO odometry (x, y, yaw) with wheel odometry's z/roll/pitch
-# via robot_localization, as an alternative to lio_odom_bridge.py's
-# flatten_base_frame hard clamp -- see ekf_lio_wheel.yaml for why.
-#
-# ADDITIVE, not a replacement: run this ALONGSIDE fastlio_odometry.launch.py
-# or pointlio_odometry.launch.py (needs their odom<-odom TF and raw
-# odom topic already flowing). Publishes /odometry/filtered only -- does not
-# touch the existing TF tree (publish_tf: false in the EKF config), so it's
-# safe to add without risking the working default pipeline.
-#
-# Usage:
-#   ros2 launch pepper_slam fastlio_odometry.launch.py flatten_base_frame:=false
-#   ros2 launch pepper_slam ekf_fusion.launch.py
-#   ros2 bag play <bag> --clock --topics /points /imu/data /pepper_odom
-#
-# For Point-LIO instead:
-#   ros2 launch pepper_slam pointlio_odometry.launch.py flatten_base_frame:=false
-#   ros2 launch pepper_slam ekf_fusion.launch.py odom_topic:=/odom_lio
-#
-# flatten_base_frame:=false on the mapping launch is deliberate here: this
-# fuses FAST-LIO's/Point-LIO's own raw (undoctored) z/roll/pitch with wheel
-# odometry, so the input needs to still be the real drifting estimate, not
-# already clamped to zero by the other fix.
+"""ekf_fusion.launch.py
+
+Fuse leveled LIO odometry with wheel odometry via robot_localization.
+
+Takes x, y, yaw from the LIO estimator and z, roll, pitch from wheel odometry,
+as an alternative to lio_odom_bridge.py's flatten_base_frame hard clamp — see
+config/ekf_lio_wheel.yaml for why.
+
+ADDITIVE, not a replacement: run this ALONGSIDE fastlio_odometry.launch.py or
+pointlio_odometry.launch.py (it needs their odom TF and raw odom topic already
+flowing). Publishes /odometry/filtered only — it does not touch the existing TF
+tree (publish_tf: false in the EKF config), so it is safe to add without
+risking the working default pipeline.
+
+Nodes started:
+    pepper_slam/leveled_odometry_publisher.py (node:
+    leveled_odometry_publisher)
+        Republishes the LIO odometry leveled for fusion.
+    pepper_slam/pepper_odom_relabel.py (node: pepper_odom_relabel)
+        Relabels the wheel odometry frames to match.
+    robot_localization/ekf_node (node: ekf_filter_node)
+        The fusion filter itself.
+
+Launch arguments:
+    odom_topic (default: "/odom_lio")
+        Raw LIO odometry topic to fuse.
+    use_sim_time (default: "true")
+        Defaults true because this is normally run against a bag.
+
+Configuration:
+    config/ekf_lio_wheel.yaml
+
+Usage:
+    ros2 launch pepper_slam fastlio_odometry.launch.py flatten_base_frame:=false
+    ros2 launch pepper_slam ekf_fusion.launch.py
+    ros2 bag play <bag> --clock --topics /points /imu/data /pepper_odom
+
+For Point-LIO instead:
+    ros2 launch pepper_slam pointlio_odometry.launch.py flatten_base_frame:=false
+    ros2 launch pepper_slam ekf_fusion.launch.py odom_topic:=/odom_lio
+
+flatten_base_frame:=false on the odometry launch is deliberate here: this
+fuses FAST-LIO's or Point-LIO's own raw (undoctored) z/roll/pitch with wheel
+odometry, so the input needs to still be the real drifting estimate, not
+already clamped to zero by the other fix.
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
 
 import os
 

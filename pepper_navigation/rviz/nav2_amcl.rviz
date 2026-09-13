@@ -414,7 +414,7 @@ Visualization Manager:
     - Class: rviz_default_plugins/Measure
       Line color: 128; 128; 0
     # ICP-loc launch requires setting the initial pose here after startup
-    # (see pepper_nav2_fastlio_loc.launch.py usage notes) for ICP to lock on.
+    # (see pepper_nav2_fastloc.launch.py usage notes) for the filter to lock on.
     - Class: rviz_default_plugins/SetInitialPose
       Covariance x: 0.25
       Covariance y: 0.25

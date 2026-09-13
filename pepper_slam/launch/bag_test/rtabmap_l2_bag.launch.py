@@ -1,13 +1,26 @@
-# RTAB-Map lidar variant on a recorded bag: Unitree L2 (/points) + its IMU
-# (/imu/data), no camera. rtabmap's icp_odometry tracks the pose from the
-# point cloud (IMU used for gravity/initialization) and the SLAM node uses
-# the scan cloud for proximity loop closures and map assembly.
-#
-# Wraps rtabmap_base.launch.py (unchanged), like rtabmap_rgbd_wheel_bag.launch.py.
-#
-# Usage:
-#   ros2 launch pepper_slam rtabmap_l2_bag.launch.py
-#   ros2 bag play <bag> --clock --topics /points /imu/data /tf /tf_static
+"""rtabmap_l2_bag.launch.py
+
+RTAB-Map lidar variant on a recorded bag: Unitree L2 (/points) + its IMU
+(/imu/data), no camera. rtabmap's icp_odometry tracks the pose from the
+point cloud (IMU used for gravity/initialization) and the SLAM node uses
+the scan cloud for proximity loop closures and map assembly.
+
+Wraps rtabmap_base.launch.py (unchanged), like rtabmap_rgbd_wheel_bag.launch.py.
+
+Usage:
+  ros2 launch pepper_slam rtabmap_l2_bag.launch.py
+  ros2 bag play <bag> --clock --topics /points /imu/data /tf /tf_static
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
 
 import os
 

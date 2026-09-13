@@ -25,12 +25,15 @@ Affiliation: Carnegie Mellon University Africa
 Email: yohatad123@gmail.com
 Date: November 8, 2025
 Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
 """
 
 import math
 import time
 import numpy as np
-import torch
 import os
 import onnxruntime
 import threading
@@ -51,7 +54,25 @@ from .speech_event_denoiser import SpeechDenoiser
 
 
 class OnnxWrapper():
+    """ONNX Runtime wrapper around the Silero VAD model.
+
+    Holds the inference session and the model's recurrent state, and exposes
+    per-chunk speech-probability inference at a fixed 16 kHz sample rate.
+
+    Attributes:
+        session (onnxruntime.InferenceSession): Loaded Silero VAD session.
+        sample_rate (int): Sample rate the model expects (16000 Hz).
+    """
+
     def __init__(self, path, force_onnx_cpu=False, logger=None):
+        """Load the Silero VAD ONNX model and reset its recurrent state.
+
+        Args:
+            path (str): Path to the Silero VAD .onnx model file.
+            force_onnx_cpu (bool): Run on CPU even when CUDA is available.
+            logger (rclpy.impl.rcutils_logger.RcutilsLogger): Optional logger
+                used to report the selected execution provider.
+        """
         opts = onnxruntime.SessionOptions()
         opts.inter_op_num_threads = 4
         opts.intra_op_num_threads = 4
@@ -97,9 +118,16 @@ class OnnxWrapper():
         self.reset_states()
 
     def reset_states(self, batch_size=1):
+        """Zero the model's recurrent state between speech segments.
+
+        Args:
+            batch_size (int): Number of independent audio streams to size the
+                state for.
+        """
         with self._lock:
-            self._state = torch.zeros((2, batch_size, 128)).float()
-            self._context = torch.zeros(batch_size, 64)  # context_size = 64 for 16kHz
+            # context_size = 64 for 16kHz
+            self._state = np.zeros((2, batch_size, 128), dtype=np.float32)
+            self._context = np.zeros((batch_size, 64), dtype=np.float32)
             self._last_batch_size = batch_size
 
     def __call__(self, x: np.ndarray) -> float:
@@ -113,13 +141,13 @@ class OnnxWrapper():
             float: Speech probability [0, 1]
         """
         with self._lock:
-            # Convert to torch tensor
-            if not torch.is_tensor(x):
-                x = torch.from_numpy(x).float()
+            # float32 is not optional: the ONNX graph's 'input' is float32, and
+            # AudioBuffer arithmetic upstream can leave this float64.
+            x = np.asarray(x, dtype=np.float32)
 
             # Ensure 2D: (batch_size, samples)
-            if x.dim() == 1:
-                x = x.unsqueeze(0)
+            if x.ndim == 1:
+                x = x[np.newaxis, :]
 
             batch_size = x.shape[0]
 
@@ -127,24 +155,25 @@ class OnnxWrapper():
             if batch_size != self._last_batch_size:
                 # reset_states() also acquires this lock, and threading.Lock is not
                 # reentrant, so reset state inline here instead of calling it.
-                self._state = torch.zeros((2, batch_size, 128)).float()
-                self._context = torch.zeros(batch_size, 64)
+                self._state = np.zeros((2, batch_size, 128), dtype=np.float32)
+                self._context = np.zeros((batch_size, 64), dtype=np.float32)
                 self._last_batch_size = batch_size
 
             # Prepend context (64 samples for 16kHz)
-            x_with_context = torch.cat([self._context, x], dim=1)
+            x_with_context = np.concatenate([self._context, x], axis=1)
 
             # Run ONNX inference
             ort_inputs = {
-                'input': x_with_context.numpy(),
-                'state': self._state.numpy(),
+                'input': x_with_context,
+                'state': self._state,
                 'sr': np.array(self.sample_rate, dtype='int64')
             }
             ort_outs = self.session.run(None, ort_inputs)
             out, state = ort_outs
 
-            # Update state and context for next call
-            self._state = torch.from_numpy(state)
+            # Update state and context for next call. ONNX already returns
+            # numpy, so this is the array itself rather than a wrapper.
+            self._state = state
             self._context = x_with_context[:, -64:]  # Keep last 64 samples
             self._last_batch_size = batch_size
 
@@ -156,6 +185,12 @@ class SpeechRecognitionNode(LifecycleNode):
     """Lifecycle node that performs voice-activity detection and speech-to-text transcription."""
 
     def __init__(self):
+        """Declare parameters only; model loading is deferred to on_configure().
+
+        Declaring them here (rather than reading a pre-loaded config dict)
+        means they survive repeated configure/cleanup cycles and can be
+        overridden with `ros2 param set`.
+        """
         super().__init__("speech_recognition")
 
         # Declare parameters in __init__ so they are settable from launch/CLI before configure
@@ -262,10 +297,12 @@ class SpeechRecognitionNode(LifecycleNode):
                 cpu_threads=4,
             )
             if self.device == "cuda":
-                if torch.cuda.is_available():
-                    self.get_logger().info(f"Whisper GPU: {torch.cuda.get_device_name(0)}")
-                else:
-                    self.get_logger().warning("CUDA requested but not available — using CPU")
+                # WhisperModel() above raises if CUDA was requested and is not
+                # usable, so reaching here means CTranslate2 is on the GPU --
+                # the old torch.cuda.is_available() branch below this was
+                # unreachable for that reason. Reporting the device NAME was
+                # the only thing PyTorch was still used for in this package.
+                self.get_logger().info("Whisper running on CUDA")
             self.get_logger().info("Whisper model loaded.")
             self.warmup_whisper()
         except Exception as e:
@@ -464,6 +501,7 @@ class SpeechRecognitionNode(LifecycleNode):
         self.publish_feedback("waiting")
 
         def cleanup():
+            """Restore the pre-goal listening state when the goal ends."""
             with self.action_server_lock:
                 self.action_started = False
                 self._current_goal_handle = None
@@ -566,6 +604,7 @@ class SpeechRecognitionNode(LifecycleNode):
 
             # Extract front-left channel (primary microphone)
             def get_chan(enum_val, fallback=None):
+                """Return one microphone channel, or *fallback* if absent."""
                 if enum_val in channel_map:
                     idx = channel_map.index(enum_val)
                     return frames[:, idx]

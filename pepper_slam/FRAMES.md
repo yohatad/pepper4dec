@@ -64,15 +64,23 @@ PGO (`fastlio_lc_l2`, `pointlio_lc_l2`):
 map -> pgo_init -> lio_init -> base_footprint -> ...
 ```
 
-Localization (`fastlio_localization_l2`, `pointlio_localization_l2`):
+Localization (`fastlio_localization`, via `pepper_nav2_fastloc`):
 
 ```
-map -> lio_init -> base_footprint -> ...
-        └── odom          published as a CHILD (level_frame_as_child:=true)
+map -> base_footprint -> ...      NO odom, NO lio_init
 ```
 
-`base_footprint` is a child of `lio_init` in every case -- that is the edge
-the bridge publishes. A lookup of `odom -> base_footprint` traverses
+This one is the exception to everything above. `fastlio_localization` loads the
+prior map into the ikd-Tree its iEKF registers against, so after the initial
+lock the filter state **is** the map pose -- there is no separate odometry
+estimate to name, and no `map -> odom` correction to publish. It broadcasts
+`map -> base_footprint` itself (`publish.tf_child_frame`), and neither
+`lio_odom_bridge` nor any fusion node runs in that stack; adding one would give
+`base_footprint` two parents. The local costmap therefore rolls in `map`, not
+`odom` -- see `local_costmap.global_frame` in `nav2_params_fastloc.yaml`.
+
+In the other three stacks `base_footprint` is a child of `lio_init` -- that is
+the edge the bridge publishes. A lookup of `odom -> base_footprint` traverses
 `odom -> lio_init -> base_footprint` and works normally.
 
 | edge | kind | published by | meaning |
@@ -80,7 +88,8 @@ the bridge publishes. A lookup of `odom -> base_footprint` traverses
 | `l2lidar_frame -> l2lidar_frame_imu` | static | `static_tf_publisher` | IMU's position inside the lidar housing (17 mm, no rotation) |
 | `base_footprint -> l2lidar_frame` | static | `static_tf_publisher` | **the mount calibration** |
 | `lio_init -> base_footprint` | dynamic ~11 Hz | `lio_odom_bridge` | **the odometry** -- continuous, drifts, never corrected |
-| `map -> lio_init` | dynamic, jumps | the localizer | **the correction** -- discontinuous, does not drift |
+| `map -> lio_init` | dynamic, jumps | AMCL / RTAB-Map | **the correction** -- discontinuous, does not drift |
+| `map -> base_footprint` | dynamic, scan rate | `fastlio_localization` | pose and correction in one: the map is inside the filter, so there is no separate correction edge |
 | `odom <-> lio_init` | static, one-time | `lio_odom_bridge` | **the leveling** (0.2571 m, from calibration) |
 | `map -> pgo_init` | static, one-time | `pgo_map_odom_bridge` | the leveling, map side |
 
@@ -113,8 +122,8 @@ depending on who owns it:
 | stack | leveling edge |
 |---|---|
 | `fastlio_mapping`, `pointlio_mapping`, `pepper_nav2_amcl` | `odom -> lio_init` (odom is parent) |
-| `fastlio_localization_l2`, `pointlio_localization_l2` | `lio_init -> odom` (child; `level_frame_as_child:=true`) |
 | `fastlio_lc_l2`, `pointlio_lc_l2` (PGO) | `map -> pgo_init`; no `odom` frame here |
+| `fastlio_localization` (`pepper_nav2_fastloc`) | none -- no `lio_init` and no `odom`; the prior map is already leveled and the filter publishes `map -> base_footprint` straight out |
 
 `pgo_init` exists only during mapping. Both artifacts are written **into** the
 leveled frame (octomap builds the grid in `map`; `pgo_node` transforms
@@ -146,9 +155,14 @@ Measured after the rename (2026-08-02), July_22 bag:
 | Point-LIO mapping | 0.2571 | -0.55 / -3.26 | -0.041 | yes |
 | AMCL | 0.2571 | +0.40 / -1.99 | -0.038 | yes |
 | PGO (FAST-LIO) | -- | robot upright ~4 deg in `map` | -- | yes |
-| FAST-LIO localization | -- | robot upright 3.69 deg in `map` | -- | yes |
-| Point-LIO localization | -- | robot upright 2.68 deg in `map` | -- | yes |
+| FAST-LIO localization † | -- | robot upright 3.69 deg in `map` | -- | yes |
+| Point-LIO localization † | -- | robot upright 2.68 deg in `map` | -- | yes |
 | RTAB-Map localization | -- | -- | -- | **blocked** |
+
+† Measured against the old `lio_localization` stack, which has since been
+removed. The numbers stand as a record of the leveling at that date, but they
+are **not** a verification of today's `fastlio_localization`, which reaches
+`map` by a different path (no `lio_init`, no `odom`).
 
 RTAB-Map localization is **blocked, not skipped**: its default database
 `~/.ros/rtabmap_fastlio_refined.db` does not exist, and the only `.db` present

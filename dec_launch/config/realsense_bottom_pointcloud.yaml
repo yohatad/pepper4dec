@@ -1,0 +1,23 @@
+# Overrides for the D435i's point-cloud filter on THIS realsense2_camera_node
+# build. Its librealsense has an NEON-optimized point-cloud processing block
+# (ARM/Jetson only), which the node registers under `pointcloud__neon_.*`
+# instead of the generic `pointcloud.*` names rs_launch.py's launch_arguments
+# target -- so `'pointcloud.enable': 'true'` in the .launch.py is silently
+# ignored (undeclared parameter, no error). MEASURED 2026-09-06: `ros2 param
+# list /camera` on this node has no `pointcloud.*` entries at all, only
+# `pointcloud__neon_.*`, and `pointcloud__neon_.enable` read back False despite
+# the launch arg. Loaded via rs_launch.py's `config_file` arg, which merges
+# with HIGHER priority than its own generic launch_arguments dict.
+pointcloud__neon_.enable: true
+# stream_filter 2 (Color) previously logged "No stream match for pointcloud
+# chosen texture Process - Color" and never published, even though
+# /camera/color/image_raw was running fine at 30Hz - MEASURED 2026-09-06.
+# ROOT CAUSE (realsense2_camera/src/pointcloud_filter.cpp): the publisher
+# only textures a frame whose format is RGB8 or Y8, but rgb_camera.color_format
+# defaults to BGR8 in rs_launch.py, which never matches -- not a NEON quirk,
+# a format mismatch. Fixed by setting rgb_camera.color_format:=RGB8 in the
+# .launch.py, so this now publishes a genuinely colorized (xyzrgb) cloud.
+pointcloud__neon_.stream_filter: 2
+pointcloud__neon_.stream_index_filter: 0
+pointcloud__neon_.allow_no_texture_points: false
+pointcloud__neon_.ordered_pc: false

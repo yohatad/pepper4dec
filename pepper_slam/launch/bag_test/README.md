@@ -14,20 +14,20 @@ paths follow.
 | `pointlio_odometry_bag.launch.py` | `pepper_slam/pointlio_odometry.launch.py` | same |
 | `fastlio_lc_bag.launch.py` | `fastlio_lc_pgo/fastlio_lc_l2.launch.py` | same |
 | `pointlio_lc_bag.launch.py` | `fastlio_lc_pgo/pointlio_lc_l2.launch.py` | same |
-| `fastlio_localization_bag.launch.py` | `lio_localization/fastlio_localization_l2.launch.py` | same |
 | `rtabmap_*_bag.launch.py` | `pepper_slam/rtabmap_base.launch.py` (+ a LIO) | build one from `rtabmap_base` |
 
-Navigation follows the same convention but lives in its own package, since the
-live entry point does:
+Localization needs no bag wrapper either: `fast_lio`'s
+`localization_l2.launch.py` defaults `use_sim_time:=true` and is bag-oriented
+as it stands.
 
-| bag entry point | wraps |
-|---|---|
-| `pepper_navigation/launch/bag_test/pepper_nav2_fastlio_loc_bag.launch.py` | `pepper_navigation/pepper_nav2_fastlio_loc.launch.py` |
+Navigation needs no bag wrapper: `pepper_nav2_fastloc.launch.py` takes
+`use_sim_time` directly, so the live entry point replays a bag as-is.
 
 ```bash
-ros2 launch pepper_navigation pepper_nav2_fastlio_loc_bag.launch.py \
-    map_pcd:=<run>/map_batch.pcd map:=<run>/grid.yaml \
-    keyframe_poses:=<run>/optimized_poses.txt
+ros2 launch pepper_navigation pepper_nav2_fastloc.launch.py use_sim_time:=true
+ros2 bag play <bag> --clock \
+    --qos-profile-overrides-path config/play_qos.yaml \
+    --read-ahead-queue-size 2000
 ```
 
 ## `--show-args` lists far more than any one file honours

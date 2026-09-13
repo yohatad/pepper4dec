@@ -1,9 +1,38 @@
 #!/usr/bin/env python3
-"""
+"""realsense_camera.launch.py
+
 Launch the Intel RealSense camera driver only.
+
+Nodes started:
+    realsense2_camera/realsense2_camera_node
+        Aligned RGB-D stream with the profiles and QoS overrides the
+        perception nodes expect.
+
+Launch arguments:
+    (none)
+
+Configuration:
+    Camera settings are set inline as node parameters here, not in a YAML
+    config file.
+
+Prerequisites:
+    A RealSense device on USB and the realsense2_camera package installed.
+
+Usage:
+    ros2 launch overt_attention realsense_camera.launch.py
 
 No other nodes are started; used by attention_system.launch.py to bring up
 the shared camera feed for person/face detection and attention.
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
 """
 
 from launch import LaunchDescription

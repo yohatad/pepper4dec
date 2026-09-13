@@ -5,10 +5,15 @@
  * overt_attention_lib and unit-tested; overt_attention_saliency.cpp carries
  * the node and its main(), which a test binary cannot link against.
  *
- * Author: Yohannes Tadesse Haile, Carnegie Mellon University Africa
+ * Author: Yohannes Tadesse Haile
+ * Affiliation: Carnegie Mellon University Africa
  * Email: yohatad123@gmail.com
  * Date: June 12, 2026
  * Version: v1.0
+ *
+ * Copyright (C) 2025 Carnegie Mellon University Africa
+ * This software is provided 'as-is' for research and educational purposes
+ * within the DEC project.
  */
 
 #include "overt_attention/overt_attention_interface.h"

@@ -32,7 +32,7 @@ Actions:
         Waits for speech onset and returns the transcription once the
         speaker finishes (only created when `action_server` is true).
 
-Parameters (loaded from speech_event_configuration.yaml):
+Parameters (code defaults; overridden by speech_event_configuration.yaml):
     microphone_topic (string, default: "/naoqi_driver/audio")
     sample_rate (int, default: 16000)
     input_sample_rate (int, default: 48000)
@@ -56,16 +56,22 @@ Parameters (loaded from speech_event_configuration.yaml):
 
 Lifecycle:
     configure  -> load Silero VAD and Whisper models, create the denoiser,
-                  set up buffers, and create publishers/service/action server
+                  set up buffers, and create publishers, the set_enabled
+                  service, and the action server (only if `action_server`)
     activate   -> activate publishers and subscribe to the microphone topic
     deactivate -> unsubscribe from the microphone topic and deactivate publishers
     cleanup    -> destroy publishers, service, action server, and release models
+    shutdown   -> log that the node is shutting down
 
 Author: Yohannes Tadesse Haile
 Affiliation: Carnegie Mellon University Africa
 Email: yohatad123@gmail.com
 Date: November 8, 2025
 Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
 """
 
 import rclpy
@@ -81,7 +87,7 @@ def main(args=None):
         rclpy.init(args=args)
         rclpy_inited = True
 
-        node_name = "speechEvent"
+        node_name = "speech_recognition"
         software_version = "v1.0"
 
         node = SpeechRecognitionNode()

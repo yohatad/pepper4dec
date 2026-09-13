@@ -1,4 +1,54 @@
 #!/usr/bin/env python3
+"""attention_system.launch.py
+
+Bring up the full overt attention stack: camera, perception, and control.
+
+Nodes started:
+    overt_attention/overt_attention_saliency (node: saliency_node)
+        Boolean Map Saliency over the camera frames; process_hz is forced to
+        1.0 here, overriding the YAML value.
+    overt_attention/overt_attention (node: overt_attention)
+        Attention controller arbitrating engaged faces, detected faces, and
+        saliency peaks into head commands.
+    overt_attention/overt_attention_visualization (node: attention_visualization)
+        Debug overlay; started only when enable_viz is true.
+
+Launch files included:
+    realsense_camera.launch.py — the shared camera feed.
+    person_detection.launch.py — tracked persons.
+    face_detection.launch.py with launch_camera:=false — faces and mutual
+        gaze, reusing the camera started above rather than its own.
+
+Launch arguments:
+    params_file (default: <share>/config/overt_attention_configuration.yaml)
+        Parameter file passed to all three overt_attention nodes.
+    enable_viz (default: "true")
+        Start the visualization node.
+
+Configuration:
+    config/overt_attention_configuration.yaml — a shared wildcard block plus
+    per-node blocks for saliency_node and overt_attention.
+
+Prerequisites:
+    A RealSense camera on USB; naoqi_driver for the head commands published
+    on /joint_angles.
+
+Usage:
+    ros2 launch overt_attention attention_system.launch.py enable_viz:=false
+
+Each node's ROS interface is documented in overt_attention_application.cpp.
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
+
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource

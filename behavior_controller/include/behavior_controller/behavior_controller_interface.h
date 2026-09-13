@@ -1,10 +1,14 @@
 /* behavior_controller_interface.h
  *
  * Author: Yohannes Tadesse Haile
- * Date: Feb 07, 2026
+ * Affiliation: Carnegie Mellon University Africa
+ * Email: yohatad123@gmail.com
+ * Date: February 7, 2026
  * Version: v1.0
  *
  * Copyright (C) 2025 Carnegie Mellon University Africa
+ * This software is provided 'as-is' for research and educational purposes
+ * within the DEC project.
  */
 
 #pragma once
@@ -71,6 +75,7 @@
 //=============================================================================
 // Data Structures
 //=============================================================================
+/** @brief A 3D point in the map frame (gesture targets, exhibit locations). */
 struct Position3D {
     double x = 0.0, y = 0.0, z = 0.0;
     Position3D() = default;
@@ -78,6 +83,7 @@ struct Position3D {
         : x(x_val), y(y_val), z(z_val) {}
 };
 
+/** @brief A 2D robot pose in the map frame: position plus heading. */
 struct RobotPose {
     double x = 0.0, y = 0.0, theta = 0.0;
     RobotPose() = default;
@@ -85,6 +91,12 @@ struct RobotPose {
         : x(x_val), y(y_val), theta(theta_val) {}
 };
 
+/**
+ * @brief One exhibit entry from the environment knowledge base.
+ *
+ * Carries the description, the robot pose to navigate to, the point to gesture
+ * at, and the sentence spoken when presenting the exhibit.
+ */
 struct LocationInfo {
     std::string description;
     RobotPose robotPose;
@@ -92,6 +104,7 @@ struct LocationInfo {
     std::string gestureMessage;
 };
 
+/** @brief The ordered list of exhibit location IDs making up one tour. */
 struct TourSpec {
     std::vector<std::string> locationIds;
     size_t getLocationCount() const { return locationIds.size(); }
@@ -101,7 +114,10 @@ struct TourSpec {
 // Core Managers (Singletons)
 //=============================================================================
 
-// Configuration Manager
+/**
+ * @class ConfigManager
+ * @brief Configuration Manager
+ */
 class ConfigManager {
 public:
     static ConfigManager& instance();
@@ -132,7 +148,10 @@ private:
     ConfigManager& operator=(const ConfigManager&) = delete;
 };
 
-// Knowledge Base Manager
+/**
+ * @class KnowledgeManager
+ * @brief Knowledge Base Manager
+ */
 class KnowledgeManager {
 public:
     static KnowledgeManager& instance();
@@ -159,7 +178,10 @@ private:
 // Utility Classes
 //=============================================================================
 
-// Simplified Logger
+/**
+ * @class Logger
+ * @brief Simplified Logger
+ */
 class Logger {
 public:
     explicit Logger(std::shared_ptr<rclcpp::Node> node);
@@ -174,7 +196,10 @@ private:
     std::string formatMessage(const std::string& msg);
 };
 
-// Service Manager (for non-BT service calls)
+/**
+ * @class ServiceManager
+ * @brief Service Manager (for non-BT service calls)
+ */
 class ServiceManager {
 public:
     explicit ServiceManager(std::shared_ptr<rclcpp::Node> node);
@@ -187,7 +212,10 @@ private:
     std::shared_ptr<rclcpp::Node> node;
 };
 
-// Topic Monitor
+/**
+ * @class TopicMonitor
+ * @brief Topic Monitor
+ */
 class TopicMonitor {
 public:
     explicit TopicMonitor(std::shared_ptr<rclcpp::Node> node);
@@ -201,7 +229,10 @@ private:
     std::shared_ptr<rclcpp::Node> node;
 };
 
-// Text Utilities
+/**
+ * @class TextUtils
+ * @brief Text Utilities
+ */
 class TextUtils {
 public:
     static bool containsAnyWord(const std::string& text, const std::vector<std::string>& words);
@@ -214,7 +245,10 @@ public:
 // BehaviorTree Action Nodes
 //=============================================================================
 
-// Wraps dec_interfaces::action::AnimateBehavior
+/**
+ * @class AnimateBehaviorNode
+ * @brief Wraps dec_interfaces::action::AnimateBehavior
+ */
 class AnimateBehaviorNode
     : public BT::RosActionNode<dec_interfaces::action::AnimateBehavior>
 {
@@ -231,7 +265,10 @@ public:
     BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
 };
 
-// Wraps dec_interfaces::action::Gesture
+/**
+ * @class GestureNode
+ * @brief Wraps dec_interfaces::action::Gesture
+ */
 class GestureNode
     : public BT::RosActionNode<dec_interfaces::action::Gesture>
 {
@@ -248,7 +285,10 @@ public:
     BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
 };
 
-// Wraps nav2_msgs::action::NavigateToPose  →  Nav2 /navigate_to_pose server
+/**
+ * @class Navigate
+ * @brief Wraps nav2_msgs::action::NavigateToPose  →  Nav2 /navigate_to_pose server
+ */
 class Navigate
     : public BT::RosActionNode<nav2_msgs::action::NavigateToPose>
 {
@@ -265,7 +305,10 @@ public:
     BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
 };
 
-// Wraps dec_interfaces::action::SpeechRecognition
+/**
+ * @class SpeechRecognitionNode
+ * @brief Wraps dec_interfaces::action::SpeechRecognition
+ */
 class SpeechRecognitionNode
     : public BT::RosActionNode<dec_interfaces::action::SpeechRecognition>
 {
@@ -282,13 +325,16 @@ public:
     BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
 };
 
-// Wraps dec_interfaces::action::ConversationManager
-//
-// Output ports written from the action result:
-//   response   – full generated answer text
-//   intent     – classified intent (ASK_EXHIBIT_QUESTION | NAVIGATION_REQUEST |
-//                SOCIAL_SMALL_TALK | OFF_TOPIC | STOP | AFFIRMATIVE | NEGATIVE | …)
-//   confidence – LLM confidence in the intent (0.0 – 1.0)
+/**
+ * @class ConversationManagerNode
+ * @brief Wraps dec_interfaces::action::ConversationManager.
+ *
+ * Output ports written from the action result:
+ *   response   – full generated answer text
+ *   intent     – classified intent (ASK_EXHIBIT_QUESTION | NAVIGATION_REQUEST |
+ *                SOCIAL_SMALL_TALK | OFF_TOPIC | STOP | AFFIRMATIVE | NEGATIVE | …)
+ *   confidence – LLM confidence in the intent (0.0 – 1.0)
+ */
 class ConversationManagerNode
     : public BT::RosActionNode<dec_interfaces::action::ConversationManager>
 {
@@ -305,7 +351,10 @@ public:
     BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
 };
 
-// Wraps naoqi_bridge_msgs::action::SpeechWithFeedback
+/**
+ * @class SpeechWithFeedbackNode
+ * @brief Wraps naoqi_bridge_msgs::action::SpeechWithFeedback
+ */
 class SpeechWithFeedbackNode
     : public BT::RosActionNode<naoqi_bridge_msgs::action::SpeechWithFeedback>
 {
@@ -322,10 +371,14 @@ public:
     BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
 };
 
-// Wraps dec_interfaces::action::TTS
-// Sends text to the /text_to_speech action server (text_to_speech node), which synthesises
-// audio via Kokoro or ElevenLabs and plays it through the configured backend.
-// Blocks until playback is complete.
+/**
+ * @class TTSNode
+ * @brief Wraps dec_interfaces::action::TTS.
+ *
+ * Sends text to the /text_to_speech action server (text_to_speech node), which
+ * synthesises audio via Kokoro or ElevenLabs and plays it through the
+ * configured backend. Blocks until playback is complete.
+ */
 class TTSNode
     : public BT::RosActionNode<dec_interfaces::action::TTS>
 {
@@ -342,8 +395,13 @@ public:
     BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
 };
 
-// Calls /animate_behavior/stop (std_srvs::srv::Trigger) to immediately stop animation.
-// Returns SUCCESS if the service reports success, FAILURE otherwise.
+/**
+ * @class StopAnimateBehavior
+ * @brief Calls /animate_behavior/stop (std_srvs::srv::Trigger) to immediately stop
+ *        animation.
+ *
+ * Returns SUCCESS if the service reports success, FAILURE otherwise.
+ */
 class StopAnimateBehavior
     : public BT::RosServiceNode<std_srvs::srv::Trigger>
 {
@@ -359,9 +417,14 @@ public:
     BT::NodeStatus onFailure(BT::ServiceNodeErrorCode error) override;
 };
 
-// Calls /overt_attention/set_enabled (std_srvs::srv::SetBool) to enable or disable overt attention.
-// Input port 'enabled' (bool): true = enable, false = disable.
-// Returns SUCCESS if the service confirms the change, FAILURE otherwise.
+/**
+ * @class SetOvertAttention
+ * @brief Calls /overt_attention/set_enabled (std_srvs::srv::SetBool) to enable or
+ *        disable overt attention.
+ *
+ * Input port 'enabled' (bool): true = enable, false = disable. Returns
+ * SUCCESS if the service confirms the change, FAILURE otherwise.
+ */
 class SetOvertAttention
     : public BT::RosServiceNode<std_srvs::srv::SetBool>
 {
@@ -377,9 +440,14 @@ public:
     BT::NodeStatus onFailure(BT::ServiceNodeErrorCode error) override;
 };
 
-// Subscribes to /speech_event/text (standalone mode) and blocks (RUNNING) until
-// a new transcription arrives after this node started, then returns SUCCESS.
-// Requires speech_event running with action_server: false.
+/**
+ * @class ListenForSpeech
+ * @brief Subscribes to /speech_event/text (standalone mode) and blocks (RUNNING)
+ *        until a new transcription arrives after this node started, then returns
+ *        SUCCESS.
+ *
+ * Requires speech_event running with action_server: false.
+ */
 class ListenForSpeech : public BT::StatefulActionNode
 {
 public:
@@ -400,9 +468,14 @@ private:
     std::mutex mutex_;
 };
 
-// Calls /speech_event/set_enabled (std_srvs::srv::SetBool) to mute or unmute
-// the speech recognition mic (e.g. disable during TTS, re-enable after).
-// Input port 'enabled' (bool): true = listen, false = mute.
+/**
+ * @class SetSpeechListening
+ * @brief Mutes or unmutes the speech recognition microphone.
+ *
+ * Calls /speech_event/set_enabled (std_srvs::srv::SetBool), e.g. disable during
+ * TTS and re-enable after. Input port 'enabled' (bool): true = listen,
+ * false = mute.
+ */
 class SetSpeechListening
     : public BT::RosServiceNode<std_srvs::srv::SetBool>
 {
@@ -418,8 +491,13 @@ public:
     BT::NodeStatus onFailure(BT::ServiceNodeErrorCode error) override;
 };
 
-// Subscribes to /face_detection/data and blocks (RUNNING) until face(s) are present,
-// then returns SUCCESS. Never times out — runs indefinitely until condition is met.
+/**
+ * @class CheckFaceDetected
+ * @brief Subscribes to /face_detection/data and blocks (RUNNING) until face(s) are
+ *        present, then returns SUCCESS.
+ *
+ * Never times out — runs indefinitely until condition is met.
+ */
 class CheckFaceDetected : public BT::StatefulActionNode
 {
 public:
@@ -441,8 +519,12 @@ private:
     std::mutex mutex_;
 };
 
-// Blocks (RUNNING) until at least one face appears on /face_detection/data.
-// Returns FAILURE when the "timeout" port (seconds) expires without a face.
+/**
+ * @class IsVisitorDiscovered
+ * @brief Blocks (RUNNING) until at least one face appears on /face_detection/data.
+ *
+ * Returns FAILURE when the "timeout" port (seconds) expires without a face.
+ */
 class IsVisitorDiscovered : public BT::StatefulActionNode
 {
 public:
@@ -463,8 +545,12 @@ private:
     std::mutex mutex_;
 };
 
-// Blocks (RUNNING) until mutual gaze is detected on /face_detection/data.
-// Returns FAILURE when the "timeout" port (seconds) expires.
+/**
+ * @class IsMutualGazeDiscovered
+ * @brief Blocks (RUNNING) until mutual gaze is detected on /face_detection/data.
+ *
+ * Returns FAILURE when the "timeout" port (seconds) expires.
+ */
 class IsMutualGazeDiscovered : public BT::StatefulActionNode
 {
 public:
@@ -486,9 +572,13 @@ private:
     std::mutex mutex_;
 };
 
-// Blocks (RUNNING) until a new transcription arrives on /speech_event/text.
-// Returns FAILURE when the "timeout" port (seconds) expires without speech.
-// Writes the recognised text to the "visitor_response" output port.
+/**
+ * @class GetVisitorResponse
+ * @brief Blocks (RUNNING) until a new transcription arrives on /speech_event/text.
+ *
+ * Returns FAILURE when the "timeout" port (seconds) expires without speech.
+ * Writes the recognised text to the "visitor_response" output port.
+ */
 class GetVisitorResponse : public BT::StatefulActionNode
 {
 public:
@@ -517,9 +607,14 @@ private:
 // (a std::vector<std::string> of location IDs in visit order).
 //=============================================================================
 
-// Reads KnowledgeManager::getTourSpecification().locationIds and writes the
-// ordered vector to the "exhibit_list" output port (default key: exhibit_queue).
-// Returns FAILURE if the tour specification is empty.
+/**
+ * @class RetrieveListOfExhibits
+ * @brief Reads KnowledgeManager::getTourSpecification().locationIds and writes the
+ *        ordered vector to the "exhibit_list" output port (default key:
+ *        exhibit_queue).
+ *
+ * Returns FAILURE if the tour specification is empty.
+ */
 class RetrieveListOfExhibits : public BT::SyncActionNode
 {
 public:
@@ -530,8 +625,14 @@ public:
     BT::NodeStatus tick() override;
 };
 
-// Condition: returns SUCCESS if exhibit_queue is non-empty, FAILURE otherwise.
-// Reads the queue via the "exhibit_list" input port (default key: exhibit_queue).
+/**
+ * @class IsListWithExhibit
+ * @brief Condition: returns SUCCESS if exhibit_queue is non-empty, FAILURE
+ *        otherwise.
+ *
+ * Reads the queue via the "exhibit_list" input port (default key:
+ * exhibit_queue).
+ */
 class IsListWithExhibit : public BT::SyncActionNode
 {
 public:
@@ -542,13 +643,17 @@ public:
     BT::NodeStatus tick() override;
 };
 
-// Reads the front of exhibit_queue, looks up the corresponding LocationInfo in
-// KnowledgeManager, and writes 7 blackboard keys consumed by NavigateToLocation
-// and PresentExhibit:
-//   {exhibit_speech}         ← LocationInfo.gestureMessage
-//   {exhibit_goal_x/y/theta} ← LocationInfo.robotPose
-//   {exhibit_location_x/y/z} ← LocationInfo.gestureTarget
-// Does NOT pop the queue — that is deferred to PopExhibitFromList.
+/**
+ * @class SelectExhibit
+ * @brief Selects the exhibit at the front of exhibit_queue.
+ *
+ * Looks up the corresponding LocationInfo in KnowledgeManager and writes 7
+ * blackboard keys consumed by NavigateToLocation and PresentExhibit:
+ *   {exhibit_speech}         ← LocationInfo.gestureMessage
+ *   {exhibit_goal_x/y/theta} ← LocationInfo.robotPose
+ *   {exhibit_location_x/y/z} ← LocationInfo.gestureTarget
+ * Does NOT pop the queue — that is deferred to PopExhibitFromList.
+ */
 class SelectExhibit : public BT::SyncActionNode
 {
 public:
@@ -559,8 +664,13 @@ public:
     BT::NodeStatus tick() override;
 };
 
-// Removes the front entry from exhibit_queue and writes the remaining count to
-// the "remaining_count" output port. Always returns SUCCESS.
+/**
+ * @class PopExhibitFromList
+ * @brief Removes the front entry from exhibit_queue and writes the remaining count
+ *        to the "remaining_count" output port.
+ *
+ * Always returns SUCCESS.
+ */
 class PopExhibitFromList : public BT::SyncActionNode
 {
 public:
@@ -575,8 +685,12 @@ public:
 // Utility Nodes  (SyncActionNode — no ROS, pure blackboard/logging)
 //=============================================================================
 
-// Logs a message at the requested level (debug | info | warn | error).
-// Always returns SUCCESS.
+/**
+ * @class LogEvent
+ * @brief Logs a message at the requested level (debug | info | warn | error).
+ *
+ * Always returns SUCCESS.
+ */
 class LogEvent : public BT::SyncActionNode
 {
 public:
@@ -587,8 +701,12 @@ public:
     BT::NodeStatus tick() override;
 };
 
-// Writes a string value to an arbitrary blackboard key.
-// Always returns SUCCESS.
+/**
+ * @class SetBlackboardValue
+ * @brief Writes a string value to an arbitrary blackboard key.
+ *
+ * Always returns SUCCESS.
+ */
 class SetBlackboardValue : public BT::SyncActionNode
 {
 public:
@@ -599,8 +717,12 @@ public:
     BT::NodeStatus tick() override;
 };
 
-// Reads blackboard key "key" and compares its string value to "expected".
-// Returns SUCCESS on match, FAILURE otherwise.
+/**
+ * @class CheckBlackboard
+ * @brief Reads blackboard key "key" and compares its string value to "expected".
+ *
+ * Returns SUCCESS on match, FAILURE otherwise.
+ */
 class CheckBlackboard : public BT::SyncActionNode
 {
 public:
@@ -611,9 +733,14 @@ public:
     BT::NodeStatus tick() override;
 };
 
-// Sends the raw visitor utterance to ConversationManager. The system prompt
-// classifies AFFIRMATIVE utterances with answer="yes" and NEGATIVE with answer="no".
-// Returns SUCCESS if response == "yes", FAILURE otherwise.
+/**
+ * @class IsVisitorResponseYes
+ * @brief Sends the raw visitor utterance to ConversationManager.
+ *
+ * The system prompt classifies AFFIRMATIVE utterances with answer="yes" and
+ * NEGATIVE with answer="no". Returns SUCCESS if response == "yes", FAILURE
+ * otherwise.
+ */
 class IsVisitorResponseYes
     : public BT::RosActionNode<dec_interfaces::action::ConversationManager>
 {
@@ -728,6 +855,16 @@ std::string nodeStatusToString(BT::NodeStatus status);
 //   Both lc_node and bt_node_ are added to the MultiThreadedExecutor in main().
 //=============================================================================
 
+/**
+ * @class BehaviorControllerNode
+ * @brief ROS2 lifecycle node for executing mission behavior trees.
+ *
+ * Loads the scenario configuration and knowledge base, builds the
+ * BehaviorTree.CPP tour-guide tree, and ticks it at 50 Hz once activated.
+ * Owns a companion plain rclcpp::Node (bt_node_) for the BT action/service
+ * clients and topic subscriptions, since LifecycleNode does not inherit
+ * rclcpp::Node.
+ */
 class BehaviorControllerNode : public rclcpp_lifecycle::LifecycleNode
 {
 public:
@@ -739,11 +876,19 @@ public:
     /// Expose the companion node so main() can add it to the executor.
     rclcpp::Node::SharedPtr get_bt_node() const { return bt_node_; }
 
-    // ── Lifecycle callbacks ─────────────────────────────────────────────────
+    /** @brief Read the parameters and knowledge base and build the behavior tree. */
     CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Start the 50 Hz behavior-tree tick timer. */
     CallbackReturn on_activate  (const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Cancel the tick timer; the tree stays built. */
     CallbackReturn on_deactivate(const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Halt and destroy the behavior tree. */
     CallbackReturn on_cleanup   (const rclcpp_lifecycle::State& state) override;
+
+    /** @brief Cancel the tick timer and halt the tree from any state. */
     CallbackReturn on_shutdown  (const rclcpp_lifecycle::State& state) override;
 
 private:

@@ -1,7 +1,50 @@
-#
-# To avoid log buffering:
-# "stdbuf -o L ros2 launch rtabmap_launch rtabmap.launch.py ..."
-#
+"""rtabmap_base.launch.py
+
+Vendored copy of rtabmap_launch's rtabmap.launch.py, re-defaulted for this rig.
+
+Included by the RTAB-Map bag_test launches and by
+pepper_navigation/pepper_nav2_rtabmap_loc.launch.py rather than run directly.
+It is the upstream launch file with this rig's topics and defaults baked in, so
+the callers pass only what actually differs between runs.
+
+Nodes started (all conditional on the arguments below):
+    rtabmap_slam/rtabmap — the mapper.
+    rtabmap_odom/{rgbd_odometry,stereo_odometry,icp_odometry} — only when the
+        matching visual_odometry / icp_odometry argument is set; this rig
+        normally feeds external LIO odometry instead.
+    rtabmap_sync/{rgbd_sync,stereo_sync}, rtabmap_util/{rgbd_relay,
+    point_cloud_xyzrgb}, image_transport/republish — the sync and relay chain.
+    rtabmap_viz/rtabmap_viz and rviz2/rviz2 — the two viewers.
+
+Launch arguments:
+    ~90 arguments, inherited from upstream rtabmap.launch.py; see the
+    RTAB-Map ROS2 documentation for the full list. The defaults that differ
+    for this rig are:
+        frame_id (default: "base_footprint")
+        rgb_topic (default: "/camera/color/image_raw_custom")
+        depth_topic (default: "/camera/aligned_depth_to_color/image_raw_custom")
+        camera_info_topic (default: "/camera/color/camera_info")
+        imu_topic (default: "/camera/imu/filtered"), subscribe_imu true
+        subscribe_scan (default: "true") on /scan
+        database_path (default: "~/.ros/rtabmap_march_28.db")
+        visual_odometry and icp_odometry both false — odometry comes from
+        FAST-LIO or Point-LIO, not from RTAB-Map.
+
+Usage:
+    Included by other launch files. To avoid log buffering when running an
+    RTAB-Map launch directly:
+        stdbuf -o L ros2 launch rtabmap_launch rtabmap.launch.py ...
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
 
 import os
 

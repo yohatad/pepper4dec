@@ -1,25 +1,38 @@
-# Point-LIO odometry on a recorded bag.
-#
-# Thin wrapper over pepper_slam/launch/pointlio_odometry.launch.py -- the live
-# entry point -- with use_sim_time forced true.
-#
-#   ros2 launch pepper_slam pointlio_odometry_bag.launch.py
-#   ros2 bag play <bag> --clock \
-#     --qos-profile-overrides-path config/play_qos.yaml \
-#     --read-ahead-queue-size 2000 --disable-keyboard-controls \
-#     --topics /points /camera/imu /imu/data /tf /tf_static
-#
-# ARGUMENTS THIS FILE HONOURS:
-#   config_file         l2lidar_rsimu.yaml = RealSense IMU (default) |
-#                       l2lidar_node.yaml = the L2's own
-#   rviz                open RViz
-#   publisher           none (DEFAULT HERE) = publish no rig transforms, for
-#                       a bag that carries its own /tf_static. Pass urdf
-#                       (with scope:=all) for a legacy bag that does not.
-#   flatten_base_frame  zero the leveled z/roll/pitch (default true)
-#   use_sim_time        FORCED true here; do not pass it
-#
-# See README.md in this directory for the shared replay gotchas.
+r"""pointlio_odometry_bag.launch.py
+
+Point-LIO odometry on a recorded bag.
+
+Thin wrapper over pepper_slam/launch/pointlio_odometry.launch.py -- the live
+entry point -- with use_sim_time forced true.
+
+  ros2 launch pepper_slam pointlio_odometry_bag.launch.py
+  ros2 bag play <bag> --clock \
+    --qos-profile-overrides-path config/play_qos.yaml \
+    --read-ahead-queue-size 2000 --disable-keyboard-controls \
+    --topics /points /camera/imu /imu/data /tf /tf_static
+
+Launch arguments::
+  config_file         l2lidar_rsimu.yaml = RealSense IMU (default) |
+                      l2lidar_node.yaml = the L2's own
+  rviz                open RViz
+  publisher           none (DEFAULT HERE) = publish no rig transforms, for
+                      a bag that carries its own /tf_static. Pass urdf
+                      (with scope:=all) for a legacy bag that does not.
+  flatten_base_frame  zero the leveled z/roll/pitch (default true)
+  use_sim_time        FORCED true here; do not pass it
+
+See README.md in this directory for the shared replay gotchas.
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
 
 import os
 

@@ -1,6 +1,46 @@
 #!/usr/bin/env python3
 
-"""Launch the face_detection node, optionally with the RealSense camera driver."""
+"""face_detection.launch.py
+
+Launch the face_detection node, optionally with its camera driver.
+
+Nodes started:
+    face_detection/face_detection (node: face_detection)
+        YOLO face detection plus SixDRepNet head pose and mutual gaze.
+    naoqi_driver/naoqi_driver_node or realsense2_camera/realsense2_camera_node
+        Only when launch_camera is true. Which one starts is read from the
+        camera parameter in the YAML config, not from a launch argument.
+
+Launch arguments:
+    launch_camera (default: "false")
+        Start the camera driver as well. Leave false when the frames come
+        from a ROS2 bag or from another launch file.
+
+Configuration:
+    config/face_detection_configuration.yaml — read twice: passed to the node
+    as parameters, and parsed here to decide which camera driver to start.
+
+Prerequisites:
+    With launch_camera false, /camera/color/image_raw and the matching depth
+    topic must already be published. The naoqi_driver branch hard-codes the
+    robot's qi-url and network interface, so those need editing for a
+    different robot or network.
+
+Usage:
+    ros2 launch face_detection face_detection.launch.py launch_camera:=true
+
+The node's ROS interface is documented in face_detection_application.cpp.
+
+Author: Yohannes Tadesse Haile
+Affiliation: Carnegie Mellon University Africa
+Email: yohatad123@gmail.com
+Date: September 8, 2026
+Version: v1.0
+
+Copyright (C) 2025 Carnegie Mellon University Africa
+This software is provided 'as-is' for research and educational purposes
+within the DEC project.
+"""
 
 from launch import LaunchDescription
 from launch.actions import OpaqueFunction
