@@ -196,6 +196,14 @@ def generate_launch_description():
         'watchdog', default_value='true',
         description='Cancel navigation goals while fastlio_localization reports '
                     'itself lost. Set false to monitor without ever holding nav.')
+    declare_log_level_cmd = DeclareLaunchArgument(
+        'log_level', default_value='warn',
+        description='rclcpp logger severity for every node this file launches '
+                    'directly (not sensor_tf or fastloc, which keep their own '
+                    'includes'"'"' defaults). warn by default so bond/costmap/'
+                    'lifecycle chatter does not bury real errors; pass '
+                    'log_level:=info to see it again.')
+    log_level = LaunchConfiguration('log_level')
 
     # Sensor TF + fastlio_localization (FAST_LIO), which loads the prior map
     # INTO the ikd-Tree the iEKF registers against, so the map constrains the
@@ -255,6 +263,7 @@ def generate_launch_description():
         executable='map_server',
         name='map_server',
         output='screen',
+        arguments=['--ros-args', '--log-level', log_level],
         parameters=[{
             'use_sim_time': use_sim_time,
             'yaml_filename': map_yaml,
@@ -267,6 +276,7 @@ def generate_launch_description():
         executable='controller_server',
         name='controller_server',
         output='screen',
+        arguments=['--ros-args', '--log-level', log_level],
         parameters=[configured_params],
         # Route velocity through the collision monitor: controller -> cmd_vel_raw
         # -> collision_monitor -> cmd_vel (what Pepper drives on).
@@ -277,6 +287,7 @@ def generate_launch_description():
         executable='planner_server',
         name='planner_server',
         output='screen',
+        arguments=['--ros-args', '--log-level', log_level],
         parameters=[configured_params],
     )
     behavior_server = Node(
@@ -284,6 +295,7 @@ def generate_launch_description():
         executable='behavior_server',
         name='behavior_server',
         output='screen',
+        arguments=['--ros-args', '--log-level', log_level],
         parameters=[configured_params],
         remappings=[('cmd_vel', 'cmd_vel_raw')],
     )
@@ -295,6 +307,7 @@ def generate_launch_description():
         executable='cloud_range_filter.py',
         name='points_safety_filter',
         output='screen',
+        arguments=['--ros-args', '--log-level', log_level],
         parameters=[{
             'use_sim_time': use_sim_time,
             'input_topic': '/points',
@@ -309,6 +322,7 @@ def generate_launch_description():
         executable='collision_monitor',
         name='collision_monitor',
         output='screen',
+        arguments=['--ros-args', '--log-level', log_level],
         parameters=[configured_params],
     )
 
@@ -340,7 +354,7 @@ def generate_launch_description():
         executable='rviz2',
         name='rviz2',
         output='screen',
-        arguments=['-d', rviz_config],
+        arguments=['-d', rviz_config, '--ros-args', '--log-level', log_level],
         parameters=[{'use_sim_time': use_sim_time}],
         condition=IfCondition(rviz),
     )
@@ -350,6 +364,7 @@ def generate_launch_description():
         executable='bt_navigator',
         name='bt_navigator',
         output='screen',
+        arguments=['--ros-args', '--log-level', log_level],
         parameters=[configured_params],
     )
     nav2_starter = Node(
@@ -357,6 +372,7 @@ def generate_launch_description():
         executable='wait_for_map_then_start.py',
         name='wait_for_map_then_start',
         output='screen',
+        arguments=['--ros-args', '--log-level', log_level],
         parameters=[{'use_sim_time': use_sim_time,
                      'target_frame': 'map',
                      'source_frame': 'base_footprint'}],
@@ -370,6 +386,7 @@ def generate_launch_description():
         executable='localization_recovery.py',
         name='localization_recovery',
         output='screen',
+        arguments=['--ros-args', '--log-level', log_level],
         parameters=[{'use_sim_time': use_sim_time, 'backend': 'fastloc'}],
     )
 
@@ -402,6 +419,7 @@ def generate_launch_description():
         executable='localization_watchdog.py',
         name='localization_watchdog',
         output='screen',
+        arguments=['--ros-args', '--log-level', log_level],
         condition=IfCondition(LaunchConfiguration('watchdog')),
         parameters=[{
             'use_sim_time': use_sim_time,
@@ -417,6 +435,7 @@ def generate_launch_description():
         executable='lifecycle_manager',
         name='lifecycle_manager_navigation',
         output='screen',
+        arguments=['--ros-args', '--log-level', log_level],
         parameters=[{
             'use_sim_time': use_sim_time,
             # OFF deliberately. local_costmap blocks configuring until a
@@ -454,6 +473,7 @@ def generate_launch_description():
         declare_rviz_cmd,
         declare_rviz_config_cmd,
         declare_watchdog_cmd,
+        declare_log_level_cmd,
         sensor_tf,
         fastloc,
         map_server,
