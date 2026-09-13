@@ -61,9 +61,8 @@ Design notes:
     slam_20260823_aligned this path had 0 correction steps over 0.30 m, 4.5 cm
     maximum.
 
-    NOT YET RUN ON THE ROBOT -- everything measured is bag replay. Each of the
-    `nav_profile` Nav2 bringups except `legacy` already nests its own
-    localization, so it is launched standalone here only when navigation is
+    Each of the `nav_profile` Nav2 bringups except `legacy` already nests its
+    own localization, so it is launched standalone here only when navigation is
     off -- launching it twice would fight over the `map -> odom` transform.
 
     The localization include is wrapped in a scoped GroupAction because
