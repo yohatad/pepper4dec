@@ -153,12 +153,17 @@ controller_server:
       trans_stopped_velocity: 0.1
       short_circuit_trajectory_evaluation: True
       stateful: True
-      critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist", "Twirling"]
+      # NO Twirling. It was added at scale 10.0 to prefer rotate-then-drive over
+      # arcing turns, on the belief that it penalises vel_theta only when
+      # commanded together with translation. It does not: scoreTrajectory()
+      # returns fabs(traj.velocity.theta), so it taxes EVERY rotating
+      # trajectory, pure in-place rotation included -- which is the only way
+      # this base turns. It is meant for holonomic robots that spin needlessly
+      # on the way to a goal. The rotate-then-drive preference comes from
+      # PathAlign/GoalAlign with a short forward_point_distance, already set
+      # below; Twirling cannot express it.
+      critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
       BaseObstacle.scale: 0.02
-      # Twirling: penalizes commanding vel_theta while also translating, so DWB
-      # prefers trajectories that rotate-then-drive over arcing turns that mix
-      # full rotation with full forward speed at once.
-      Twirling.scale: 10.0
       PathAlign.scale: 20.0
       PathAlign.forward_point_distance: 0.1
       GoalAlign.scale: 20.0
@@ -193,8 +198,12 @@ local_costmap:
       robot_base_frame: base_footprint
       use_sim_time: False
       rolling_window: true
-      width: 3
-      height: 3
+      # 6, not 3: width/height is the FULL window span, so 3 only reached
+      # 1.5 m in any direction -- inside both sensors' obstacle_max_range
+      # (3-4 m below), wasting the range they can actually see. 6 gives a
+      # true 3 m radius.
+      width: 6
+      height: 6
       resolution: 0.05
       robot_radius: 0.20
       plugins: ["voxel_layer", "inflation_layer"]
@@ -214,8 +223,8 @@ local_costmap:
         enabled: True
         # VoxelLayer (not ObstacleLayer): keeps a 3D voxel column grid and
         # clears per-voxel, so a tilted 360 deg 3D lidar + moving obstacles
-        # (people) clear reliably without leaving stale marks behind. The voxel
-        # grid spans the obstacle band: origin_z .. origin_z + z_voxels*z_res.
+        # (people) clear -- eventually. The voxel grid spans the obstacle
+        # band: origin_z .. origin_z + z_voxels*z_res.
         publish_voxel_map: True
         # FLOOR-referenced (global_frame is map, which is floor-levelled): plain heights
         # above the ground. Old raw-odom values +0.30. z_voxels max is 16 --
@@ -223,12 +232,37 @@ local_costmap:
         origin_z: -0.30            # 0.30 m BELOW the floor: keeps the sensor
                                    # origin (L2 ~0.25 m up, plus drift) inside
                                    # the grid so VoxelLayer can raytrace-clear.
-        z_resolution: 0.125        # voxel height
-        z_voxels: 16               # 16 * 0.125 = 2.0 m -> covers -0.30 .. 1.70
+        # 8 bins at 0.25 m, not 16 at 0.125 m (same 2.0 m span): a column only
+        # clears once a ray re-sweeps EVERY bin a real object marked, and a
+        # standing person spans most of the band, so 16 fine bins meant 16
+        # independent ray-passes needed before the mark actually vacated --
+        # MEASURED: stuck in both costmaps well after the person walked away,
+        # cleared only by calling clear_entirely_*_costmap by hand. Half the
+        # bins means half the ray-passes to fully clear a column, at the cost
+        # of coarser vertical discrimination (2D occupancy is unaffected).
+        z_resolution: 0.25         # voxel height
+        z_voxels: 8                # 8 * 0.25 = 2.0 m -> covers -0.30 .. 1.70
         max_obstacle_height: 1.70
-        mark_threshold: 1          # marked voxels in a column to flag the 2D cell (0 = any)
+        # 3, not 1: at 1, a single stray marked voxel (dust, a passing
+        # reflection, a transient false return) flags the whole 2D column,
+        # and clearing it back out needs a ray to re-sweep that EXACT height
+        # bin -- not guaranteed every revolution on a tilted rotating lidar.
+        # MEASURED: a phantom obstacle stuck in both costmaps with nothing
+        # physically there. 3 needs multiple simultaneous height-bins marked
+        # before a column counts as occupied.
+        mark_threshold: 3          # marked voxels in a column to flag the 2D cell (0 = any)
         unknown_threshold: 15
-        combination_method: 1
+        # 0 (Overwrite), not 1 (Max). Per costmap_layer.hpp: Max sets the
+        # master grid cell to max(existing master value, this layer's fresh
+        # value) -- so once a cell is EVER marked LETHAL, a later genuine
+        # clear (value 0, not NO_INFORMATION) can never win against it again,
+        # forever, regardless of how correctly this layer re-clears
+        # internally. MEASURED: a person standing then leaving stayed stuck
+        # even directly in RealSense's dense 30 Hz FOV, which should clear
+        # near-instantly -- this is why. Overwrite writes this layer's
+        # CURRENT value straight through, which is what a layer meant to
+        # track moving obstacles needs.
+        combination_method: 0
         # L2 lidar = primary all-around (360 deg) obstacle source; RealSense
         # depth = complementary DENSE forward source for the low/small/overhang
         # obstacles the sparse tilted L2 sweep misses. See obstacle_min_range
@@ -247,7 +281,12 @@ local_costmap:
           # catch low objects/chair legs.
           min_obstacle_height: 0.20
           max_obstacle_height: 1.70
-          raytrace_max_range: 3.0
+          # raytrace_max_range MUST be >= obstacle_max_range: marks beyond the
+          # raytrace range can never be cleared once the obstacle moves away
+          # (the clearing ray stops short of them), leaving a permanent ghost
+          # mark. Was 3.0/4.0 -- mismatched, unlike the matched realsense
+          # source below and the global costmap's identical points source.
+          raytrace_max_range: 4.0
           raytrace_min_range: 0.5
           obstacle_max_range: 4.0
           obstacle_min_range: 0.5
@@ -287,11 +326,18 @@ global_costmap:
         # VoxelLayer for the same per-voxel 3D clearing as the local costmap.
         publish_voxel_map: True
         origin_z: -0.30            # floor-referenced, see local costmap
-        z_resolution: 0.125
-        z_voxels: 16               # 16 * 0.125 = 2.0 m -> covers -0.30 .. 1.70
+        z_resolution: 0.25         # see local costmap: stuck-ghost fix
+        z_voxels: 8                # 8 * 0.25 = 2.0 m -> covers -0.30 .. 1.70
         max_obstacle_height: 1.70
-        mark_threshold: 1
+        mark_threshold: 3          # see local costmap: stuck-ghost fix
         unknown_threshold: 15
+        # Left at 1 (Max), unlike local costmap: this layer sits alongside
+        # static_layer here, and Overwrite would let a live "free" reading
+        # (partial occlusion, calibration drift, a doorway edge) erase a
+        # real wall the static map correctly recorded. Max never lets live
+        # data override the map, at the cost of the same stuck-ghost
+        # behavior the local costmap had -- acceptable tradeoff here since
+        # the static map is what global planning should trust.
         combination_method: 1
         observation_sources: points
         points:
@@ -311,14 +357,16 @@ global_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 4.0
-        # 0.35, not 0.20. robot_radius 0.20 plus Nav2's default 0.01 m
+        # Not 0.20: robot_radius 0.20 plus Nav2's default 0.01 m
         # footprint_padding gives a 16-gon whose inscribed radius is 0.206 m,
         # so at 0.20 the inflation sat INSIDE the robot's own body and both
         # costmaps logged "inflation radius (0.200) is smaller than the
         # computed inscribed radius (0.206)": the planner could path the robot
-        # closer to an obstacle than its own radius. 0.35 keeps ~14 cm of real
-        # clearance without making doorways impassable.
-        inflation_radius: 0.35
+        # closer to an obstacle than its own radius. 0.30, not local
+        # costmap's 0.35 -- live-tuned lower here for the global planner
+        # specifically, still ~10 cm of real clearance without making
+        # doorways impassable.
+        inflation_radius: 0.30
       always_send_full_costmap: True
 
 planner_server:
