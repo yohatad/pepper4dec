@@ -33,12 +33,13 @@ Launch arguments:
     enable_navigation (default: "true")
         Bring up pepper_navigation (the Nav2 navigation/localization stack).
     nav_profile (default: "fastloc"; choices: amcl, fastloc, legacy,
-                 rtabmap_loc)
+                 pointloc, rtabmap_loc)
         Which Nav2 bringup to use when enable_navigation is true.
         fastloc = fastlio_localization, FAST-LIO with the prior map inside the
-        iEKF; rtabmap_loc = RTAB-Map localization mode; amcl = AMCL on FAST-LIO
-        odom; legacy = AMCL on raw wheel odom, kept only for reproducing old
-        runs and publishing no /localization/pose.
+        iEKF; pointloc = the Point-LIO equivalent; rtabmap_loc = RTAB-Map
+        localization mode; amcl = AMCL on FAST-LIO odom; legacy = AMCL on raw
+        wheel odom, kept only for reproducing old runs and publishing no
+        /localization/pose.
 
 Configuration:
     None of its own; each included launch file loads its package's YAML.
@@ -100,6 +101,8 @@ NAV_PROFILES = {
     # registers against, so the map constrains the estimate at scan rate from
     # inside the filter, with no map->odom correction step to jump.
     'fastloc': 'pepper_nav2_fastloc.launch.py',
+    # Same arrangement with Point-LIO carrying the prior map instead.
+    'pointloc': 'pepper_nav2_pointloc.launch.py',
     'rtabmap_loc': 'pepper_nav2_rtabmap_loc.launch.py',
     'amcl': 'pepper_nav2_amcl.launch.py',
     'legacy': 'pepper_navigation.launch.py',

@@ -11,7 +11,7 @@ node and RViz:
     --read-ahead-queue-size 1000 --disable-keyboard-controls --rate 3
 
 REPLAY /tf HERE. The other bag_test launches tell you to remap it away,
-because the bag's wheel odometry fights lio_map_odom_bridge for
+because the bag's wheel odometry fights lio_odom_bridge for
 base_footprint's parent. This launch wants exactly that data: /pepper_odom is
 the thing under comparison, and the bag's /tf carries it.
 

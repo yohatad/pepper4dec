@@ -20,7 +20,7 @@ a result from this node as a lower bound on the localizer's accuracy, not a
 measurement of it.
 
 Needs the bag's /tf (pepper_odom -> base_footprint) replayed, and the rig's
-static transforms. Do NOT run lio_map_odom_bridge alongside it: that publishes
+static transforms. Do NOT run lio_odom_bridge alongside it: that publishes
 lio_init -> base_footprint, and a second live parent for base_footprint is a
 broken tree (see pepper_odom_relabel.py).
 """
