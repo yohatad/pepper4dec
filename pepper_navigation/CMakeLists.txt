@@ -106,7 +106,7 @@ install(CODE [[
   else()
     message(STATUS "rviz/ symlink failed -- copying instead")
     file(COPY "${_rviz_src}/" DESTINATION "${_rviz_dst}"
-         FILES_MATCHING PATTERN "*.rviz")
+      FILES_MATCHING PATTERN "*.rviz")
   endif()
 ]])
 

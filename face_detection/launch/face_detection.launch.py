@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 
-"""face_detection.launch.py
-
-Launch the face_detection node, optionally with its camera driver.
+"""
+face_detection.launch.py: launch the face_detection node, optionally with its camera driver.
 
 Nodes started:
     face_detection/face_detection (node: face_detection)

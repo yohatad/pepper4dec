@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""realsense_camera.launch.py
-
-Launch the Intel RealSense camera driver only.
+"""
+realsense_camera.launch.py: launch the Intel RealSense camera driver only.
 
 Nodes started:
     realsense2_camera/realsense2_camera_node
