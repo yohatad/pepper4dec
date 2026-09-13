@@ -70,19 +70,45 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# Install launch files
+# Install launch files.
+#
+# NOT symlinked, unlike config/ and rviz/ below: `ros2 launch <pkg> <file>`
+# resolves its top-level file argument via ros2launch/api/api.py's
+# os.walk(package_share_directory) with the default followlinks=False, which
+# never descends into a SYMLINKED launch/ directory -- MEASURED: symlinking
+# this one broke `ros2 launch pepper_navigation pepper_nav2_fastloc.launch.py`
+# outright ("file ... was not found"), even though the file plainly existed
+# through the symlink. config/ and rviz/ are safe because they're only ever
+# reached by direct path construction inside a launch file's own Python code
+# (get_package_share_directory() + os.path.join()), never through that
+# top-level os.walk lookup.
 install(DIRECTORY
   launch/
   DESTINATION share/${PROJECT_NAME}/launch
   FILES_MATCHING PATTERN "*.py"
 )
 
-# Install rviz configs
-install(DIRECTORY
-  rviz/
-  DESTINATION share/${PROJECT_NAME}/rviz
-  FILES_MATCHING PATTERN "*.rviz"
-)
+# Install rviz configs. SYMLINKED -- same reasoning as config/ above.
+install(CODE "set(_rviz_src \"${CMAKE_CURRENT_SOURCE_DIR}/rviz\")")
+install(CODE "set(_rviz_pkg \"${PROJECT_NAME}\")")
+install(CODE [[
+  set(_rviz_dst "${CMAKE_INSTALL_PREFIX}/share/${_rviz_pkg}/rviz")
+  get_filename_component(_rviz_parent "${_rviz_dst}" DIRECTORY)
+  file(MAKE_DIRECTORY "${_rviz_parent}")
+  if(EXISTS "${_rviz_dst}" OR IS_SYMLINK "${_rviz_dst}")
+    file(REMOVE_RECURSE "${_rviz_dst}")
+  endif()
+  execute_process(
+    COMMAND ${CMAKE_COMMAND} -E create_symlink "${_rviz_src}" "${_rviz_dst}"
+    RESULT_VARIABLE _rviz_rc ERROR_QUIET)
+  if(_rviz_rc EQUAL 0)
+    message(STATUS "rviz/ symlinked -> ${_rviz_src} (edits are live)")
+  else()
+    message(STATUS "rviz/ symlink failed -- copying instead")
+    file(COPY "${_rviz_src}/" DESTINATION "${_rviz_dst}"
+         FILES_MATCHING PATTERN "*.rviz")
+  endif()
+]])
 
 # Install config files.
 #
