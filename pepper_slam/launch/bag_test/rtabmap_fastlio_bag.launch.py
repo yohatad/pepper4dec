@@ -107,33 +107,37 @@ def generate_launch_description():
             'qos': '2',
             'database_path': '~/.ros/rtabmap_fastlio_bag_test.db',
             # Reg/Strategy 1: ICP refinement + proximity loop closures on scans.
-            # Grid/Sensor 0: occupancy from the scan cloud (not a camera).
+            # Grid/Sensor 0 (default) builds occupancy from the scan cloud alone;
+            # rgbd:=true switches to 2 (see below).
             # Ground/obstacle split assumes Z-up map frame (hence odom).
             # NeighborLinkRefining + dense proximity closures: without them the
             # residual odometry drift between passes printed walls twice in the
             # 2D grid (validated via rtabmap-reprocess on the first run's db:
             # 6 -> 49 loop closures, wall duplication gone).
-            'rtabmap_args': ['--delete_db_on_start '
-                            '--Reg/Strategy 1 '
-                            '--RGBD/NeighborLinkRefining true '
-                            '--RGBD/ProximityBySpace true '
-                            '--RGBD/ProximityPathMaxNeighbors 10 '
-                            '--Icp/VoxelSize 0.15 --Icp/PointToPlaneK 20 '
-                            '--Icp/MaxCorrespondenceDistance 0.5 '
-                            '--Icp/CorrespondenceRatio 0.2 '
-                            '--Grid/CellSize 0.05 '
-                            '--Grid/RangeMax 8.0 '
-                            '--Grid/MaxGroundHeight 0.10 '
-                            '--Grid/MaxObstacleHeight 1.7 '
-                            '--Grid/RayTracing true '
-                            '--Grid/NoiseFilteringRadius 0.15 '
-                            '--Grid/NoiseFilteringMinNeighbors 3 '
-                            '--Grid/3D true ',
-            # Grid/Sensor: 0 = scan cloud only (geometry, no colour),
-            # 2 = scan cloud AND the RGB-D camera, so the assembled /cloud_map
-            # and the database carry colour.
-            PythonExpression(
-                ["'--Grid/Sensor 2 ' if '", rgbd, "' == 'true' else '--Grid/Sensor 0 '"])],
+            'rtabmap_args': [
+                '--delete_db_on_start '
+                '--Reg/Strategy 1 '
+                '--RGBD/NeighborLinkRefining true '
+                '--RGBD/ProximityBySpace true '
+                '--RGBD/ProximityPathMaxNeighbors 10 '
+                '--Icp/VoxelSize 0.15 --Icp/PointToPlaneK 20 '
+                '--Icp/MaxCorrespondenceDistance 0.5 '
+                '--Icp/CorrespondenceRatio 0.2 '
+                '--Grid/CellSize 0.05 '
+                '--Grid/RangeMax 8.0 '
+                '--Grid/MaxGroundHeight 0.10 '
+                '--Grid/MaxObstacleHeight 1.7 '
+                '--Grid/RayTracing true '
+                '--Grid/NoiseFilteringRadius 0.15 '
+                '--Grid/NoiseFilteringMinNeighbors 3 '
+                '--Grid/3D true ',
+                # Grid/Sensor: 0 = scan cloud only (geometry, no colour),
+                # 2 = scan cloud AND the RGB-D camera, so the assembled
+                # /cloud_map and the database carry colour.
+                PythonExpression([
+                    "'--Grid/Sensor 2 ' if '", rgbd,
+                    "' == 'true' else '--Grid/Sensor 0 '"]),
+            ],
             'rtabmap_viz': 'true',
             'rviz': 'true',
             # The RGB-D config differs only in the 3D Cloud Map display's
