@@ -22,14 +22,14 @@ source ~/ros2_ws/install/setup.bash
 | Frame | Published by | Notes |
 |-------|--------------|-------|
 | `pepper_odom` | `naoqi_driver2` | wheel odometry; **not** named `odom` on purpose |
-| `odom` | FAST-LIO | IMU-aligned, tilted ~90° on Pepper's mount — **not** gravity-aligned |
-| `odom` | `lio_odom_bridge` | one-time gravity-leveled parent of `odom`; Z-up |
+| `lio_init` | FAST-LIO / Point-LIO | LIO's own world frame, tilted ~90° by the sensor mount — **not** gravity-aligned |
+| `odom` | `lio_odom_bridge` | one-time gravity-leveled parent of `lio_init`; Z-up |
 | `map` | RTAB-Map / PGO | whichever layer owns the loop-closure correction |
 | `map` | `fastlio_localization` | prior-map localization: publishes `map -> base_footprint` directly, with no `odom` edge at all (see `FRAMES.md`) |
 
 **Only one node may publish a given frame's parent** — that constraint is what
 the FAST-LIO options below are choosing between. RTAB-Map must anchor on
-`odom`, not `odom`: projecting a 2D grid out of a tilted frame silently
+`odom`, not `lio_init`: projecting a 2D grid out of a tilted frame silently
 produces garbage ground/obstacle splits. See `config/README.md` in
 `pepper_navigation` for the odometry naming rules.
 
@@ -59,7 +59,7 @@ against, so there is no correction node beside the filter and no `odom` frame
 -- and is wrapped for Nav2 by `pepper_nav2_fastloc.launch.py`.
 
 **`bridge_level_frame` is the one that bites.** FAST-LIO publishes in the raw
-initial-IMU frame — the L2 IMU reads gravity along +X, so `odom` looks tilted
+initial-IMU frame — the L2 IMU reads gravity along +X, so `lio_init` looks tilted
 ~90° — and `odom` is the bridge's one-time fix. Set it `false` whenever a
 higher layer owns `odom`'s parent, or `odom` gets two parents and the TF tree
 breaks.

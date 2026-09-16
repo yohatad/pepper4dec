@@ -89,8 +89,8 @@ RobotTopics loadRobotTopics(const std::string& yaml_path) {
         YAML::Node root = YAML::LoadFile(yaml_path);
         if (root["topics"]) {
             YAML::Node t = root["topics"];
-            if (t["JointStates"]) topics.joint_states = t["JointStates"].as<std::string>();
-            if (t["RobotPose"]) topics.robot_pose = t["RobotPose"].as<std::string>();
+            if (t["joint_states"]) topics.joint_states = t["joint_states"].as<std::string>();
+            if (t["robot_pose"]) topics.robot_pose = t["robot_pose"].as<std::string>();
         }
     } catch (const std::exception&) {
         // Keep defaults, mirroring the Python ConfigManager's best-effort load.

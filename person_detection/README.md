@@ -40,7 +40,7 @@ source install/setup.bash
 ### Model Files
 
 Download the required ONNX model files to the `models/` directory:
-- `person_detection_yolov11m.onnx` - YOLOv11 detection model (or other YOLO variant)
+- `person_detection_yolov11m.onnx` - YOLO11m detection model (or other YOLO variant)
 
 ## 🔧 Configuration
 

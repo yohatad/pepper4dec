@@ -1,8 +1,8 @@
 """
-Face Detection Package
+Text-to-Speech (TTS) Package
 
-This package provides face detection and mutual gaze estimation functionality
-using MediaPipe and SixDrepNet algorithms.
+This package synthesizes and plays speech on the Pepper robot through one of
+several backends (naoqi_ros, kokoro_local/pepper, elevenlabs_local/pepper).
 """
 
 __version__ = "1.0.0"

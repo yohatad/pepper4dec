@@ -37,7 +37,7 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 
 ### **Navigation & Localization**
 - **`pepper_slam`** - Mapping and odometry backends: RTAB-Map (RGB-D), SLAM Toolbox (2D lidar), and FAST-LIO / Point-LIO lidar-inertial odometry via the Unitree L2, plus an optional `robot_localization` EKF that fuses leveled LIO odometry with wheel odometry. Launch files and parameters only — the SLAM backends themselves are upstream packages
-- **`pepper_navigation`** - Nav2 stack (path planning, obstacle avoidance, keepout zones, collision-monitor safety layer) with **three interchangeable localization profiles** — AMCL, RTAB-Map, or prior-map LIO (`fastlio_localization`) — behind identical costmaps and tuning
+- **`pepper_navigation`** - Nav2 stack (path planning, obstacle avoidance, keepout zones, collision-monitor safety layer) with **four interchangeable localization profiles** — AMCL, RTAB-Map, prior-map FAST-LIO (`fastlio_localization`), or prior-map Point-LIO (`pointlio_localization`) — behind identical costmaps and tuning
 
 Localization-only deployments get their `map → base_footprint` pose (`/localization/pose`) from **`fast_lio`**'s `fastlio_localization` node; `gesture_execution` consumes that pose for pointing IK.
 
@@ -144,6 +144,7 @@ ros2 launch dec_launch dec_system.launch.py enable_navigation:=false
 | `nav_profile` | Nav2 bringup | Localization |
 |---|---|---|
 | `fastloc` *(default)* | `pepper_nav2_fastloc.launch.py` | FAST-LIO with the prior map inside the iEKF (`fastlio_localization`) |
+| `pointloc` | `pepper_nav2_pointloc.launch.py` | Point-LIO with the prior map inside the iEKF (`pointlio_localization`) |
 | `rtabmap_loc` | `pepper_nav2_rtabmap_loc.launch.py` | RTAB-Map localization mode against a `.db` |
 | `amcl` | `pepper_nav2_amcl.launch.py` | AMCL over a flattened `/scan`, on FAST-LIO odom |
 | `legacy` | `pepper_navigation.launch.py` | AMCL on raw wheel odometry; publishes no `/localization/pose` |
@@ -222,7 +223,7 @@ docker compose --profile dev up  # live-mounts the source over the image
 
 ### **Navigation System**
 - **Mapping** (`pepper_slam`): RTAB-Map (RGB-D) or SLAM Toolbox (2D lidar); FAST-LIO / Point-LIO for lidar-inertial odometry on the Unitree L2
-- **Localization** (`pepper_navigation`): three interchangeable profiles — AMCL, RTAB-Map, or prior-map LIO via `fastlio_localization` — sharing identical costmaps and tuning so they can be compared directly
+- **Localization** (`pepper_navigation`): four interchangeable profiles — AMCL, RTAB-Map, prior-map FAST-LIO via `fastlio_localization`, or prior-map Point-LIO via `pointlio_localization` — sharing identical costmaps and tuning so they can be compared directly
 - **Odometry**: wheel odometry (`/pepper_odom` from `naoqi_driver2`), LIO odometry, or the two fused by the `robot_localization` EKF (`pepper_slam ekf_fusion.launch.py`)
 - **Path Planning**: Nav2 with 3D voxel costmaps consuming the L2's 360° `PointCloud2` directly, no flattening step
 - **Safety**: An independent collision monitor gates every velocity command straight off the lidar, bypassing the costmaps

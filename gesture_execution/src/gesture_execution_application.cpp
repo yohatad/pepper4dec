@@ -10,7 +10,7 @@
  *   /localization/pose (nav_msgs/msg/Odometry)
  *     Absolute map->base_footprint robot pose from fast_lio's
  *     fastlio_localization, used to compute pointing direction. The topic
- *     name comes from the RobotPose key in data/pepper_topics.yaml.
+ *     name comes from the robot_pose key in data/pepper_topics.yaml.
  *
  * Publishers:
  *   /joint_angles_trajectory (naoqi_bridge_msgs/msg/JointAnglesTrajectory)

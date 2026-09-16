@@ -76,6 +76,12 @@ also works at runtime; changes take effect on the next `configure`).
 
 ### All Parameters
 
+> **Note:** the values below are the node's *code* defaults. The committed
+> `config/text_to_speech_configuration.yaml` overrides two of them —
+> `engine: elevenlabs_pepper` and `playback_method: file` — so a plain
+> `ros2 launch text_to_speech text_to_speech.launch.py` speaks through ElevenLabs
+> to the robot, not through the on-board `naoqi_ros` voice shown here.
+
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `engine` | Synthesis + playback backend | `naoqi_ros` |

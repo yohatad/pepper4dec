@@ -219,7 +219,7 @@ void PersonDetectionNode::processImages() {
         auto tracking_data = prepareTrackingData(tracked);
         cv::Mat annotated = drawTrackedObjects(frame, tracked, tracking_data);
         updateLatestFrame(annotated);
-        publishObjectDetection(tracking_data);
+        publishPersonDetection(tracking_data);
     } else {
         updateLatestFrame(frame);
     }
@@ -253,7 +253,7 @@ std::vector<TrackingDatum> PersonDetectionNode::prepareTrackingData(const byte_t
     return tracking_data;
 }
 
-void PersonDetectionNode::publishObjectDetection(const std::vector<TrackingDatum>& tracking_data) {
+void PersonDetectionNode::publishPersonDetection(const std::vector<TrackingDatum>& tracking_data) {
     if (tracking_data.empty()) return;
 
     dec_interfaces::msg::PersonDetection msg;

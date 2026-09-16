@@ -19,7 +19,7 @@ The **Animate Behavior** package is a ROS2 action server that provides natural, 
 
 ## ✅ Prerequisites
 - **ROS2 Humble** or newer
-- **Python 3.10** or compatible version
+- **C++17 toolchain** (compiled package, built via `colcon build`)
 - **Physical Pepper robot** or compatible simulator
 - **naoqi_bridge_msgs** for joint command publishing
 

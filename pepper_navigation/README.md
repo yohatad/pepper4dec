@@ -13,9 +13,10 @@ and the saved maps those consume.
 ## ✨ Key Features
 - **ROS2 Native**: Built for ROS2 Humble
 - **Nav2 Stack**: Full autonomous navigation with path planning and obstacle avoidance
-- **Three interchangeable localization stacks**: AMCL, a prior map carried
-  inside FAST-LIO's filter (`fastlio_localization`), or RTAB-Map — same costmaps
-  and tuning behind each, so they can be compared directly
+- **Four interchangeable localization stacks**: AMCL, a prior map carried
+  inside FAST-LIO's filter (`fastlio_localization`), the Point-LIO equivalent
+  (`pointlio_localization`), or RTAB-Map — same costmaps and tuning behind each,
+  so they can be compared directly
 - **3D obstacle avoidance**: costmaps consume the L2's 360° `PointCloud2` directly
   through voxel layers, with no flattening step
 - **Independent safety layer**: a collision monitor gates every velocity command
@@ -94,7 +95,7 @@ source install/setup.bash
 ### Parameter files
 
 Each launch file has its own params file; everything except the localization
-block is kept identical across the three current stacks, so a behavioural
+block is kept identical across the four current stacks, so a behavioural
 difference between them is a *localization* difference and nothing else.
 
 | Params file | Used by | Localization |
@@ -102,15 +103,16 @@ difference between them is a *localization* difference and nothing else.
 | `nav2_params.yaml` | `pepper_navigation.launch.py` | AMCL on wheel odom (`pepper_odom`), legacy |
 | `nav2_params_amcl.yaml` | `pepper_nav2_amcl.launch.py` | AMCL on FAST-LIO odom |
 | `nav2_params_fastloc.yaml` | `pepper_nav2_fastloc.launch.py` | `fastlio_localization`: prior map inside the iEKF |
+| `nav2_params_pointloc.yaml` | `pepper_nav2_pointloc.launch.py` | `pointlio_localization`: Point-LIO prior map inside the iEKF |
 | `nav2_params_rtabmap_loc.yaml` | `pepper_nav2_rtabmap_loc.launch.py` | RTAB-Map localization mode vs a `.db` |
 | `nav2_params_wheel_odom.yaml` | not launched by default | wheel-odometry variant, kept for comparison |
 
 `test/test_shared_nav2_params.py` guards the three node blocks
 (`behavior_server`, `controller_server`, `planner_server`) that are meant to be
-byte-identical across all five, so tuning a gain in four files and forgetting
-the fifth is caught rather than discovered later on the robot.
+byte-identical across all six, so tuning a gain in five files and forgetting
+the sixth is caught rather than discovered later on the robot.
 
-The **keepout filter is not carried into the three current stacks**:
+The **keepout filter is not carried into the four current stacks**:
 `keepout_zone.yaml`'s mask was authored against an older map's
 frame, so it has to be re-generated (`ros2_ws/utils/generate_keepout.py`) against the
 current map before that layer can be re-enabled.
@@ -119,16 +121,17 @@ current map before that layer can be re-enabled.
 
 ### Pick a localization stack
 
-All three current stacks share the same costmaps, DWB tuning, safety layer and
+All four current stacks share the same costmaps, DWB tuning, safety layer and
 FAST-LIO dead reckoning. They differ only in what corrects the drift:
 
 | Launch file | Localization | Prior map | Cost |
 |-------------|--------------|-----------|------|
 | `pepper_nav2_amcl.launch.py` | AMCL particle filter over a flattened `/scan` | 2D grid (`.yaml`/`.pgm`) | Cheapest; 2D only |
 | `pepper_nav2_fastloc.launch.py` | `fastlio_localization`, prior map loaded into the iEKF's ikd-Tree | keyframe `pose.json` + clouds **+** a matching 2D grid | Light — no Open3D, no PGO at runtime |
+| `pepper_nav2_pointloc.launch.py` | `pointlio_localization`, Point-LIO prior map loaded into the iEKF's ikd-Tree | keyframe `pose.json` + clouds **+** a matching 2D grid | Light — no Open3D, no PGO at runtime |
 | `pepper_nav2_rtabmap_loc.launch.py` | RTAB-Map localization mode (ICP + appearance) | RTAB-Map `.db` | Heaviest; also needs RGB |
 
-`pepper_navigation.launch.py` is the legacy fourth path — AMCL on naoqi's wheel
+`pepper_navigation.launch.py` is the legacy fifth path — AMCL on naoqi's wheel
 odometry (`pepper_odom`) against `map/pepper_map_lc.yaml`, from the 2D-lidar
 era. It expects a `/scan` that nothing in the current rig publishes, so start
 from `pepper_nav2_amcl.launch.py` instead unless you specifically want it.
@@ -271,6 +274,7 @@ odometry frame and the global costmap lives in `map`:
 |-------|--------------|-------------------------|---------------------|
 | `pepper_nav2_amcl` | `amcl` | `lio_odom_bridge` (FAST-LIO) | `odom` |
 | `pepper_nav2_fastloc` | `fastlio_localization` (publishes `map → base_footprint`; no `odom` edge) | — | `map` |
+| `pepper_nav2_pointloc` | `pointlio_localization` (publishes `map → base_footprint`; no `odom` edge) | — | `map` |
 | `pepper_nav2_rtabmap_loc` | `rtabmap` (to `odom`) | `lio_odom_bridge` | `odom` |
 | `pepper_navigation` (legacy) | `amcl` | `naoqi_driver2` (`pepper_odom`) | `pepper_odom` |
 
@@ -439,6 +443,7 @@ pepper_navigation/
 │   ├── nav2_params.yaml                      # Nav2 stack parameters (AMCL + static map, wheel odom)
 │   ├── nav2_params_amcl.yaml                 # Nav2 params for AMCL on FAST-LIO odom
 │   ├── nav2_params_fastloc.yaml              # Nav2 params for the fastlio_localization stack
+│   ├── nav2_params_pointloc.yaml             # Nav2 params for the pointlio_localization stack
 │   ├── nav2_params_rtabmap_loc.yaml          # Nav2 params for the RTAB-Map localization stack
 │   ├── ekf_nav.yaml                          # robot_localization EKF parameters (not yet launched)
 │   └── README.md
@@ -446,6 +451,7 @@ pepper_navigation/
 │   ├── pepper_navigation.launch.py           # Nav2 + AMCL against a static map
 │   ├── pepper_nav2_amcl.launch.py            # Nav2 + AMCL on FAST-LIO odom (localization baseline)
 │   ├── pepper_nav2_fastloc.launch.py         # Nav2 + fastlio_localization (prior map in the iEKF)
+│   ├── pepper_nav2_pointloc.launch.py        # Nav2 + pointlio_localization (prior map in the iEKF)
 │   ├── pepper_nav2_rtabmap_loc.launch.py     # Nav2 + FAST-LIO + RTAB-Map localization (.db)
 │   └── odom_test.launch.py
 ├── map/
@@ -500,7 +506,7 @@ The navigation stack integrates four main subsystems:
    - **SLAM Toolbox**: 2D LiDAR SLAM with loop closure
    - Publishes the `map` frame and `/map` that this package consumes
 
-3. **Localization Layer** — three interchangeable implementations, one interface
+3. **Localization Layer** — four interchangeable implementations, one interface
    (`map → odom` + a `/map` for the static layer):
    - **AMCL** over a flattened `/scan`, on FAST-LIO odometry
    - **`fastlio_localization`**, the prior map registered inside FAST-LIO's iEKF

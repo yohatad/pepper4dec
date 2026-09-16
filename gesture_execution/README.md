@@ -78,10 +78,10 @@ gestures:
 Robot topics are configured in `data/pepper_topics.yaml`:
 ```yaml
 topics:
-  JointAngles: "/joint_angles"
-  Wheels: "/cmd_vel"
-  JointStates: "/joint_states"
-  RobotPose: "/localization/pose"
+  joint_angles: "/joint_angles_trajectory"
+  wheels: "/cmd_vel"
+  joint_states: "/joint_states"
+  robot_pose: "/localization/pose"
 ```
 
 ## 🚀 Running the Node
