@@ -21,7 +21,7 @@ The **Speech Event Recognition and Localization** package provides real-time spe
 - **ROS2 Humble** or newer
 - **Python 3.10** or compatible version
 - **CUDA-capable GPU** (optional but recommended for Whisper acceleration)
-- **Intel RealSense camera** (for localization)
+- **Pepper robot** (its 4-microphone array enables the optional SRP-PHAT sound-source localization)
 
 ## 🛠️ Installation
 

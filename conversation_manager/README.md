@@ -22,7 +22,7 @@ The **Conversation Manager Package** implements a **Retrieval-Augmented Generati
 
 ## ✅ Prerequisites
 - **ROS2 Humble** or newer
-- **Python 3.8** or compatible version
+- **Python 3.10** or compatible version
 - **ROS 2 installation** with `rclpy` support
 - **Internet connection** for LLM API access (unless using local LLM)
 
@@ -48,52 +48,44 @@ pip install -r ~/ros2_ws/src/pepper4dec/conversation_manager/requirements.txt
 # 🔧 Configuration Parameters
 The configuration is managed via `config/conversation_manager_configuration.yaml`. The file must be present for the node to start.
 
-| Parameter                        | Description                                                      | Range/Values     | Default Value                       |
-|----------------------------------|------------------------------------------------------------------|------------------|--------------------------------------|
-| `llm.base_url`                   | LLM API endpoint URL                                             | String (URL)     | `http://localhost:8080/v1`          |
-| `llm.api_key`                    | API key for LLM service                                          | String           | (from `LLM_API_KEY` env var)        |
-| `llm.model`                      | LLM model name                                                   | String           | `HuggingFaceTB/SmolLM3-3B`          |
-| `embedding.model`                | Sentence transformer model for embeddings                        | String           | `all-MiniLM-L6-v2`           |
-| `retrieval.mode`                 | `rag` (vector search) or `full_context` (send entire KB every turn) | `rag` \| `full_context` | `rag`                |
-| `search.similarity_threshold`    | Similarity threshold for document retrieval                      | `[0.0 – 1.0]`   | `0.15`                        |
-| `search.top_k`                   | Number of documents to retrieve for context                      | Positive integer | `10`                           |
-| `conversation.max_history_turns` | Number of past turns kept in conversation memory               | Positive integer | `15`                           |
-| `conversation.context_turns`     | Number of recent turns included in each LLM request             | Positive integer | `10`                           |
-| `conversation.max_response_sentences` | Target answer length; controls the LLM's token budget       | Positive integer | `3`                           |
-| `data.default_path`              | Path to JSON knowledge base (relative to package share dir)      | String (path)    | `./data/upanzi_data.json`     |
-| `debug.verbose`                  | Enable verbose logging                                           | Boolean          | `false`                       |
+| Parameter                | Description                                                     | Range/Values            | Default Value                    |
+|--------------------------|-----------------------------------------------------------------|-------------------------|----------------------------------|
+| `llm_base_url`           | LLM API endpoint URL                                            | String (URL)            | `http://localhost:8080/v1`       |
+| `llm_model`              | LLM model name                                                  | String                  | `HuggingFaceTB/SmolLM3-3B`       |
+| `embedding_model`        | Sentence-transformer embedding model                            | String                  | `all-MiniLM-L6-v2`               |
+| `retrieval_mode`         | `rag` (vector search) or `full_context` (send entire KB)        | `rag` \| `full_context` | `rag`                            |
+| `similarity_threshold`   | Similarity threshold for document retrieval                     | `[0.0 – 1.0]`           | `0.15`                           |
+| `top_k`                  | Number of documents retrieved for context                       | Positive integer        | `10`                             |
+| `max_history_turns`      | Past turns kept in conversation memory                          | Positive integer        | `15`                             |
+| `context_turns`          | Recent turns included in each LLM request                       | Positive integer        | `10`                             |
+| `max_response_sentences` | Target answer length; controls the LLM token budget             | Positive integer        | `3`                              |
+| `data_default_path`      | Path to the JSON knowledge base (relative to package share dir) | String (path)           | `./data/upanzi_data.json`        |
+| `collection_name`        | ChromaDB collection name (`rag` mode only)                      | String                  | `upanzi_knowledge`               |
+| `verbose`                | Enable verbose logging                                          | Boolean                 | `false`                          |
 
 > **Note:**
-> - `llm.api_key` must be provided via the `LLM_API_KEY` environment variable.
-> - ChromaDB storage is automatically configured in the package data folder.
+> - The LLM API key is provided via the `LLM_API_KEY` environment variable, never as a ROS parameter.
+> - The committed `config/conversation_manager_configuration.yaml` overrides several code
+>   defaults above (`llm_base_url: https://api.deepseek.com/v1`, `llm_model: deepseek-chat`,
+>   `top_k: 5`, `verbose: true`).
 > - The configuration file is required for node startup.
 
 ## Example Configuration File (`config/conversation_manager_configuration.yaml`)
 ```yaml
-llm:
-  base_url: https://api.deepseek.com/v1
-  model: deepseek-chat
-
-embedding:
-  model: all-MiniLM-L6-v2
-
-retrieval:
-  mode: rag
-
-search:
-  similarity_threshold: 0.15
-  top_k: 5
-
-conversation:
-  max_history_turns: 15
-  context_turns: 10
-  max_response_sentences: 3
-
-data:
-  default_path: ./data/upanzi_data.json
-
-debug:
-  verbose: true
+conversation_manager:
+  ros__parameters:
+    llm_base_url: https://api.deepseek.com/v1
+    llm_model: deepseek-chat
+    embedding_model: all-MiniLM-L6-v2
+    retrieval_mode: rag
+    similarity_threshold: 0.15
+    top_k: 5
+    max_history_turns: 15
+    context_turns: 10
+    max_response_sentences: 3
+    data_default_path: ./data/upanzi_data.json
+    collection_name: upanzi_knowledge
+    verbose: true
 ```
 
 # 🚀 Running the Node

@@ -10,7 +10,7 @@ The **Face and Mutual Gaze Detection and Localization** package detects multiple
 
 ## ✨ Key Features
 - **ROS2 Native**: Built for ROS2 Humble
-- **SixDrepNet Algorithm**: State-of-the-art face detection and head pose estimation
+- **Gold-YOLO + SixDRepNet**: Gold-YOLO face detection with SixDRepNet head-pose estimation
 - **Person Detection Integration**: Uses YOLO-based person detection to locate faces
 - **Mutual Gaze Detection**: Evaluates engagement based on head pose angles
 - **Real-time Processing**: Processes synchronized RGB-D camera streams
@@ -52,7 +52,7 @@ Configuration is managed via ROS2 parameters, loaded from `config/face_detection
 |-----------|-------------|---------|
 | `use_compressed` | Use compressed ROS image topics | `false` |
 | `camera` | Camera type to use (`realsense`, `pepper`, or `video`) | `pepper` |
-| `sixdrepnet_confidence` | Confidence threshold for face detection | `0.90` |
+| `sixdrepnet_confidence` | Confidence threshold for face detection (YOLO/Gold-YOLO class score) | `0.90` |
 | `sixdrepnet_headpose_angle` | Head pose angle threshold in degrees | `10.0` |
 | `image_timeout` | Timeout for shutting down after video ends (s) | `2.0` |
 | `verbose_mode` | Enable visualization and detailed logging | `false` |
@@ -169,7 +169,7 @@ The face detection system consists of three main components:
 3. **Face Detection Node**:
    - Receives person detections from person detection
    - Performs face detection within person bounding boxes
-   - Estimates head pose using SixDrepNet
+   - Estimates head pose using SixDRepNet
    - Determines mutual gaze based on head pose angles
    - Publishes face detection results
 

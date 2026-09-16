@@ -1,6 +1,6 @@
 # Pepper Robot Topic Mappings
 topics:
-  JointAngles: "/joint_angles"
-  Wheels: "/cmd_vel"
-  JointStates: "/joint_states"
-  RobotPose: "/localization/pose"
+  joint_angles: "/joint_angles_trajectory"
+  wheels: "/cmd_vel"
+  joint_states: "/joint_states"
+  robot_pose: "/localization/pose"

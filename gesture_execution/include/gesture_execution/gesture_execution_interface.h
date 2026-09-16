@@ -129,7 +129,7 @@ std::unordered_map<std::string, GestureDescriptor> loadGestureDescriptors(const 
  */
 struct RobotTopics {
     std::string joint_states = "/joint_states";
-    // Matches the RobotPose key in data/pepper_topics.yaml and what
+    // Matches the robot_pose key in data/pepper_topics.yaml and what
     // fast_lio's fastlio_localization actually publishes; the old
     // "/localization" default silently subscribed to a topic nobody
     // publishes whenever the YAML key was missing.

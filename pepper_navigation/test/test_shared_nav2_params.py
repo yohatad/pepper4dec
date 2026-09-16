@@ -41,7 +41,7 @@ def _load():
 def _drift(node, loaded):
     """Return a list of human-readable drift reports for one shared node.
 
-    An empty list means the node is byte-identical across all four files.
+    An empty list means the node is byte-identical across all six files.
     """
     have = {f: d[node] for f, d in loaded.items() if node in d}
     missing = [f for f in FILES if f not in have]
@@ -64,7 +64,7 @@ def _drift(node, loaded):
 
 @pytest.mark.parametrize("node", SHARED)
 def test_shared_section_identical_across_param_files(node):
-    """Each shared nav2 section must be identical in all four param files."""
+    """Each shared nav2 section must be identical in all six param files."""
     drift = _drift(node, _load())
     assert not drift, "\n".join(drift)
 

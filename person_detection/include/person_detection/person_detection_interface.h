@@ -136,7 +136,7 @@ protected:
                                                     const std::vector<int>& class_ids) = 0;
 
     std::vector<TrackingDatum> prepareTrackingData(const byte_tracker::Detections& tracked);
-    void publishObjectDetection(const std::vector<TrackingDatum>& tracking_data);
+    void publishPersonDetection(const std::vector<TrackingDatum>& tracking_data);
     cv::Mat drawTrackedObjects(const cv::Mat& frame, const byte_tracker::Detections& tracked,
                               const std::vector<TrackingDatum>& tracking_data);
 
