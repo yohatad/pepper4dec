@@ -7,8 +7,8 @@
     system running on the Pepper robot at Carnegie Mellon University Africa.
 
     Actions:  ConversationManager, TTS, SpeechRecognition, Gesture, AnimateBehavior
-    Services: ConversationManagerPrompt
-    Messages: FaceDetection, ObjectDetection, PersonDetection
+    Services: ConversationManagerPrompt, GetDepthROI
+    Messages: FaceDetection, PersonDetection
   </description>
 
   <maintainer email="yohatad123@gmail.com">Yohannes Tadesse Haile</maintainer>
