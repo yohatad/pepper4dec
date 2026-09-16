@@ -34,12 +34,18 @@ import os
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
     pkg_launch_dir = os.path.join(
         get_package_share_directory('pepper_slam'), 'launch')
+
+    # Colour the 3D map from the RealSense instead of building it from lidar
+    # geometry alone. Off by default: it needs the aligned-depth topic, costs
+    # roughly a third more CPU, and the loop closures do not depend on it.
+    rgbd = LaunchConfiguration('rgbd')
 
     # 2026-08-12: was fast_lio/mapping.launch.py directly, which does NOT
     # include pepper_sensor_tf -- so lio_odom_bridge had no static
@@ -78,13 +84,21 @@ def generate_launch_description():
             # lidar geometry + RGB appearance: the color image feeds the
             # bag-of-words vocabulary for GLOBAL loop-closure detection, while
             # the loop constraint itself is computed by ICP on the L2 scans
-            # (Reg/Strategy 1) -- so no depth image is required, sidestepping
-            # the missing aligned-depth topic and the IR dot-pattern problem.
-            'depth': 'false',
+            # (Reg/Strategy 1) -- so no depth image is required by default.
+            #
+            # rgbd:=true additionally subscribes the aligned depth image, which
+            # makes every keyframe carry an RGB-D cloud: that is what colours
+            # the 3D map (Grid/Sensor 2 below) and what rtabmap-export needs to
+            # write a coloured .ply. Only bags that actually recorded
+            # /camera/aligned_depth_to_color/* can use it -- the older ones did
+            # not, which is why the default stays false.
+            'depth': rgbd,
             'subscribe_rgb': 'true',
             'rgb_topic': '/camera/color/image_raw',
+            'depth_topic': '/camera/aligned_depth_to_color/image_raw',
             'camera_info_topic': '/camera/color/camera_info',
-            'rgbd_sync': 'false',
+            'rgbd_sync': rgbd,
+            'approx_rgbd_sync': 'true',
             'subscribe_scan': 'false',
             'subscribe_scan_cloud': 'true',
             'scan_cloud_topic': '/points',
@@ -99,7 +113,7 @@ def generate_launch_description():
             # residual odometry drift between passes printed walls twice in the
             # 2D grid (validated via rtabmap-reprocess on the first run's db:
             # 6 -> 49 loop closures, wall duplication gone).
-            'rtabmap_args': '--delete_db_on_start '
+            'rtabmap_args': ['--delete_db_on_start '
                             '--Reg/Strategy 1 '
                             '--RGBD/NeighborLinkRefining true '
                             '--RGBD/ProximityBySpace true '
@@ -107,19 +121,28 @@ def generate_launch_description():
                             '--Icp/VoxelSize 0.15 --Icp/PointToPlaneK 20 '
                             '--Icp/MaxCorrespondenceDistance 0.5 '
                             '--Icp/CorrespondenceRatio 0.2 '
-                            '--Grid/Sensor 0 --Grid/CellSize 0.05 '
+                            '--Grid/CellSize 0.05 '
                             '--Grid/RangeMax 8.0 '
                             '--Grid/MaxGroundHeight 0.10 '
                             '--Grid/MaxObstacleHeight 1.7 '
                             '--Grid/RayTracing true '
                             '--Grid/NoiseFilteringRadius 0.15 '
                             '--Grid/NoiseFilteringMinNeighbors 3 '
-                            '--Grid/3D true',
+                            '--Grid/3D true ',
+            # Grid/Sensor: 0 = scan cloud only (geometry, no colour),
+            # 2 = scan cloud AND the RGB-D camera, so the assembled /cloud_map
+            # and the database carry colour.
+            PythonExpression(
+                ["'--Grid/Sensor 2 ' if '", rgbd, "' == 'true' else '--Grid/Sensor 0 '"])],
             'rtabmap_viz': 'true',
             'rviz': 'true',
-            'rviz_cfg': os.path.join(
-                get_package_share_directory('pepper_slam'),
-                'rviz', 'rtabmap_fastlio_mapping.rviz'),
+            # The RGB-D config differs only in the 3D Cloud Map display's
+            # Color Transformer (RGB8 instead of AxisColor) -- with rgbd:=false
+            # the cloud has no rgb field and RViz would show nothing.
+            'rviz_cfg': PythonExpression([
+                "'", os.path.join(get_package_share_directory('pepper_slam'), 'rviz'),
+                "/' + ('rtabmap_fastlio_rgbd.rviz' if '", rgbd,
+                "' == 'true' else 'rtabmap_fastlio_mapping.rviz')"]),
         }.items(),
     )
 
@@ -129,6 +152,11 @@ def generate_launch_description():
     # rtabmap needs the camera edges and will not start without them.
     # Keep this DECLARED, not forwarded: a launch_arguments entry would shadow
     # the command line and make the override above a silent no-op.
+    declare_rgbd_cmd = DeclareLaunchArgument(
+        'rgbd', default_value='false', choices=['true', 'false'],
+        description='Subscribe the aligned depth image so the 3D map is '
+                    'coloured (needs /camera/aligned_depth_to_color/image_raw '
+                    'in the bag).')
     declare_publisher_cmd = DeclareLaunchArgument(
         'publisher', default_value='urdf',
         description="pepper_sensor_tf publisher: 'urdf' (default) publishes the "
@@ -156,4 +184,5 @@ def generate_launch_description():
                     "replayed. Use 'mount' on the live robot.")
 
     return LaunchDescription([
-        declare_publisher_cmd, declare_scope_cmd, fast_lio, rtabmap])
+        declare_rgbd_cmd, declare_publisher_cmd, declare_scope_cmd,
+        fast_lio, rtabmap])
