@@ -1,35 +1,13 @@
 #!/usr/bin/env python3
-"""Clean a scan cloud before octomap/costmap: self-hit cut + outlier removal
-+ optional ground-plane removal.
+"""Filter a scan cloud before costmap/octomap use.
 
-Three filters, applied to an input cloud and republished (the SLAM input, and
-any other consumer of the original topic, are untouched):
+Applies, in order:
+1. Range cut       -- drop the robot's own body (points within min_range..max_range).
+2. Outlier removal -- drop isolated spike returns (radius outlier filter).
+3. Ground plane    -- RANSAC-fit and remove the near-z=0 plane in base_footprint
+                      (off by default; needs live TF).
 
-1. RANGE CUT -- the L2 sits low (~0.26 m above base_footprint) so it sees
-   Pepper's own body: a dense cluster within ~0.6 m of the sensor that would
-   otherwise be inserted as an obstacle at every pose (a black trail). Keep
-   only points with min_range <= range <= max_range (range = norm in the body
-   frame, whose origin is the sensor).
-
-2. RADIUS-OUTLIER REMOVAL -- isolated spike returns (few neighbours) become
-   stray obstacles and spawn thin clearing-ray "spokes". Drop any point with
-   fewer than ror_min_neighbors others within ror_radius. Brute-force via the
-   |a-b|^2 = |a|^2+|b|^2-2a.b identity (per-scan clouds are ~1.5k pts, cheap);
-   no KDTree/scipy needed. Set ror_min_neighbors=0 to disable.
-
-3. GROUND-PLANE REMOVAL (off by default) -- for feeding nav2's costmap
-   voxel_layer, which marks obstacles with a FIXED height band evaluated in
-   its global_frame (odom/map). That frame's leveling is a one-time
-   snapshot (see lio_odom_bridge.py); residual tilt at that instant grows
-   with distance/time, so a fixed band eventually mis-marks the real floor as
-   an obstacle. base_footprint, by contrast, is republished continuously from
-   FAST-LIO's live odometry and tracks the robot's true current
-   gravity-referenced attitude (roll/pitch are gravity-observable and don't
-   drift the way position/yaw can). So instead of a fixed band, RANSAC-fit
-   the dominant near-horizontal, near-z=0 plane per scan in base_footprint
-   (same idea as octomap_server's filter_ground_plane used to build this
-   map) and drop its inliers -- there is no fixed band left to drift out of.
-   Set remove_ground_plane=true to enable; needs a live TF to ground_frame.
+The original topic is untouched; the filtered cloud is republished.
 """
 import numpy as np
 import rclpy

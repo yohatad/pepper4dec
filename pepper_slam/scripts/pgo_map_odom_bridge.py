@@ -1,40 +1,12 @@
 #!/usr/bin/env python3
-"""
-Publishes the REP-105 map -> odom loop-closure correction from PGO.
+"""Publish the REP-105 map -> odom loop-closure correction from PGO.
 
-FAST-LIO owns   odom -> base_footprint  (via lio_odom_bridge).
-PGO owns        map  -> odom            (this node) -- the loop-closure
-correction, so the full tree is
+Composes FAST-LIO's odom -> body with PGO's map -> body to publish map -> odom,
+buffering FAST-LIO odometry and matching each PGO keyframe to the nearest
+sample. Identity until the first correction, then republished on every odom tick.
 
-    map -> odom -> base_footprint -> l2lidar_frame -> l2lidar_frame_imu
-
-Both FAST-LIO's /Odometry and PGO's /aft_pgo_odom describe the SAME physical
-body (the l2lidar_frame_imu pose), just in two world frames:
-
-    /Odometry      : odom -> l2lidar_frame_imu   (dense, from FAST-LIO)
-    /aft_pgo_odom  : map  -> l2lidar_frame_imu   (sparse, latest optimized keyframe)
-
-so the correction at a shared timestamp t_k is
-
-    map -> odom = (map -> l2lidar_frame_imu)_pgo  *  (odom -> l2lidar_frame_imu)_fastlio^-1
-
-We keep a short buffer of FAST-LIO odometry, match each PGO keyframe pose to the
-FAST-LIO sample nearest its stamp, and republish the latest correction on every
-FAST-LIO odom tick (identity until the first correction arrives). This is the
-same pattern nav2/slam_toolbox use: map -> odom updates at loop closures and is
-otherwise constant, while odom -> base_footprint stays smooth.
-
-LEVELING (optional, visualization only)
----------------------------------------
-pgo_init is PGO's OWN map frame (map_frame), tied to the IMU's mounting tilt
-at t=0 and therefore NOT gravity-aligned -- the exact counterpart of lio_init
-on the odometry side. map is the LEVELED frame: when publish_level_frame is
-true this node publishes a single static edge between them so map's axes match
-base_footprint's at t=0 (Z-up, assuming the robot was level at startup).
-
-Use map as RViz's fixed frame for an upright, world-fixed view. pgo_init, like
-lio_init, exists only to anchor PGO's own cloud/path topics -- it is not part
-of the pose chain.
+Optionally publishes a one-time static map -> pgo_init so map is gravity-aligned
+for visualization.
 """
 
 import bisect

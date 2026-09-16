@@ -1,28 +1,13 @@
 #!/usr/bin/env python3
-"""
-Republish a lidar scan expressed in an odometry frame.
+"""Republish a lidar scan into the wheel-odometry frame.
 
-global_localization assumes cloud_topic is ALREADY in odom_frame -- it forms
-scan_in_map as (map -> odom) * scan and never consults TF for the scan itself.
-With FAST-LIO that holds for free: /cloud_registered is published in the LIO
-world frame, which is the odom frame. There is no such topic for wheel odometry,
-so evaluating the localizer against /pepper_odom needs the raw scan carried into
-the pepper_odom frame first. That is all this node does.
+Transforms /points into the pepper_odom frame so the localizer can be evaluated
+against wheel odometry (FAST-LIO's /cloud_registered is already in its odom
+frame; wheel odometry has no equivalent).
 
-WHY BOTHER: FAST-LIO odometry is good enough that the ICP correction is almost
-never asked to do real work, which makes it a weak test of the localizer.
-Wheel odometry drifts hard, so it exercises the part under test.
-
-NOT DESKEWED. FAST-LIO removes motion distortion using the IMU before
-publishing /cloud_registered; the raw /points has none of that, so every scan is
-smeared by whatever the robot did during the sweep -- worst while turning. Treat
-a result from this node as a lower bound on the localizer's accuracy, not a
-measurement of it.
-
-Needs the bag's /tf (pepper_odom -> base_footprint) replayed, and the rig's
-static transforms. Do NOT run lio_odom_bridge alongside it: that publishes
-lio_init -> base_footprint, and a second live parent for base_footprint is a
-broken tree (see pepper_odom_relabel.py).
+The raw scan is not deskewed, so results are a lower bound on accuracy. Requires
+the bag's /tf and the rig static transforms; do not run lio_odom_bridge
+alongside it.
 """
 import rclpy
 from rclpy.node import Node

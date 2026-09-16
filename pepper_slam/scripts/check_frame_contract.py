@@ -1,22 +1,10 @@
 #!/usr/bin/env python3
-"""
-Asserts the LIO frame contract holds, whichever backend is running.
-
-THE CONTRACT
-  * odom          -- backend-native, OPAQUE. FAST-LIO leaves it at the IMU
-                     mount orientation; Point-LIO can gravity-align it. Never
-                     use it for geometry.
-  * <level_frame> -- gravity-aligned AND floor-referenced (z=0 on the floor),
-                     identical on every backend and every run. Everything
-                     downstream standardises on this.
-
-Because leveling is now derived from the rigid calibration rather than a
-runtime sample (level_source=calibration), these are exact predictions, not
-tolerances-of-convenience -- so this is a real assertion, not a smoke test.
+"""Assert the LIO frame contract: odom is backend-native and opaque, while
+<level_frame> is gravity-aligned and floor-referenced (identical across
+backends). With calibration-derived leveling these are exact predictions, so
+this is a real assertion rather than a smoke test.
 
     ros2 run pepper_slam check_frame_contract.py
-    ros2 run pepper_slam check_frame_contract.py --ros-args \
-        -p level_frame:=map -p expect_offset:=0.2571
 """
 import sys
 import numpy as np

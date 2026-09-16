@@ -1,54 +1,11 @@
 #!/usr/bin/env python3
-"""Validation gate for a LIO estimator's pose, with wheel-odometry dead reckoning.
+"""Validation gate for a LIO pose, with wheel-odometry dead reckoning.
 
-WHY THIS EXISTS
-    When FAST-LIO's plane correspondences collapse -- a feature-poor corridor, a
-    blank wall, a body-occluded lidar -- the iterated EKF stops correcting but
-    keeps propagating on IMU. Accelerometer bias and gravity-misalignment then
-    get DOUBLE integrated, so the pose does not drift, it accelerates: the
-    estimate sprints out of the map in a second or two. l2.yaml's high acc_cov
-    (2.0, carrying the motor-vibration picket fence) makes it worse by growing P
-    quickly, which raises the Kalman gain and lets one bad correspondence set
-    move the estimate a long way in a single scan.
+Rejects (never saturates) implausible poses above a physical speed bound, and
+dead-recks on wheel odometry for up to max_hold_duration before escalating to
+FAULT. A failing update is discarded, not clipped.
 
-    Unguarded, lio_odom_bridge republishes that straight onto
-    odom -> base_footprint, i.e. INSIDE Nav2's control loop. Nav2's max_vel_x
-    does not help: it clamps commanded velocity and never inspects the pose.
-
-REJECT, DO NOT SATURATE
-    This is measurement validation gating (Bar-Shalom's validation gate;
-    robot_localization spells the same idea <topic>_pose_rejection_threshold).
-    A failing update is DISCARDED, never clipped to the limit. Clipping would
-    manufacture a plausible-looking but wrong pose, which is strictly harder to
-    detect downstream than an obviously broken one. Saturation is the right
-    treatment for an actuator command, which must be feasible; it is the wrong
-    treatment for a measurement, which must be honest or absent.
-
-TIER 1 ONLY
-    The bound used here is PHYSICAL -- Pepper cannot exceed it whatever the
-    filter believes -- so it needs no baseline, no warm-up and no tuning.
-    Statistical degeneracy detection (a covariance spike, an effct_feat_num
-    collapse; see utils/lio_health.py) is a separate tier: it should inform the
-    health signal but must not reject on its own, because those signals look
-    healthy after a confidently-wrong relock.
-
-HOLD = DEAD RECKON, AND IT IS TIME BOUNDED
-    While rejecting, the pose is carried forward on wheel odometry rather than
-    frozen (a frozen odom makes obstacles stream past a robot that reports
-    standing still) or dropped (that just moves the failure into tf2
-    extrapolation errors). Coasting is bounded by max_hold_duration: a
-    persistent fault must escalate to FAULT, not degrade into unbounded silent
-    dead reckoning. Same reasoning as localization.health_bad_duration in
-    FAST_LIO/src/laserLocalization.cpp.
-
-GATE LOCKOUT
-    If the gate starts rejecting MOST updates, the likely fault is this guard's
-    thresholds, not the sensor -- an over-tight gate rejects exactly the
-    measurements that would correct it and diverges with a clean conscience. The
-    rejection rate over a rolling window is tracked and surfaced so that shows up
-    as a diagnostic rather than as silence.
-
-No ROS imports: everything here is plain numpy so it unit-tests without a spin.
+Pure numpy (no ROS imports) so it unit-tests without a spin.
 """
 
 import collections

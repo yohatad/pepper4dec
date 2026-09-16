@@ -1,24 +1,9 @@
 #!/usr/bin/env python3
-"""
-Publishes a whole static TF chain from ONE node.
+"""Publish a whole static TF chain from a single node.
 
-Replaces N separate tf2_ros/static_transform_publisher processes with a single
-node that emits every transform in one latched /tf_static message.
-
-WHY: pepper_sensor_tf used to spawn 10 static_transform_publisher nodes -- one
-per edge. Each is a full ROS node: its own executor, DDS participant, discovery
-traffic and /tf_static publisher, to publish seven numbers that never change.
-tf2 concatenates all /tf_static publishers anyway, so a single message carrying
-the whole list is equivalent and costs one process instead of ten.
-
-The transforms come from a YAML list so the rig geometry stays data, not code:
-
-    transforms:
-      - {parent: base_footprint, child: l2lidar_frame,
-         xyz: [0.133, 0.0, 0.2582], qxyzw: [0.69313, -0.147438, 0.690138, -0.14677]}
-
-Quaternions are normalised on load and a non-unit input is reported rather than
-silently skewing the rig.
+Reads the rig transforms from a YAML list and emits them as one latched
+/tf_static message, replacing N separate static_transform_publisher processes.
+Quaternions are normalised on load; non-unit input is reported.
 """
 import sys
 

@@ -1,38 +1,12 @@
 #!/usr/bin/env python3
-"""
-Overlay LIO odometry and wheel odometry in one frame, and report both odometers.
+"""Overlay LIO and wheel odometry in one frame and report both odometers.
 
-They are not comparable as published. /odom_lio is expressed in lio_init, which
-is the IMU MOUNT orientation at t=0 and is NOT gravity-aligned -- on this rig it
-sits about 90 deg off. /pepper_odom is gravity-aligned and base-referenced.
-Displaying both raw gives two unrelated squiggles.
+Levels /odom_lio into the base frame using the base <- lidar_imu rotation from
+TF, then accumulates path length (robust to heading error) for a fair
+comparison against wheel odometry.
 
-The rotation that relates them is the same one everything else here levels by:
-base_frame <- lidar_imu_frame, read from TF rather than hardcoded, so it follows
-the rig instead of going stale (a hardcoded axis 2.43 deg off cost 3 m of height
-elsewhere in this workspace). lio_init IS the body frame at t=0, so applying
-that rotation carries LIO positions into base-referenced coordinates, which is
-what /pepper_odom already reports -- yaw included, since the mount rotation
-carries the heading offset too.
-
-Both odometers start counting only once BOTH streams are live, and are
-re-origined at that moment. FAST-LIO publishes nothing until IMU init completes
--- about 20 s into a replay -- while wheel odometry counts from t=0, so
-accumulating each from its own first message compared different spans and read
-ratio 0.63 on a bag whose true ratio is 1.01.
-
-PATH LENGTH is the useful number, not displacement: this route loops, so the
-robot finishes ~0.2 m from where it started after ~500 m of driving. Path length
-is also robust to heading error -- a wrong heading points a step the wrong way
-but does not change its length -- which is why wheel odometry is a fair witness
-for distance travelled even though its POSITION drifts badly.
-
-Publishes:
-  /compare/lio_path     nav_msgs/Path   (leveled /odom_lio)
-  /compare/wheel_path   nav_msgs/Path   (/pepper_odom)
-  /compare/report       visualization_msgs/Marker  live odometer readout
-all in compare_frame, which is published as a static child of base_frame's
-gravity-aligned twin so RViz needs no extra setup.
+Publishes /compare/lio_path, /compare/wheel_path (nav_msgs/Path) and
+/compare/report (Marker) in compare_frame.
 """
 import numpy as np
 import rclpy

@@ -1,56 +1,17 @@
 #!/usr/bin/env python3
-"""Publishes odom -> base_footprint from a LIO estimator's odometry (REP-105).
+"""Publish REP-105 odom -> base_footprint from a LIO estimator's odometry.
 
-TWO WORLD FRAMES, AND WHY
-    lio_init  the estimator's OWN world frame (publish.map_frame). It is the
-              IMU's pose frozen at t=0, so its axes are the IMU's MOUNTING
-              axes -- tilted, not gravity-aligned. Opaque: never use it for
-              geometry. It exists in TF only so the estimator's own
-              /cloud_registered and /path (stamped in it) are displayable; it
-              is NOT part of the pose chain and this node never looks it up.
-    odom      the gravity-aligned, floor-referenced frame everything
-              downstream standardises on. One static rotation from lio_init,
-              published by _publish_level_frame.
-
-The estimator (configured publish_tf=false, publish.map_frame=lio_init,
-publish.body_frame = whichever IMU is in use -- camera_imu_optical_frame with
-l2_rsimu.yaml, l2lidar_frame_imu with l2.yaml) emits:
-
-    lio_init -> <body frame>    (as a nav_msgs/Odometry, NOT as TF)
-
-That body frame is also a static child of base_footprint via the rig chain, so
-this node closes the tree by publishing the single edge:
+The estimator emits lio_init -> <body frame> as Odometry (lio_init is its own
+tilted world frame). This node closes the tree by publishing
 
     odom -> base_footprint = (lio_init -> body) * (base_footprint -> body)^-1
 
-reading the first term from the message and the second from the URDF.
+reading the first term from the message and the second from TF.
 
-KEY DESIGN POINT
-----------------
-FAST-LIO's own TF broadcast MUST be disabled (publish.publish_tf=false).
-Otherwise l2lidar_frame_imu would get two parents (odom directly, and
-base_footprint via the static chain) and the tree would split -- the bug
-this node exists to avoid.
-
-Time alignment: the output transform is stamped with the odometry message's
-own stamp (never wall-now).
-
-VISUALIZATION-ONLY LEVELING FRAME
-----------------------------------
-FAST-LIO's odom (camera_init) is fixed to the IMU's raw mounting
-orientation at t=0, which is NOT gravity-aligned -- the robot can appear
-"lying down" if odom is used as RViz's fixed frame, even though everything
-is internally consistent (base_footprint looks correct).
-
-To fix this for visualization without disturbing odom (and therefore
-without breaking the consistency between odom -> base_footprint and
-FAST-LIO's odom-frame point cloud/path), this node also publishes a single
-one-time STATIC transform odom -> lio_init, computed from the first
-odometry sample so that odom's axes match base_footprint's axes at
-t=0 (i.e. odom is Z-up, assuming the robot was level/stationary at
-startup). Use odom as RViz's fixed frame for an upright view; the
-TF tree below it (point cloud, path, robot model) is rotated as a whole,
-so everything stays consistent.
+It also publishes a one-time static odom -> lio_init so odom is gravity-aligned
+and floor-referenced for visualization. The estimator's own TF broadcast must be
+disabled (publish_tf=false) or the tree splits. Output is stamped with the
+odometry message's own stamp.
 """
 
 import time
