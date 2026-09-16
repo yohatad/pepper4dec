@@ -36,7 +36,7 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 - **`overt_attention`** - Unified head-attention controller: engaged faces → detected faces → Boolean Map Saliency peaks, with inhibition of return
 
 ### **Navigation & Localization**
-- **`pepper_slam`** - Mapping and odometry backends: RTAB-Map (RGB-D), SLAM Toolbox (2D lidar), and FAST-LIO / Point-LIO lidar-inertial odometry via the Unitree L2, plus an optional `robot_localization` EKF that fuses leveled LIO odometry with wheel odometry. Launch files and parameters only — the SLAM backends themselves are upstream packages
+- **`pepper_slam`** - Mapping and odometry backends: RTAB-Map (RGB-D), SLAM Toolbox (2D lidar), and FAST-LIO / Point-LIO lidar-inertial odometry via the Unitree L2. Launch files and parameters only — the SLAM backends themselves are upstream packages
 - **`pepper_navigation`** - Nav2 stack (path planning, obstacle avoidance, keepout zones, collision-monitor safety layer) with **four interchangeable localization profiles** — AMCL, RTAB-Map, prior-map FAST-LIO (`fastlio_localization`), or prior-map Point-LIO (`pointlio_localization`) — behind identical costmaps and tuning
 
 Localization-only deployments get their `map → base_footprint` pose (`/localization/pose`) from **`fast_lio`**'s `fastlio_localization` node; `gesture_execution` consumes that pose for pointing IK.
@@ -224,7 +224,7 @@ docker compose --profile dev up  # live-mounts the source over the image
 ### **Navigation System**
 - **Mapping** (`pepper_slam`): RTAB-Map (RGB-D) or SLAM Toolbox (2D lidar); FAST-LIO / Point-LIO for lidar-inertial odometry on the Unitree L2
 - **Localization** (`pepper_navigation`): four interchangeable profiles — AMCL, RTAB-Map, prior-map FAST-LIO via `fastlio_localization`, or prior-map Point-LIO via `pointlio_localization` — sharing identical costmaps and tuning so they can be compared directly
-- **Odometry**: wheel odometry (`/pepper_odom` from `naoqi_driver2`), LIO odometry, or the two fused by the `robot_localization` EKF (`pepper_slam ekf_fusion.launch.py`)
+- **Odometry**: wheel odometry (`/pepper_odom` from `naoqi_driver2`), LIO odometry
 - **Path Planning**: Nav2 with 3D voxel costmaps consuming the L2's 360° `PointCloud2` directly, no flattening step
 - **Safety**: An independent collision monitor gates every velocity command straight off the lidar, bypassing the costmaps
 - **Integration**: Full coordination with the behavior controller

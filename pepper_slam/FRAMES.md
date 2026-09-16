@@ -187,9 +187,7 @@ accumulates -- not to widen the threshold.
   unconditionally (no `publish_tf` flag, unlike FAST-LIO) and it is left
   unclaimed so it cannot fight the static chain for a parent. Harmless.
 * **`pepper_odom`** -- naoqi wheel odometry, on a deliberately **disconnected**
-  tree (a second live parent for `base_footprint` would split the tree). This
-  is why `pepper_odom_relabel.py` exists: with no TF path between them,
-  `robot_localization` cannot transform the data itself.
+  tree (a second live parent for `base_footprint` would split the tree).
 * **`base_footprint` vs `base_link`** -- REP-105 specifies `base_link`;
   `base_footprint` (ground projection) is convention, not spec.
 * **bare `odom` is also a TOPIC name** in the rtabmap launch files

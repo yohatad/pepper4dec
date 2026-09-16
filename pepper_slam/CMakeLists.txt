@@ -45,8 +45,6 @@ install(PROGRAMS
   scripts/cloud_range_filter.py
   scripts/cloud_to_odom_frame.py
   scripts/odom_compare.py
-  scripts/leveled_odometry_publisher.py
-  scripts/pepper_odom_relabel.py
   scripts/check_frame_contract.py
   scripts/static_tf_publisher.py
   DESTINATION lib/${PROJECT_NAME}

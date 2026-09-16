@@ -39,7 +39,7 @@ Launch arguments:
         Body frame matching config_file.
     flatten_base_frame (default: "true")
         Clamp z, roll, and pitch to zero. Pass false to see FAST-LIO's own
-        drifting estimate, e.g. when feeding ekf_fusion.launch.py.
+        drifting estimate.
     guard_enable (default: "false")
         Reject LIO poses above a physical speed bound and dead reckon on wheel
         odometry through the gap, rather than republishing a diverged estimate

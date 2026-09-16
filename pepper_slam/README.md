@@ -234,7 +234,6 @@ Launch, params, and a few standalone TF/odometry helper scripts (`ament_cmake`, 
 ```
 pepper_slam/
 ├── config/
-│   ├── ekf_lio_wheel.yaml                    # robot_localization EKF (wheel + LIO fusion)
 │   ├── mapper_params_online_async.yaml       # SLAM Toolbox parameters
 │   ├── record_qos.yaml                       # QoS overrides for bag recording
 │   └── sensor_tf.yaml                        # static sensor-rig transform provenance
@@ -242,7 +241,6 @@ pepper_slam/
 │   ├── rtabmap_base.launch.py                 # vendored upstream; excluded from flake8
 │   ├── slam_toolbox.launch.py
 │   ├── pepper_sensor_tf.launch.py
-│   ├── ekf_fusion.launch.py                   # robot_localization EKF, alternative to lio_odom_bridge
 │   ├── fastlio_odometry.launch.py             # FAST-LIO odometry (no loop closure); wraps fast_lio's mapping.launch.py
 │   ├── pointlio_odometry.launch.py            # same, for Point-LIO
 │   ├── view_rig.launch.py                     # sensor rig visualization
@@ -256,8 +254,6 @@ pepper_slam/
 ├── scripts/
 │   ├── check_frame_contract.py                # asserts the LIO frame contract holds, whichever backend runs
 │   ├── lio_odom_guard.py                      # divergence gate: reject implausible LIO poses, dead reckon on wheels
-│   ├── leveled_odometry_publisher.py          # republishes LIO odometry rotated into the gravity-level odom frame
-│   ├── pepper_odom_relabel.py                 # republishes /pepper_odom with frame_id overridden to odom
 │   └── static_tf_publisher.py                 # publishes a whole static TF chain from one node
 ├── urdf/
 │   ├── pepper_display_with_rig.urdf.xacro     # DISPLAY ONLY: Pepper body + sensor rig together

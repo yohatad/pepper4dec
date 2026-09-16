@@ -68,8 +68,7 @@ def relative_motion(m_from: np.ndarray, m_to: np.ndarray) -> np.ndarray:
     can be right-multiplied onto a pose expressed in a DIFFERENT parent frame,
     which is what lets wheel odometry (pepper_odom -> base_footprint) carry a
     pose in odom even though the two trees are deliberately disconnected. Both
-    parents are gravity-aligned by physical construction -- the same argument
-    pepper_odom_relabel.py's docstring makes for relabeling z/roll/pitch.
+    parents are gravity-aligned by physical construction.
     """
     return np.linalg.inv(m_from) @ m_to
 
