@@ -52,7 +52,7 @@ Configuration is managed via ROS2 parameters, loaded from `config/face_detection
 |-----------|-------------|---------|
 | `use_compressed` | Use compressed ROS image topics | `false` |
 | `camera` | Camera type to use (`realsense`, `pepper`, or `video`) | `pepper` |
-| `sixdrepnet_confidence` | Confidence threshold for face detection (YOLO/Gold-YOLO class score) | `0.90` |
+| `face_detection_confidence` | Confidence threshold for face detection (YOLO/Gold-YOLO class score) | `0.90` |
 | `sixdrepnet_headpose_angle` | Head pose angle threshold in degrees | `10.0` |
 | `image_timeout` | Timeout for shutting down after video ends (s) | `2.0` |
 | `verbose_mode` | Enable visualization and detailed logging | `false` |

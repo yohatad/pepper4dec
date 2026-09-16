@@ -15,7 +15,7 @@ Configuration:
     the input topics, and the estimation gating and re-estimation intervals.
 
 Prerequisites:
-    Assumes /camera/color/image_raw, /face_detection/data, and
+    Assumes /camera/color/image_raw_custom, /face_detection/data, and
     /person_detection/data are already being published (e.g. by
     face_detection.launch.py or a ROS2 bag).
 

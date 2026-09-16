@@ -14,16 +14,22 @@ Launch arguments:
     launch_camera (default: "false")
         Start the camera driver as well. Leave false when the frames come
         from a ROS2 bag or from another launch file.
+    qi_url (default: "tcp://172.29.111.230:9559")
+    roscore_ip (default: "127.0.0.1")
+    network_interface (default: "wlp0s20f3")
+        Passed to naoqi_driver_node when launch_camera is true and
+        camera == "pepper".
 
 Configuration:
     config/face_detection_configuration.yaml — read twice: passed to the node
     as parameters, and parsed here to decide which camera driver to start.
 
 Prerequisites:
-    With launch_camera false, /camera/color/image_raw and the matching depth
-    topic must already be published. The naoqi_driver branch hard-codes the
-    robot's qi-url and network interface, so those need editing for a
-    different robot or network.
+    With launch_camera false, /camera/color/image_raw_custom and the matching
+    depth topic must already be published. The naoqi_driver branch defaults its
+    qi-url / roscore_ip / network_interface to this robot; override them via the
+    qi_url, roscore_ip, and network_interface launch arguments for a different
+    robot or network.
 
 Usage:
     ros2 launch face_detection face_detection.launch.py launch_camera:=true
@@ -48,6 +54,7 @@ from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 import yaml
 import os
+from ament_index_python.packages import get_package_share_directory
 
 
 def launch_setup(context, *args, **kwargs):
@@ -57,14 +64,18 @@ def launch_setup(context, *args, **kwargs):
 
     # Load the camera type from the YAML file
     config_file = os.path.join(
-        os.getenv("COLCON_PREFIX_PATH").split(":")[0],  # first install dir
-        "face_detection", "share", "face_detection", "config", "face_detection_configuration.yaml"
+        get_package_share_directory("face_detection"),
+        "config", "face_detection_configuration.yaml"
     )
     with open(config_file, "r") as f:
         params = yaml.safe_load(f)
 
     node_params = params.get("face_detection", {}).get("ros__parameters", {})
-    camera_value = node_params.get("camera", "realsense")  # default fallback
+    camera_value = node_params.get("camera", "pepper")  # default fallback
+
+    qi_url = LaunchConfiguration('qi_url').perform(context)
+    roscore_ip = LaunchConfiguration('roscore_ip').perform(context)
+    network_interface = LaunchConfiguration('network_interface').perform(context)
 
     actions = []
 
@@ -77,9 +88,9 @@ def launch_setup(context, *args, **kwargs):
                     executable="naoqi_driver_node",
                     namespace="naoqi_driver",
                     arguments=[
-                        "--qi-url=tcp://172.29.111.230:9559",
-                        "--roscore_ip=127.0.0.1",
-                        "--network_interface=wlp0s20f3",
+                        "--qi-url=" + qi_url,
+                        "--roscore_ip=" + roscore_ip,
+                        "--network_interface=" + network_interface,
                         "--namespace=naoqi_driver",
                     ],
                     output="screen",
@@ -139,6 +150,21 @@ def generate_launch_description():
             'launch_camera',
             default_value='false',
             description='Whether to launch the camera driver (set to false when using ROS2 bags)'
+        ),
+        DeclareLaunchArgument(
+            'qi_url',
+            default_value='tcp://172.29.111.230:9559',
+            description='Pepper NAOqi URL (naoqi_driver branch, launch_camera=true)'
+        ),
+        DeclareLaunchArgument(
+            'roscore_ip',
+            default_value='127.0.0.1',
+            description='ROS core IP passed to naoqi_driver_node'
+        ),
+        DeclareLaunchArgument(
+            'network_interface',
+            default_value='wlp0s20f3',
+            description='Network interface passed to naoqi_driver_node'
         ),
         OpaqueFunction(function=launch_setup)
     ])

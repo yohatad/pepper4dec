@@ -63,7 +63,7 @@ struct AgeGenderDetectionConfig {
     bool face_only = false;
     std::string face_topic = "/face_detection/data";
     std::string person_topic = "/person_detection/data";
-    std::string image_topic = "/camera/color/image_raw";
+    std::string image_topic = "/camera/color/image_raw_custom";
     std::string output_topic = "/face_detection/age_gender_results";
     double max_cache_age_sec = 2.0;
     double min_estimate_interval_sec = 0.5;

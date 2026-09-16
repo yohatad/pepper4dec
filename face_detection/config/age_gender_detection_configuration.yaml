@@ -14,7 +14,7 @@ age_gender_detection:
     # Topics
     face_topic: "/face_detection/data"
     person_topic: "/person_detection/data"
-    image_topic: "/camera/color/image_raw"
+    image_topic: "/camera/color/image_raw_custom"
     output_topic: "/face_detection/age_gender_results"
 
     # Timing / gating

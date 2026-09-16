@@ -2,7 +2,7 @@
  *
  * Implements YOLOONNX (the goldYOLO face-detector wrapper), FaceDetectionNode
  * (publishers, debug visualization, camera topic resolution, depth lookup),
- * and SixDrepNet (YOLO face detection + SixDrepNet head-pose/mutual-gaze
+ * and SixDRepNet (YOLO face detection + SixDRepNet head-pose/mutual-gaze
  * inference, with Hungarian face-to-person matching). See
  * face_detection_interface.h for the full subscriber/publisher/parameter
  * reference and the lifecycle state-machine diagram.
@@ -40,8 +40,8 @@ FaceDetectionConfig loadConfiguration(rclcpp_lifecycle::LifecycleNode* node) {
     config.camera = dec_common::declareAndGetParameter(node, "camera", config.camera);
     config.verbose_mode = dec_common::declareAndGetParameter(node, "verbose_mode", config.verbose_mode);
     config.image_timeout = dec_common::declareAndGetParameter(node, "image_timeout", config.image_timeout);
-    config.sixdrepnet_confidence =
-        dec_common::declareAndGetParameter(node, "sixdrepnet_confidence", config.sixdrepnet_confidence);
+    config.face_detection_confidence =
+        dec_common::declareAndGetParameter(node, "face_detection_confidence", config.face_detection_confidence);
     config.sixdrepnet_headpose_angle =
         dec_common::declareAndGetParameter(node, "sixdrepnet_headpose_angle", config.sixdrepnet_headpose_angle);
     config.require_person_detection =
@@ -286,11 +286,11 @@ void FaceDetectionNode::personDetectionCallback(const dec_interfaces::msg::Perso
     latest_person_detections_timestamp_ = get_clock()->now();
 }
 
-// ── SixDrepNet ───────────────────────────────────────────────────────────────
+// ── SixDRepNet ───────────────────────────────────────────────────────────────
 
-SixDrepNet::SixDrepNet() : FaceDetectionNode() {}
+SixDRepNet::SixDRepNet() : FaceDetectionNode() {}
 
-SixDrepNet::CallbackReturn SixDrepNet::on_configure(const rclcpp_lifecycle::State& state) {
+SixDRepNet::CallbackReturn SixDRepNet::on_configure(const rclcpp_lifecycle::State& state) {
     auto ret = FaceDetectionNode::on_configure(state);
     if (ret != CallbackReturn::SUCCESS) return ret;
 
@@ -310,7 +310,7 @@ SixDrepNet::CallbackReturn SixDrepNet::on_configure(const rclcpp_lifecycle::Stat
     std::string sixdrepnet_model_path = package_path + "/models/face_detection_sixdrepnet360.onnx";
 
     try {
-        yolo_model_ = std::make_unique<YOLOONNX>(yolo_model_path, config_.sixdrepnet_confidence);
+        yolo_model_ = std::make_unique<YOLOONNX>(yolo_model_path, config_.face_detection_confidence);
         if (verbose_mode_) {
             RCLCPP_INFO(get_logger(), "%s: YOLOONNX loaded successfully", node_name_.c_str());
         }
@@ -358,11 +358,11 @@ SixDrepNet::CallbackReturn SixDrepNet::on_configure(const rclcpp_lifecycle::Stat
             out_ptrs.size());
 
         if (verbose_mode_) {
-            RCLCPP_INFO(get_logger(), "%s: SixDrepNet loaded — %s", node_name_.c_str(),
+            RCLCPP_INFO(get_logger(), "%s: SixDRepNet loaded — %s", node_name_.c_str(),
                 cuda_enabled ? "GPU (CUDA)" : "CPU");
         }
     } catch (const std::exception& e) {
-        RCLCPP_ERROR(get_logger(), "%s: SixDrepNet ONNX init failed: %s", node_name_.c_str(), e.what());
+        RCLCPP_ERROR(get_logger(), "%s: SixDRepNet ONNX init failed: %s", node_name_.c_str(), e.what());
         return CallbackReturn::FAILURE;
     }
 
@@ -370,7 +370,7 @@ SixDrepNet::CallbackReturn SixDrepNet::on_configure(const rclcpp_lifecycle::Stat
     return CallbackReturn::SUCCESS;
 }
 
-SixDrepNet::CallbackReturn SixDrepNet::on_activate(const rclcpp_lifecycle::State& state) {
+SixDRepNet::CallbackReturn SixDRepNet::on_activate(const rclcpp_lifecycle::State& state) {
     auto ret = FaceDetectionNode::on_activate(state);
     if (ret != CallbackReturn::SUCCESS) return ret;
 
@@ -384,7 +384,7 @@ SixDrepNet::CallbackReturn SixDrepNet::on_activate(const rclcpp_lifecycle::State
     return CallbackReturn::SUCCESS;
 }
 
-SixDrepNet::CallbackReturn SixDrepNet::on_deactivate(const rclcpp_lifecycle::State& state) {
+SixDRepNet::CallbackReturn SixDRepNet::on_deactivate(const rclcpp_lifecycle::State& state) {
     sync_.reset();
     color_sub_.reset();
     depth_sub_.reset();
@@ -400,14 +400,14 @@ SixDrepNet::CallbackReturn SixDrepNet::on_deactivate(const rclcpp_lifecycle::Sta
     return FaceDetectionNode::on_deactivate(state);
 }
 
-SixDrepNet::CallbackReturn SixDrepNet::on_cleanup(const rclcpp_lifecycle::State& state) {
+SixDRepNet::CallbackReturn SixDRepNet::on_cleanup(const rclcpp_lifecycle::State& state) {
     yolo_model_.reset();
     sixdrepnet_session_.reset();
     sixdrepnet_env_.reset();
     return FaceDetectionNode::on_cleanup(state);
 }
 
-void SixDrepNet::drawAxis(cv::Mat& img, double yaw, double pitch, double roll, double tdx, double tdy, double size) {
+void SixDRepNet::drawAxis(cv::Mat& img, double yaw, double pitch, double roll, double tdx, double tdy, double size) {
     double pitch_r = pitch * M_PI / 180.0;
     double yaw_r = -yaw * M_PI / 180.0;
     double roll_r = roll * M_PI / 180.0;
@@ -427,7 +427,7 @@ void SixDrepNet::drawAxis(cv::Mat& img, double yaw, double pitch, double roll, d
     cv::line(img, origin, cv::Point(static_cast<int>(x3), static_cast<int>(y3)), cv::Scalar(255, 0, 0), 2);
 }
 
-double SixDrepNet::calculateMatchingCost(const FaceCandidate& face, const PersonCandidate& person) const {
+double SixDRepNet::calculateMatchingCost(const FaceCandidate& face, const PersonCandidate& person) const {
     if (!(person.x1 <= face.cx && face.cx <= person.x2 && person.y1 <= face.cy && face.cy <= person.y2)) {
         return kImpossibleMatchCost;
     }
@@ -459,7 +459,7 @@ double SixDrepNet::calculateMatchingCost(const FaceCandidate& face, const Person
     return normalized_distance * 2.0 + vertical_penalty * 1.5 + size_penalty * 1.0 + confidence_cost * 0.5;
 }
 
-std::vector<std::pair<int, int>> SixDrepNet::matchFacesToPersonsHungarian(
+std::vector<std::pair<int, int>> SixDRepNet::matchFacesToPersonsHungarian(
     const std::vector<FaceCandidate>& faces, const std::vector<PersonCandidate>& persons) {
     if (faces.empty() || persons.empty()) return {};
 
@@ -508,7 +508,7 @@ std::vector<std::pair<int, int>> SixDrepNet::matchFacesToPersonsHungarian(
     }
 }
 
-float SixDrepNet::getBestDepthEstimate(double face_cx, double face_cy, double face_width, double face_height,
+float SixDRepNet::getBestDepthEstimate(double face_cx, double face_cy, double face_width, double face_height,
                                        double person_depth) const {
     auto face_depth = getDepthInRegion(face_cx, face_cy, face_width, face_height);
     if (prioritize_face_depth_) {
@@ -521,7 +521,7 @@ float SixDrepNet::getBestDepthEstimate(double face_cx, double face_cy, double fa
     return 0.0f;
 }
 
-std::optional<std::array<double, 3>> SixDrepNet::estimateHeadPose(const cv::Mat& face_crop) {
+std::optional<std::array<double, 3>> SixDRepNet::estimateHeadPose(const cv::Mat& face_crop) {
     try {
         cv::Mat resized;
         cv::resize(face_crop, resized, cv::Size(224, 224));
@@ -563,7 +563,7 @@ std::optional<std::array<double, 3>> SixDrepNet::estimateHeadPose(const cv::Mat&
     }
 }
 
-void SixDrepNet::processImages() {
+void SixDRepNet::processImages() {
     bool depth_required = camera_type_ != "pepper";
     if (color_image_.empty() || (depth_required && depth_image_.empty())) return;
 
@@ -573,7 +573,7 @@ void SixDrepNet::processImages() {
     if (!frame.empty()) updateLatestFrame(frame);
 }
 
-cv::Mat SixDrepNet::processFrameStandalone(const cv::Mat& cv_image) {
+cv::Mat SixDRepNet::processFrameStandalone(const cv::Mat& cv_image) {
     cv::Mat debug_image = cv_image.clone();
     int img_h = debug_image.rows, img_w = debug_image.cols;
     std::vector<FaceTrackingDatum> tracking_data;
@@ -665,7 +665,7 @@ cv::Mat SixDrepNet::processFrameStandalone(const cv::Mat& cv_image) {
     return debug_image;
 }
 
-cv::Mat SixDrepNet::processFrameWithPersonDetection(const cv::Mat& cv_image) {
+cv::Mat SixDRepNet::processFrameWithPersonDetection(const cv::Mat& cv_image) {
     cv::Mat debug_image = cv_image.clone();
     int img_h = debug_image.rows, img_w = debug_image.cols;
     std::vector<FaceTrackingDatum> tracking_data;

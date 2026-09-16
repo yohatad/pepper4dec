@@ -2,8 +2,8 @@
  *
  * Lifecycle node(s) for face and mutual-gaze detection: a base
  * FaceDetectionNode that manages publishers, person-detection subscription,
- * and debug visualization, and a SixDrepNet subclass that loads the YOLO
- * (face detector) and SixDrepNet (head pose) ONNX models and runs
+ * and debug visualization, and a SixDRepNet subclass that loads the YOLO
+ * (face detector) and SixDRepNet (head pose) ONNX models and runs
  * head-pose/mutual-gaze inference on synchronized RGB-D camera frames. Faces
  * are matched to tracked persons (from /person_detection/data) via a
  * Hungarian-assignment cost function when require_person_detection is true;
@@ -56,10 +56,10 @@ constexpr double kImpossibleMatchCost = 1e6;
 /** @brief Tunable settings for the face-detection node (see the YAML config). */
 struct FaceDetectionConfig {
     bool use_compressed = false;
-    std::string camera = "realsense";
-    bool verbose_mode = true;
+    std::string camera = "pepper";
+    bool verbose_mode = false;
     double image_timeout = 2.0;
-    double sixdrepnet_confidence = 0.65;
+    double face_detection_confidence = 0.90;
     double sixdrepnet_headpose_angle = 10.0;
     bool require_person_detection = true;
     double person_detection_timeout = 0.5;
@@ -190,20 +190,20 @@ protected:
 };
 
 //=============================================================================
-// SixDrepNet
+// SixDRepNet
 //=============================================================================
 
 /**
- * @class SixDrepNet
+ * @class SixDRepNet
  * @brief Face-detection node adding SixDRepNet head-pose and mutual gaze.
  *
  * Loads the YOLO face detector and the SixDRepNet head-pose model, runs both
  * over the synchronized RGB-D frames, and marks a face as engaged when its
  * head-pose angle falls within sixdrepnet_headpose_angle of the camera.
  */
-class SixDrepNet : public FaceDetectionNode {
+class SixDRepNet : public FaceDetectionNode {
 public:
-    SixDrepNet();
+    SixDRepNet();
 
     /** @brief Load the YOLO face detector and the SixDRepNet head-pose model. */
     CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;
@@ -248,7 +248,7 @@ private:
     cv::Mat processFrameStandalone(const cv::Mat& cv_image);
     cv::Mat processFrameWithPersonDetection(const cv::Mat& cv_image);
 
-    // Runs SixDrepNet on a cropped face image, returning (yaw, pitch, roll) in degrees.
+    // Runs SixDRepNet on a cropped face image, returning (yaw, pitch, roll) in degrees.
     std::optional<std::array<double, 3>> estimateHeadPose(const cv::Mat& face_crop);
 
     double sixdrep_angle_ = 10.0;

@@ -26,7 +26,7 @@
  *   face_only (bool, default: false)
  *   face_topic (string, default: "/face_detection/data")
  *   person_topic (string, default: "/person_detection/data")
- *   image_topic (string, default: "/camera/color/image_raw")
+ *   image_topic (string, default: "/camera/color/image_raw_custom")
  *   output_topic (string, default: "/face_detection/age_gender_results")
  *   max_cache_age_sec (double, default: 2.0)
  *   min_estimate_interval_sec (double, default: 0.5)

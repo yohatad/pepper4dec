@@ -12,8 +12,8 @@ face_detection:
     verbose_mode: false            # Enable verbose logging and display
     image_timeout: 2.0             # Timeout in seconds for image reception
 
-    # SixDrepNet Algorithm Settings
-    sixdrepnet_confidence: 0.90        # Face detection confidence threshold (0.0-1.0)
+    # Detection and head-pose settings
+    face_detection_confidence: 0.90    # YOLO/Gold-YOLO face-detection confidence threshold (0.0-1.0)
     sixdrepnet_headpose_angle: 10.0    # Head pose angle threshold for mutual gaze (degrees)
     require_person_detection: true     # Set to false to run face detection independently
     person_detection_timeout: 0.5      # Timeout in seconds for person detection messages

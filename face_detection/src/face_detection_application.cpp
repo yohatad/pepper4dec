@@ -1,6 +1,6 @@
 /* face_detection_application.cpp
  *
- * Entry point for the SixDrepNet face and mutual gaze detection lifecycle
+ * Entry point for the SixDRepNet face and mutual gaze detection lifecycle
  * node. Loads configuration, spins the node, and cleans up (closing any
  * debug windows) on shutdown; the node classes themselves are implemented in
  * face_detection_implementation.cpp.
@@ -28,10 +28,10 @@
  * Parameters (config/face_detection_configuration.yaml, under
  * face_detection/ros__parameters):
  *   use_compressed (bool, default: false)
- *   camera (string, default: "realsense")
- *   verbose_mode (bool, default: true)
+ *   camera (string, default: "pepper")
+ *   verbose_mode (bool, default: false)
  *   image_timeout (double, default: 2.0)
- *   sixdrepnet_confidence (double, default: 0.65)
+ *   face_detection_confidence (double, default: 0.90)
  *   sixdrepnet_headpose_angle (double, default: 10.0)
  *   require_person_detection (bool, default: true)
  *   person_detection_timeout (double, default: 0.5)
@@ -40,15 +40,15 @@
  * Lifecycle:
  *   configure  -> create lifecycle publishers and initialize state, incl. the
  *                 standalone-mode ByteTrack face tracker (base); load YOLO +
- *                 SixDrepNet ONNX models (SixDrepNet)
+ *                 SixDRepNet ONNX models (SixDRepNet)
  *   activate   -> subscribe to person detection (if enabled) and start the
  *                 debug visualization timer (base); create camera
- *                 subscriptions and start the image timeout monitor (SixDrepNet)
+ *                 subscriptions and start the image timeout monitor (SixDRepNet)
  *   deactivate -> stop the visualization timer and destroy the person
  *                 detection subscription (base); destroy camera
- *                 subscriptions (SixDrepNet)
+ *                 subscriptions (SixDRepNet)
  *   cleanup    -> destroy lifecycle publishers (base); release the loaded
- *                 ONNX models (SixDrepNet)
+ *                 ONNX models (SixDRepNet)
  *   shutdown   -> log shutdown (base)
  *
  * Author: Yohannes Tadesse Haile
@@ -67,9 +67,9 @@
 #include "dec_common/node_runner.h"
 
 int main(int argc, char** argv) {
-    return dec_common::runNode<SixDrepNet>(
+    return dec_common::runNode<SixDRepNet>(
         argc, argv,
         {"face_detection v1.0 — This program comes with ABSOLUTELY NO WARRANTY.", "face_detection"},
         nullptr,
-        [](SixDrepNet& node) { node.cleanup(); });
+        [](SixDRepNet& node) { node.cleanup(); });
 }

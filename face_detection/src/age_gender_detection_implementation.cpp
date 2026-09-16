@@ -334,8 +334,11 @@ AgeGenderDetectionNode::CallbackReturn AgeGenderDetectionNode::on_configure(cons
 AgeGenderDetectionNode::CallbackReturn AgeGenderDetectionNode::on_activate(const rclcpp_lifecycle::State& state) {
     LifecycleNode::on_activate(state);
 
+    // RELIABLE (default) so these subscriptions match the reliable publishers of
+    // /face_detection/data and /person_detection/data. A reliable subscriber
+    // also accepts the RealSense camera's best-effort image stream, whereas a
+    // best-effort subscriber would silently miss the reliable face/person topics.
     rclcpp::QoS sensor_qos(rclcpp::KeepLast(1));
-    sensor_qos.best_effort();
 
     person_sub_ = create_subscription<dec_interfaces::msg::PersonDetection>(
         config_.person_topic, sensor_qos, std::bind(&AgeGenderDetectionNode::personCallback, this, std::placeholders::_1));
@@ -442,7 +445,7 @@ void AgeGenderDetectionNode::personCallback(const dec_interfaces::msg::PersonDet
             if (is_new) {
                 auto face_it = recent_faces_.find(label_id);
                 if (face_it != recent_faces_.end() && face_it->second.mutual_gaze) {
-                    bool depth_ok = face_it->second.depth > 0.0 && face_it->second.depth < config_.max_depth_m;
+                    bool depth_ok = face_it->second.depth <= 0.0 || face_it->second.depth < config_.max_depth_m;
                     if (depth_ok) {
                         RCLCPP_INFO(get_logger(), "%s: new person %s has mutual gaze at %.2fm, triggering estimation",
                             get_name(), label_id.c_str(), face_it->second.depth);
@@ -476,7 +479,7 @@ void AgeGenderDetectionNode::faceCallback(const dec_interfaces::msg::FaceDetecti
                 AgeGenderBoundingBox::fromCentroid(msg->centroids[i], msg->width[i], msg->height[i], mutual_gaze);
             recent_faces_[label_id] = face_bbox;
 
-            bool depth_ok = depth > 0.0 && depth < config_.max_depth_m;
+            bool depth_ok = depth <= 0.0 || depth < config_.max_depth_m;  // unknown depth (e.g. Pepper RGB-only) is allowed
             if (mutual_gaze && depth_ok && known_label_ids_.count(label_id)) {
                 auto profile_it = person_profiles_.find(label_id);
                 if (profile_it != person_profiles_.end() &&
