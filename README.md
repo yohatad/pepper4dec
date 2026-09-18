@@ -1,18 +1,44 @@
 <div align="center">
 
-# Pepper Robot Tour – Digital Experience Center (DEC)
+# Pepper4DEC: Autonomous Humanoid Guide Platform
 
 <img src="images/upanzi-logo.svg" alt="Upanzi Logo" width="800px">
+
+[![CI](https://github.com/yohatad/pepper4dec/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/yohatad/pepper4dec/actions/workflows/ci.yml)
+![ROS 2 Humble](https://img.shields.io/badge/ROS_2-Humble-blue)
+![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-green)
 
 </div>
 
 ## 📋 Overview
 
-This repository contains the complete software stack for an autonomous Pepper robot-led tour at the Upanzi Digital Experience Center (DEC), developed as a spin-off of the **Culturally Sensitive Social Robotics for Africa (CSSR4Africa)** project.
+Pepper4DEC is a ROS 2 Humble stack that lets a SoftBank Pepper humanoid work autonomously as a guide in a public space. The robot navigates between points of interest on a Nav2 stack with interchangeable localization backends, detects and tracks visitors, engages whoever makes eye contact, holds LLM-backed dialogue about what it is showing, and drives speech, gaze and gestures from a single behavior tree, with no operator in the loop.
 
-The system replaces repetitive, human-led walkthroughs with a fully automated, interactive tour, where Pepper role-plays as a digital guide and engages visitors across multiple Digital Public Infrastructure (DPI) booths. The robot coordinates speech, gestures, dialogue, and task sequencing to guide visitors through the fictional Upanzi Republic, illustrating the end-to-end lifecycle of digital identity and service delivery—ranging from biometric enrollment (MOSIP) to financial transactions (MIFOS) and subsidy validation (UPMS).
+It is built as a configurable platform rather than a one-off demo. Everything that defines a deployment is data, not code:
 
-Beyond automation, the project serves as a real-world testbed for **culturally aware human-robot interaction**. Pepper adapts its dialogue, gestures, and engagement strategies to local contexts and languages, while visitor interactions are logged to support research on cross-cultural behavior modeling and adaptive dialogue management in public spaces.
+- **The mission** - a BehaviorTree.CPP XML selected by parameter (`dec_Tour.xml`, `lab_tour.xml`, ...)
+- **The venue** - an environment knowledge base describing locations and exhibits (`decEnvironmentKnowledgeBase.yaml`, `labEnvironmentKnowledgeBase.yaml`)
+- **The dialogue domain** - a JSON knowledge base and system prompt behind the RAG conversation manager
+- **The cultural register** - `cultureKnowledgeBase.yaml`, governing greetings, gestures and engagement norms
+
+Repointing the robot at a new venue, or at a different front-of-house role such as a receptionist or information desk, is a matter of supplying new data files. The reference deployment runs guided tours of the Upanzi Digital Experience Center (DEC).
+
+## 🖥️ Hardware Setup
+
+<div align="center">
+<table>
+<tr>
+<td align="center" width="50%">
+<img src="images/Full_pepper_image.jpg" alt="Pepper with the sensor collar and onboard compute" width="290px"><br>
+<em>Pepper carrying the sensor collar and the onboard compute board at the waist</em>
+</td>
+<td align="center" width="50%">
+<img src="images/Lidar_and_RealSense.jpg" alt="Unitree L2 lidar and Intel RealSense on the sensor collar" width="290px"><br>
+<em>The 3D-printed collar: Unitree L2 lidar above the Intel RealSense, both facing forward</em>
+</td>
+</tr>
+</table>
+</div>
 
 ## 🏗️ System Architecture
 
@@ -36,8 +62,8 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 - **`overt_attention`** - Unified head-attention controller: engaged faces → detected faces → Boolean Map Saliency peaks, with inhibition of return
 
 ### **Navigation & Localization**
-- **`pepper_slam`** - Mapping and odometry backends: RTAB-Map (RGB-D), SLAM Toolbox (2D lidar), and FAST-LIO / Point-LIO lidar-inertial odometry via the Unitree L2. Launch files and parameters only — the SLAM backends themselves are upstream packages
-- **`pepper_navigation`** - Nav2 stack (path planning, obstacle avoidance, keepout zones, collision-monitor safety layer) with **four interchangeable localization profiles** — AMCL, RTAB-Map, prior-map FAST-LIO (`fastlio_localization`), or prior-map Point-LIO (`pointlio_localization`) — behind identical costmaps and tuning
+- **`pepper_slam`** - 3D mapping and odometry backends: FAST-LIO / Point-LIO lidar-inertial mapping and odometry on the Unitree L2, and RTAB-Map (RGB-D). Launch files and parameters only; the SLAM backends themselves are upstream packages
+- **`pepper_navigation`** - Nav2 stack (path planning, obstacle avoidance, keepout zones, collision-monitor safety layer) localizing by default with FAST-LIO against a prior 3D map (`fastlio_localization`). The localization backend is a launch-time profile behind shared costmaps and tuning, so alternatives can be swapped in and compared directly
 
 Localization-only deployments get their `map → base_footprint` pose (`/localization/pose`) from **`fast_lio`**'s `fastlio_localization` node; `gesture_execution` consumes that pose for pointing IK.
 
@@ -45,23 +71,6 @@ Localization-only deployments get their `map → base_footprint` pose (`/localiz
 - **`dec_launch`** - System launch files, lifecycle sequencing, and startup configurations
 - **`dec_interfaces`** - Custom ROS2 message, service, and action definitions
 - **`dec_common`** - Shared C++ utilities: the camera lifecycle node base class, the ByteTrack multi-object tracker, and ROS2 parameter-loading helpers
-
-## 🖥️ Hardware Setup
-
-<div align="center">
-<table>
-<tr>
-<td align="center" width="50%">
-<img src="images/Full_pepper_image.jpg" alt="Pepper with the sensor collar and onboard compute" width="290px"><br>
-<em>Pepper carrying the sensor collar and the onboard compute board at the waist</em>
-</td>
-<td align="center" width="50%">
-<img src="images/Lidar_and_RealSense.jpg" alt="Unitree L2 lidar and Intel RealSense on the sensor collar" width="290px"><br>
-<em>The 3D-printed collar: Unitree L2 lidar above the Intel RealSense, both facing forward</em>
-</td>
-</tr>
-</table>
-</div>
 
 ## 🚀 Quick Start
 
@@ -141,13 +150,7 @@ ros2 launch dec_launch dec_system.launch.py nav_profile:=rtabmap_loc
 ros2 launch dec_launch dec_system.launch.py enable_navigation:=false
 ```
 
-| `nav_profile` | Nav2 bringup | Localization |
-|---|---|---|
-| `fastloc` *(default)* | `pepper_nav2_fastloc.launch.py` | FAST-LIO with the prior map inside the iEKF (`fastlio_localization`) |
-| `pointloc` | `pepper_nav2_pointloc.launch.py` | Point-LIO with the prior map inside the iEKF (`pointlio_localization`) |
-| `rtabmap_loc` | `pepper_nav2_rtabmap_loc.launch.py` | RTAB-Map localization mode against a `.db` |
-| `amcl` | `pepper_nav2_amcl.launch.py` | AMCL over a flattened `/scan`, on FAST-LIO odom |
-| `legacy` | `pepper_navigation.launch.py` | AMCL on raw wheel odometry; publishes no `/localization/pose` |
+Navigation defaults to the `fastloc` profile: FAST-LIO localizing against a prior 3D map. Other localization backends are selectable with `nav_profile:=`; see [pepper_navigation/README.md](pepper_navigation/README.md) for the full list and their trade-offs.
 
 ### Component-Based Launch
 For development and testing, individual components can be launched:
@@ -162,25 +165,18 @@ ros2 launch overt_attention attention_system.launch.py
 ros2 launch behavior_controller behavior_controller.launch.py
 ```
 
-3. **Launch SLAM Toolbox (2D Mapping)**
-```bash
-ros2 launch pepper_slam slam_toolbox.launch.py
-```
-
-4. **Launch LIO odometry** (FAST-LIO or Point-LIO on the Unitree L2)
+3. **Launch LIO odometry** (FAST-LIO or Point-LIO on the Unitree L2)
 ```bash
 ros2 launch pepper_slam fastlio_odometry.launch.py
 ros2 launch pepper_slam pointlio_odometry.launch.py
 ```
 
-5. **Launch Nav2 with the localization profile of your choice**
+4. **Launch Nav2** (fastloc profile; other profiles are listed in [pepper_navigation/README.md](pepper_navigation/README.md))
 ```bash
-ros2 launch pepper_navigation pepper_nav2_fastloc.launch.py       # prior map in the iEKF
-ros2 launch pepper_navigation pepper_nav2_rtabmap_loc.launch.py   # RTAB-Map
-ros2 launch pepper_navigation pepper_nav2_amcl.launch.py          # 2D AMCL
+ros2 launch pepper_navigation pepper_nav2_fastloc.launch.py
 ```
 
-6. **Replay a recorded bag** (static TF for sensors, no robot required)
+5. **Replay a recorded bag** (static TF for sensors, no robot required)
 ```bash
 ros2 launch dec_launch bag_static_tf.launch.py
 ```
@@ -191,6 +187,24 @@ Each package contains configuration files in their `config/` directories:
 - `face_detection/config/face_detection_configuration.yaml` - Perception settings
 - `pepper_slam/config/` and `pepper_navigation/config/` - SLAM, EKF, costmap and Nav2 tuning
 - Gesture, attention, speech and TTS parameters in their respective package configs
+
+## 🧪 Testing
+
+Every push to `main` or `devel` builds the workspace and runs the full suite in CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): 458 tests across the 14 packages, plus `ament_flake8`, `ament_pep257` and `ament_copyright` linting.
+
+```bash
+cd ~/ros2_ws
+colcon test --packages-select dec_common person_detection   # or any subset
+colcon test-result --verbose
+```
+
+Coverage by tier:
+
+- **Unit, C++ (gtest)** - ByteTrack multi-object tracking, Pepper arm kinematics and joint-limit clamping, the animate_behavior motion math, behavior-tree utilities and knowledge-base validation, Boolean Map Saliency, age/gender temporal smoothing, camera-topic and pixel-to-angle helpers, COCO class filtering
+- **Unit, Python (pytest)** - the LIO divergence guard, the map-leveling frame contract, sound-localization geometry, the speech denoiser DSP, LLM response parsing, TTS audio helpers, and a drift check on the Nav2 parameter sections shared across localization profiles
+- **Integration** - a bag-replay regression test that runs the real YOLOv11 + ByteTrack person-detection node against recorded camera frames and asserts on the published detections. Frames are fed one at a time, so the result does not depend on machine speed
+
+Tests that need an optional dependency (ONNX model weights, `librosa`, `pyroomacoustics`, ChromaDB) skip cleanly when it is absent, so the suite passes on a bare CI runner and exercises everything on a full workstation.
 
 ## 🐳 Docker
 
@@ -222,8 +236,8 @@ docker compose --profile dev up  # live-mounts the source over the image
 - **Tooling**: Publishes BT state for live Groot2 visualization
 
 ### **Navigation System**
-- **Mapping** (`pepper_slam`): RTAB-Map (RGB-D) or SLAM Toolbox (2D lidar); FAST-LIO / Point-LIO for lidar-inertial odometry on the Unitree L2
-- **Localization** (`pepper_navigation`): four interchangeable profiles — AMCL, RTAB-Map, prior-map FAST-LIO via `fastlio_localization`, or prior-map Point-LIO via `pointlio_localization` — sharing identical costmaps and tuning so they can be compared directly
+- **Mapping** (`pepper_slam`): FAST-LIO / Point-LIO 3D lidar-inertial mapping and odometry on the Unitree L2, or RTAB-Map (RGB-D)
+- **Localization** (`pepper_navigation`): FAST-LIO against a prior 3D map via `fastlio_localization` by default; other backends are selectable as launch-time profiles sharing the same costmaps and tuning (see [pepper_navigation/README.md](pepper_navigation/README.md))
 - **Odometry**: wheel odometry (`/pepper_odom` from `naoqi_driver2`), LIO odometry
 - **Path Planning**: Nav2 with 3D voxel costmaps consuming the L2's 360° `PointCloud2` directly, no flattening step
 - **Safety**: An independent collision monitor gates every velocity command straight off the lidar, bypassing the costmaps
@@ -238,6 +252,9 @@ Detailed documentation is available:
 - **API documentation**: `ros2 interface show dec_interfaces/`
 <!-- - **Deliverable reports**: [DEC4Africa Deliverables](https://dec4africa.github.io/deliverables/) -->
 
+## 🎓 Background
+
+Developed at Carnegie Mellon University Africa as a spin-off of the **Culturally Sensitive Social Robotics for Africa (CSSR4Africa)** project. The DEC deployment replaces repetitive, human-led walkthroughs of the center's Digital Public Infrastructure demo (biometric enrollment with MOSIP, financial transactions with MIFOS, and subsidy validation with UPMS) and doubles as a testbed for culturally aware human-robot interaction: visitor interactions are logged to support research on cross-cultural behavior modeling and adaptive dialogue management in public spaces.
 
 ## ❓ Support
 
