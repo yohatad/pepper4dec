@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """The divergence guard must reject implausible poses rather than clip them.
 
-These are the properties the guard exists for, and each one has a real failure
-behind it:
+Each property below is one the guard exists for, with a real failure behind it:
 
   * a pose that moves faster than the base physically can is a broken estimate,
     not a fast robot, and must not reach odom -> base_footprint;

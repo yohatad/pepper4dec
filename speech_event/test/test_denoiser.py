@@ -6,11 +6,8 @@ harmonic notch cascade.
 
 Pure DSP on synthetic signals — no ROS graph, no microphone, no recorded audio.
 Assertions are on measurable filter behaviour (passband retained, stopband
-attenuated, notch centred), not on exact sample values.
-
-The module imports librosa at import time, so this file skips when that isn't
-installed (same convention as person_detection's bag-replay test skipping on a
-missing ONNX model).
+attenuated, notch centred), not on exact sample values. Skips when librosa
+isn't installed, since the module imports it at import time.
 
 Run via: colcon test --packages-select speech_event
 

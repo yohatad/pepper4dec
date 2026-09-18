@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """One "I am lost, fix it" service that works whichever localization backend is running.
 
-The Nav2 profiles each recover differently, so an operator switching between
-them would otherwise have to remember one procedure per backend:
+Exposes /localization_recover (Trigger) in front of all of them and dispatches
+to whatever is actually up, so an operator switching between Nav2 profiles does
+not have to remember one recovery procedure per backend:
 
   fastloc  -> /relocalize (std_srvs/Trigger), re-arms the ScanContext search
-  pointloc -> /relocalize as well: the Point-LIO localizer is a port of the
+  pointloc -> /relocalize as well; the Point-LIO localizer is a port of the
               FAST-LIO one and exposes the same service
   amcl     -> /reinitialize_global_localization (std_srvs/Empty), scatters
               particles for a global re-draw
-  rtabmap  -> no forced re-search exists; it relocalizes on its own via loop
-              closure, so the only operator action is seeding /initialpose
+  rtabmap  -> no forced re-search exists; it relocalizes via loop closure, so
+              the only operator action is seeding /initialpose
 
-This exposes /localization_recover (Trigger) in front of all of them and
-dispatches to whatever is actually up. For rtabmap it reports honestly that
-there is nothing to call rather than pretending a no-op succeeded.
+For rtabmap it reports honestly that there is nothing to call rather than
+pretending a no-op succeeded.
 """
 import time
 

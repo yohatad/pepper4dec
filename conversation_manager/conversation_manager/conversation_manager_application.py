@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
 """conversation_manager_application.py
 
-Entry point for the ConversationManagerNode lifecycle node.
-Running this node provides a Retrieval-Augmented Generation (RAG) action server
-that answers natural-language questions about the Upanzi Network knowledge base.
+Entry point for the ConversationManagerNode lifecycle node: a
+Retrieval-Augmented Generation (RAG) action server answering natural-language
+questions about the Upanzi Network knowledge base.
 
-On configure, the node builds its RAG configuration from ROS parameters,
-initializes (or builds) a ChromaDB collection from the knowledge-base JSON
-file, and starts an action server for handling conversational queries. Each
-goal triggers a vector search over the knowledge base followed by a streaming
-LLM call; sentences are accumulated into the full response as they arrive.
-The action result carries the full answer text, classified intent, and
-confidence score. The BT SpeechWithFeedback node is the sole consumer
-responsible for playback, using NAOqi ALAnimatedSpeech to interpret embedded
-prosody tags and drive gestures.
+On configure it builds its RAG configuration from ROS parameters, initializes
+(or builds) a ChromaDB collection from the knowledge-base JSON, and starts the
+action server. Each goal runs a vector search followed by a streaming LLM call,
+and the result carries the full answer text, classified intent, and confidence
+score. Playback belongs solely to the BT SpeechWithFeedback node, which uses
+NAOqi ALAnimatedSpeech to interpret embedded prosody tags and drive gestures.
 
 Actions:
     /conversation_manager (dec_interfaces/action/ConversationManager)

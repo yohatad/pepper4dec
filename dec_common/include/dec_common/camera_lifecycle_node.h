@@ -1,28 +1,13 @@
 /* camera_lifecycle_node.h
  *
  * Shared lifecycle-node base for the camera-driven perception nodes
- * (face_detection, person_detection). Owns the camera plumbing that both
- * nodes previously duplicated: topic resolution from pepper_topics.yaml,
- * synchronized color/depth and RGB-only subscriptions (raw and compressed),
- * depth decoding, the debug visualization pipeline, the image-timeout
- * monitor, and depth-in-region lookup.
+ * (face_detection, person_detection). Owns topic resolution from
+ * pepper_topics.yaml, synchronized color/depth and RGB-only subscriptions
+ * (raw and compressed), depth decoding, the debug visualization pipeline,
+ * the image-timeout monitor, and depth-in-region lookup.
  *
- * The two nodes' deliberate behavioral differences are captured in
- * CameraNodeBehavior rather than papered over:
- *   - median_depth:         face uses the median depth in a region,
- *                           person uses the mean.
- *   - always_publish_debug: face always publishes debug images; person
- *                           gates both imshow and publishing behind
- *                           verbose_mode + DISPLAY.
- *   - quit_on_q:            person's imshow window quits the node on 'q'.
- *
- * Unifications (previously inconsistent between the two copies):
- *   - The color/depth resolution check runs on the freshly decoded pair
- *     (face's ordering; person checked the previous frame pair).
- *   - The depth frame shown by the visualization timer is snapshotted
- *     under frame_mutex_ in updateLatestFrame (face's pattern; person read
- *     depth_image_ cross-thread, which was a latent data race).
- *   - camera type "video" (RealSense topics) is accepted by both.
+ * Where the two nodes deliberately differ, the difference lives in
+ * CameraNodeBehavior below rather than in branching here.
  *
  * This base deliberately does NOT override the lifecycle callbacks —
  * derived nodes keep their own configure/activate orchestration and call

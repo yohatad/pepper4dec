@@ -5,14 +5,9 @@
  * selection, compression-suffix handling, pixel-to-angle projection, clamping,
  * the image QoS profile, and the face-ID colour generator.
  *
- * All pure functions — no ROS graph, no camera, no node instantiation. The
- * one ROS type touched (rclcpp::QoS) is a plain value object that needs no
- * rclcpp::init().
- *
- * Expected values come from two sources, noted per test:
- *   (a) hand-derived arithmetic at simple inputs,
- *   (b) properties that must hold for any input (determinism, symmetry,
- *       documented ordering).
+ * All pure functions — no ROS graph, no camera, no node instantiation.
+ * Expected values are either hand-derived arithmetic at simple inputs or
+ * properties that must hold for any input.
  *
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa

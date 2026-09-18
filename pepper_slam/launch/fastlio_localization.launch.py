@@ -4,15 +4,14 @@ Standalone fastlio_localization on the Pepper L2 rig, with its required
 static TF, for LIVE testing outside the full Nav2 bringup.
 
 It exists because fast_lio's own localization_l2.launch.py is not
-standalone-usable live: it is bag-oriented (use_sim_time defaults true) and it
+standalone-usable live: it is bag-oriented (use_sim_time defaults true) and
 does not publish the rig's static TF, which pepper_nav2_fastloc.launch.py
-normally supplies via its own sensor_tf GroupAction. Run localization_l2
-alone on the robot and you get two silent failures at once: ROS time pinned
-at 0 (no /clock publisher), and "Tf has two or more unconnected trees" /
-"NOT broadcasting map -> base_footprint" once it does lock, because
-base_footprint and camera_imu_optical_frame are disconnected roots.
-MEASURED 2026-09-09: fixed by use_sim_time:=false + this file's sensor_tf
-include (publisher:=urdf scope:=mount).
+normally supplies via its own sensor_tf GroupAction. Run it alone on the robot
+and two failures land silently at once: ROS time pinned at 0 (no /clock
+publisher), and an unconnected TF tree once it locks, because base_footprint
+and camera_imu_optical_frame are disconnected roots. Fixed by
+use_sim_time:=false plus this file's sensor_tf include (publisher:=urdf
+scope:=mount).
 
 Launch files included:
     pepper_sensor_tf.launch.py — the rig's static TF.

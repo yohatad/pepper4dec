@@ -1,27 +1,22 @@
 #!/usr/bin/env python3
 """Stop navigating when localization says it is lost.
 
-fastlio_localization reports its own health (/diagnostics, from the periodic
+fastlio_localization reports its own health on /diagnostics (from the periodic
 map-overlap check), but nothing downstream consumed it: a wrong-but-confident
-lock left Nav2 planning happily against a costmap built on a bad
-map -> base_footprint, and the robot kept driving toward a goal computed from
-a pose that was not where it was.
+lock left Nav2 planning against a costmap built on a bad map -> base_footprint,
+driving toward a goal computed from a pose that was wrong.
 
 This watches that status and, once it has been bad long enough to not be a
 transient, cancels the active navigate_to_pose goal -- and keeps cancelling
-while still lost, so a goal issued during that window does not slip through.
-It does NOT touch cmd_vel: the collision monitor already owns the
-safety-critical stop, and two things arbitrating velocity is worse than one.
+while still lost, so a goal issued in that window does not slip through. It
+does not touch cmd_vel: the collision monitor already owns the safety-critical
+stop, and two arbiters of velocity are worse than one.
 
-Deliberately gated on SUSTAINED badness, for the same reason the health check
-itself is: overlap dips for a scan or two whenever the robot turns a corner
-into unmapped space or someone walks through the scan, and cancelling a goal
-every time that happened would make navigation unusable.
-
-Also treats silence as lost (stale_timeout): if fastlio_localization dies, no
-diagnostics arrive at all, and a frozen TF is exactly as dangerous as a wrong
-one. Only applies once a first status has been seen, so a slow startup is not
-mistaken for a crash.
+The sustained-badness gate matters because overlap dips for a scan or two
+whenever the robot corners into unmapped space or someone walks through the
+scan. Silence counts as lost too (stale_timeout), since a frozen TF is as
+dangerous as a wrong one, but only once a first status has been seen so slow
+startup is not mistaken for a crash.
 """
 import rclpy
 from action_msgs.srv import CancelGoal

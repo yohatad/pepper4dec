@@ -3,14 +3,11 @@
  * Unit tests for BooleanMapSaliency — the bottom-up saliency operator behind
  * SaliencyNode. Synthetic images only: no ROS graph, no camera, no node.
  *
- * BMS thresholds the normalized Lab channels into boolean maps, suppresses
- * whatever touches the image border by flood-fill, and averages the surviving
- * regions. So the properties worth pinning are structural rather than exact
- * pixel values:
- *   (a) output shape/type/range invariants,
- *   (b) a border-connected region scores lower than an enclosed one — the
- *       whole point of the flood-fill activation step,
- *   (c) degenerate inputs (flat images) produce zeros rather than NaNs.
+ * BMS thresholds the normalized Lab channels into boolean maps, flood-fills
+ * away whatever touches the border, and averages what survives — so the
+ * properties pinned here are structural rather than exact pixel values:
+ * shape/type/range invariants, a border-connected region scoring below an
+ * enclosed one, and flat images producing zeros rather than NaNs.
  *
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa

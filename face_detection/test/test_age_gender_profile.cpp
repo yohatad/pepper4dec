@@ -5,14 +5,9 @@
  * 5-estimate window), its JSON serialization, and AgeGenderBoundingBox's
  * centroid-to-corners conversion.
  *
- * Pure data structures — no ROS graph, no MiVOLO model, no camera. The one
- * ROS type touched (geometry_msgs::msg::Point) is a plain message struct that
- * needs no rclcpp::init().
- *
- * Expected values come from three sources, noted per test:
- *   (a) hand-computed medians and weighted votes,
- *   (b) properties that must hold (window bounding, tie-break direction),
- *   (c) the documented JSON shape and numeric precision.
+ * Pure data structures — no ROS graph, no MiVOLO model, no camera. Expected
+ * values are hand-computed medians and weighted votes, invariants that must
+ * hold (window bounding, tie-break direction), or the documented JSON shape.
  *
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa

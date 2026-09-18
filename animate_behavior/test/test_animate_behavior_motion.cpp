@@ -5,13 +5,9 @@
  * exponential smoothing applied before joint angles are published.
  *
  * No ROS runtime, no robot, no RNG — the caller supplies the random value, so
- * every case here is deterministic.
- *
- * Expected values come from three sources, noted per test:
- *   (a) hand-derived arithmetic,
- *   (b) properties that must hold for any input (bounds, monotonicity,
- *       convergence, symmetry),
- *   (c) documented behaviour at degenerate inputs.
+ * every case here is deterministic. Expected values are hand-derived
+ * arithmetic, properties that must hold for any input (bounds, monotonicity,
+ * convergence, symmetry), or documented behaviour at degenerate inputs.
  *
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa

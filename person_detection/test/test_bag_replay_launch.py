@@ -2,23 +2,19 @@
 """
 Bag-replay regression test for the person_detection pipeline.
 
-Launches the real node (YOLOv11 ONNX + ByteTrack), feeds it recorded camera frames from
-a mini-bag (person_walk_minibag, 12 frames sampled from a lab recording
-with people in view), and asserts on the published /person_detection/data
-stream. The bag lives outside this package, under the workspace-level
-bags/ directory (see BAG_PATH below) rather than checked into git.
+Launches the real node (YOLOv11 ONNX + ByteTrack), feeds it 12 recorded camera
+frames from person_walk_minibag, and asserts on the published
+/person_detection/data stream. The bag lives under the workspace-level bags/
+directory (see BAG_PATH below) rather than checked into git.
 
-Frames are fed one at a time, each waiting for the node to finish inference
-before the next is sent. This keeps the test deterministic on slow/CPU-only
-machines — real-time playback would silently drop frames whenever inference
-is slower than the camera rate, making pass/fail depend on machine speed.
+Frames are fed one at a time, each waiting for inference to finish, which keeps
+the test deterministic on slow/CPU-only machines — real-time playback would
+silently drop frames whenever inference lags the camera rate.
 
-What this catches that unit tests cannot: ONNX model loading/inference glue,
-image decoding, the full subscribe -> detect -> track -> publish path, and
-message field consistency — against real sensor data, with no robot.
-
-This is the integration tier for this package; test_class_indices.cpp covers
-the class-filter logic at the unit tier, with no model or bag required.
+This catches what unit tests cannot: ONNX loading/inference glue, image
+decoding, and the full subscribe -> detect -> track -> publish path against
+real sensor data. test_class_indices.cpp covers the class-filter logic at the
+unit tier, with no model or bag required.
 
 Run via: colcon test --packages-select person_detection
 

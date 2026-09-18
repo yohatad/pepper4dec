@@ -1,38 +1,30 @@
 """rviz_remote.launch.py
 
-RViz ONLY, for a laptop watching a Nav2 stack that runs on the robot.
+RViz only, for a laptop watching a Nav2 stack running on the robot.
 
-Nav2 and the localizer stay on the Jetson, next to the sensors. This launches
-nothing but rviz2, with a deliberately light config that subscribes to no
-point cloud stream, no camera, and no prior map -- only the 2D map, the
-costmaps, plans, footprints, safety polygons and the localizer's pose.
+Nav2 and the localizer stay on the Jetson; this starts rviz2 alone with a light
+config -- 2D map, costmaps, plans, footprints, safety polygons and the
+localizer's pose, but no point clouds, camera or prior map.
 
-WHY (MEASURED 2026-09-12): with the full stack up the Jetson sat at a load
-average of ~5.8 on 6 cores. Two of the largest consumers were not navigation
-at all: RViz rendering a 4.5 M-point prior map, and NoMachine encoding that
-desktop to stream it. Both go away when RViz runs here instead. The Behavior
-Tree "tick rate exceeded" warnings were the symptom of that saturation.
+Why: measured 2026-09-12, the full stack held the Jetson at ~5.8 load average
+on 6 cores, two of the top consumers being RViz rendering a 4.5 M-point prior
+map and NoMachine encoding that desktop. Running RViz here removes both; the
+Behavior Tree "tick rate exceeded" warnings were a symptom of that saturation.
 
-What you can and cannot see from the light view:
-    Locked pose arrow present  -> localized (it is published only while locked)
-    Candidate pose (orange)    -> a lock is being verified right now
-    Candidate scan (disabled)  -> enable it to judge a lock against the map:
-                                  ~1-3k points, only during verification, so
-                                  a short burst rather than a stream
-    NOT shown: /cloud_registered, /prior_map, /points, the camera. Those are
-    the heavy topics this config exists to avoid.
+Reading the light view: a locked pose arrow means localized (it is published
+only while locked), and an orange candidate pose means a lock is being
+verified. Enable the candidate scan to judge a lock against the map (~1-3k
+points, only during verification). /cloud_registered, /prior_map, /points and
+the camera are absent by design -- they are what this config exists to avoid.
 
-REQUIREMENTS -- discovery is the thing that will silently fail:
+Requirements -- discovery fails silently if any is wrong:
     1. Same ROS_DOMAIN_ID as the robot (the Jetson uses 5) and the same RMW
        (rmw_cyclonedds_cpp).
-    2. The Jetson's CycloneDDS config (ros2_ws/config/cyclonedds/robot.xml)
-       runs UNICAST discovery with multicast OFF and a hardcoded <Peers> list.
-       This laptop's WiFi address must be in that list, AND this laptop must
-       run a CycloneDDS config that lists the Jetson (172.29.111.250) as a
-       peer. Miss either half and `ros2 topic list` here shows nothing, with
-       no error. Check with:  ros2 node list   (expect the Jetson's nodes)
+    2. The Jetson's CycloneDDS config runs UNICAST discovery with a hardcoded
+       <Peers> list: this laptop must appear in it, AND must itself list the
+       Jetson (172.29.111.250). Miss either half and `ros2 topic list` is
+       silently empty -- check with `ros2 node list`.
     3. pepper_navigation built on this machine, so the config path resolves.
-       No robot meshes are needed -- the light config has no RobotModel.
 
 Launch arguments:
     rviz_config (default: <share>/rviz/nav2_fastloc_remote.rviz)

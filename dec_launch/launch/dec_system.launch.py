@@ -50,21 +50,15 @@ Usage:
     ros2 launch dec_launch dec_system.launch.py enable_navigation:=false
 
 Design notes:
-    Localization: the absolute `map -> base_footprint` pose
-    (`/localization/pose`, consumed by gesture_execution for pointing IK)
-    comes from fast_lio's fastlio_localization node, which publishes that
-    topic with the pose AND twist composed into base_footprint.
+    The absolute `map -> base_footprint` pose (`/localization/pose`, consumed
+    by gesture_execution for pointing IK) comes from fast_lio's
+    fastlio_localization, which publishes pose AND twist composed into
+    base_footprint and applies the map constraint inside the iEKF at scan
+    rate rather than as a discrete map->odom correction beside the filter.
 
-    It replaces lio_localization, which has been removed (it lives on at
-    github.com/yohatad/lio_localization). The difference is where the map
-    constraint is applied: inside the iEKF at scan rate, rather than as a
-    discrete map->odom correction computed by a node beside the filter. On
-    slam_20260823_aligned this path had 0 correction steps over 0.30 m, 4.5 cm
-    maximum.
-
-    Each of the `nav_profile` Nav2 bringups except `legacy` already nests its
-    own localization, so it is launched standalone here only when navigation is
-    off -- launching it twice would fight over the `map -> odom` transform.
+    Every `nav_profile` except `legacy` already nests its own localization, so
+    it is launched standalone here only when navigation is off -- launching it
+    twice would fight over the `map -> odom` transform.
 
     The localization include is wrapped in a scoped GroupAction because
     IncludeLaunchDescription emits its launch_arguments as

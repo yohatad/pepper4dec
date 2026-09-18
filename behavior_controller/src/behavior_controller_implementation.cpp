@@ -1,15 +1,10 @@
 /* behavior_controller_implementation.cpp
  *
  * Implements the custom BehaviorTree.CPP node types used by the
- * behavior_controller's tour-guide trees: ROS action/service wrappers
- * (AnimateBehavior, Gesture, Navigate, SpeechRecognition,
- * ConversationManager, SpeechWithFeedback, TTS, StopAnimateBehavior,
- * SetOvertAttention, SetSpeechListening), stateful perception/speech
- * conditions (ListenForSpeech, CheckFaceDetected, IsVisitorDiscovered,
- * IsMutualGazeDiscovered, GetVisitorResponse, IsVisitorResponseYes), the
- * exhibit-queue tour-loop nodes, and blackboard/logging utility nodes. Also
- * defines initializeTree(), which registers all of these node types and
- * loads the scenario's behavior tree XML.
+ * behavior_controller's tour-guide trees: ROS action/service wrappers,
+ * stateful perception/speech conditions, the exhibit-queue tour-loop nodes,
+ * and blackboard/logging utilities. Also defines initializeTree(), which
+ * registers all of them and loads the scenario's behavior tree XML.
  *
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa

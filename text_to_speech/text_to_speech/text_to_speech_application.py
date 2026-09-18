@@ -2,23 +2,20 @@
 
 """text_to_speech_application.py
 
-Entry point for the TextToSpeechNode lifecycle node.
-Running this node lets Pepper convert streamed text into spoken audio with
-low latency.
+Entry point for the TextToSpeechNode lifecycle node, converting streamed text
+into spoken audio with low latency.
 
-The node pulls sentences from the /text_to_speech/input topic (typically fed
-by an LLM response stream) and speaks them as they arrive, so Pepper can
-start talking before the full response has finished generating. Sentences
-are queued and drained sequentially by a background playback thread, which
-ensures strict ordering even while new sentences keep arriving.
+Sentences arrive on /text_to_speech/input (typically an LLM response stream)
+and are spoken as they come in, so Pepper starts talking before the full
+response has finished generating. A background playback thread drains the
+queue sequentially, keeping strict order while new sentences arrive.
 
-Synthesis/playback is handled by one of several interchangeable backends,
+Synthesis/playback goes through one of several interchangeable backends,
 selected via the 'engine' parameter: 'naoqi_ros' (Pepper's on-board
 ALTextToSpeech via naoqi_bridge), 'kokoro_local' / 'kokoro_pepper' (Kokoro-82M
-synthesised locally and played on the laptop or on Pepper's speakers), and
-'elevenlabs_local' / 'elevenlabs_pepper' (ElevenLabs streaming TTS played
-locally or on Pepper). The node also exposes a /text_to_speech action server
-so other nodes can request ad-hoc TTS playback and wait for completion.
+played on the laptop or on Pepper's speakers), and 'elevenlabs_local' /
+'elevenlabs_pepper' (ElevenLabs streaming TTS). A /text_to_speech action
+server lets other nodes request ad-hoc playback and wait for completion.
 
 Subscribers:
     /text_to_speech/input (std_msgs/String)

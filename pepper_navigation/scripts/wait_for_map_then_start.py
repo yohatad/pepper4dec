@@ -1,28 +1,22 @@
 #!/usr/bin/env python3
 """Start nav2's lifecycle manager once the map frame actually exists.
 
-WHY. nav2 configures its costmaps at startup, and local_costmap blocks waiting
-for a transform to its global_frame. With fastlio_localization that frame does
-not exist yet: the node publishes map -> base_footprint only after ScanContext
-locks, and that lock waits on the world rather than on the clock -- enough scan
-overlap with the prior map, and init_agree_count estimates agreeing on where it
-is, then the candidate must hold up over lock_verify_scans live scans before
-it is applied. So the wait is unbounded even standing still. Left to autostart,
-the bringup stalls waiting for that transform.
+Why: nav2 configures its costmaps at startup and local_costmap blocks waiting
+for a transform to its global_frame. With fastlio_localization that transform
+appears only once ScanContext locks, and the lock waits on the world rather
+than the clock -- enough scan overlap with the prior map, init_agree_count
+estimates agreeing, then the candidate holding up over lock_verify_scans live
+scans. The wait is unbounded even standing still, so under autostart the
+bringup stalls and planner/controller/bt_navigator sit inactive forever. A
+fixed TimerAction cannot fix it: no delay is correct when the lock waits on the
+robot. Instead the lifecycle manager is launched with autostart:=false and this
+node calls its startup service the moment the transform appears.
 
-NOTE the node now publishes a STATIC map -> lio_init anchor at startup, so the
-map frame itself exists immediately (RViz needs a Fixed Frame to draw the prior
-map while searching). That anchor deliberately stops there -- nothing publishes
+Note: a STATIC map -> lio_init anchor is published at startup so the map frame
+exists immediately (RViz needs a Fixed Frame to draw the prior map while
+searching). It deliberately stops there -- nothing publishes
 lio_init -> base_footprint -- so the lookup_transform below still blocks until
-a real lock, which is the whole point of this node. Do not "simplify" it to a
-frame-exists check.
-
-and planner/controller/bt_navigator sit inactive forever.
-
-A fixed TimerAction cannot fix this -- there is no delay that is correct, since
-the lock waits on the robot, not on the clock. So the lifecycle manager is
-launched with autostart:=false and this node calls its startup service the
-moment the transform appears.
+a real lock. Do not "simplify" it to a frame-exists check.
 """
 import rclpy
 from rclpy.node import Node

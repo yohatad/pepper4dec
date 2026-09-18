@@ -8,10 +8,10 @@ It exists for the same reason as its fastlio twin: point_lio's own
 localization_l2.launch.py is not standalone-usable live. It is bag-oriented
 (use_sim_time defaults true) and does not publish the rig's static TF, which
 pepper_nav2_pointloc.launch.py normally supplies via its own sensor_tf
-GroupAction. Run localization_l2 alone on the robot and you get two silent
-failures at once: ROS time pinned at 0 (no /clock publisher), and a TF tree
-split in two once it does lock, because base_footprint and
-camera_imu_optical_frame are disconnected roots.
+GroupAction. Run it alone on the robot and two failures land silently at once:
+ROS time pinned at 0 (no /clock publisher), and a TF tree split in two once it
+locks, because base_footprint and camera_imu_optical_frame are disconnected
+roots.
 
 Launch files included:
     pepper_sensor_tf.launch.py — the rig's static TF.

@@ -3,20 +3,18 @@
 actually uses.
 
 *_map_odom_bridge with level_source 'calibration' levels the whole map by the
-static base_frame -> lidar_imu_frame mount. If that frame is not the same one
-the LIO config names as publish.body_frame, the map is leveled by the WRONG
-mount and comes out tilted by the angle between them -- silently. Nothing
-errors, and the .pcd save still reports "frame map".
+static base_frame -> lidar_imu_frame mount. If that frame is not the one the
+LIO config names as publish.body_frame, the map is leveled by the WRONG mount
+and comes out tilted by the angle between them -- silently, with the .pcd save
+still reporting "frame map".
 
-That is not hypothetical: fastlio_lc_l2.launch.py simply never passed
-lidar_imu_frame, so the bridge kept its l2lidar_frame_imu default while
-FAST-LIO estimated the RealSense IMU. The two mounts differ by 64.2 deg, and
-every map saved that way was tilted by that much. Measuring height on such a
-map reads a slanted axis through it -- the 2026-08-23 run showed an 80.30 m z
-band that was really 8.05 m once leveled correctly.
-
-The only visible symptom was the floor offset in the bridge's own log line:
-+0.257 m (the L2 lidar IMU) where the RealSense IMU sits at +0.314 m.
+This is not hypothetical: fastlio_lc_l2.launch.py never passed lidar_imu_frame,
+so the bridge kept its l2lidar_frame_imu default while FAST-LIO estimated the
+RealSense IMU. The mounts differ by 64.2 deg, and every map saved that way was
+tilted by that much -- the 2026-08-23 run showed an 80.30 m z band that was
+really 8.05 m once leveled. The only visible symptom was the bridge's own
+floor-offset log line: +0.257 m (L2 lidar IMU) where the RealSense IMU sits at
++0.314 m.
 """
 import os
 import sys

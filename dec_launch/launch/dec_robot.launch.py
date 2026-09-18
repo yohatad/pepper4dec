@@ -15,26 +15,21 @@ Launch files included:
 Nodes started:
     None directly; everything comes from the two included launch files.
 
-NO STATIC TF HERE — AND WHY
-    The transforms that put the L2 and the RealSense in one tree
-    (base_footprint -> l2lidar_frame -> {l2lidar_frame_imu,
-    camera_camera_link -> ...}) come from pepper_slam's
-    pepper_sensor_tf.launch.py, which is NOT included here: every stack that
-    consumes these sensors already nests it -- pepper_nav2_fastloc / _amcl /
-    _rtabmap_loc (as sensor_tf / sensor_tf_scope), pepper_slam's
-    fastlio_odometry and pointlio_odometry, and dec_system.launch.py through
-    them. Publishing it from here too would give those latched /tf_static
-    edges two publishers, and whichever lands last silently wins.
+No static TF here:
+    The transforms tying the L2 and the RealSense into one tree
+    (base_footprint -> l2lidar_frame -> ...) come from pepper_slam's
+    pepper_sensor_tf.launch.py, deliberately not included here: every stack
+    that consumes these sensors already nests it, and a second publisher of
+    those latched /tf_static edges means whichever lands last silently wins.
+    One owner, and the owner is whatever you launch next.
 
-    So the rule is one owner, and the owner is whatever you launch next.
-    Running the drivers ALONE (bag recording, a raw RViz look at /points),
-    there is no owner, and nothing relates the two sensors -- start it
-    yourself:
+    Running the drivers ALONE (bag recording, a raw RViz look at /points)
+    there is no owner, so start it yourself:
 
         ros2 launch pepper_slam pepper_sensor_tf.launch.py
 
-    scope:=mount is its default and is right on the robot; the RealSense
-    driver publishes its own internal extrinsics.
+    Its default scope:=mount is right on the robot; the RealSense driver
+    publishes its own internal extrinsics.
 
 Launch arguments:
     enable_lidar / enable_camera (default: "true")
@@ -61,11 +56,9 @@ Usage:
         ros2 launch dec_launch dec_system.launch.py
 
 Design notes:
-    Every include is wrapped in a scoped GroupAction. IncludeLaunchDescription
+    Every include is wrapped in a scoped GroupAction: IncludeLaunchDescription
     emits its launch_arguments as SetLaunchConfiguration into the CURRENT
-    context, so an unscoped include would leak its arguments into the ones
-    after it — the same trap dec_system.launch.py and
-    pepper_nav2_fastloc.launch.py hit.
+    context, so an unscoped include would leak them into the ones after it.
 
     QoS: the L2 publishes /points and /imu/data BEST_EFFORT. A RELIABLE
     subscriber silently receives nothing and the driver logs "requesting

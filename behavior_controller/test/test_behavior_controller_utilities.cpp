@@ -5,13 +5,10 @@
  * base validator, ConfigManager, and KnowledgeManager. YAML fixtures live in
  * test/fixtures/ (the path is injected at compile time as TEST_FIXTURE_DIR).
  *
- * ORDERING NOTE: ConfigManager and KnowledgeManager are process-wide
- * singletons, so their state persists across tests in this binary. All tests
- * that touch them live in the single `Singletons` suite below, in a
- * deliberate declaration order (gtest runs tests in declaration order by
- * default — do not run this binary with --gtest_shuffle). This order
- * dependence is a direct consequence of the singleton design; if the
- * managers ever become injectable, these tests can be made independent.
+ * Ordering: ConfigManager and KnowledgeManager are process-wide singletons,
+ * so their state persists across tests in this binary. Every test touching
+ * them lives in the single `Singletons` suite below, in a deliberate
+ * declaration order — do not run this binary with --gtest_shuffle.
  *
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa

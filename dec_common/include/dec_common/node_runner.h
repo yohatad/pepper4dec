@@ -1,11 +1,9 @@
 /* node_runner.h
  *
- * Shared main() helper for dec_system nodes. Replaces the six hand-rolled
- * rclcpp::init -> construct -> spin -> shutdown application files with one
- * template covering their actual variations: an optional startup banner,
- * single- vs multi-threaded executor, optional extra nodes on the executor
- * (behavior_controller's companion BT node), and an optional post-spin hook
- * (face_detection's cleanup()).
+ * Shared main() helper for dec_system nodes: rclcpp::init -> construct ->
+ * spin -> shutdown, with an optional startup banner, a single- or
+ * multi-threaded executor, optional extra nodes on that executor, and an
+ * optional post-spin hook.
  *
  * Header-only and rclcpp-only on purpose — link the light
  * dec_common::dec_common_runner target, not the full dec_common library.
@@ -61,15 +59,10 @@ int runNode(int argc, char** argv, const NodeRunOptions& options = {},
     try {
         node = std::make_shared<NodeT>();
     } catch (const std::exception&) {
-        // rclcpp::shutdown() (e.g. SIGINT arriving within the first few ms
-        // of process start, as launch_testing harnesses do) can race node
-        // construction: rclcpp_lifecycle::LifecycleNode's base constructor
-        // creates several built-in services (change_state, get_state, ...),
-        // and if shutdown lands mid-construction those calls throw against
-        // an already-invalidated context. That's not a real startup error --
-        // exit cleanly instead of letting the exception reach
-        // std::terminate() and abort the process. Genuine construction
-        // failures (e.g. a malformed config) still throw, since rclcpp::ok()
+        // A shutdown racing construction (SIGINT in the first few ms, as
+        // launch_testing does) makes LifecycleNode's built-in service
+        // creation throw against an invalidated context. Exit cleanly rather
+        // than aborting; genuine failures still throw, since rclcpp::ok()
         // is true for those.
         if (!rclcpp::ok()) {
             return 0;
@@ -92,10 +85,9 @@ int runNode(int argc, char** argv, const NodeRunOptions& options = {},
             executor.spin();
         }
     } catch (const std::exception&) {
-        // Same race as the construction try/catch above, one step later:
-        // spin()/executor setup creates its own guard condition against the
-        // context, and SIGINT can land (calling rclcpp::shutdown()) between
-        // construction and that call. Exit cleanly rather than aborting.
+        // Same race, one step later: executor setup creates its own guard
+        // condition against the context, which SIGINT can invalidate between
+        // construction and this call.
         if (!rclcpp::ok()) {
             return 0;
         }

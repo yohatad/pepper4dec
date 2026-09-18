@@ -2,19 +2,18 @@
 
 Plain FAST-LIO ODOMETRY on the Pepper L2 rig, with its required static TF.
 
-ODOMETRY, not SLAM. "mapping" is upstream's word for the ikd-Tree the
-estimator aligns each scan against — there is no loop closure and nothing ever
-revisits a pose, so returning to a place after N metres of drift lays the same
-wall down twice, permanently. For a map worth keeping use fastlio_lc_pgo's
-fastlio_lc_l2.launch.py or bag_test/rtabmap_fastlio_bag.launch.py. This file is
-the right tool for MEASURING odometry, precisely because nothing here hides the
-drift.
+ODOMETRY, not SLAM. "mapping" is upstream's word for the ikd-Tree each scan is
+aligned against — there is no loop closure, so revisiting a place after N
+metres of drift lays the same wall down twice, permanently. For a map worth
+keeping use fastlio_lc_pgo's fastlio_lc_l2.launch.py or
+bag_test/rtabmap_fastlio_bag.launch.py. This file is for MEASURING odometry,
+precisely because nothing here hides the drift.
 
 It exists because fast_lio's own mapping.launch.py is not standalone-usable
 here: the bridge needs the static base_footprint -> l2lidar_frame_imu chain
 that only pepper_sensor_tf.launch.py provides, and mapping.launch.py is shared
-with every other FAST-LIO sensor config so it cannot bake that in. Forgetting
-the second launch file is a silent hang.
+across sensor configs so it cannot bake that in. Forgetting it is a silent
+hang.
 
 Launch files included:
     pepper_sensor_tf.launch.py — the rig's static TF.

@@ -4,13 +4,10 @@ Unit tests for the angle helpers on SoundLocalizationNode: the circular mean
 used to average azimuth estimates across frames, and the azimuth-to-direction
 naming used for logging and RViz labels.
 
-Both are pure functions of their arguments — they touch no node state — so they
-are called unbound (``SoundLocalizationNode.method(None, ...)``) rather than
-constructing a node, which would need rclpy.init() and a live ROS graph.
-
-The module imports pyroomacoustics at import time, so this file skips when that
-isn't installed (same convention as person_detection's bag-replay test skipping
-on a missing ONNX model).
+Both are pure functions of their arguments, so they are called unbound
+(``SoundLocalizationNode.method(None, ...)``) rather than constructing a node,
+which would need rclpy.init() and a live ROS graph. Skips when
+pyroomacoustics isn't installed, since the module imports it at import time.
 
 Run via: colcon test --packages-select speech_event
 

@@ -1,15 +1,13 @@
 /* send_goal.cpp
  *
  * One-shot Nav2 navigation goal sender. Publishes an initial pose at the
- * map origin, waits for the NavigateToPose action server to come up, then
- * sends a single fixed goal pose and prints the remaining distance until
- * the goal completes.
+ * map origin, waits for the NavigateToPose action server, then sends a
+ * single fixed goal and prints the remaining distance until it completes.
  *
- * nav2_simple_commander (the Python BasicNavigator this replaces) is a
- * Python-only convenience wrapper with no official C++ equivalent, so this
- * reimplements the relevant subset directly: a plain publish to
- * /initialpose (what AMCL listens to for manual pose initialization) and
- * an rclcpp_action client for NavigateToPose.
+ * nav2_simple_commander is Python-only with no official C++ equivalent, so
+ * this reimplements the relevant subset: a plain publish to /initialpose
+ * (what AMCL listens to for manual initialization) and an rclcpp_action
+ * client for NavigateToPose.
  *
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa
