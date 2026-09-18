@@ -221,7 +221,7 @@ FaceDetectionNode::CallbackReturn FaceDetectionNode::on_activate(const rclcpp_li
 
     vis_timer_ = create_wall_timer(
         std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(1.0 / 30.0)),
-        std::bind(&FaceDetectionNode::visualizationCallback, this));
+        std::bind(&FaceDetectionNode::visualizationCallback, this), vis_callback_group_);
     return CallbackReturn::SUCCESS;
 }
 

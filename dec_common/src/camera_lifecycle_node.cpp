@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <limits>
 #include <random>
 #include <stdexcept>
 #include <vector>
@@ -31,39 +32,56 @@
 namespace dec_common {
 
 CameraLifecycleNode::CameraLifecycleNode(const std::string& node_name, CameraNodeBehavior behavior)
-    : rclcpp_lifecycle::LifecycleNode(node_name), behavior_(std::move(behavior)) {}
+    : rclcpp_lifecycle::LifecycleNode(node_name),
+      behavior_(std::move(behavior)),
+      vis_callback_group_(create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive)) {}
 
 // ── Debug visualization ──────────────────────────────────────────────────────
 
 void CameraLifecycleNode::updateLatestFrame(const cv::Mat& frame) {
     std::lock_guard<std::mutex> lock(frame_mutex_);
-    latest_frame_ = frame.clone();
+    // Shallow (refcounted) assignment, not a deep copy: every producer of these
+    // frames assigns a freshly allocated Mat rather than writing into an
+    // existing buffer, so the pixels behind an old header stay valid for as
+    // long as a reader holds it.
+    latest_frame_ = frame;
     // Snapshot the depth frame under the same lock so visualizationCallback
     // (timer thread) never reads depth_image_ while a camera callback writes it.
-    latest_depth_ = depth_image_.empty() ? cv::Mat() : depth_image_.clone();
+    latest_depth_ = depth_image_;
 }
 
 void CameraLifecycleNode::visualizationCallback() {
-    cv::Mat color_frame, depth_vis;
-    bool have_color = false, have_depth_vis = false;
+    const bool display = verbose_mode_ && std::getenv("DISPLAY") != nullptr;
+
+    // Decide up front whether anything will consume the result: this timer runs
+    // at a fixed 30 Hz regardless of frame arrival, and the depth colormap below
+    // is the most expensive work either perception node does per tick.
+    const bool publishing = behavior_.always_publish_debug || display;
+    const size_t color_subs =
+        (publishing && debug_pub_) ? debug_pub_->get_subscription_count() : 0;
+    const size_t depth_subs =
+        (publishing && depth_debug_pub_) ? depth_debug_pub_->get_subscription_count() : 0;
+    const bool want_color = display || color_subs > 0;
+    const bool want_depth = display || depth_subs > 0;
+    if (!want_color && !want_depth) return;
+
+    cv::Mat color_frame, depth_raw;
     {
         std::lock_guard<std::mutex> lock(frame_mutex_);
-        if (!latest_frame_.empty()) {
-            color_frame = latest_frame_.clone();
-            have_color = true;
-        }
-        if (!latest_depth_.empty()) {
-            auto vis = makeDepthVis(latest_depth_);
-            if (vis) {
-                depth_vis = *vis;
-                have_depth_vis = true;
-            }
-        }
+        if (want_color) color_frame = latest_frame_;
+        if (want_depth) depth_raw = latest_depth_;
     }
 
-    if (!have_color && !have_depth_vis) return;
+    // Colormapping happens outside frame_mutex_ so it cannot block the camera
+    // callbacks that are trying to publish the next frame.
+    cv::Mat depth_vis;
+    if (!depth_raw.empty()) {
+        if (auto vis = makeDepthVis(depth_raw)) depth_vis = *vis;
+    }
 
-    const bool display = verbose_mode_ && std::getenv("DISPLAY") != nullptr;
+    const bool have_color = !color_frame.empty();
+    const bool have_depth_vis = !depth_vis.empty();
+    if (!have_color && !have_depth_vis) return;
 
     if (display) {
         try {
@@ -79,13 +97,13 @@ void CameraLifecycleNode::visualizationCallback() {
         }
     }
 
-    if (behavior_.always_publish_debug || display) {
+    if (publishing) {
         try {
-            if (have_color) {
+            if (have_color && color_subs > 0) {
                 auto msg = cv_bridge::CvImage(std_msgs::msg::Header(), "bgr8", color_frame).toImageMsg();
                 debug_pub_->publish(*msg);
             }
-            if (have_depth_vis) {
+            if (have_depth_vis && depth_subs > 0) {
                 auto msg = cv_bridge::CvImage(std_msgs::msg::Header(), "bgr8", depth_vis).toImageMsg();
                 depth_debug_pub_->publish(*msg);
             }
@@ -348,23 +366,27 @@ bool CameraLifecycleNode::checkCameraResolution(const cv::Mat& color_image, cons
 std::optional<cv::Mat> CameraLifecycleNode::makeDepthVis(const cv::Mat& depth) const {
     if (depth.empty()) return std::nullopt;
     try {
-        cv::Mat depth_f32;
-        depth.convertTo(depth_f32, CV_32F);
-        for (int r = 0; r < depth_f32.rows; ++r) {
-            float* row = depth_f32.ptr<float>(r);
-            for (int c = 0; c < depth_f32.cols; ++c) {
-                if (!std::isfinite(row[c])) row[c] = 0.0f;
-            }
+        // Only floating-point depth encodings can carry NaN/Inf; the integer
+        // ones (CV_16U millimetres from RealSense) are finite by construction,
+        // so they skip both the scrub and the intermediate float buffer.
+        cv::Mat scrubbed = depth;
+        if (depth.depth() == CV_32F || depth.depth() == CV_64F) {
+            depth.convertTo(scrubbed, CV_32F);
+            cv::patchNaNs(scrubbed, 0.0f);
+            cv::Mat non_finite;
+            cv::compare(cv::abs(scrubbed), std::numeric_limits<float>::max(), non_finite, cv::CMP_GT);
+            scrubbed.setTo(0.0f, non_finite);
         }
 
         double max_val = 0.0;
-        if (depth_f32.total() > 0) cv::minMaxLoc(depth_f32, nullptr, &max_val);
-        if (max_val > 1000.0) depth_f32 /= 1000.0;
-        if (depth_f32.total() > 0) cv::minMaxLoc(depth_f32, nullptr, &max_val);
+        if (scrubbed.total() > 0) cv::minMaxLoc(scrubbed, nullptr, &max_val);
         if (max_val <= 0.0) return std::nullopt;
 
+        // The old millimetre-to-metre divide is intentionally gone: it scaled
+        // the values and their maximum by the same factor, so it cancelled out
+        // of the normalization below and only cost a full extra image pass.
         cv::Mat norm;
-        depth_f32.convertTo(norm, CV_8U, 255.0 / max_val);
+        scrubbed.convertTo(norm, CV_8U, 255.0 / max_val);
         cv::Mat colored;
         cv::applyColorMap(norm, colored, cv::COLORMAP_JET);
         return colored;
@@ -396,6 +418,7 @@ std::optional<float> CameraLifecycleNode::getDepthInRegion(double centroid_x, do
     roi.convertTo(roi_f, CV_32F);
 
     std::vector<float> valid;
+    valid.reserve(roi_f.total());
     for (int r = 0; r < roi_f.rows; ++r) {
         const float* row = roi_f.ptr<float>(r);
         for (int c = 0; c < roi_f.cols; ++c) {
@@ -405,9 +428,15 @@ std::optional<float> CameraLifecycleNode::getDepthInRegion(double centroid_x, do
     if (valid.empty()) return std::nullopt;
 
     if (behavior_.median_depth) {
-        std::sort(valid.begin(), valid.end());
-        size_t n = valid.size();
-        float median = (n % 2 == 1) ? valid[n / 2] : (valid[n / 2 - 1] + valid[n / 2]) / 2.0f;
+        const size_t n = valid.size();
+        const auto mid = valid.begin() + n / 2;
+        std::nth_element(valid.begin(), mid, valid.end());
+        float median = *mid;
+        if (n % 2 == 0) {
+            // Even count: the lower central value is the largest element
+            // nth_element already partitioned below mid.
+            median = (*std::max_element(valid.begin(), mid) + median) / 2.0f;
+        }
         return median / 1000.0f;
     }
     double sum = 0.0;

@@ -147,7 +147,7 @@ PersonDetectionNode::CallbackReturn PersonDetectionNode::on_activate(const rclcp
     LifecycleNode::on_activate(state);
     vis_timer_ = create_wall_timer(
         std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(1.0 / 30.0)),
-        std::bind(&PersonDetectionNode::visualizationCallback, this));
+        std::bind(&PersonDetectionNode::visualizationCallback, this), vis_callback_group_);
     status_timer_ = create_wall_timer(
         std::chrono::seconds(10), std::bind(&PersonDetectionNode::statusCallback, this));
     return CallbackReturn::SUCCESS;
@@ -191,7 +191,10 @@ void PersonDetectionNode::processImages() {
         return;
     }
 
-    cv::Mat frame = color_image_.clone();
+    // Detection and drawing both treat the frame as read-only (drawTrackedObjects
+    // returns its own annotated copy), so this aliases color_image_ rather than
+    // deep-copying it every frame.
+    const cv::Mat& frame = color_image_;
     std::vector<Eigen::Vector4d> boxes;
     std::vector<float> scores;
     std::vector<int> class_ids;
@@ -202,6 +205,9 @@ void PersonDetectionNode::processImages() {
         std::vector<Eigen::Vector4d> filtered_boxes;
         std::vector<float> filtered_scores;
         std::vector<int> filtered_class_ids;
+        filtered_boxes.reserve(boxes.size());
+        filtered_scores.reserve(boxes.size());
+        filtered_class_ids.reserve(boxes.size());
         for (size_t i = 0; i < boxes.size(); ++i) {
             if (target_class_indices_.count(class_ids[i])) {
                 filtered_boxes.push_back(boxes[i]);
@@ -227,6 +233,7 @@ void PersonDetectionNode::processImages() {
 
 std::vector<TrackingDatum> PersonDetectionNode::prepareTrackingData(const byte_tracker::Detections& tracked) {
     std::vector<TrackingDatum> tracking_data;
+    tracking_data.reserve(tracked.xyxy.size());
     for (size_t i = 0; i < tracked.xyxy.size(); ++i) {
         double x1 = tracked.xyxy[i][0], y1 = tracked.xyxy[i][1];
         double x2 = tracked.xyxy[i][2], y2 = tracked.xyxy[i][3];

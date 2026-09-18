@@ -76,5 +76,5 @@ constexpr const char* kBanner = R"(
 }  // namespace
 
 int main(int argc, char** argv) {
-    return dec_common::runNode<Yolov11Node>(argc, argv, {kBanner, "person_detection"});
+    return dec_common::runNode<Yolov11Node>(argc, argv, {kBanner, "person_detection", 2});
 }

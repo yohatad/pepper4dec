@@ -160,6 +160,13 @@ protected:
     rclcpp::TimerBase::SharedPtr vis_timer_;
     rclcpp::TimerBase::SharedPtr timeout_timer_;
 
+    // Group for the visualization timer alone. On a multi-threaded executor it
+    // lets the debug colormap/imshow/publish work overlap the camera callbacks
+    // instead of blocking them; everything else stays in the node's default
+    // (mutually exclusive) group, which is what keeps color_image_/depth_image_
+    // and last_image_time_ free of races.
+    rclcpp::CallbackGroup::SharedPtr vis_callback_group_;
+
     // Synchronized (uncompressed) subscription pair.
     using ApproxSync = message_filters::sync_policies::ApproximateTime<
         sensor_msgs::msg::Image, sensor_msgs::msg::Image>;
