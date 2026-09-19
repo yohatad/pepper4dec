@@ -71,118 +71,22 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# Install launch files.
+# Install launch, config, rviz, the 2D map and the prior map: one plain
+# install(DIRECTORY), matching pepper_slam and FAST_LIO.
 #
-# NOT symlinked, unlike config/ and rviz/ below: `ros2 launch <pkg> <file>`
-# resolves its top-level file argument via ros2launch/api/api.py's
-# os.walk(package_share_directory) with the default followlinks=False, which
-# never descends into a SYMLINKED launch/ directory -- MEASURED: symlinking
-# this one broke `ros2 launch pepper_navigation pepper_nav2_fastloc.launch.py`
-# outright ("file ... was not found"), even though the file plainly existed
-# through the symlink. config/ and rviz/ are safe because they're only ever
-# reached by direct path construction inside a launch file's own Python code
-# (get_package_share_directory() + os.path.join()), never through that
-# top-level os.walk lookup.
+# With colcon --symlink-install this installs a REAL directory per folder with
+# one SYMLINK PER FILE back into src/, so edits are live without a rebuild
+# (a NEW file still needs one).
+#
+# Do NOT add FILES_MATCHING / PATTERN filters: --symlink-install cannot
+# symlink through them and silently falls back to COPYING (see
+# pepper_slam/CMakeLists.txt). That fallback is why this package once carried
+# hand-written install(CODE) symlink blocks. And do NOT symlink a whole
+# directory instead: `ros2 launch <pkg> <file>` finds its file with
+# os.walk(followlinks=False), which skips a symlinked launch/ directory.
 install(DIRECTORY
-  launch/
-  DESTINATION share/${PROJECT_NAME}/launch
-  FILES_MATCHING PATTERN "*.py"
-)
-
-# Install rviz configs. SYMLINKED -- same reasoning as config/ above.
-install(CODE "set(_rviz_src \"${CMAKE_CURRENT_SOURCE_DIR}/rviz\")")
-install(CODE "set(_rviz_pkg \"${PROJECT_NAME}\")")
-install(CODE [[
-  set(_rviz_dst "${CMAKE_INSTALL_PREFIX}/share/${_rviz_pkg}/rviz")
-  get_filename_component(_rviz_parent "${_rviz_dst}" DIRECTORY)
-  file(MAKE_DIRECTORY "${_rviz_parent}")
-  if(EXISTS "${_rviz_dst}" OR IS_SYMLINK "${_rviz_dst}")
-    file(REMOVE_RECURSE "${_rviz_dst}")
-  endif()
-  execute_process(
-    COMMAND ${CMAKE_COMMAND} -E create_symlink "${_rviz_src}" "${_rviz_dst}"
-    RESULT_VARIABLE _rviz_rc ERROR_QUIET)
-  if(_rviz_rc EQUAL 0)
-    message(STATUS "rviz/ symlinked -> ${_rviz_src} (edits are live)")
-  else()
-    message(STATUS "rviz/ symlink failed -- copying instead")
-    file(COPY "${_rviz_src}/" DESTINATION "${_rviz_dst}"
-      FILES_MATCHING PATTERN "*.rviz")
-  endif()
-]])
-
-# Install config files.
-#
-# SYMLINKED, not copied, so tuning is live: nav2 reads
-# share/<pkg>/config/<file>.yaml, and with a symlink that IS the source file.
-# Edit it -- by hand or from nav2_config's Save Config -- relaunch, done. No
-# colcon build in the loop.
-#
-# install(DIRECTORY) copies unconditionally, and colcon's --symlink-install does
-# NOT change that: it applies to Python packages and a few install types, not to
-# install(DIRECTORY). Without this, every save left nav2 reading the OLD values
-# with nothing to indicate why -- the config looked edited and had no effect.
-#
-# Falls back to a copy if the symlink cannot be created, so the package still
-# installs correctly and only the live-editing convenience is lost.
-#
-# Two install(CODE) blocks: the first carries the configure-time paths in, the
-# second is a bracket argument so the script needs no backslash escaping.
-# NOTE: no ';' anywhere inside these blocks -- CMake treats it as a list
-# separator and silently truncates the generated script mid-statement.
-install(CODE "set(_cfg_src \"${CMAKE_CURRENT_SOURCE_DIR}/config\")")
-install(CODE "set(_cfg_pkg \"${PROJECT_NAME}\")")
-install(CODE [[
-  set(_cfg_dst "${CMAKE_INSTALL_PREFIX}/share/${_cfg_pkg}/config")
-  get_filename_component(_cfg_parent "${_cfg_dst}" DIRECTORY)
-  file(MAKE_DIRECTORY "${_cfg_parent}")
-  if(EXISTS "${_cfg_dst}" OR IS_SYMLINK "${_cfg_dst}")
-    file(REMOVE_RECURSE "${_cfg_dst}")
-  endif()
-  execute_process(
-    COMMAND ${CMAKE_COMMAND} -E create_symlink "${_cfg_src}" "${_cfg_dst}"
-    RESULT_VARIABLE _cfg_rc ERROR_QUIET)
-  if(_cfg_rc EQUAL 0)
-    message(STATUS "config/ symlinked -> ${_cfg_src} (edits are live)")
-  else()
-    message(STATUS "config/ symlink failed -- copying instead")
-    file(COPY "${_cfg_src}/" DESTINATION "${_cfg_dst}"
-      FILES_MATCHING PATTERN "*.yaml")
-  endif()
-]])
-
-# Install 2D occupancy grid files (nav2 map_server format).
-install(DIRECTORY
-  map/
-  DESTINATION share/${PROJECT_NAME}/map
-  FILES_MATCHING
-  PATTERN "*.yaml"
-  PATTERN "*.pgm"
-)
-
-# Install the 3D map fastlio_lc_pgo's /pgo_batch_optimize writes
-# (map_pcd_path). It shares the levelled, floor-referenced frame with the
-# .pgm/.yaml 2D grid in map/, but lives in its own directory since it is a
-# different artifact (3D cloud vs. 2D nav grid). Nothing localizes against it
-# directly any more -- fastlio_localization reads the per-keyframe pose.json
-# and clouds below -- but it is still the PGO run's map product.
-install(DIRECTORY
-  pcd/
-  DESTINATION share/${PROJECT_NAME}/pcd
-  FILES_MATCHING
-  PATTERN "*.pcd"
-  # Levelled keyframe poses in KITTI 3x4, written beside the .pcd by the same
-  # PGO run. No longer a runtime input (that was lio_localization's global
-  # search); kept as the run's record, and as the plain-text counterpart to
-  # the pose.json below.
-  PATTERN "*_poses.txt"
-  # pose.json is the SAME mapping run in the format fastlio_localization reads:
-  # per-keyframe quaternion poses, against the KITTI 3x4 in *_poses.txt. It
-  # ships here so every artifact of the run stays visibly ONE set rather
-  # than files that happen to describe the same building. The 2735 keyframe
-  # CLOUDS it indexes are 75 MB and deliberately do NOT live in this package --
-  # they are in ros2_ws/bags/pcd, addressed by localization.map_scan_dir.
-  PATTERN "*.json"
+  launch config rviz map pcd
+  DESTINATION share/${PROJECT_NAME}
 )
 
 if(BUILD_TESTING)
