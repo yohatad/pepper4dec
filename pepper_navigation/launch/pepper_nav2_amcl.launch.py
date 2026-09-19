@@ -263,8 +263,9 @@ def generate_launch_description():
         parameters=[configured_params],
     )
 
-    # Strips Pepper's own body (< 0.8 m) so the collision monitor doesn't
-    # freeze on self-hits.
+    # Safety-layer input: drop the L2's own housing/bumper (< 0.22 m from the
+    # sensor). MEASURED: the old 0.8 m cut also hid everything below ~0.7 m
+    # inside both monitor zones, so legs never triggered a stop.
     points_safety_filter = Node(
         package='pepper_slam',
         executable='cloud_range_filter.py',
@@ -274,7 +275,7 @@ def generate_launch_description():
             'use_sim_time': use_sim_time,
             'input_topic': '/points',
             'output_topic': '/points_safety',
-            'min_range': 0.8,
+            'min_range': 0.22,
             'ror_min_neighbors': 0,   # ROR off (see cloud_range_filter notes)
         }],
     )

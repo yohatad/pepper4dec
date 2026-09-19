@@ -209,7 +209,9 @@ local_costmap:
           data_type: "PointCloud2"
           clearing: True
           marking: True
-          min_obstacle_height: 0.10
+          # 0.18, not 0.10: the ~3 deg body tilt put floor returns 0.16 m high
+          # at 3 m. Still below the L2's 0.20.
+          min_obstacle_height: 0.18
           max_obstacle_height: 1.70
           # D435i reliable depth ~0.3-3 m; below 0.3 m it is blind.
           raytrace_max_range: 3.0
@@ -298,13 +300,9 @@ behavior_server:
     wait:
       plugin: "nav2_behaviors/Wait"
 
-# ---------------------------------------------------------------------------
-# Collision Monitor -- safety layer in the cmd_vel chain, independent of the
-# costmap and planner: controller/behavior -> cmd_vel_raw -> monitor -> cmd_vel.
-# Reads /points_safety (L2 filtered to drop Pepper's own body < 0.8 m), NOT raw
-# /points, or the robot's own structure freezes it. min/max_height are in
-# base_footprint with the floor at z=0.
-# ---------------------------------------------------------------------------
+# Collision monitor: independent safety stop on the L2, between the controller
+# and the base (cmd_vel_raw -> monitor -> cmd_vel). Reads /points_safety, the
+# L2 with Pepper's own body filtered out, or the robot would stop itself.
 collision_monitor:
   ros__parameters:
     use_sim_time: False
@@ -341,7 +339,9 @@ collision_monitor:
     observation_sources: ["pointcloud"]
     pointcloud:
       type: "pointcloud"
-      topic: "/points_safety"   # L2 self-hit-filtered (see cloud_range_filter)
-      min_height: 0.10
+      topic: "/points_safety"   # L2 minus its own housing (points_safety_filter)
+      # 0.22, not 0.10: the L2 reads the floor up to ~0.20 m high within
+      # 0.6 m, which filled both zones. MEASURED: no false trigger at 0.22.
+      min_height: 0.22
       max_height: 1.80
       enabled: True

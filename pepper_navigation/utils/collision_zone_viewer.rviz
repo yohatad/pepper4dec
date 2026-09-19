@@ -1,0 +1,57 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+      Cell Size: 0.1
+      Plane Cell Count: 40
+      Reference Frame: base_footprint
+      Color: 160; 160; 164
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Enabled: true
+      Show Names: false
+      Marker Scale: 0.3
+    - Class: rviz_default_plugins/PointCloud2
+      Name: counted (what the monitor sees)
+      Enabled: true
+      Topic: {Value: /zone_view/counted, Reliability Policy: Reliable, Durability Policy: Volatile, Depth: 5}
+      Color Transformer: FlatColor
+      Color: 0; 255; 0
+      Size (m): 0.02
+      Style: Points
+      Size (Pixels): 5
+    - Class: rviz_default_plugins/PointCloud2
+      Name: cut_by_range (sensor min_range)
+      Enabled: true
+      Topic: {Value: /zone_view/cut_by_range, Reliability Policy: Reliable, Durability Policy: Volatile, Depth: 5}
+      Color Transformer: FlatColor
+      Color: 255; 0; 255
+      Style: Points
+      Size (Pixels): 4
+    - Class: rviz_default_plugins/PointCloud2
+      Name: cut_by_height (min/max_height)
+      Enabled: true
+      Topic: {Value: /zone_view/cut_by_height, Reliability Policy: Reliable, Durability Policy: Volatile, Depth: 5}
+      Color Transformer: FlatColor
+      Color: 120; 120; 120
+      Style: Points
+      Size (Pixels): 2
+    - Class: rviz_default_plugins/MarkerArray
+      Name: zones
+      Enabled: true
+      Topic: {Value: /zone_view/markers, Reliability Policy: Reliable, Durability Policy: Volatile, Depth: 5}
+  Global Options:
+    Fixed Frame: base_footprint
+    Background Color: 30; 30; 30
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 3.0
+      Focal Point: {X: 0.3, Y: 0.0, Z: 0.2}
+      Pitch: 0.6
+      Yaw: 3.4
