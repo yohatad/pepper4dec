@@ -67,6 +67,7 @@ install(PROGRAMS
   scripts/wait_for_map_then_start.py
   scripts/localization_recovery.py
   scripts/localization_watchdog.py
+  scripts/tf_nav_relay.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

@@ -247,7 +247,7 @@ def generate_launch_description():
         parameters=[configured_params],
         # Route velocity through the collision monitor: controller -> cmd_vel_raw
         # -> collision_monitor -> cmd_vel (what Pepper drives on).
-        remappings=[('cmd_vel', 'cmd_vel_raw')],
+        remappings=[('cmd_vel', 'cmd_vel_raw'), ('/tf', '/tf_nav')],
     )
     planner_server = Node(
         package='nav2_planner',
@@ -255,6 +255,7 @@ def generate_launch_description():
         name='planner_server',
         output='screen',
         parameters=[configured_params],
+        remappings=[('/tf', '/tf_nav')],
     )
     behavior_server = Node(
         package='nav2_behaviors',
@@ -262,7 +263,7 @@ def generate_launch_description():
         name='behavior_server',
         output='screen',
         parameters=[configured_params],
-        remappings=[('cmd_vel', 'cmd_vel_raw')],
+        remappings=[('cmd_vel', 'cmd_vel_raw'), ('/tf', '/tf_nav')],
     )
 
     # Safety-layer input: drop the L2's own housing/bumper (< 0.22 m from the
@@ -288,6 +289,7 @@ def generate_launch_description():
         name='collision_monitor',
         output='screen',
         parameters=[configured_params],
+        remappings=[('/tf', '/tf_nav')],
     )
 
     # VoxelLayer publishes nav2_msgs/VoxelGrid, which RViz cannot draw --
@@ -328,6 +330,7 @@ def generate_launch_description():
         name='bt_navigator',
         output='screen',
         parameters=[configured_params],
+        remappings=[('/tf', '/tf_nav')],
     )
     nav2_starter = Node(
         package='pepper_navigation',
@@ -403,6 +406,18 @@ def generate_launch_description():
         }],
     )
 
+    # Nav2 reads /tf_nav, a copy of /tf holding only the navigation edges:
+    # naoqi_driver's joint tree (~4150 transforms/s) saturated the costmap's
+    # TF thread until it stopped updating. See scripts/tf_nav_relay.py. Only
+    # nodes that LISTEN to TF are remapped -- never one that broadcasts it.
+    tf_nav_relay = Node(
+        package='pepper_navigation',
+        executable='tf_nav_relay.py',
+        name='tf_nav_relay',
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}],
+    )
+
     return LaunchDescription([
         declare_use_sim_time_cmd,
         declare_sensor_tf_cmd,
@@ -432,4 +447,6 @@ def generate_launch_description():
         nav2_starter,
         localization_recovery,
         localization_watchdog,
+        # Last: it reads use_sim_time, declared above.
+        tf_nav_relay,
     ])
