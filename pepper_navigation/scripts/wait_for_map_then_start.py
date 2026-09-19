@@ -19,6 +19,7 @@ lio_init -> base_footprint -- so the lookup_transform below still blocks until
 a real lock. Do not "simplify" it to a frame-exists check.
 """
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from nav2_msgs.srv import ManageLifecycleNodes
 import tf2_ros
@@ -81,10 +82,16 @@ def main():
     n = Waiter()
     try:
         rclpy.spin(n)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
+    except RuntimeError:
+        # On Ctrl+C rclpy can shut the context down mid-take and raise
+        # "Unable to convert call argument"; only a real error if still up.
+        if rclpy.ok():
+            raise
     finally:
         n.destroy_node()
+        rclpy.try_shutdown()
 
 
 if __name__ == '__main__':
