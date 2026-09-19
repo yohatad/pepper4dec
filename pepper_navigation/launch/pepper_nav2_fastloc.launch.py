@@ -21,7 +21,12 @@ Nodes started:
         Range-limited cloud feeding the collision monitor.
     nav2_collision_monitor/collision_monitor — the safety chain.
     nav2_costmap_2d/nav2_costmap_2d_markers x2 (local_voxel_markers,
-    global_voxel_markers) — voxel visualization for the 3D RViz view.
+    global_voxel_markers) — voxel visualization for the 3D RViz view. The
+        LOCAL grid covers the RealSense forward cone only: the local costmap
+        is a hybrid whose 3D layer is fed by the camera alone, with the L2 on
+        a separate 2D layer that publishes no voxels (see
+        nav2_params_fastloc.yaml). Sides and rear will look empty in the
+        local voxel view even when the L2 has marked them.
     pepper_navigation/wait_for_map_then_start.py — holds the lifecycle
         manager until /map is available.
     pepper_navigation/localization_recovery.py — /relocalize recovery.
@@ -300,8 +305,9 @@ def generate_launch_description():
         remappings=[('cmd_vel', 'cmd_vel_raw')],
     )
 
-    # Self-hit filter feeding the safety layer: strip Pepper's own body (< 0.8 m)
-    # from the raw L2 /points so the collision monitor doesn't freeze on it.
+    # Safety-layer input: drop the L2's own housing/bumper (< 0.22 m from the
+    # sensor). MEASURED: the old 0.8 m cut also hid everything below ~0.7 m
+    # inside both monitor zones, so legs never triggered a stop.
     points_safety_filter = Node(
         package='pepper_slam',
         executable='cloud_range_filter.py',
@@ -312,7 +318,7 @@ def generate_launch_description():
             'use_sim_time': use_sim_time,
             'input_topic': '/points',
             'output_topic': '/points_safety',
-            'min_range': 0.8,
+            'min_range': 0.22,
             'ror_min_neighbors': 0,   # ROR off (see cloud_range_filter notes)
         }],
     )
@@ -329,6 +335,11 @@ def generate_launch_description():
     # VoxelLayer publishes nav2_msgs/VoxelGrid, which RViz cannot draw --
     # these converters turn it into a MarkerArray it can. See the equivalent
     # block in pepper_nav2_amcl.launch.py.
+    #
+    # Both costmaps still run a VoxelLayer, so both converters have a producer,
+    # but they no longer show the same thing. The local one draws the
+    # RealSense cone only -- the L2 moved to a 2D ObstacleLayer beside it,
+    # which contributes to the costmap but not to any voxel grid.
     local_voxel_markers = Node(
         package='nav2_costmap_2d',
         executable='nav2_costmap_2d_markers',
