@@ -68,6 +68,11 @@ install(PROGRAMS
   scripts/localization_recovery.py
   scripts/localization_watchdog.py
   scripts/tf_nav_relay.py
+  # bag_test only: replay helpers (see launch/bag_test/README.md)
+  scripts/cloud_delay.py
+  scripts/costmap_explain.py
+  scripts/depth_to_cloud.py
+  scripts/points_to_image.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

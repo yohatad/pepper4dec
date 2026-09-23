@@ -1,14 +1,30 @@
-# Nav2 params for pepper_nav2_fastloc.launch.py: fastlio_localization publishes
-# map -> base_footprint directly, so no amcl and no map -> odom split.
+# TEST PROFILE: the L2 as a 3D VoxelLayer in the local costmap.
+#
+# Same as nav2_params_fastloc.yaml except the local costmap: one voxel layer
+# fed by the L2 (no RealSense layer), so the L2's noise can be judged against
+# the vertical-evidence rule (mark_threshold) instead of the 2D layer's
+# one-point marking. Everything else -- global costmap, controller, collision
+# monitor -- is unchanged.
+#
+#   ros2 launch pepper_navigation costmap_bag.launch.py \
+#       params_file:=<this file> localize:=false depth_images:=false
+#
+# Nav2 params for pepper_nav2_fastloc.launch.py. fastlio_localization publishes
+# map -> base_footprint directly: no amcl, no map -> odom split. Obstacle
+# sources are PointCloud2. keepout_filter is off (its mask targets a deleted
+# map; regenerate with utils/generate_keepout.py).
 
 bt_navigator:
   ros__parameters:
     use_sim_time: False
     global_frame: map
     robot_base_frame: base_footprint
-    # /localization/pose, not /Odometry: its twist is in base_footprint.
+    # /localization/pose, not /Odometry: /Odometry's twist is in the mast IMU's
+    # axes (~64 deg yaw off), this one is in base_footprint. Inert with the
+    # current BT (nothing in it reads odom), but correct if that changes.
     odom_topic: /localization/pose
-    # 20 Hz, the controller rate; faster buys nothing.
+    # 50 ms = 20 Hz, the controller rate. 500 Hz and 100 Hz were both exceeded
+    # on the loaded Jetson; faster than the controller buys nothing.
     bt_loop_duration: 50
     default_server_timeout: 20
     wait_for_service_timeout: 5
@@ -112,8 +128,9 @@ controller_server:
       trans_stopped_velocity: 0.1
       short_circuit_trajectory_evaluation: True
       stateful: True
-      # No Twirling: it penalises in-place rotation, which is how this base
-      # turns; PathAlign/GoalAlign give rotate-then-drive instead.
+      # No Twirling: it penalises ALL rotation, in-place included, which is
+      # how this base turns. Rotate-then-drive comes from PathAlign/GoalAlign
+      # with a short forward_point_distance instead.
       critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
       BaseObstacle.scale: 0.02
       PathAlign.scale: 20.0
@@ -131,84 +148,42 @@ local_costmap:
     ros__parameters:
       update_frequency: 15.0
       publish_frequency: 2.0
-      # map, not odom: no odom frame, and map is levelled, so the heights
-      # below are metres above the floor.
+      # map, not odom: no odom frame here, and map is smooth (2.1 cm median
+      # step) and levelled, so the heights below are metres above the floor.
       global_frame: map
       robot_base_frame: base_footprint
       use_sim_time: False
       rolling_window: true
-      
-      # Full span, not radius: 10 reaches 5 m.
       width: 10
       height: 10
       resolution: 0.05
       robot_radius: 0.20
-      # RealSense only: the L2 was too noisy here. It still feeds the global
-      # costmap and the collision monitor. A layer runs only if named here.
-      plugins: ["voxel_layer", "inflation_layer"]                  # in use
-      # plugins: ["l2_voxel", "inflation_layer"]                   # L2 only
-      # plugins: ["l2_voxel", "voxel_layer", "inflation_layer"]    # both: set voxel_layer combination_method 1
-      
+      plugins: ["l2_voxel", "inflation_layer"]
+
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 4.0
-        # Must exceed the 0.206 m inscribed radius; 0.25 leaves ~4 cm.
-        inflation_radius: 0.25
-      
-      voxel_layer:
-        plugin: "nav2_costmap_2d::VoxelLayer"
-        enabled: True
-        # RealSense, 3D: dense enough for per-voxel clearing and overhangs.
-        publish_voxel_map: True
-        # Grid 0.00 .. 1.60 m (z_voxels max is 16).
-        origin_z: 0.00
-        z_resolution: 0.10
-        z_voxels: 16
-        max_obstacle_height: 1.60   # = top of the grid
-        # Marks on MORE than 2 voxels in a column, i.e. >= 0.3 m of height.
-        mark_threshold: 2
-        unknown_threshold: 10       # must be < z_voxels to mean anything
-        # Overwrite: correct alone. With a layer before it, use 1 (Max).
-        combination_method: 0
-        # Split marking/clearing; clearing uncapped (3D rays free only what
-        # they cross).
-        observation_sources: realsense realsense_clear
-        
-        realsense:
-          # Needs the driver's pointcloud.enable:=true.
-          topic: /camera/depth/color/points
-          data_type: "PointCloud2"
-          marking: True
-          clearing: False
-          # 0.18, not 0.10: body tilt puts floor returns 0.16 m high at 3 m.
-          min_obstacle_height: 0.18
-          max_obstacle_height: 1.30     # top of the voxel grid
-          obstacle_max_range: 6.0       # the 10 m window reaches 5 m
-          obstacle_min_range: 0.1
-        
-        realsense_clear:
-          topic: /camera/depth/color/points
-          data_type: "PointCloud2"
-          marking: False
-          clearing: True
-          min_obstacle_height: 0.1     # no height filter
-          max_obstacle_height: 2.0
-          raytrace_max_range: 6.0
-          raytrace_min_range: 0.1
-          obstacle_max_range: 6.0
-          obstacle_min_range: 0.1
-      # Inert: not in plugins. Tested L2 settings, kept for reuse.
+        inflation_radius: 0.25      # must exceed the 0.206 m inscribed radius
+
+      # The L2 in a 3D VoxelLayer instead of the 2D ObstacleLayer, to see
+      # whether the vertical evidence rule cuts its noise. ONE source does both
+      # marking and clearing: with mark_threshold a flat floor cannot mark (it
+      # fills a single voxel), so floor returns can be kept for their rays.
       l2_voxel:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
         publish_voxel_map: True
-        # Grid 0.15 .. 1.75 m: starts at the source's height floor.
+        # Grid: origin_z .. origin_z + z_voxels * z_resolution = 0.15 .. 1.75 m.
+        # It starts at the source's height floor: nothing below 0.15 m is used
+        # at all, so no voxels are spent under it.
+        # z_voxels MAX IS 16 (nav2 packs a column into 32 bits).
         origin_z: 0.15
         z_resolution: 0.10
         z_voxels: 16
         max_obstacle_height: 1.75   # = top of the grid
-        # Marks on MORE than this many voxels: higher = less noise, fewer
-        # low obstacles.
+        # A cell marks only with MORE than 2 marked voxels, i.e. >= 0.3 m of
+        # stacked points. This is the knob under test: raise it for less noise
+        # and fewer low obstacles, lower it for the opposite.
         mark_threshold: 3
         unknown_threshold: 15
         combination_method: 0       # Overwrite: this layer runs alone here
@@ -218,12 +193,14 @@ local_costmap:
           data_type: "PointCloud2"
           marking: True
           clearing: True
-          # 0.15: everything below is discarded -- it neither marks nor
-          # clears, so floor returns and reflections are dropped.
+          # 0.15: EVERYTHING below this is discarded before the layer sees it
+          # -- it can neither mark nor clear. That drops the floor returns and
+          # the reflections under them; the cost is that clearing rays now come
+          # only from points above 0.15 m (walls, furniture, legs).
           min_obstacle_height: 0.15
           max_obstacle_height: 1.75
-          # 0.40: closer than this the L2 sees Pepper's own body. 3D from
-          # the lidar.
+          # 0.40: closer than this the L2 sees Pepper's own body (collision
+          # monitor covers that zone). Ranges are 3D from the lidar.
           obstacle_min_range: 0.40
           obstacle_max_range: 4.0
           raytrace_min_range: 0.15
@@ -272,7 +249,8 @@ global_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 4.0
-        # Above the 0.206 m inscribed radius, low enough for doorways.
+        # Above the 0.206 m inscribed radius, and low enough that the planner
+        # still fits through doorways.
         inflation_radius: 0.30
       always_send_full_costmap: True
 
@@ -294,7 +272,7 @@ behavior_server:
     robot_base_frame: base_footprint
     transform_tolerance: 0.1
     simulate_ahead_time: 2.0
-    # Matches FollowPath's limits so Spin can't outrun the controller.
+    # Matches FollowPath's rotation limits, so Spin can't outrun the controller.
     max_rotational_vel: 0.3
     min_rotational_vel: 0.15
     rotational_acc_lim: 0.8
@@ -306,14 +284,15 @@ behavior_server:
     wait:
       plugin: "nav2_behaviors/Wait"
 
-# Collision monitor: safety stop on the L2, between controller and base
-# (cmd_vel_raw -> monitor -> cmd_vel). /points_safety = L2 minus Pepper.
+# Collision monitor: independent safety stop on the L2, between the controller
+# and the base (cmd_vel_raw -> monitor -> cmd_vel). Reads /points_safety: the
+# L2 with Pepper's own body filtered out.
 collision_monitor:
   ros__parameters:
     use_sim_time: False
     base_frame_id: "base_footprint"
-    # map: there is no odom frame, and base_shift_correction only needs a
-    # continuous one.
+    # map: there is no odom frame, and with "odom" the monitor never started.
+    # base_shift_correction only needs a continuous frame; map is.
     odom_frame_id: "map"
     cmd_vel_in_topic: "cmd_vel_raw"
     cmd_vel_out_topic: "cmd_vel"
@@ -344,7 +323,8 @@ collision_monitor:
     pointcloud:
       type: "pointcloud"
       topic: "/points_safety"   # L2 minus its own housing (points_safety_filter)
-      # 0.22, not 0.10: the L2 reads the floor up to ~0.20 m high near in.
+      # 0.22, not 0.10: the L2 reads the floor up to ~0.20 m high within 0.6 m,
+      # which filled both zones. MEASURED: no false trigger at 0.22.
       min_height: 0.22
       max_height: 1.80
       enabled: True
