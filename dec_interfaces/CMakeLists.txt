@@ -29,13 +29,20 @@ if(BUILD_TESTING)
   # the following line skips the linter which checks for copyrights
   # comment the line when a copyright and license is added to all source files
   set(ament_cmake_copyright_FOUND TRUE)
-  # the following line skips cpplint (only works in a git repo); moot here
-  # anyway since this package has no C++ source of its own (msg/srv/action
-  # only) -- kept for consistency with every other package's lint_auto block.
-  set(ament_cmake_cpplint_FOUND TRUE)
-  # skip uncrustify: repo predates it and follows its own consistent style
-  set(ament_cmake_uncrustify_FOUND TRUE)
+  # ROS 2 style; see the C++ packages for why these two are set.
+  set(ament_cmake_uncrustify_ADDITIONAL_ARGS LANGUAGE CPP)
+  list(APPEND AMENT_LINT_AUTO_EXCLUDE ament_cmake_cpplint)
   ament_lint_auto_find_test_dependencies()
+
+  find_package(ament_cmake_cpplint REQUIRED)
+  ament_cpplint(FILTERS "-legal/copyright")
+
+  # Round-trip every generated type through the CDR serializer.
+  find_package(ament_cmake_gtest REQUIRED)
+  find_package(rclcpp REQUIRED)
+  ament_add_gtest(test_serialization test/test_serialization.cpp)
+  rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} rosidl_typesupport_cpp)
+  target_link_libraries(test_serialization "${cpp_typesupport_target}" rclcpp::rclcpp)
 endif()
 
 ament_package()
