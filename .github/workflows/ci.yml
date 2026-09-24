@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, cpp]
+    branches: [main, devel]
   pull_request:
-    branches: [main, cpp]
+    branches: [main, devel]
 
 jobs:
   build-and-lint:
@@ -16,23 +16,14 @@ jobs:
         with:
           path: src/pepper4dec
 
-      - name: Install system dependencies
+      # Build tools only. Every package dependency comes from rosdep in the
+      # next steps, so a dependency missing from a package.xml fails the build
+      # here instead of being installed by hand and hidden.
+      - name: Install build tools
         run: |
           apt-get update && apt-get install -y --no-install-recommends \
             build-essential cmake git \
-            python3-colcon-common-extensions python3-vcstool python3-rosdep python3-pip \
-            ros-humble-nav2-bringup ros-humble-nav2-map-server ros-humble-nav2-amcl \
-            ros-humble-nav2-controller ros-humble-nav2-planner ros-humble-nav2-behaviors \
-            ros-humble-nav2-bt-navigator ros-humble-nav2-lifecycle-manager ros-humble-nav2-costmap-2d \
-            ros-humble-slam-toolbox ros-humble-rtabmap-ros ros-humble-realsense2-camera \
-            ros-humble-message-filters ros-humble-cv-bridge \
-            ros-humble-image-transport ros-humble-nav2-msgs ros-humble-geometry-msgs \
-            ros-humble-sensor-msgs ros-humble-std-msgs ros-humble-std-srvs \
-            ros-humble-robot-state-publisher ros-humble-joint-state-publisher \
-            ros-humble-naoqi-libqi ros-humble-naoqi-libqicore \
-            ros-humble-pepper-meshes ros-humble-nao-meshes \
-            libyaml-cpp-dev libopencv-dev libomp-dev libeigen3-dev libboost-all-dev \
-            libgl1-mesa-glx libglib2.0-0 libudev-dev libusb-1.0-0
+            python3-colcon-common-extensions python3-vcstool python3-rosdep python3-pip
 
       - name: Clone sibling ROS2 dependencies
         run: |
@@ -48,16 +39,20 @@ jobs:
       - name: rosdep install
         run: |
           rosdep update
-          rosdep install --from-paths src --ignore-src -r -y
+          # No -r: an unresolvable key fails the job. The skipped keys are
+          # our own source repos, only needed at run time (exec_depend).
+          rosdep install --from-paths src --ignore-src -y \
+            --skip-keys "fast_lio point_lio l2lidar_node"
 
       - name: colcon build
         run: |
           . /opt/ros/humble/setup.sh
           colcon build --symlink-install
 
-      # Runs linters, gtest unit tests (kinematics, behavior utilities,
-      # ByteTracker), and launch tests (lifecycle, bag replay). The bag-replay
-      # test self-skips here: the ONNX model is git-ignored and absent in CI.
+      # Runs linters, gtest and pytest unit tests across the packages, and the
+      # person_detection bag-replay launch test. That test, and the pepper_slam
+      # frame-contract test, self-skip here: the ONNX model and the sibling LIO
+      # repos are absent in CI.
       - name: colcon test (lint + unit + launch tests)
         run: |
           . /opt/ros/humble/setup.sh
