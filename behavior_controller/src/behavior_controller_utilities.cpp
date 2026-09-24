@@ -21,6 +21,7 @@
 #include "behavior_controller/behavior_controller_interface.h"
 
 #include <yaml-cpp/yaml.h>
+
 #include <algorithm>
 #include <regex>
 #include <filesystem>
@@ -169,7 +170,6 @@ bool KnowledgeManager::loadFromPackage(const std::string & packagePath)
       RCLCPP_INFO(logger, "  - Utility phrases loaded: %zu", utilityPhrases.size());
     }
     return true;
-
   } catch (const std::exception & e) {
     RCLCPP_ERROR(logger, "Exception loading knowledge base: %s", e.what());
     return false;
@@ -589,7 +589,8 @@ bool validateEnvironmentKnowledgeBase(const std::string & filePath)
     if (!found) {
       RCLCPP_ERROR(
         logger,
-        "[KB Validation] tour_specification refers to location '%s' which is not defined in 'locations'",
+        "[KB Validation] tour_specification refers to location '%s' "
+        "which is not defined in 'locations'",
         id.c_str());
       valid = false;
     }
@@ -769,4 +770,4 @@ bool validateEnvironmentKnowledgeBase(const std::string & filePath)
   return valid;
 }
 
-} // namespace behavior_controller
+}  // namespace behavior_controller

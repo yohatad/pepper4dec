@@ -27,7 +27,7 @@
 
 namespace
 {
-const std::string kFixtureDir = TEST_FIXTURE_DIR;
+const char kFixtureDir[] = TEST_FIXTURE_DIR;
 }
 
 //=============================================================================
@@ -87,7 +87,7 @@ TEST(TextUtils, ContainsAnyWordUsesWordBoundaries) {
 TEST(KnowledgeBaseValidator, AcceptsValidFixture) {
   EXPECT_TRUE(
     behavior_controller::validateEnvironmentKnowledgeBase(
-      kFixtureDir + "/data/testEnvKB.yaml"));
+      std::string(kFixtureDir) + "/data/testEnvKB.yaml"));
 }
 
 TEST(KnowledgeBaseValidator, AcceptsShippedKnowledgeBases) {
@@ -95,28 +95,28 @@ TEST(KnowledgeBaseValidator, AcceptsShippedKnowledgeBases) {
   // catches accidental edits to the production data files.
   EXPECT_TRUE(
     behavior_controller::validateEnvironmentKnowledgeBase(
-      kFixtureDir + "/../../data/decEnvironmentKnowledgeBase.yaml"));
+      std::string(kFixtureDir) + "/../../data/decEnvironmentKnowledgeBase.yaml"));
   EXPECT_TRUE(
     behavior_controller::validateEnvironmentKnowledgeBase(
-      kFixtureDir + "/../../data/labEnvironmentKnowledgeBase.yaml"));
+      std::string(kFixtureDir) + "/../../data/labEnvironmentKnowledgeBase.yaml"));
 }
 
 TEST(KnowledgeBaseValidator, RejectsTourReferencingUndefinedLocation) {
   EXPECT_FALSE(
     behavior_controller::validateEnvironmentKnowledgeBase(
-      kFixtureDir + "/data/invalid_tour_ref.yaml"));
+      std::string(kFixtureDir) + "/data/invalid_tour_ref.yaml"));
 }
 
 TEST(KnowledgeBaseValidator, RejectsThetaOutOfRange) {
   EXPECT_FALSE(
     behavior_controller::validateEnvironmentKnowledgeBase(
-      kFixtureDir + "/data/theta_out_of_range.yaml"));
+      std::string(kFixtureDir) + "/data/theta_out_of_range.yaml"));
 }
 
 TEST(KnowledgeBaseValidator, RejectsMissingFile) {
   EXPECT_FALSE(
     behavior_controller::validateEnvironmentKnowledgeBase(
-      kFixtureDir + "/data/does_not_exist.yaml"));
+      std::string(kFixtureDir) + "/data/does_not_exist.yaml"));
 }
 
 //=============================================================================
@@ -138,7 +138,7 @@ TEST(Singletons, KnowledgeManagerThrowsBeforeLoad) {
 
 TEST(Singletons, ConfigManagerLoadsGoodConfig) {
   auto & config = ConfigManager::instance();
-  ASSERT_TRUE(config.loadFromFile(kFixtureDir + "/config_good.yaml"));
+  ASSERT_TRUE(config.loadFromFile(std::string(kFixtureDir) + "/config_good.yaml"));
   EXPECT_EQ(config.getScenarioSpecification(), "test_tour");
   EXPECT_EQ(config.getCultureKnowledgeBasePath(), "testCultureKB.yaml");
   EXPECT_EQ(config.getEnvironmentKnowledgeBasePath(), "testEnvKB.yaml");
@@ -147,7 +147,7 @@ TEST(Singletons, ConfigManagerLoadsGoodConfig) {
 
 TEST(Singletons, ConfigManagerAppliesDefaultsForMissingKeys) {
   auto & config = ConfigManager::instance();
-  ASSERT_TRUE(config.loadFromFile(kFixtureDir + "/config_minimal.yaml"));
+  ASSERT_TRUE(config.loadFromFile(std::string(kFixtureDir) + "/config_minimal.yaml"));
   EXPECT_TRUE(config.isVerbose());
   // Absent keys fall back to the documented defaults, replacing whatever
   // the previous load set.
@@ -161,7 +161,7 @@ TEST(Singletons, ConfigManagerAppliesDefaultsForMissingKeys) {
 TEST(Singletons, ConfigManagerRejectsMissingFile) {
   EXPECT_FALSE(
     ConfigManager::instance().loadFromFile(
-      kFixtureDir + "/no_such_config.yaml"));
+      std::string(kFixtureDir) + "/no_such_config.yaml"));
 }
 
 TEST(Singletons, KnowledgeManagerLoadsFixturePackage) {
@@ -169,7 +169,7 @@ TEST(Singletons, KnowledgeManagerLoadsFixturePackage) {
   // (loadFromPackage appends /data/<filename> itself).
   ASSERT_TRUE(
     ConfigManager::instance().loadFromFile(
-      kFixtureDir + "/config_good.yaml"));
+      std::string(kFixtureDir) + "/config_good.yaml"));
   ASSERT_TRUE(KnowledgeManager::instance().loadFromPackage(kFixtureDir));
 
   auto & km = KnowledgeManager::instance();

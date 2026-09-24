@@ -61,13 +61,15 @@ if(BUILD_TESTING)
   # the following line skips the linter which checks for copyrights
   # comment the line when a copyright and license is added to all source files
   set(ament_cmake_copyright_FOUND TRUE)
-  # the following line skips cpplint (only works in a git repo)
-  # comment the line when this package is in a git repo and when
-  # a copyright and license is added to all source files
-  set(ament_cmake_cpplint_FOUND TRUE)
-  # skip uncrustify: repo predates it and follows its own consistent style
-  set(ament_cmake_uncrustify_FOUND TRUE)
+  # ROS 2 style; the .h headers are C++, which uncrustify must be told.
+  set(ament_cmake_uncrustify_ADDITIONAL_ARGS LANGUAGE CPP)
+  # cpplint runs manually below, without its copyright rule: license
+  # headers are kept out of the source files on purpose (see LICENSE).
+  list(APPEND AMENT_LINT_AUTO_EXCLUDE ament_cmake_cpplint)
   ament_lint_auto_find_test_dependencies()
+
+  find_package(ament_cmake_cpplint REQUIRED)
+  ament_cpplint(FILTERS "-legal/copyright")
 
   find_package(ament_cmake_gtest REQUIRED)
   # The motion helpers are pure math with no ROS dependencies, so the test

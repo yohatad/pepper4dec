@@ -60,10 +60,15 @@ if(BUILD_TESTING)
   # headers are C++; left unset, cppcheck parses .h files as C
   set(ament_cmake_cppcheck_LANGUAGE "c++")
   set(ament_cmake_copyright_FOUND TRUE)
-  set(ament_cmake_cpplint_FOUND TRUE)
-  # skip uncrustify: repo predates it and follows its own consistent style
-  set(ament_cmake_uncrustify_FOUND TRUE)
+  # ROS 2 style; the .h headers are C++, which uncrustify must be told.
+  set(ament_cmake_uncrustify_ADDITIONAL_ARGS LANGUAGE CPP)
+  # cpplint runs manually below, without its copyright rule: license
+  # headers are kept out of the source files on purpose (see LICENSE).
+  list(APPEND AMENT_LINT_AUTO_EXCLUDE ament_cmake_cpplint)
   ament_lint_auto_find_test_dependencies()
+
+  find_package(ament_cmake_cpplint REQUIRED)
+  ament_cpplint(FILTERS "-legal/copyright")
 
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_byte_tracker test/test_byte_tracker.cpp)

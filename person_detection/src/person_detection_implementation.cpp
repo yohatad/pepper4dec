@@ -18,11 +18,9 @@
 
 #include "person_detection/person_detection_interface.h"
 
-#include <ament_index_cpp/get_package_share_directory.hpp>
 #include <cv_bridge/cv_bridge.h>
 #include <dec_common/param_loader.h>
 #include <yaml-cpp/yaml.h>
-
 #include <rmw/qos_profiles.h>
 
 #include <algorithm>
@@ -32,6 +30,8 @@
 #include <filesystem>
 #include <random>
 #include <thread>
+
+#include <ament_index_cpp/get_package_share_directory.hpp>
 
 const std::array<std::string, 80> COCO_CLASSES = {
   "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck",
@@ -468,7 +468,8 @@ bool Yolov11Node::initModel()
       output_names_.emplace_back(session_->GetOutputNameAllocated(i, allocator).get());
     }
 
-    auto input_shape = session_->GetInputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();      // [N, C, H, W]
+    // [N, C, H, W]
+    auto input_shape = session_->GetInputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
     input_height_ = input_shape[2];
     input_width_ = input_shape[3];
 
@@ -476,7 +477,8 @@ bool Yolov11Node::initModel()
       RCLCPP_INFO(
         get_logger(), "%s: CUDAExecutionProvider %s",
         node_name_.c_str(),
-        cuda_enabled ? "is active — running on GPU for faster inference" : "not available — running on CPU");
+        cuda_enabled ? "is active — running on GPU for faster inference" :
+        "not available — running on CPU");
     }
 
     // Warmup run to load model weights into memory.

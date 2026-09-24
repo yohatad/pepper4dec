@@ -28,16 +28,8 @@
 
 #pragma once
 
-#include <rclcpp/rclcpp.hpp>
-#include <rclcpp_action/rclcpp_action.hpp>
-#include <rclcpp_lifecycle/lifecycle_node.hpp>
-
-#include <sensor_msgs/msg/joint_state.hpp>
-#include <nav_msgs/msg/odometry.hpp>
-#include <geometry_msgs/msg/point.hpp>
-#include <visualization_msgs/msg/marker.hpp>
-#include <naoqi_bridge_msgs/msg/joint_angles_trajectory.hpp>
 #include <dec_interfaces/action/gesture.hpp>
+#include "gesture_execution/gesture_pepper_kinematics.h"
 
 #include <yaml-cpp/yaml.h>
 
@@ -47,8 +39,16 @@
 #include <unordered_set>
 #include <mutex>
 #include <atomic>
+#include <memory>
 
-#include "gesture_execution/gesture_pepper_kinematics.h"
+#include <rclcpp/rclcpp.hpp>
+#include <rclcpp_action/rclcpp_action.hpp>
+#include <rclcpp_lifecycle/lifecycle_node.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
+#include <nav_msgs/msg/odometry.hpp>
+#include <geometry_msgs/msg/point.hpp>
+#include <visualization_msgs/msg/marker.hpp>
+#include <naoqi_bridge_msgs/msg/joint_angles_trajectory.hpp>
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 constexpr int64_t MIN_GESTURE_DURATION_MS = 1000;

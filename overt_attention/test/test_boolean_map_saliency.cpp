@@ -20,7 +20,6 @@
 #include <gtest/gtest.h>
 
 #include <opencv2/opencv.hpp>
-
 #include "overt_attention/overt_attention_interface.h"
 
 namespace

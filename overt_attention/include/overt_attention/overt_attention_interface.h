@@ -20,29 +20,8 @@
 
 #pragma once
 
-// ROS includes
-#include <rclcpp/rclcpp.hpp>
-#include <rclcpp_lifecycle/lifecycle_node.hpp>
-#include <rclcpp_lifecycle/lifecycle_publisher.hpp>
-#include <ament_index_cpp/get_package_share_directory.hpp>
-#include <builtin_interfaces/msg/time.hpp>
-
-// Message includes
-#include <sensor_msgs/msg/image.hpp>
-#include <sensor_msgs/msg/compressed_image.hpp>
-#include <sensor_msgs/msg/camera_info.hpp>
-#include <sensor_msgs/msg/joint_state.hpp>
-#include <std_msgs/msg/float32_multi_array.hpp>
-#include <geometry_msgs/msg/vector3.hpp>
-#include <geometry_msgs/msg/point.hpp>
-#include <std_srvs/srv/set_bool.hpp>
-#include <naoqi_bridge_msgs/msg/joint_angles_with_speed.hpp>
-#include <dec_interfaces/msg/face_detection.hpp>
-
 // cv_bridge / OpenCV
 #include <cv_bridge/cv_bridge.h>
-#include <opencv2/opencv.hpp>
-
 // YAML
 #include <yaml-cpp/yaml.h>
 
@@ -56,6 +35,27 @@
 #include <algorithm>
 #include <functional>
 #include <stdexcept>
+#include <memory>
+#include <utility>
+
+// ROS includes
+#include <rclcpp/rclcpp.hpp>
+#include <rclcpp_lifecycle/lifecycle_node.hpp>
+#include <rclcpp_lifecycle/lifecycle_publisher.hpp>
+#include <ament_index_cpp/get_package_share_directory.hpp>
+#include <builtin_interfaces/msg/time.hpp>
+// Message includes
+#include <sensor_msgs/msg/image.hpp>
+#include <sensor_msgs/msg/compressed_image.hpp>
+#include <sensor_msgs/msg/camera_info.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
+#include <std_msgs/msg/float32_multi_array.hpp>
+#include <geometry_msgs/msg/vector3.hpp>
+#include <geometry_msgs/msg/point.hpp>
+#include <std_srvs/srv/set_bool.hpp>
+#include <naoqi_bridge_msgs/msg/joint_angles_with_speed.hpp>
+#include <dec_interfaces/msg/face_detection.hpp>
+#include <opencv2/opencv.hpp>
 
 //=============================================================================
 // Shared configuration / helpers

@@ -24,16 +24,9 @@
 
 #pragma once
 
-#include <rclcpp/rclcpp.hpp>
-#include <rclcpp_lifecycle/lifecycle_node.hpp>
-
-#include <sensor_msgs/msg/image.hpp>
-#include <sensor_msgs/msg/compressed_image.hpp>
-#include <geometry_msgs/msg/point.hpp>
 #include <dec_interfaces/msg/person_detection.hpp>
 
 #include <onnxruntime_cxx_api.h>
-#include <opencv2/opencv.hpp>
 
 #include <array>
 #include <memory>
@@ -43,6 +36,12 @@
 #include <unordered_map>
 #include <vector>
 
+#include <rclcpp/rclcpp.hpp>
+#include <rclcpp_lifecycle/lifecycle_node.hpp>
+#include <sensor_msgs/msg/image.hpp>
+#include <sensor_msgs/msg/compressed_image.hpp>
+#include <geometry_msgs/msg/point.hpp>
+#include <opencv2/opencv.hpp>
 #include "dec_common/byte_tracker.h"
 #include "dec_common/camera_lifecycle_node.h"
 
@@ -150,7 +149,8 @@ protected:
 
   PersonDetectionConfig config_;
 
-  rclcpp_lifecycle::LifecyclePublisher<dec_interfaces::msg::PersonDetection>::SharedPtr pub_objects_;
+  rclcpp_lifecycle::LifecyclePublisher<dec_interfaces::msg::PersonDetection>::SharedPtr
+    pub_objects_;
 
   std::set<int> target_class_indices_;
   std::unordered_map<int, cv::Scalar> object_colors_;

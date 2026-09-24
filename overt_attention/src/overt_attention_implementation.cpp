@@ -204,7 +204,8 @@ void OvertAttentionNode::handleSetEnabled(
         moveHeadToDefault();
         RCLCPP_INFO(
           get_logger(),
-          "Attention system DISABLED - moving to default position (yaw=%.1f\xc2\xb0, pitch=%.1f\xc2\xb0)",
+          "Attention system DISABLED - moving to default position "
+          "(yaw=%.1f\xc2\xb0, pitch=%.1f\xc2\xb0)",
           default_yaw_ * 180.0 / M_PI, default_pitch_ * 180.0 / M_PI);
         response->success = true;
         response->message =
@@ -216,7 +217,8 @@ void OvertAttentionNode::handleSetEnabled(
         double current_pitch = head_pitch_.value_or(0.0);
         RCLCPP_INFO(
           get_logger(),
-          "Attention system DISABLED - holding current position (yaw=%.1f\xc2\xb0, pitch=%.1f\xc2\xb0)",
+          "Attention system DISABLED - holding current position "
+          "(yaw=%.1f\xc2\xb0, pitch=%.1f\xc2\xb0)",
           current_yaw * 180.0 / M_PI, current_pitch * 180.0 / M_PI);
         response->success = true;
         response->message =

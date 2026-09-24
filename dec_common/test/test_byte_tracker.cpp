@@ -16,8 +16,8 @@
  */
 
 #include <gtest/gtest.h>
-
 #include <Eigen/Dense>
+
 #include <algorithm>
 #include <utility>
 #include <vector>

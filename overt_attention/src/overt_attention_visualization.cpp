@@ -15,6 +15,7 @@
  */
 
 #include "overt_attention/overt_attention_interface.h"
+
 #include <iomanip>
 #include <limits>
 #include <sstream>

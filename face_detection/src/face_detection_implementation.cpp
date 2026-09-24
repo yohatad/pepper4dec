@@ -20,7 +20,6 @@
 
 #include "face_detection/face_detection_interface.h"
 
-#include <ament_index_cpp/get_package_share_directory.hpp>
 #include <cv_bridge/cv_bridge.h>
 #include <dec_common/param_loader.h>
 #include <yaml-cpp/yaml.h>
@@ -33,6 +32,8 @@
 #include <random>
 #include <set>
 #include <thread>
+
+#include <ament_index_cpp/get_package_share_directory.hpp>
 
 FaceDetectionConfig loadConfiguration(rclcpp_lifecycle::LifecycleNode * node)
 {

@@ -28,17 +28,7 @@
 
 #pragma once
 
-#include <rclcpp/rclcpp.hpp>
-#include <rclcpp_action/rclcpp_action.hpp>
-#include <rclcpp_lifecycle/lifecycle_node.hpp>
-
-#include <geometry_msgs/msg/twist.hpp>
-#include <naoqi_bridge_msgs/msg/joint_angles_with_speed.hpp>
-#include <naoqi_bridge_msgs/action/run_led.hpp>
-#include <sensor_msgs/msg/joint_state.hpp>
 #include <dec_interfaces/action/animate_behavior.hpp>
-#include <std_srvs/srv/trigger.hpp>
-#include <std_msgs/msg/color_rgba.hpp>
 
 #include <string>
 #include <vector>
@@ -47,6 +37,17 @@
 #include <mutex>
 #include <condition_variable>
 #include <functional>
+#include <memory>
+
+#include <rclcpp/rclcpp.hpp>
+#include <rclcpp_action/rclcpp_action.hpp>
+#include <rclcpp_lifecycle/lifecycle_node.hpp>
+#include <geometry_msgs/msg/twist.hpp>
+#include <naoqi_bridge_msgs/msg/joint_angles_with_speed.hpp>
+#include <naoqi_bridge_msgs/action/run_led.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
+#include <std_srvs/srv/trigger.hpp>
+#include <std_msgs/msg/color_rgba.hpp>
 
 /**
  * @brief Per-limb joint definition: names + soft-limits + home pose + per-joint

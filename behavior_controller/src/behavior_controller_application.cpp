@@ -74,12 +74,13 @@
 
 #include "behavior_controller/behavior_controller_interface.h"
 
+#include <behaviortree_cpp/bt_factory.h>
+#include <behaviortree_cpp/loggers/groot2_publisher.h>
+
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include "dec_common/node_runner.h"
-#include <behaviortree_cpp/bt_factory.h>
-#include <behaviortree_cpp/loggers/groot2_publisher.h>
 
 // Forward declaration (defined in behavior_controller_implementation.cpp)
 namespace behavior_controller

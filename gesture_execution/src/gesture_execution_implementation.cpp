@@ -20,13 +20,14 @@
 
 #include "gesture_execution/gesture_execution_interface.h"
 
-#include <ament_index_cpp/get_package_share_directory.hpp>
-
 #include <algorithm>
 #include <cctype>
+#include <cinttypes>
 #include <chrono>
 #include <cmath>
 #include <thread>
+
+#include <ament_index_cpp/get_package_share_directory.hpp>
 
 namespace
 {
@@ -354,8 +355,9 @@ void GestureExecutionNode::execute(const std::shared_ptr<GoalHandleGesture> goal
 
   if (verbose_mode_) {
     RCLCPP_INFO(
-      get_logger(), "Executing gesture — type='%s', name='%s', duration=%ldms",
-      gesture_type.c_str(), goal->gesture_name.c_str(), static_cast<long>(goal->gesture_duration));
+      get_logger(), "Executing gesture — type='%s', name='%s', duration=%" PRId64 "ms",
+      gesture_type.c_str(), goal->gesture_name.c_str(),
+      static_cast<int64_t>(goal->gesture_duration));
   }
 
   std::thread feedback_thread(&GestureExecutionNode::publishElapsedFeedback, this, goal_handle,

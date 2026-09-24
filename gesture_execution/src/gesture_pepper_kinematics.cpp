@@ -32,11 +32,14 @@ namespace
 constexpr double kShoulderOffsetXMm = -57.0;      // l_1
 constexpr double kShoulderOffsetYMagMm = 149.74;  // l_2 magnitude; sign flips per arm
 constexpr double kShoulderOffsetZMm = 86.82;      // l_3
-constexpr double kUpperArmLengthMm = 181.2;       // l_4 (getElbowPosition/getArmShoulderAngles); == d_3 elsewhere
+// l_4 (getElbowPosition/getArmShoulderAngles); == d_3 elsewhere
+constexpr double kUpperArmLengthMm = 181.2;
 constexpr double kElbowOffsetYMagMm = 15.0;       // l_5 magnitude; sign flips per arm
 constexpr double kElbowOffsetXM = 0.13;           // l_6 / z_3 — meters, see note above
-constexpr double kForearmLengthMm = 150.0;        // l_4 (getArmElbowRollAngle) / d_5 (getArmElbowYawAngle)
-constexpr double kWristOffsetYMagMm = 15.0;       // a_3 magnitude; sign flips per arm (opposite of l_5's)
+// l_4 (getArmElbowRollAngle) / d_5 (getArmElbowYawAngle)
+constexpr double kForearmLengthMm = 150.0;
+// a_3 magnitude; sign flips per arm (opposite of l_5's)
+constexpr double kWristOffsetYMagMm = 15.0;
 constexpr double kElbowRollAxisAngleDeg = 9.0;    // alpha
 
 // Pepper head kinematic parameters (mm), DH-style offsets.

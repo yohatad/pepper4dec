@@ -21,11 +21,11 @@
 
 #pragma once
 
-#include <rclcpp/rclcpp.hpp>
-
 #include <functional>
 #include <memory>
 #include <vector>
+
+#include <rclcpp/rclcpp.hpp>
 
 namespace dec_common
 {

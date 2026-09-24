@@ -27,17 +27,7 @@
 
 #pragma once
 
-#include <rclcpp/rclcpp.hpp>
-#include <rclcpp_lifecycle/lifecycle_node.hpp>
-
-#include <sensor_msgs/msg/image.hpp>
-#include <std_msgs/msg/string.hpp>
-#include <geometry_msgs/msg/point.hpp>
-#include <dec_interfaces/msg/face_detection.hpp>
-#include <dec_interfaces/msg/person_detection.hpp>
-
 #include <onnxruntime_cxx_api.h>
-#include <opencv2/opencv.hpp>
 
 #include <atomic>
 #include <chrono>
@@ -51,7 +41,17 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 #include <vector>
+
+#include <rclcpp/rclcpp.hpp>
+#include <rclcpp_lifecycle/lifecycle_node.hpp>
+#include <sensor_msgs/msg/image.hpp>
+#include <std_msgs/msg/string.hpp>
+#include <geometry_msgs/msg/point.hpp>
+#include <dec_interfaces/msg/face_detection.hpp>
+#include <dec_interfaces/msg/person_detection.hpp>
+#include <opencv2/opencv.hpp>
 
 /** @brief Tunable settings for the age/gender node (see the YAML config). */
 struct AgeGenderDetectionConfig

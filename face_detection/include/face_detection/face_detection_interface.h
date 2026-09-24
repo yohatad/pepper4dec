@@ -26,25 +26,25 @@
 
 #pragma once
 
-#include <rclcpp/rclcpp.hpp>
-#include <rclcpp_lifecycle/lifecycle_node.hpp>
-
-#include <sensor_msgs/msg/image.hpp>
-#include <sensor_msgs/msg/compressed_image.hpp>
-#include <geometry_msgs/msg/point.hpp>
 #include <dec_interfaces/msg/face_detection.hpp>
-#include <dec_interfaces/msg/person_detection.hpp>
 
 #include <onnxruntime_cxx_api.h>
-#include <opencv2/opencv.hpp>
 
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
+#include <rclcpp/rclcpp.hpp>
+#include <rclcpp_lifecycle/lifecycle_node.hpp>
+#include <sensor_msgs/msg/image.hpp>
+#include <sensor_msgs/msg/compressed_image.hpp>
+#include <geometry_msgs/msg/point.hpp>
+#include <dec_interfaces/msg/person_detection.hpp>
+#include <opencv2/opencv.hpp>
 #include "dec_common/byte_tracker.h"
 #include "dec_common/camera_lifecycle_node.h"
 

@@ -18,12 +18,12 @@
  */
 
 #include "behavior_controller/behavior_controller_interface.h"
+
 #include <behaviortree_ros2/bt_service_node.hpp>
 #include <behaviortree_ros2/bt_action_node.hpp>
 #include <behaviortree_ros2/ros_node_params.hpp>
 #include <behaviortree_ros2/plugins.hpp>
 
-using namespace BT;
 
 //=============================================================================
 // AnimateBehaviorNode
@@ -1799,7 +1799,9 @@ BT::Tree initializeTree(
   if (ConfigManager::instance().isVerbose()) {
     RCLCPP_INFO(
       logger,
-      "[initializeTree] Registered nodes: AnimateBehavior, StopAnimateBehavior, SetOvertAttention, SetSpeechListening, Gesture, Navigate, SpeechRecognition, ConversationManager, SpeechWithFeedback, TTS, CheckFaceDetected, ListenForSpeech");
+      "[initializeTree] Registered nodes: AnimateBehavior, StopAnimateBehavior, "
+      "SetOvertAttention, SetSpeechListening, Gesture, Navigate, SpeechRecognition, "
+      "ConversationManager, SpeechWithFeedback, TTS, CheckFaceDetected, ListenForSpeech");
     RCLCPP_INFO(logger, "[initializeTree] Loading tree: %s", xmlPath.c_str());
   }
 
@@ -1812,4 +1814,4 @@ BT::Tree initializeTree(
   return tree;
 }
 
-} // namespace behavior_controller
+}  // namespace behavior_controller

@@ -19,7 +19,6 @@
 
 #include "face_detection/age_gender_detection_interface.h"
 
-#include <ament_index_cpp/get_package_share_directory.hpp>
 #include <cv_bridge/cv_bridge.h>
 #include <dec_common/param_loader.h>
 
@@ -28,6 +27,8 @@
 #include <cstdio>
 #include <cstring>
 #include <thread>
+
+#include <ament_index_cpp/get_package_share_directory.hpp>
 
 namespace
 {
@@ -562,14 +563,16 @@ void AgeGenderDetectionNode::faceCallback(
         mutual_gaze);
       recent_faces_[label_id] = face_bbox;
 
-      bool depth_ok = depth <= 0.0 || depth < config_.max_depth_m;        // unknown depth (e.g. Pepper RGB-only) is allowed
+      // unknown depth (e.g. Pepper RGB-only) is allowed
+      bool depth_ok = depth <= 0.0 || depth < config_.max_depth_m;
       if (mutual_gaze && depth_ok && known_label_ids_.count(label_id)) {
         auto profile_it = person_profiles_.find(label_id);
         if (profile_it != person_profiles_.end() &&
           shouldReEstimate(profile_it->second, std::chrono::steady_clock::now()))
         {
           RCLCPP_INFO(
-            get_logger(), "%s: mutual gaze detected for %s at %.2fm (< %.2fm), triggering estimation",
+            get_logger(), "%s: mutual gaze detected for %s at %.2fm (< %.2fm), "
+            "triggering estimation",
             get_name(), label_id.c_str(), depth, config_.max_depth_m);
           ids_to_estimate.push_back(label_id);
         }
@@ -800,7 +803,10 @@ void AgeGenderDetectionNode::debugStatus()
   }
 
   RCLCPP_INFO(
-    get_logger(), "%s: [DEBUG] Image: %s (age=%.1fs), Persons: %zu, Faces: %zu (%zu gaze, %zu <%.2fm), Known IDs: %zu",
-    get_name(), has_image ? "YES" : "NO", image_age, num_persons, num_faces, gaze_count, gaze_depth_ok,
+    get_logger(),
+    "%s: [DEBUG] Image: %s (age=%.1fs), Persons: %zu, Faces: %zu "
+    "(%zu gaze, %zu <%.2fm), Known IDs: %zu",
+    get_name(), has_image ? "YES" : "NO", image_age, num_persons, num_faces, gaze_count,
+    gaze_depth_ok,
     config_.max_depth_m, num_known);
 }

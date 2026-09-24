@@ -21,15 +21,15 @@
  * within the DEC project.
  */
 
-#include <rclcpp/rclcpp.hpp>
-#include <visualization_msgs/msg/marker.hpp>
-#include <geometry_msgs/msg/point.hpp>
-
 #include <chrono>
 #include <exception>
 #include <iostream>
 #include <sstream>
 #include <thread>
+
+#include <rclcpp/rclcpp.hpp>
+#include <visualization_msgs/msg/marker.hpp>
+#include <geometry_msgs/msg/point.hpp>
 
 class VisualizationTestNode : public rclcpp::Node
 {

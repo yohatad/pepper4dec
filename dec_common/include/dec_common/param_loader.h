@@ -21,9 +21,9 @@
 
 #pragma once
 
-#include <rclcpp_lifecycle/lifecycle_node.hpp>
-
 #include <string>
+
+#include <rclcpp_lifecycle/lifecycle_node.hpp>
 
 namespace dec_common
 {

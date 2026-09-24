@@ -13,25 +13,11 @@
 
 #pragma once
 
-// ROS includes
-#include <rclcpp/rclcpp.hpp>
-#include <rclcpp/executors/multi_threaded_executor.hpp>
-#include <rclcpp_action/rclcpp_action.hpp>
-#include <rclcpp_lifecycle/lifecycle_node.hpp>
-#include <std_msgs/msg/string.hpp>
-#include <ament_index_cpp/get_package_share_directory.hpp>
-#include <nav2_msgs/action/navigate_to_pose.hpp>
-#include <geometry_msgs/msg/pose_stamped.hpp>
-
 // BehaviorTree.CPP includes
 #include <behaviortree_cpp/bt_factory.h>
 #include <behaviortree_cpp/loggers/groot2_publisher.h>
-
-// BehaviorTree.ROS2 includes
-#include <behaviortree_ros2/bt_service_node.hpp>
-#include <behaviortree_ros2/bt_action_node.hpp>
-#include <behaviortree_ros2/ros_node_params.hpp>
-#include <behaviortree_ros2/plugins.hpp>
+// YAML includes
+#include <yaml-cpp/yaml.h>
 
 // Standard includes
 #include <string>
@@ -50,23 +36,31 @@
 #include <thread>
 #include <iomanip>
 
-// YAML includes
-#include <yaml-cpp/yaml.h>
-
+// ROS includes
+#include <rclcpp/rclcpp.hpp>
+#include <rclcpp/executors/multi_threaded_executor.hpp>
+#include <rclcpp_action/rclcpp_action.hpp>
+#include <rclcpp_lifecycle/lifecycle_node.hpp>
+#include <std_msgs/msg/string.hpp>
+#include <ament_index_cpp/get_package_share_directory.hpp>
+#include <nav2_msgs/action/navigate_to_pose.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
+// BehaviorTree.ROS2 includes
+#include <behaviortree_ros2/bt_service_node.hpp>
+#include <behaviortree_ros2/bt_action_node.hpp>
+#include <behaviortree_ros2/ros_node_params.hpp>
+#include <behaviortree_ros2/plugins.hpp>
 // Custom message/service/action includes from dec_interfaces package
 // Messages
 #include "dec_interfaces/msg/face_detection.hpp"
-
 // naoqi_bridge_msgs actions
 #include "naoqi_bridge_msgs/action/speech_with_feedback.hpp"
-
 // Actions
 #include "dec_interfaces/action/tts.hpp"
 #include "dec_interfaces/action/gesture.hpp"
 #include "dec_interfaces/action/animate_behavior.hpp"
 #include "dec_interfaces/action/speech_recognition.hpp"
 #include "dec_interfaces/action/conversation_manager.hpp"
-
 // Services
 #include "dec_interfaces/srv/conversation_manager_prompt.hpp"
 #include <std_srvs/srv/trigger.hpp>
@@ -865,7 +859,7 @@ void printNodeInfo(std::shared_ptr<rclcpp::Node> node);
  */
 std::string nodeStatusToString(BT::NodeStatus status);
 
-} // namespace behavior_controller
+}  // namespace behavior_controller
 
 //=============================================================================
 // BehaviorControllerNode
@@ -901,7 +895,7 @@ public:
   using CallbackReturn =
     rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
-  explicit BehaviorControllerNode();
+  BehaviorControllerNode();
 
   /// Expose the companion node so main() can add it to the executor.
   rclcpp::Node::SharedPtr get_bt_node() const {return bt_node_;}

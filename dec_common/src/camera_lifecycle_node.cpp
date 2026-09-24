@@ -18,7 +18,6 @@
 
 #include "dec_common/camera_lifecycle_node.h"
 
-#include <ament_index_cpp/get_package_share_directory.hpp>
 #include <cv_bridge/cv_bridge.h>
 #include <yaml-cpp/yaml.h>
 
@@ -28,6 +27,8 @@
 #include <random>
 #include <stdexcept>
 #include <vector>
+
+#include <ament_index_cpp/get_package_share_directory.hpp>
 
 namespace dec_common
 {
