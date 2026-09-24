@@ -96,6 +96,8 @@ install(DIRECTORY
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
+  # headers are C++; left unset, cppcheck parses .h files as C
+  set(ament_cmake_cppcheck_LANGUAGE "c++")
   # the following line skips the linter which checks for copyrights
   # comment the line when a copyright and license is added to all source files
   set(ament_cmake_copyright_FOUND TRUE)

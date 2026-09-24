@@ -57,6 +57,8 @@ ament_export_dependencies(rclcpp_lifecycle Eigen3 sensor_msgs message_filters
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
+  # headers are C++; left unset, cppcheck parses .h files as C
+  set(ament_cmake_cppcheck_LANGUAGE "c++")
   set(ament_cmake_copyright_FOUND TRUE)
   set(ament_cmake_cpplint_FOUND TRUE)
   # skip uncrustify: repo predates it and follows its own consistent style

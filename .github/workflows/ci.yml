@@ -54,6 +54,11 @@ jobs:
       # frame-contract test, self-skip here: the ONNX model and the sibling LIO
       # repos are absent in CI.
       - name: colcon test (lint + unit + launch tests)
+        env:
+          # Humble's ament_cppcheck skips every file on cppcheck 2.x (jammy
+          # ships 2.7) unless this is set; without it the test reports
+          # "skipped" and checks nothing.
+          AMENT_CPPCHECK_ALLOW_SLOW_VERSIONS: "1"
         run: |
           . /opt/ros/humble/setup.sh
           . install/setup.sh
