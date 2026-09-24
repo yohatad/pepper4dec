@@ -23,7 +23,8 @@ jobs:
         run: |
           apt-get update && apt-get install -y --no-install-recommends \
             build-essential cmake git \
-            python3-colcon-common-extensions python3-vcstool python3-rosdep python3-pip
+            python3-colcon-common-extensions python3-vcstool python3-rosdep python3-pip \
+            clang-tidy libstdc++-12-dev
 
       - name: Clone sibling ROS2 dependencies
         run: |
@@ -47,7 +48,22 @@ jobs:
       - name: colcon build
         run: |
           . /opt/ros/humble/setup.sh
-          colcon build --symlink-install
+          colcon build --symlink-install --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      # Bug-finding checks from .clang-tidy, on this repo's C++ packages only.
+      # Each package is checked against its own compile_commands.json.
+      - name: clang-tidy
+        run: |
+          . /opt/ros/humble/setup.sh
+          . install/setup.sh
+          rc=0
+          for p in animate_behavior behavior_controller dec_common face_detection \
+                   gesture_execution overt_attention person_detection pepper_navigation; do
+            echo "::group::$p"
+            run-clang-tidy -p build/$p -quiet "/pepper4dec/$p/" || rc=1
+            echo "::endgroup::"
+          done
+          exit $rc
 
       # Runs linters, gtest and pytest unit tests across the packages, and the
       # person_detection bag-replay launch test. That test, and the pepper_slam

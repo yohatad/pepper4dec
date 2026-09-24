@@ -345,7 +345,7 @@ SixDRepNet::CallbackReturn SixDRepNet::on_configure(const rclcpp_lifecycle::Stat
         }
 
         // Warmup
-        std::vector<float> dummy(1 * 3 * 224 * 224, 0.0f);
+        std::vector<float> dummy(1UL * 3 * 224 * 224, 0.0f);
         std::array<int64_t, 4> shape = {1, 3, 224, 224};
         Ort::MemoryInfo mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
         Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
@@ -537,8 +537,8 @@ std::optional<std::array<double, 3>> SixDRepNet::estimateHeadPose(const cv::Mat&
             channels[c] = (channels[c] - mean_arr[c]) / std_arr[c];
         }
 
-        std::vector<float> chw(3 * 224 * 224);
-        size_t plane = 224 * 224;
+        std::vector<float> chw(3UL * 224 * 224);
+        size_t plane = 224UL * 224;
         for (int c = 0; c < 3; ++c) {
             std::memcpy(chw.data() + c * plane, channels[c].ptr<float>(), plane * sizeof(float));
         }

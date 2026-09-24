@@ -21,6 +21,8 @@
  */
 
 #include <chrono>
+#include <exception>
+#include <iostream>
 #include <memory>
 
 #include <rclcpp/rclcpp.hpp>
@@ -99,8 +101,17 @@ private:
 
 int main(int argc, char** argv) {
     rclcpp::init(argc, argv);
-    auto node = std::make_shared<SendGoal>();
-    node->run();
+    int rc = 0;
+    try {
+        auto node = std::make_shared<SendGoal>();
+        node->run();
+    } catch (const std::exception& e) {
+        std::cerr << "send_goal: " << e.what() << std::endl;
+        rc = 1;
+    } catch (...) {
+        std::cerr << "send_goal: unknown exception" << std::endl;
+        rc = 1;
+    }
     rclcpp::shutdown();
-    return 0;
+    return rc;
 }

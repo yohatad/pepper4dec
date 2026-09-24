@@ -72,7 +72,8 @@ TEST(ClampToLimits, InvertedLimitsFallBackToTheLowerBound) {
 // (b) Property: the result is always within the limits, for any input.
 TEST(ClampToLimits, ResultAlwaysWithinLimits) {
     const double min_limit = -1.2, max_limit = 0.8;
-    for (double value = -5.0; value <= 5.0; value += 0.1) {
+    for (int i = 0; i <= 100; ++i) {
+        const double value = -5.0 + 0.1 * i;
         const double clamped = motion::clampToLimits(value, min_limit, max_limit);
         EXPECT_GE(clamped, min_limit) << "value=" << value;
         EXPECT_LE(clamped, max_limit) << "value=" << value;
@@ -119,7 +120,8 @@ TEST(GestureTarget, ZeroFactorHoldsHome) {
 TEST(GestureTarget, NeverExceedsLimitsForAnyNoise) {
     const double min_limit = -0.5, max_limit = 0.5;
     // A range far larger than the limits allow, to force saturation.
-    for (double noise = -1.0; noise <= 1.0; noise += 0.05) {
+    for (int i = 0; i <= 40; ++i) {
+        const double noise = -1.0 + 0.05 * i;
         const double target =
             motion::gestureTarget(0.0, noise, 10.0, 1.0, min_limit, max_limit);
         EXPECT_GE(target, min_limit) << "noise=" << noise;
@@ -148,7 +150,8 @@ TEST(GestureTarget, IsSymmetricAboutHomeWhenUnclamped) {
 // (b) Monotonic in noise: larger noise never produces a smaller target.
 TEST(GestureTarget, IsMonotonicInNoise) {
     double previous = -1e9;
-    for (double noise = -1.0; noise <= 1.0; noise += 0.05) {
+    for (int i = 0; i <= 40; ++i) {
+        const double noise = -1.0 + 0.05 * i;
         const double target =
             motion::gestureTarget(0.0, noise, 0.5, 1.0, -2.0, 2.0);
         EXPECT_GE(target, previous) << "noise=" << noise;
@@ -190,7 +193,8 @@ TEST(SmoothToward, AlreadyAtTargetDoesNotMove) {
 // (b) Property: a smoothed step never overshoots and never moves away — the
 // output stays between where the joint is and where it is going.
 TEST(SmoothToward, StaysBetweenCurrentAndTarget) {
-    for (double factor = 0.0; factor <= 1.0; factor += 0.05) {
+    for (int i = 0; i <= 20; ++i) {
+        const double factor = 0.05 * i;
         const double forward = motion::smoothToward(-1.0, 2.0, factor);
         EXPECT_GE(forward, -1.0) << "factor=" << factor;
         EXPECT_LE(forward, 2.0) << "factor=" << factor;

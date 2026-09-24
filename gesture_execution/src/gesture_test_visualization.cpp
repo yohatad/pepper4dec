@@ -26,6 +26,7 @@
 #include <geometry_msgs/msg/point.hpp>
 
 #include <chrono>
+#include <exception>
 #include <iostream>
 #include <sstream>
 #include <thread>
@@ -170,15 +171,21 @@ private:
 int main(int argc, char** argv) {
     rclcpp::init(argc, argv);
 
-    auto test_node = std::make_shared<VisualizationTestNode>();
+    try {
+        auto test_node = std::make_shared<VisualizationTestNode>();
 
-    // Wait a moment for the publisher to be ready
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+        // Wait a moment for the publisher to be ready
+        std::this_thread::sleep_for(std::chrono::seconds(1));
 
-    test_node->publishTestMarkers();
+        test_node->publishTestMarkers();
 
-    // Keep node alive for a bit so markers are published
-    std::this_thread::sleep_for(std::chrono::seconds(2));
+        // Keep node alive for a bit so markers are published
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+    } catch (const std::exception& e) {
+        std::cerr << "gesture_test_visualization: " << e.what() << std::endl;
+        rclcpp::shutdown();
+        return 1;
+    }
 
     rclcpp::shutdown();
 

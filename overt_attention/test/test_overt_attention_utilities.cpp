@@ -142,7 +142,8 @@ TEST(PixelToAngles, OddSymmetryAboutPrincipalPoint) {
 TEST(PixelToAngles, MonotonicAndBounded) {
     const double fx = 500.0, fy = 500.0, cx = 320.0, cy = 240.0;
     double previous_yaw = 10.0;  // larger than any achievable yaw
-    for (double u = 0.0; u <= 640.0; u += 40.0) {
+    for (int i = 0; i <= 16; ++i) {
+        const double u = 40.0 * i;
         auto [yaw, pitch] = pixelToAngles(u, cy, fx, fy, cx, cy);
         EXPECT_LT(yaw, previous_yaw) << "yaw must decrease as u increases, u=" << u;
         EXPECT_GT(yaw, -M_PI / 2.0);
