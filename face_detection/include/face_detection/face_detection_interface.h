@@ -54,43 +54,46 @@
 constexpr double kImpossibleMatchCost = 1e6;
 
 /** @brief Tunable settings for the face-detection node (see the YAML config). */
-struct FaceDetectionConfig {
-    bool use_compressed = false;
-    std::string camera = "pepper";
-    bool verbose_mode = false;
-    double image_timeout = 2.0;
-    double face_detection_confidence = 0.90;
-    double sixdrepnet_headpose_angle = 10.0;
-    bool require_person_detection = true;
-    double person_detection_timeout = 0.5;
-    bool prioritize_face_depth = true;
+struct FaceDetectionConfig
+{
+  bool use_compressed = false;
+  std::string camera = "pepper";
+  bool verbose_mode = false;
+  double image_timeout = 2.0;
+  double face_detection_confidence = 0.90;
+  double sixdrepnet_headpose_angle = 10.0;
+  bool require_person_detection = true;
+  double person_detection_timeout = 0.5;
+  bool prioritize_face_depth = true;
 };
 
 // Declares and reads this node's ROS2 parameters (see param_loader.h),
 // falling back to the FaceDetectionConfig defaults above for any parameter
 // not set by the launch file's YAML.
-FaceDetectionConfig loadConfiguration(rclcpp_lifecycle::LifecycleNode* node);
+FaceDetectionConfig loadConfiguration(rclcpp_lifecycle::LifecycleNode * node);
 
 /**
  * @brief Cached snapshot of the latest /person_detection/data message.
  */
-struct PersonSnapshot {
-    std::vector<std::string> person_label_id;
-    std::vector<std::string> class_names;
-    std::vector<geometry_msgs::msg::Point> centroids;
-    std::vector<float> width;
-    std::vector<float> height;
+struct PersonSnapshot
+{
+  std::vector<std::string> person_label_id;
+  std::vector<std::string> class_names;
+  std::vector<geometry_msgs::msg::Point> centroids;
+  std::vector<float> width;
+  std::vector<float> height;
 };
 
 /**
  * @brief One finalized face tracking record, ready to publish/draw.
  */
-struct FaceTrackingDatum {
-    std::string face_id;
-    geometry_msgs::msg::Point centroid;
-    float width = 0.0f;
-    float height = 0.0f;
-    bool mutual_gaze = false;
+struct FaceTrackingDatum
+{
+  std::string face_id;
+  geometry_msgs::msg::Point centroid;
+  float width = 0.0f;
+  float height = 0.0f;
+  bool mutual_gaze = false;
 };
 
 //=============================================================================
@@ -109,25 +112,27 @@ struct FaceTrackingDatum {
  * NMS is baked into the exported graph, so postprocessing is only a confidence
  * filter plus coordinate rescale.
  */
-class YOLOONNX {
+class YOLOONNX
+{
 public:
-    YOLOONNX(const std::string& model_path, double class_score_th);
+  YOLOONNX(const std::string & model_path, double class_score_th);
 
-    // Returns (boxes as xyxy in image pixel coords, scores).
-    std::pair<std::vector<cv::Rect2d>, std::vector<float>> detect(const cv::Mat& image);
+  // Returns (boxes as xyxy in image pixel coords, scores).
+  std::pair<std::vector<cv::Rect2d>, std::vector<float>> detect(const cv::Mat & image);
 
 private:
-    cv::Mat preprocess(const cv::Mat& image);
-    std::pair<std::vector<cv::Rect2d>, std::vector<float>> postprocess(
-        const cv::Mat& image, const std::vector<float>& raw_boxes, int64_t num_boxes, int64_t num_attrs);
+  cv::Mat preprocess(const cv::Mat & image);
+  std::pair<std::vector<cv::Rect2d>, std::vector<float>> postprocess(
+    const cv::Mat & image, const std::vector<float> & raw_boxes, int64_t num_boxes,
+    int64_t num_attrs);
 
-    double class_score_th_;
-    std::unique_ptr<Ort::Env> ort_env_;
-    std::unique_ptr<Ort::Session> session_;
-    std::vector<std::string> input_names_;
-    std::vector<std::string> output_names_;
-    int64_t input_height_ = 0;
-    int64_t input_width_ = 0;
+  double class_score_th_;
+  std::unique_ptr<Ort::Env> ort_env_;
+  std::unique_ptr<Ort::Session> session_;
+  std::vector<std::string> input_names_;
+  std::vector<std::string> output_names_;
+  int64_t input_height_ = 0;
+  int64_t input_width_ = 0;
 };
 
 //=============================================================================
@@ -143,50 +148,51 @@ private:
  * dec_common::CameraLifecycleNode; this class adds the face publishers and the
  * person-detection subscription used for face-person matching.
  */
-class FaceDetectionNode : public dec_common::CameraLifecycleNode {
+class FaceDetectionNode : public dec_common::CameraLifecycleNode
+{
 public:
-    explicit FaceDetectionNode(const std::string& node_name = "face_detection");
+  explicit FaceDetectionNode(const std::string & node_name = "face_detection");
 
-    /** @brief Create the lifecycle publishers and the standalone-mode face tracker. */
-    CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;
+  /** @brief Create the lifecycle publishers and the standalone-mode face tracker. */
+  CallbackReturn on_configure(const rclcpp_lifecycle::State & state) override;
 
-    /** @brief Subscribe to person detection (if enabled) and start the debug
-     *         visualization timer. */
-    CallbackReturn on_activate  (const rclcpp_lifecycle::State& state) override;
+  /** @brief Subscribe to person detection (if enabled) and start the debug
+   *         visualization timer. */
+  CallbackReturn on_activate(const rclcpp_lifecycle::State & state) override;
 
-    /** @brief Stop the visualization timer and drop the person-detection
-     *         subscription. */
-    CallbackReturn on_deactivate(const rclcpp_lifecycle::State& state) override;
+  /** @brief Stop the visualization timer and drop the person-detection
+   *         subscription. */
+  CallbackReturn on_deactivate(const rclcpp_lifecycle::State & state) override;
 
-    /** @brief Destroy the lifecycle publishers. */
-    CallbackReturn on_cleanup   (const rclcpp_lifecycle::State& state) override;
+  /** @brief Destroy the lifecycle publishers. */
+  CallbackReturn on_cleanup(const rclcpp_lifecycle::State & state) override;
 
-    /** @brief Log that the node is shutting down. */
-    CallbackReturn on_shutdown  (const rclcpp_lifecycle::State& state) override;
+  /** @brief Log that the node is shutting down. */
+  CallbackReturn on_shutdown(const rclcpp_lifecycle::State & state) override;
 
-    /** @brief Close any open debug windows before the process exits. */
-    void cleanup();
+  /** @brief Close any open debug windows before the process exits. */
+  void cleanup();
 
 protected:
-    void publishFaceDetection(const std::vector<FaceTrackingDatum>& tracking_data);
-    void personDetectionCallback(const dec_interfaces::msg::PersonDetection& msg);
+  void publishFaceDetection(const std::vector<FaceTrackingDatum> & tracking_data);
+  void personDetectionCallback(const dec_interfaces::msg::PersonDetection & msg);
 
-    FaceDetectionConfig config_;
+  FaceDetectionConfig config_;
 
-    rclcpp_lifecycle::LifecyclePublisher<dec_interfaces::msg::FaceDetection>::SharedPtr pub_gaze_;
+  rclcpp_lifecycle::LifecyclePublisher<dec_interfaces::msg::FaceDetection>::SharedPtr pub_gaze_;
 
-    bool require_person_detection_ = true;
-    double person_detection_timeout_ = 0.5;
-    bool prioritize_face_depth_ = true;
+  bool require_person_detection_ = true;
+  double person_detection_timeout_ = 0.5;
+  bool prioritize_face_depth_ = true;
 
-    std::mutex person_detections_mutex_;
-    std::optional<PersonSnapshot> latest_person_detections_;
-    std::optional<rclcpp::Time> latest_person_detections_timestamp_;
+  std::mutex person_detections_mutex_;
+  std::optional<PersonSnapshot> latest_person_detections_;
+  std::optional<rclcpp::Time> latest_person_detections_timestamp_;
 
-    std::unordered_map<std::string, cv::Scalar> face_colors_;
-    byte_tracker::ByteTrack face_tracker_;
+  std::unordered_map<std::string, cv::Scalar> face_colors_;
+  byte_tracker::ByteTrack face_tracker_;
 
-    rclcpp::Subscription<dec_interfaces::msg::PersonDetection>::SharedPtr person_detection_sub_;
+  rclcpp::Subscription<dec_interfaces::msg::PersonDetection>::SharedPtr person_detection_sub_;
 };
 
 //=============================================================================
@@ -201,65 +207,70 @@ protected:
  * over the synchronized RGB-D frames, and marks a face as engaged when its
  * head-pose angle falls within sixdrepnet_headpose_angle of the camera.
  */
-class SixDRepNet : public FaceDetectionNode {
+class SixDRepNet : public FaceDetectionNode
+{
 public:
-    SixDRepNet();
+  SixDRepNet();
 
-    /** @brief Load the YOLO face detector and the SixDRepNet head-pose model. */
-    CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;
+  /** @brief Load the YOLO face detector and the SixDRepNet head-pose model. */
+  CallbackReturn on_configure(const rclcpp_lifecycle::State & state) override;
 
-    /** @brief Create the camera subscriptions and start the image-timeout monitor. */
-    CallbackReturn on_activate  (const rclcpp_lifecycle::State& state) override;
+  /** @brief Create the camera subscriptions and start the image-timeout monitor. */
+  CallbackReturn on_activate(const rclcpp_lifecycle::State & state) override;
 
-    /** @brief Destroy the camera subscriptions. */
-    CallbackReturn on_deactivate(const rclcpp_lifecycle::State& state) override;
+  /** @brief Destroy the camera subscriptions. */
+  CallbackReturn on_deactivate(const rclcpp_lifecycle::State & state) override;
 
-    /** @brief Release the loaded ONNX models. */
-    CallbackReturn on_cleanup   (const rclcpp_lifecycle::State& state) override;
+  /** @brief Release the loaded ONNX models. */
+  CallbackReturn on_cleanup(const rclcpp_lifecycle::State & state) override;
 
 protected:
-    void processImages() override;
+  void processImages() override;
 
 private:
-    void drawAxis(cv::Mat& img, double yaw, double pitch, double roll, double tdx, double tdy, double size = 100.0);
+  void drawAxis(
+    cv::Mat & img, double yaw, double pitch, double roll, double tdx, double tdy,
+    double size = 100.0);
 
-    /** @brief One detected face awaiting assignment to a tracked person. */
-    struct FaceCandidate {
-        double x1, y1, x2, y2;
-        double cx, cy;
-        double w, h;
-        float score;
-    };
+  /** @brief One detected face awaiting assignment to a tracked person. */
+  struct FaceCandidate
+  {
+    double x1, y1, x2, y2;
+    double cx, cy;
+    double w, h;
+    float score;
+  };
 
-    /** @brief One tracked person available to receive a detected face. */
-    struct PersonCandidate {
-        std::string tracking_id;
-        double x1 = 0.0, y1 = 0.0, x2 = 0.0, y2 = 0.0;
-        double depth = 0.0;
-        int assigned_faces = 0;
-    };
+  /** @brief One tracked person available to receive a detected face. */
+  struct PersonCandidate
+  {
+    std::string tracking_id;
+    double x1 = 0.0, y1 = 0.0, x2 = 0.0, y2 = 0.0;
+    double depth = 0.0;
+    int assigned_faces = 0;
+  };
 
-    double calculateMatchingCost(const FaceCandidate& face, const PersonCandidate& person) const;
-    std::vector<std::pair<int, int>> matchFacesToPersonsHungarian(
-        const std::vector<FaceCandidate>& faces, const std::vector<PersonCandidate>& persons);
-    float getBestDepthEstimate(double face_cx, double face_cy, double face_width, double face_height,
-                               double person_depth) const;
+  double calculateMatchingCost(const FaceCandidate & face, const PersonCandidate & person) const;
+  std::vector<std::pair<int, int>> matchFacesToPersonsHungarian(
+    const std::vector<FaceCandidate> & faces, const std::vector<PersonCandidate> & persons);
+  float getBestDepthEstimate(
+    double face_cx, double face_cy, double face_width, double face_height,
+    double person_depth) const;
 
-    cv::Mat processFrameStandalone(const cv::Mat& cv_image);
-    cv::Mat processFrameWithPersonDetection(const cv::Mat& cv_image);
+  cv::Mat processFrameStandalone(const cv::Mat & cv_image);
+  cv::Mat processFrameWithPersonDetection(const cv::Mat & cv_image);
 
-    // Runs SixDRepNet on a cropped face image, returning (yaw, pitch, roll) in degrees.
-    std::optional<std::array<double, 3>> estimateHeadPose(const cv::Mat& face_crop);
+  // Runs SixDRepNet on a cropped face image, returning (yaw, pitch, roll) in degrees.
+  std::optional<std::array<double, 3>> estimateHeadPose(const cv::Mat & face_crop);
 
-    double sixdrep_angle_ = 10.0;
+  double sixdrep_angle_ = 10.0;
 
-    std::unique_ptr<YOLOONNX> yolo_model_;
-    std::unique_ptr<Ort::Env> sixdrepnet_env_;
-    std::unique_ptr<Ort::Session> sixdrepnet_session_;
-    std::vector<std::string> sixdrepnet_input_names_;
-    std::vector<std::string> sixdrepnet_output_names_;
+  std::unique_ptr<YOLOONNX> yolo_model_;
+  std::unique_ptr<Ort::Env> sixdrepnet_env_;
+  std::unique_ptr<Ort::Session> sixdrepnet_session_;
+  std::vector<std::string> sixdrepnet_input_names_;
+  std::vector<std::string> sixdrepnet_output_names_;
 
-    cv::Scalar mean_{0.485, 0.456, 0.406};
-    cv::Scalar std_{0.229, 0.224, 0.225};
+  cv::Scalar mean_{0.485, 0.456, 0.406};
+  cv::Scalar std_{0.229, 0.224, 0.225};
 };
-

@@ -17,65 +17,70 @@
 
 #include "overt_attention/overt_attention_interface.h"
 
-TopicsConfig loadTopicsConfig(const std::string& package_name, const std::string& relative_path) {
-    std::string package_share = ament_index_cpp::get_package_share_directory(package_name);
-    std::string config_path = package_share + "/" + relative_path;
+TopicsConfig loadTopicsConfig(const std::string & package_name, const std::string & relative_path)
+{
+  std::string package_share = ament_index_cpp::get_package_share_directory(package_name);
+  std::string config_path = package_share + "/" + relative_path;
 
-    YAML::Node yaml = YAML::LoadFile(config_path);
-    YAML::Node topics = yaml["topics"];
+  YAML::Node yaml = YAML::LoadFile(config_path);
+  YAML::Node topics = yaml["topics"];
 
-    TopicsConfig cfg;
-    cfg.image.pepper = topics["image"]["pepper"].as<std::string>();
-    cfg.image.realsense = topics["image"]["realsense"].as<std::string>();
-    cfg.image.use_compressed = topics["image"]["use_compressed"].as<bool>();
-    cfg.depth.pepper = topics["depth"]["pepper"].as<std::string>();
-    cfg.depth.realsense = topics["depth"]["realsense"].as<std::string>();
-    cfg.depth.use_compressed = topics["depth"]["use_compressed"].as<bool>();
-    cfg.saliency.peak = topics["saliency"]["peak"].as<std::string>();
-    cfg.saliency.map = topics["saliency"]["map"].as<std::string>();
-    cfg.face = topics["face"].as<std::string>();
-    cfg.audio = topics["audio"].as<std::string>();
-    cfg.camera_info.pepper = topics["camera_info"]["pepper"].as<std::string>();
-    cfg.camera_info.realsense = topics["camera_info"]["realsense"].as<std::string>();
-    cfg.target_angles = topics["target_angles"].as<std::string>();
-    cfg.joint_state = topics["joint_state"].as<std::string>();
-    cfg.joint_angles = topics["joint_angles"].as<std::string>();
-    cfg.trajectory = topics["trajectory"].as<std::string>();
-    return cfg;
+  TopicsConfig cfg;
+  cfg.image.pepper = topics["image"]["pepper"].as<std::string>();
+  cfg.image.realsense = topics["image"]["realsense"].as<std::string>();
+  cfg.image.use_compressed = topics["image"]["use_compressed"].as<bool>();
+  cfg.depth.pepper = topics["depth"]["pepper"].as<std::string>();
+  cfg.depth.realsense = topics["depth"]["realsense"].as<std::string>();
+  cfg.depth.use_compressed = topics["depth"]["use_compressed"].as<bool>();
+  cfg.saliency.peak = topics["saliency"]["peak"].as<std::string>();
+  cfg.saliency.map = topics["saliency"]["map"].as<std::string>();
+  cfg.face = topics["face"].as<std::string>();
+  cfg.audio = topics["audio"].as<std::string>();
+  cfg.camera_info.pepper = topics["camera_info"]["pepper"].as<std::string>();
+  cfg.camera_info.realsense = topics["camera_info"]["realsense"].as<std::string>();
+  cfg.target_angles = topics["target_angles"].as<std::string>();
+  cfg.joint_state = topics["joint_state"].as<std::string>();
+  cfg.joint_angles = topics["joint_angles"].as<std::string>();
+  cfg.trajectory = topics["trajectory"].as<std::string>();
+  return cfg;
 }
 
-rclcpp::QoS getImageQoS() {
-    return rclcpp::QoS(rclcpp::KeepLast(1))
-        .reliability(rclcpp::ReliabilityPolicy::BestEffort)
-        .durability(rclcpp::DurabilityPolicy::Volatile);
+rclcpp::QoS getImageQoS()
+{
+  return rclcpp::QoS(rclcpp::KeepLast(1))
+         .reliability(rclcpp::ReliabilityPolicy::BestEffort)
+         .durability(rclcpp::DurabilityPolicy::Volatile);
 }
 
-std::string getImageTopic(const std::string& base_topic, bool use_compressed, bool is_depth) {
-    if (use_compressed) {
-        return base_topic + (is_depth ? "/compressedDepth" : "/compressed");
-    }
-    return base_topic;
+std::string getImageTopic(const std::string & base_topic, bool use_compressed, bool is_depth)
+{
+  if (use_compressed) {
+    return base_topic + (is_depth ? "/compressedDepth" : "/compressed");
+  }
+  return base_topic;
 }
 
-std::pair<int, int> saliencyBorderPad(int height, int width) {
-    int pad = std::max(3, static_cast<int>(std::min(height, width) * 0.05));
-    return {std::min(pad, height / 2), std::min(pad, width / 2)};
+std::pair<int, int> saliencyBorderPad(int height, int width)
+{
+  int pad = std::max(3, static_cast<int>(std::min(height, width) * 0.05));
+  return {std::min(pad, height / 2), std::min(pad, width / 2)};
 }
 
-cv::Scalar generateColorFromId(const std::string& face_id) {
-    std::size_t hash_val = std::hash<std::string>{}(face_id);
+cv::Scalar generateColorFromId(const std::string & face_id)
+{
+  std::size_t hash_val = std::hash<std::string>{}(face_id);
 
-    int r = static_cast<int>(hash_val & 0xFF);
-    int g = static_cast<int>((hash_val >> 8) & 0xFF);
-    int b = static_cast<int>((hash_val >> 16) & 0xFF);
+  int r = static_cast<int>(hash_val & 0xFF);
+  int g = static_cast<int>((hash_val >> 8) & 0xFF);
+  int b = static_cast<int>((hash_val >> 16) & 0xFF);
 
-    double brightness = 0.299 * r + 0.587 * g + 0.114 * b;
-    if (brightness < 100.0) {
-        double scale = 150.0 / std::max(brightness, 1.0);
-        r = std::min(255, static_cast<int>(r * scale));
-        g = std::min(255, static_cast<int>(g * scale));
-        b = std::min(255, static_cast<int>(b * scale));
-    }
+  double brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+  if (brightness < 100.0) {
+    double scale = 150.0 / std::max(brightness, 1.0);
+    r = std::min(255, static_cast<int>(r * scale));
+    g = std::min(255, static_cast<int>(g * scale));
+    b = std::min(255, static_cast<int>(b * scale));
+  }
 
-    return cv::Scalar(b, g, r);  // BGR for OpenCV
+  return cv::Scalar(b, g, r);    // BGR for OpenCV
 }

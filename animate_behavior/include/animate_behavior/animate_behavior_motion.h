@@ -21,7 +21,8 @@
 
 #pragma once
 
-namespace animate_behavior_motion {
+namespace animate_behavior_motion
+{
 
 /**
  * @brief Clamp a joint value into its soft limits.
@@ -43,8 +44,9 @@ double clampToLimits(double value, double min_limit, double max_limit);
  * @param min_limit  Soft lower limit.
  * @param max_limit  Soft upper limit.
  */
-double gestureTarget(double home, double noise, double range, double factor,
-                     double min_limit, double max_limit);
+double gestureTarget(
+  double home, double noise, double range, double factor,
+  double min_limit, double max_limit);
 
 /**
  * @brief One step of exponential smoothing from current toward target.

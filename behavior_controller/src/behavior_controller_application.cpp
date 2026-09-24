@@ -82,9 +82,11 @@
 #include <behaviortree_cpp/loggers/groot2_publisher.h>
 
 // Forward declaration (defined in behavior_controller_implementation.cpp)
-namespace behavior_controller {
-    BT::Tree initializeTree(const std::string& scenario,
-                            std::shared_ptr<rclcpp::Node> node_handle);
+namespace behavior_controller
+{
+BT::Tree initializeTree(
+  const std::string & scenario,
+  std::shared_ptr<rclcpp::Node> node_handle);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -93,21 +95,21 @@ namespace behavior_controller {
 // ─────────────────────────────────────────────────────────────────────────────
 
 BehaviorControllerNode::BehaviorControllerNode()
-    : rclcpp_lifecycle::LifecycleNode("behavior_controller")
+: rclcpp_lifecycle::LifecycleNode("behavior_controller")
 {
-    // Declared here so the values are available to `ros2 param` and to
-    // --params-file / launch overrides before the first configure transition.
-    // Defaults mirror ConfigManager's in-class initialisers.
-    declare_parameter<std::string>("scenario_specification", "lab_tour");
-    declare_parameter<std::string>("culture_knowledge_base", "cultureKnowledgeBase.yaml");
-    declare_parameter<std::string>("environment_knowledge_base", "labEnvironmentKnowledgeBase.yaml");
-    declare_parameter<bool>("verbose_mode", false);
+  // Declared here so the values are available to `ros2 param` and to
+  // --params-file / launch overrides before the first configure transition.
+  // Defaults mirror ConfigManager's in-class initialisers.
+  declare_parameter<std::string>("scenario_specification", "lab_tour");
+  declare_parameter<std::string>("culture_knowledge_base", "cultureKnowledgeBase.yaml");
+  declare_parameter<std::string>("environment_knowledge_base", "labEnvironmentKnowledgeBase.yaml");
+  declare_parameter<bool>("verbose_mode", false);
 
-    // Create the companion BT node immediately so main() can add it to the
-    // executor before any lifecycle transition is triggered.
-    bt_node_ = rclcpp::Node::make_shared("behavior_controller_bt");
+  // Create the companion BT node immediately so main() can add it to the
+  // executor before any lifecycle transition is triggered.
+  bt_node_ = rclcpp::Node::make_shared("behavior_controller_bt");
 
-    RCLCPP_INFO(get_logger(), "behavior_controller: created (UNCONFIGURED)");
+  RCLCPP_INFO(get_logger(), "behavior_controller: created (UNCONFIGURED)");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -115,49 +117,52 @@ BehaviorControllerNode::BehaviorControllerNode()
 // ─────────────────────────────────────────────────────────────────────────────
 
 BehaviorControllerNode::CallbackReturn
-BehaviorControllerNode::on_configure(const rclcpp_lifecycle::State& /*state*/)
+BehaviorControllerNode::on_configure(const rclcpp_lifecycle::State & /*state*/)
 {
-    // ── Startup banner ──────────────────────────────────────────────────────
-    RCLCPP_INFO(get_logger(),
-        "\n"
-        "**************************************************\n"
-        "\t\tBehavior Controller v2.0 (BehaviorTree.ROS2)\n"
-        "\t\tCopyright (C) 2025 Carnegie Mellon University Africa\n"
-        "**************************************************\n");
+  // ── Startup banner ──────────────────────────────────────────────────────
+  RCLCPP_INFO(
+    get_logger(),
+    "\n"
+    "**************************************************\n"
+    "\t\tBehavior Controller v2.0 (BehaviorTree.ROS2)\n"
+    "\t\tCopyright (C) 2025 Carnegie Mellon University Africa\n"
+    "**************************************************\n");
 
-    // ── Load configuration from ROS parameters ──────────────────────────────
-    // Read on every configure so a cleanup/configure cycle picks up values
-    // changed via `ros2 param set` while unconfigured.
-    const std::string packagePath =
-        ament_index_cpp::get_package_share_directory("behavior_controller");
+  // ── Load configuration from ROS parameters ──────────────────────────────
+  // Read on every configure so a cleanup/configure cycle picks up values
+  // changed via `ros2 param set` while unconfigured.
+  const std::string packagePath =
+    ament_index_cpp::get_package_share_directory("behavior_controller");
 
-    ConfigManager::instance().loadFromParameters(*this);
+  ConfigManager::instance().loadFromParameters(*this);
 
-    // ── Load knowledge base ─────────────────────────────────────────────────
-    if (!KnowledgeManager::instance().loadFromPackage(packagePath)) {
-        RCLCPP_ERROR(get_logger(),
-                     "Failed to load knowledge base from: %s", packagePath.c_str());
-        return CallbackReturn::FAILURE;
-    }
+  // ── Load knowledge base ─────────────────────────────────────────────────
+  if (!KnowledgeManager::instance().loadFromPackage(packagePath)) {
+    RCLCPP_ERROR(
+      get_logger(),
+      "Failed to load knowledge base from: %s", packagePath.c_str());
+    return CallbackReturn::FAILURE;
+  }
 
-    const auto& cfg = ConfigManager::instance();
-    RCLCPP_INFO(get_logger(), "Configuration loaded successfully:");
-    RCLCPP_INFO(get_logger(), "  Verbose mode : %s", cfg.isVerbose() ? "Yes" : "No");
-    RCLCPP_INFO(get_logger(), "  Scenario     : %s", cfg.getScenarioSpecification().c_str());
+  const auto & cfg = ConfigManager::instance();
+  RCLCPP_INFO(get_logger(), "Configuration loaded successfully:");
+  RCLCPP_INFO(get_logger(), "  Verbose mode : %s", cfg.isVerbose() ? "Yes" : "No");
+  RCLCPP_INFO(get_logger(), "  Scenario     : %s", cfg.getScenarioSpecification().c_str());
 
-    // ── Build behavior tree ─────────────────────────────────────────────────
-    try {
-        const std::string scenario = cfg.getScenarioSpecification();
-        tree_ = behavior_controller::initializeTree(scenario, bt_node_);
-        tree_initialized_ = true;
-    } catch (const std::exception& e) {
-        RCLCPP_ERROR(get_logger(),
-                     "Failed to initialize behavior tree: %s", e.what());
-        return CallbackReturn::FAILURE;
-    }
+  // ── Build behavior tree ─────────────────────────────────────────────────
+  try {
+    const std::string scenario = cfg.getScenarioSpecification();
+    tree_ = behavior_controller::initializeTree(scenario, bt_node_);
+    tree_initialized_ = true;
+  } catch (const std::exception & e) {
+    RCLCPP_ERROR(
+      get_logger(),
+      "Failed to initialize behavior tree: %s", e.what());
+    return CallbackReturn::FAILURE;
+  }
 
-    RCLCPP_INFO(get_logger(), "behavior_controller: configured");
-    return CallbackReturn::SUCCESS;
+  RCLCPP_INFO(get_logger(), "behavior_controller: configured");
+  return CallbackReturn::SUCCESS;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -165,24 +170,25 @@ BehaviorControllerNode::on_configure(const rclcpp_lifecycle::State& /*state*/)
 // ─────────────────────────────────────────────────────────────────────────────
 
 BehaviorControllerNode::CallbackReturn
-BehaviorControllerNode::on_activate(const rclcpp_lifecycle::State& state)
+BehaviorControllerNode::on_activate(const rclcpp_lifecycle::State & state)
 {
-    // Activate any managed publishers (none currently, but good practice).
-    LifecycleNode::on_activate(state);
+  // Activate any managed publishers (none currently, but good practice).
+  LifecycleNode::on_activate(state);
 
-    // 50 Hz = 20 ms period.  The lambda captures this; tick() is thread-safe
-    // via the executor's callback group.
-    tick_timer_ = create_wall_timer(
-        std::chrono::milliseconds(20),
-        [this]() {
-            if (tree_initialized_) {
-                tree_.tickOnce();
-            }
-        });
+  // 50 Hz = 20 ms period.  The lambda captures this; tick() is thread-safe
+  // via the executor's callback group.
+  tick_timer_ = create_wall_timer(
+    std::chrono::milliseconds(20),
+    [this]() {
+      if (tree_initialized_) {
+        tree_.tickOnce();
+      }
+    });
 
-    RCLCPP_INFO(get_logger(),
-                "behavior_controller: activated — BT ticking at 50 Hz");
-    return CallbackReturn::SUCCESS;
+  RCLCPP_INFO(
+    get_logger(),
+    "behavior_controller: activated — BT ticking at 50 Hz");
+  return CallbackReturn::SUCCESS;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -190,17 +196,18 @@ BehaviorControllerNode::on_activate(const rclcpp_lifecycle::State& state)
 // ─────────────────────────────────────────────────────────────────────────────
 
 BehaviorControllerNode::CallbackReturn
-BehaviorControllerNode::on_deactivate(const rclcpp_lifecycle::State& state)
+BehaviorControllerNode::on_deactivate(const rclcpp_lifecycle::State & state)
 {
-    if (tick_timer_) {
-        tick_timer_->cancel();
-        tick_timer_.reset();
-    }
+  if (tick_timer_) {
+    tick_timer_->cancel();
+    tick_timer_.reset();
+  }
 
-    LifecycleNode::on_deactivate(state);
-    RCLCPP_INFO(get_logger(),
-                "behavior_controller: deactivated — BT ticking paused");
-    return CallbackReturn::SUCCESS;
+  LifecycleNode::on_deactivate(state);
+  RCLCPP_INFO(
+    get_logger(),
+    "behavior_controller: deactivated — BT ticking paused");
+  return CallbackReturn::SUCCESS;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -208,14 +215,14 @@ BehaviorControllerNode::on_deactivate(const rclcpp_lifecycle::State& state)
 // ─────────────────────────────────────────────────────────────────────────────
 
 BehaviorControllerNode::CallbackReturn
-BehaviorControllerNode::on_cleanup(const rclcpp_lifecycle::State& /*state*/)
+BehaviorControllerNode::on_cleanup(const rclcpp_lifecycle::State & /*state*/)
 {
-    if (tree_initialized_) {
-        tree_.haltTree();
-        tree_initialized_ = false;
-    }
-    RCLCPP_INFO(get_logger(), "behavior_controller: cleaned up");
-    return CallbackReturn::SUCCESS;
+  if (tree_initialized_) {
+    tree_.haltTree();
+    tree_initialized_ = false;
+  }
+  RCLCPP_INFO(get_logger(), "behavior_controller: cleaned up");
+  return CallbackReturn::SUCCESS;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -223,33 +230,33 @@ BehaviorControllerNode::on_cleanup(const rclcpp_lifecycle::State& /*state*/)
 // ─────────────────────────────────────────────────────────────────────────────
 
 BehaviorControllerNode::CallbackReturn
-BehaviorControllerNode::on_shutdown(const rclcpp_lifecycle::State& /*state*/)
+BehaviorControllerNode::on_shutdown(const rclcpp_lifecycle::State & /*state*/)
 {
-    if (tick_timer_) {
-        tick_timer_->cancel();
-        tick_timer_.reset();
-    }
-    if (tree_initialized_) {
-        tree_.haltTree();
-        tree_initialized_ = false;
-    }
-    RCLCPP_INFO(get_logger(), "behavior_controller: shut down");
-    return CallbackReturn::SUCCESS;
+  if (tick_timer_) {
+    tick_timer_->cancel();
+    tick_timer_.reset();
+  }
+  if (tree_initialized_) {
+    tree_.haltTree();
+    tree_initialized_ = false;
+  }
+  RCLCPP_INFO(get_logger(), "behavior_controller: shut down");
+  return CallbackReturn::SUCCESS;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // main
 // ─────────────────────────────────────────────────────────────────────────────
 
-int main(int argc, char* argv[])
+int main(int argc, char * argv[])
 {
-    // Spin both nodes concurrently on 4 executor threads:
-    //   the lifecycle node    → lifecycle service callbacks, 50 Hz tick timer
-    //   the companion BT node → BT action/service/subscription callbacks
-    return dec_common::runNode<BehaviorControllerNode>(
-        argc, argv, {nullptr, "behavior_controller", 4},
-        [](BehaviorControllerNode& node) {
-            return std::vector<rclcpp::node_interfaces::NodeBaseInterface::SharedPtr>{
-                node.get_bt_node()->get_node_base_interface()};
-        });
+  // Spin both nodes concurrently on 4 executor threads:
+  //   the lifecycle node    → lifecycle service callbacks, 50 Hz tick timer
+  //   the companion BT node → BT action/service/subscription callbacks
+  return dec_common::runNode<BehaviorControllerNode>(
+    argc, argv, {nullptr, "behavior_controller", 4},
+    [](BehaviorControllerNode & node) {
+      return std::vector<rclcpp::node_interfaces::NodeBaseInterface::SharedPtr>{
+        node.get_bt_node()->get_node_base_interface()};
+    });
 }

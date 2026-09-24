@@ -66,10 +66,11 @@
 
 #include "dec_common/node_runner.h"
 
-int main(int argc, char** argv) {
-    return dec_common::runNode<SixDRepNet>(
-        argc, argv,
-        {"face_detection v1.0 — This program comes with ABSOLUTELY NO WARRANTY.", "face_detection", 2},
-        nullptr,
-        [](SixDRepNet& node) { node.cleanup(); });
+int main(int argc, char ** argv)
+{
+  return dec_common::runNode<SixDRepNet>(
+    argc, argv,
+    {"face_detection v1.0 — This program comes with ABSOLUTELY NO WARRANTY.", "face_detection", 2},
+    nullptr,
+    [](SixDRepNet & node) {node.cleanup();});
 }

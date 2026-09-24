@@ -68,8 +68,9 @@
 
 #include "dec_common/node_runner.h"
 
-int main(int argc, char** argv) {
-    // 4 executor threads: the action server, timers, and lifecycle
-    // state-machine callbacks run concurrently.
-    return dec_common::runNode<AnimateBehaviorNode>(argc, argv, {nullptr, "animate_behavior", 4});
+int main(int argc, char ** argv)
+{
+  // 4 executor threads: the action server, timers, and lifecycle
+  // state-machine callbacks run concurrently.
+  return dec_common::runNode<AnimateBehaviorNode>(argc, argv, {nullptr, "animate_behavior", 4});
 }

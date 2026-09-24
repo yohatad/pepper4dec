@@ -44,7 +44,8 @@
 #include <string>
 #include <utility>
 
-namespace dec_common {
+namespace dec_common
+{
 
 /**
  * @brief The deliberate behavioral differences between the camera nodes.
@@ -53,18 +54,19 @@ namespace dec_common {
  * (depth statistic, debug-image gating, imshow quit key) instead of papering
  * over them in the shared base.
  */
-struct CameraNodeBehavior {
-    // Package whose share/<pkg>/data/pepper_topics.yaml resolves camera topics.
-    std::string topics_package;
-    // Prefix for the imshow debug windows, e.g. "Person Detection".
-    std::string debug_window_prefix;
-    // getDepthInRegion statistic: median (true) or mean (false).
-    bool median_depth = false;
-    // Publish debug images unconditionally (true) or only when
-    // verbose_mode + DISPLAY are set (false).
-    bool always_publish_debug = false;
-    // 'q' in the imshow window shuts the node down.
-    bool quit_on_q = false;
+struct CameraNodeBehavior
+{
+  // Package whose share/<pkg>/data/pepper_topics.yaml resolves camera topics.
+  std::string topics_package;
+  // Prefix for the imshow debug windows, e.g. "Person Detection".
+  std::string debug_window_prefix;
+  // getDepthInRegion statistic: median (true) or mean (false).
+  bool median_depth = false;
+  // Publish debug images unconditionally (true) or only when
+  // verbose_mode + DISPLAY are set (false).
+  bool always_publish_debug = false;
+  // 'q' in the imshow window shuts the node down.
+  bool quit_on_q = false;
 };
 
 /**
@@ -76,102 +78,111 @@ struct CameraNodeBehavior {
  * pipeline, the image-timeout monitor, and depth-in-region lookup. Derived
  * nodes keep their own lifecycle callbacks and call the helpers here.
  */
-class CameraLifecycleNode : public rclcpp_lifecycle::LifecycleNode {
+class CameraLifecycleNode : public rclcpp_lifecycle::LifecycleNode
+{
 public:
-    using CallbackReturn =
-        rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
+  using CallbackReturn =
+    rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
 protected:
-    CameraLifecycleNode(const std::string& node_name, CameraNodeBehavior behavior);
+  CameraLifecycleNode(const std::string & node_name, CameraNodeBehavior behavior);
 
-    // Called by the camera callbacks once a frame pair is decoded; derived
-    // classes run detection here and call updateLatestFrame() with the
-    // annotated frame.
-    virtual void processImages() = 0;
+  // Called by the camera callbacks once a frame pair is decoded; derived
+  // classes run detection here and call updateLatestFrame() with the
+  // annotated frame.
+  virtual void processImages() = 0;
 
-    // ── Debug visualization ─────────────────────────────────────────────────
-    void updateLatestFrame(const cv::Mat& frame);
-    void visualizationCallback();
+  // ── Debug visualization ─────────────────────────────────────────────────
+  void updateLatestFrame(const cv::Mat & frame);
+  void visualizationCallback();
 
-    // ── Camera topic resolution ─────────────────────────────────────────────
-    std::pair<std::string, std::string> getTopicNames();
-    std::optional<std::string> extractTopic(const std::string& image_topic_key);
+  // ── Camera topic resolution ─────────────────────────────────────────────
+  std::pair<std::string, std::string> getTopicNames();
+  std::optional<std::string> extractTopic(const std::string & image_topic_key);
 
-    // ── Subscriptions (called from derived on_activate) ─────────────────────
-    bool createCameraSubscriptions();
+  // ── Subscriptions (called from derived on_activate) ─────────────────────
+  bool createCameraSubscriptions();
 
-    // ── Frame callbacks ─────────────────────────────────────────────────────
-    void synchronizedCallback(const sensor_msgs::msg::Image::ConstSharedPtr& color_data,
-                              const sensor_msgs::msg::Image::ConstSharedPtr& depth_data);
-    void synchronizedCallbackCompressed(const sensor_msgs::msg::CompressedImage::ConstSharedPtr& color_data,
-                                        const sensor_msgs::msg::CompressedImage::ConstSharedPtr& depth_data);
-    void rgbOnlyCallback(const sensor_msgs::msg::Image::ConstSharedPtr& color_data);
-    void rgbOnlyCallbackCompressed(const sensor_msgs::msg::CompressedImage::ConstSharedPtr& color_data);
+  // ── Frame callbacks ─────────────────────────────────────────────────────
+  void synchronizedCallback(
+    const sensor_msgs::msg::Image::ConstSharedPtr & color_data,
+    const sensor_msgs::msg::Image::ConstSharedPtr & depth_data);
+  void synchronizedCallbackCompressed(
+    const sensor_msgs::msg::CompressedImage::ConstSharedPtr & color_data,
+    const sensor_msgs::msg::CompressedImage::ConstSharedPtr & depth_data);
+  void rgbOnlyCallback(const sensor_msgs::msg::Image::ConstSharedPtr & color_data);
+  void rgbOnlyCallbackCompressed(
+    const sensor_msgs::msg::CompressedImage::ConstSharedPtr & color_data);
 
-    std::optional<cv::Mat> processDepthImageMsg(const sensor_msgs::msg::Image::ConstSharedPtr& msg);
-    std::optional<cv::Mat> processDepthCompressedMsg(const sensor_msgs::msg::CompressedImage::ConstSharedPtr& msg);
+  std::optional<cv::Mat> processDepthImageMsg(const sensor_msgs::msg::Image::ConstSharedPtr & msg);
+  std::optional<cv::Mat> processDepthCompressedMsg(
+    const sensor_msgs::msg::CompressedImage::ConstSharedPtr & msg);
 
-    // ── Monitoring / helpers ────────────────────────────────────────────────
-    void startTimeoutMonitor();
-    void checkTimeout();
-    bool checkCameraResolution(const cv::Mat& color_image, const cv::Mat& depth_image) const;
-    std::optional<cv::Mat> makeDepthVis(const cv::Mat& depth) const;
-    std::optional<float> getDepthInRegion(double centroid_x, double centroid_y, double box_width,
-                                          double box_height, double region_scale = 0.1) const;
-    cv::Scalar generateDarkColor();
+  // ── Monitoring / helpers ────────────────────────────────────────────────
+  void startTimeoutMonitor();
+  void checkTimeout();
+  bool checkCameraResolution(const cv::Mat & color_image, const cv::Mat & depth_image) const;
+  std::optional<cv::Mat> makeDepthVis(const cv::Mat & depth) const;
+  std::optional<float> getDepthInRegion(
+    double centroid_x, double centroid_y, double box_width,
+    double box_height, double region_scale = 0.1) const;
+  cv::Scalar generateDarkColor();
 
-    // ── Shared state ────────────────────────────────────────────────────────
-    CameraNodeBehavior behavior_;
-    std::string node_name_;
+  // ── Shared state ────────────────────────────────────────────────────────
+  CameraNodeBehavior behavior_;
+  std::string node_name_;
 
-    cv::Mat color_image_;
-    cv::Mat depth_image_;
+  cv::Mat color_image_;
+  cv::Mat depth_image_;
 
-    bool use_compressed_ = false;
-    std::string camera_type_ = "realsense";
-    bool verbose_mode_ = true;
-    double image_timeout_ = 2.0;
+  bool use_compressed_ = false;
+  std::string camera_type_ = "realsense";
+  bool verbose_mode_ = true;
+  double image_timeout_ = 2.0;
 
-    rclcpp::Time timer_start_;
-    std::optional<double> last_image_time_;
+  rclcpp::Time timer_start_;
+  std::optional<double> last_image_time_;
 
-    std::mutex frame_mutex_;
-    cv::Mat latest_frame_;
-    cv::Mat latest_depth_;
+  std::mutex frame_mutex_;
+  cv::Mat latest_frame_;
+  cv::Mat latest_depth_;
 
-    rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Image>::SharedPtr debug_pub_;
-    rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Image>::SharedPtr depth_debug_pub_;
+  rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Image>::SharedPtr debug_pub_;
+  rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Image>::SharedPtr depth_debug_pub_;
 
-    rclcpp::TimerBase::SharedPtr vis_timer_;
-    rclcpp::TimerBase::SharedPtr timeout_timer_;
+  rclcpp::TimerBase::SharedPtr vis_timer_;
+  rclcpp::TimerBase::SharedPtr timeout_timer_;
 
-    // Group for the visualization timer alone. On a multi-threaded executor it
-    // lets the debug colormap/imshow/publish work overlap the camera callbacks
-    // instead of blocking them; everything else stays in the node's default
-    // (mutually exclusive) group, which is what keeps color_image_/depth_image_
-    // and last_image_time_ free of races.
-    rclcpp::CallbackGroup::SharedPtr vis_callback_group_;
+  // Group for the visualization timer alone. On a multi-threaded executor it
+  // lets the debug colormap/imshow/publish work overlap the camera callbacks
+  // instead of blocking them; everything else stays in the node's default
+  // (mutually exclusive) group, which is what keeps color_image_/depth_image_
+  // and last_image_time_ free of races.
+  rclcpp::CallbackGroup::SharedPtr vis_callback_group_;
 
-    // Synchronized (uncompressed) subscription pair.
-    using ApproxSync = message_filters::sync_policies::ApproximateTime<
-        sensor_msgs::msg::Image, sensor_msgs::msg::Image>;
-    std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::Image, rclcpp_lifecycle::LifecycleNode>> color_sub_;
-    std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::Image, rclcpp_lifecycle::LifecycleNode>> depth_sub_;
-    std::shared_ptr<message_filters::Synchronizer<ApproxSync>> sync_;
+  // Synchronized (uncompressed) subscription pair.
+  using ApproxSync = message_filters::sync_policies::ApproximateTime<
+    sensor_msgs::msg::Image, sensor_msgs::msg::Image>;
+  std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::Image,
+    rclcpp_lifecycle::LifecycleNode>> color_sub_;
+  std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::Image,
+    rclcpp_lifecycle::LifecycleNode>> depth_sub_;
+  std::shared_ptr<message_filters::Synchronizer<ApproxSync>> sync_;
 
-    // Synchronized (compressed) subscription pair.
-    using ApproxSyncCompressed = message_filters::sync_policies::ApproximateTime<
-        sensor_msgs::msg::CompressedImage, sensor_msgs::msg::CompressedImage>;
-    std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::CompressedImage, rclcpp_lifecycle::LifecycleNode>>
-        color_sub_compressed_;
-    std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::CompressedImage, rclcpp_lifecycle::LifecycleNode>>
-        depth_sub_compressed_;
-    std::shared_ptr<message_filters::Synchronizer<ApproxSyncCompressed>> sync_compressed_;
+  // Synchronized (compressed) subscription pair.
+  using ApproxSyncCompressed = message_filters::sync_policies::ApproximateTime<
+    sensor_msgs::msg::CompressedImage, sensor_msgs::msg::CompressedImage>;
+  std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::CompressedImage,
+    rclcpp_lifecycle::LifecycleNode>>
+  color_sub_compressed_;
+  std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::CompressedImage,
+    rclcpp_lifecycle::LifecycleNode>>
+  depth_sub_compressed_;
+  std::shared_ptr<message_filters::Synchronizer<ApproxSyncCompressed>> sync_compressed_;
 
-    // Pepper RGB-only subscription (plain, not message_filters-wrapped).
-    rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr color_sub_plain_;
-    rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr color_sub_plain_compressed_;
+  // Pepper RGB-only subscription (plain, not message_filters-wrapped).
+  rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr color_sub_plain_;
+  rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr color_sub_plain_compressed_;
 };
 
 }  // namespace dec_common
-

@@ -50,43 +50,47 @@
 extern const std::array<std::string, 80> COCO_CLASSES;
 
 /** @brief Tunable settings for the person-detection node (see the YAML config). */
-struct PersonDetectionConfig {
-    std::string camera = "realsense";
-    bool use_compressed = false;
-    double image_timeout = 2.0;
-    bool verbose_mode = true;
-    double confidence_threshold = 0.5;
+struct PersonDetectionConfig
+{
+  std::string camera = "realsense";
+  bool use_compressed = false;
+  double image_timeout = 2.0;
+  bool verbose_mode = true;
+  double confidence_threshold = 0.5;
 
-    // ByteTrack parameters
-    float track_threshold = 0.45f;
-    int track_buffer = 30;
-    float match_threshold = 0.8f;
-    int frame_rate = 30;
+  // ByteTrack parameters
+  float track_threshold = 0.45f;
+  int track_buffer = 30;
+  float match_threshold = 0.8f;
+  int frame_rate = 30;
 
-    // Class names (or numeric indices, as strings) to track; {"all"} tracks everything.
-    std::vector<std::string> target_classes = {"person"};
+  // Class names (or numeric indices, as strings) to track; {"all"} tracks everything.
+  std::vector<std::string> target_classes = {"person"};
 };
 
 // Declares and reads this node's ROS2 parameters (see dec_common/param_loader.h),
 // falling back to the PersonDetectionConfig defaults above for any parameter
 // not set by the launch file's YAML.
-PersonDetectionConfig loadConfiguration(rclcpp_lifecycle::LifecycleNode* node);
+PersonDetectionConfig loadConfiguration(rclcpp_lifecycle::LifecycleNode * node);
 
 // Resolves target_classes (names or numeric-string indices) to a set of COCO
 // class indices. Empty or {"all"} means "track everything".
-std::set<int> getClassIndices(const std::vector<std::string>& target_classes, const rclcpp::Logger& logger);
+std::set<int> getClassIndices(
+  const std::vector<std::string> & target_classes,
+  const rclcpp::Logger & logger);
 
 /**
  * @brief One finalized tracked-object record, ready to publish/draw.
  */
-struct TrackingDatum {
-    std::string track_id;
-    int class_id = 0;
-    std::string class_name;
-    float confidence = 0.0f;
-    geometry_msgs::msg::Point centroid;
-    float width = 0.0f;
-    float height = 0.0f;
+struct TrackingDatum
+{
+  std::string track_id;
+  int class_id = 0;
+  std::string class_name;
+  float confidence = 0.0f;
+  geometry_msgs::msg::Point centroid;
+  float width = 0.0f;
+  float height = 0.0f;
 };
 
 //=============================================================================
@@ -102,52 +106,56 @@ struct TrackingDatum {
  * dec_common::CameraLifecycleNode; this class adds the detection publishers,
  * class filtering, and tracking post-processing.
  */
-class PersonDetectionNode : public dec_common::CameraLifecycleNode {
+class PersonDetectionNode : public dec_common::CameraLifecycleNode
+{
 public:
-    explicit PersonDetectionNode(const std::string& node_name = "person_detection");
+  explicit PersonDetectionNode(const std::string & node_name = "person_detection");
 
-    /** @brief Create the lifecycle publishers and load the camera settings
-     *         and target classes. */
-    CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;
+  /** @brief Create the lifecycle publishers and load the camera settings
+   *         and target classes. */
+  CallbackReturn on_configure(const rclcpp_lifecycle::State & state) override;
 
-    /** @brief Start the visualization and status timers. */
-    CallbackReturn on_activate  (const rclcpp_lifecycle::State& state) override;
+  /** @brief Start the visualization and status timers. */
+  CallbackReturn on_activate(const rclcpp_lifecycle::State & state) override;
 
-    /** @brief Cancel the visualization and status timers. */
-    CallbackReturn on_deactivate(const rclcpp_lifecycle::State& state) override;
+  /** @brief Cancel the visualization and status timers. */
+  CallbackReturn on_deactivate(const rclcpp_lifecycle::State & state) override;
 
-    /** @brief Destroy the lifecycle publishers. */
-    CallbackReturn on_cleanup   (const rclcpp_lifecycle::State& state) override;
+  /** @brief Destroy the lifecycle publishers. */
+  CallbackReturn on_cleanup(const rclcpp_lifecycle::State & state) override;
 
-    /** @brief Log that the node is shutting down. */
-    CallbackReturn on_shutdown  (const rclcpp_lifecycle::State& state) override;
+  /** @brief Log that the node is shutting down. */
+  CallbackReturn on_shutdown(const rclcpp_lifecycle::State & state) override;
 
 protected:
-    void statusCallback();
+  void statusCallback();
 
-    // Runs detection + tracking on the current color/depth frame. Subclasses
-    // implement detectObject(); this drives the shared post-processing
-    // (class filtering, tracking, publishing, visualization).
-    void processImages() override;
-    virtual bool detectObject(const cv::Mat& image, std::vector<Eigen::Vector4d>& boxes,
-                              std::vector<float>& scores, std::vector<int>& class_ids) = 0;
-    virtual byte_tracker::Detections updateTracker(const std::vector<Eigen::Vector4d>& boxes,
-                                                    const std::vector<float>& scores,
-                                                    const std::vector<int>& class_ids) = 0;
+  // Runs detection + tracking on the current color/depth frame. Subclasses
+  // implement detectObject(); this drives the shared post-processing
+  // (class filtering, tracking, publishing, visualization).
+  void processImages() override;
+  virtual bool detectObject(
+    const cv::Mat & image, std::vector<Eigen::Vector4d> & boxes,
+    std::vector<float> & scores, std::vector<int> & class_ids) = 0;
+  virtual byte_tracker::Detections updateTracker(
+    const std::vector<Eigen::Vector4d> & boxes,
+    const std::vector<float> & scores,
+    const std::vector<int> & class_ids) = 0;
 
-    std::vector<TrackingDatum> prepareTrackingData(const byte_tracker::Detections& tracked);
-    void publishPersonDetection(const std::vector<TrackingDatum>& tracking_data);
-    cv::Mat drawTrackedObjects(const cv::Mat& frame, const byte_tracker::Detections& tracked,
-                              const std::vector<TrackingDatum>& tracking_data);
+  std::vector<TrackingDatum> prepareTrackingData(const byte_tracker::Detections & tracked);
+  void publishPersonDetection(const std::vector<TrackingDatum> & tracking_data);
+  cv::Mat drawTrackedObjects(
+    const cv::Mat & frame, const byte_tracker::Detections & tracked,
+    const std::vector<TrackingDatum> & tracking_data);
 
-    PersonDetectionConfig config_;
+  PersonDetectionConfig config_;
 
-    rclcpp_lifecycle::LifecyclePublisher<dec_interfaces::msg::PersonDetection>::SharedPtr pub_objects_;
+  rclcpp_lifecycle::LifecyclePublisher<dec_interfaces::msg::PersonDetection>::SharedPtr pub_objects_;
 
-    std::set<int> target_class_indices_;
-    std::unordered_map<int, cv::Scalar> object_colors_;
+  std::set<int> target_class_indices_;
+  std::unordered_map<int, cv::Scalar> object_colors_;
 
-    rclcpp::TimerBase::SharedPtr status_timer_;
+  rclcpp::TimerBase::SharedPtr status_timer_;
 };
 
 //=============================================================================
@@ -167,60 +175,66 @@ protected:
  * Loads the YOLOv11 ONNX model, filters detections down to the configured
  * target classes, and assigns persistent track IDs with ByteTrack.
  */
-class Yolov11Node : public PersonDetectionNode {
+class Yolov11Node : public PersonDetectionNode
+{
 public:
-    Yolov11Node();
+  Yolov11Node();
 
-    /** @brief Load the YOLOv11 ONNX model and the ByteTrack tracker. */
-    CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;
+  /** @brief Load the YOLOv11 ONNX model and the ByteTrack tracker. */
+  CallbackReturn on_configure(const rclcpp_lifecycle::State & state) override;
 
-    /** @brief Create the camera subscriptions and start the timeout monitor. */
-    CallbackReturn on_activate  (const rclcpp_lifecycle::State& state) override;
+  /** @brief Create the camera subscriptions and start the timeout monitor. */
+  CallbackReturn on_activate(const rclcpp_lifecycle::State & state) override;
 
-    /** @brief Destroy the camera subscriptions. */
-    CallbackReturn on_deactivate(const rclcpp_lifecycle::State& state) override;
+  /** @brief Destroy the camera subscriptions. */
+  CallbackReturn on_deactivate(const rclcpp_lifecycle::State & state) override;
 
-    /** @brief Release the ONNX session. */
-    CallbackReturn on_cleanup   (const rclcpp_lifecycle::State& state) override;
+  /** @brief Release the ONNX session. */
+  CallbackReturn on_cleanup(const rclcpp_lifecycle::State & state) override;
 
 protected:
-    bool detectObject(const cv::Mat& image, std::vector<Eigen::Vector4d>& boxes,
-                      std::vector<float>& scores, std::vector<int>& class_ids) override;
-    byte_tracker::Detections updateTracker(const std::vector<Eigen::Vector4d>& boxes,
-                                           const std::vector<float>& scores,
-                                           const std::vector<int>& class_ids) override;
+  bool detectObject(
+    const cv::Mat & image, std::vector<Eigen::Vector4d> & boxes,
+    std::vector<float> & scores, std::vector<int> & class_ids) override;
+  byte_tracker::Detections updateTracker(
+    const std::vector<Eigen::Vector4d> & boxes,
+    const std::vector<float> & scores,
+    const std::vector<int> & class_ids) override;
 
 private:
-    bool initModel();
+  bool initModel();
 
-    Ort::Value prepareInput(const cv::Mat& image);
-    void processOutput(const Ort::Value& output, std::vector<Eigen::Vector4d>& boxes,
-                       std::vector<float>& scores, std::vector<int>& class_ids);
-    static Eigen::Vector4d rescaleBox(const Eigen::Vector4d& box_cxcywh, double orig_w, double orig_h,
-                                      double input_w, double input_h);
-    static Eigen::Vector4d xywhToXyxy(const Eigen::Vector4d& box);
-    static double computeIou(const Eigen::Vector4d& a, const Eigen::Vector4d& b);
-    static std::vector<int> nms(const std::vector<Eigen::Vector4d>& boxes, const std::vector<float>& scores,
-                                double iou_threshold);
-    static std::vector<int> multiclassNms(const std::vector<Eigen::Vector4d>& boxes,
-                                          const std::vector<float>& scores, const std::vector<int>& class_ids,
-                                          double iou_threshold);
+  Ort::Value prepareInput(const cv::Mat & image);
+  void processOutput(
+    const Ort::Value & output, std::vector<Eigen::Vector4d> & boxes,
+    std::vector<float> & scores, std::vector<int> & class_ids);
+  static Eigen::Vector4d rescaleBox(
+    const Eigen::Vector4d & box_cxcywh, double orig_w, double orig_h,
+    double input_w, double input_h);
+  static Eigen::Vector4d xywhToXyxy(const Eigen::Vector4d & box);
+  static double computeIou(const Eigen::Vector4d & a, const Eigen::Vector4d & b);
+  static std::vector<int> nms(
+    const std::vector<Eigen::Vector4d> & boxes, const std::vector<float> & scores,
+    double iou_threshold);
+  static std::vector<int> multiclassNms(
+    const std::vector<Eigen::Vector4d> & boxes,
+    const std::vector<float> & scores, const std::vector<int> & class_ids,
+    double iou_threshold);
 
-    double confidence_threshold_ = 0.5;
-    float track_thresh_ = 0.45f;
-    int track_buffer_ = 30;
-    float match_thresh_ = 0.8f;
-    int frame_rate_ = 30;
+  double confidence_threshold_ = 0.5;
+  float track_thresh_ = 0.45f;
+  int track_buffer_ = 30;
+  float match_thresh_ = 0.8f;
+  int frame_rate_ = 30;
 
-    std::unique_ptr<Ort::Env> ort_env_;
-    std::unique_ptr<Ort::Session> session_;
-    std::vector<std::string> input_names_;
-    std::vector<std::string> output_names_;
-    int64_t input_height_ = 0;
-    int64_t input_width_ = 0;
-    double orig_width_ = 0.0;
-    double orig_height_ = 0.0;
+  std::unique_ptr<Ort::Env> ort_env_;
+  std::unique_ptr<Ort::Session> session_;
+  std::vector<std::string> input_names_;
+  std::vector<std::string> output_names_;
+  int64_t input_height_ = 0;
+  int64_t input_width_ = 0;
+  double orig_width_ = 0.0;
+  double orig_height_ = 0.0;
 
-    std::unique_ptr<byte_tracker::ByteTrack> tracker_;
+  std::unique_ptr<byte_tracker::ByteTrack> tracker_;
 };
-

@@ -82,36 +82,40 @@ constexpr double HEAD_PITCH_MIN = -0.7068;
 constexpr double HEAD_PITCH_MAX = 0.6371;
 
 /** @brief The robot's 2D pose in the map frame, used to aim deictic gestures. */
-struct RobotPose {
-    double x = 0.0;
-    double y = 0.0;
-    double theta = 0.0;
+struct RobotPose
+{
+  double x = 0.0;
+  double y = 0.0;
+  double theta = 0.0;
 };
 
 /**
  * @brief One gesture's per-arm waypoint data, as loaded from data/gesture.yaml.
  */
-struct ArmWaypoints {
-    std::vector<std::string> joint_names;
-    std::vector<std::vector<double>> waypoints;  // one entry per waypoint, one value per joint_name
-    std::vector<double> times;                   // one entry per waypoint
+struct ArmWaypoints
+{
+  std::vector<std::string> joint_names;
+  std::vector<std::vector<double>> waypoints;    // one entry per waypoint, one value per joint_name
+  std::vector<double> times;                     // one entry per waypoint
 };
 
 /** @brief A single named gesture descriptor (e.g. "welcome", "wave", "shake"). */
-struct GestureDescriptor {
-    std::vector<std::string> arms;  // e.g. {"LArm", "RArm", "Leg"}
-    std::unordered_map<std::string, ArmWaypoints> per_arm;
+struct GestureDescriptor
+{
+  std::vector<std::string> arms;    // e.g. {"LArm", "RArm", "Leg"}
+  std::unordered_map<std::string, ArmWaypoints> per_arm;
 };
 
 /**
  * @brief Home-pose joint angles per limb, used both to seed joint_states_ and as
  *        the resting position for deictic/bow/nod gestures.
  */
-struct HomePositions {
-    std::vector<double> r_arm{1.7410, -0.09664, 1.6981, 0.09664, -0.05679};
-    std::vector<double> l_arm{1.7625, 0.09970, -1.7150, -0.1334, 0.06592};
-    std::vector<double> head{-0.2, 0.0};
-    std::vector<double> leg{0.0, 0.0, 0.0};
+struct HomePositions
+{
+  std::vector<double> r_arm{1.7410, -0.09664, 1.6981, 0.09664, -0.05679};
+  std::vector<double> l_arm{1.7625, 0.09970, -1.7150, -0.1334, 0.06592};
+  std::vector<double> head{-0.2, 0.0};
+  std::vector<double> leg{0.0, 0.0, 0.0};
 };
 
 /**
@@ -120,20 +124,22 @@ struct HomePositions {
  * @return Map of gesture name to its per-arm waypoint data. Empty if the
  *         file is missing or malformed.
  */
-std::unordered_map<std::string, GestureDescriptor> loadGestureDescriptors(const std::string& yaml_path);
+std::unordered_map<std::string, GestureDescriptor> loadGestureDescriptors(
+  const std::string & yaml_path);
 
 /**
  * @brief Loads the robot topic mapping from data/pepper_topics.yaml (falls back to
  *        hardcoded defaults for any missing key, mirroring the Python
  *        ConfigManager).
  */
-struct RobotTopics {
-    std::string joint_states = "/joint_states";
-    // Matches the robot_pose key in data/pepper_topics.yaml and what
-    // fast_lio's fastlio_localization actually publishes; the old
-    // "/localization" default silently subscribed to a topic nobody
-    // publishes whenever the YAML key was missing.
-    std::string robot_pose = "/localization/pose";
+struct RobotTopics
+{
+  std::string joint_states = "/joint_states";
+  // Matches the robot_pose key in data/pepper_topics.yaml and what
+  // fast_lio's fastlio_localization actually publishes; the old
+  // "/localization" default silently subscribed to a topic nobody
+  // publishes whenever the YAML key was missing.
+  std::string robot_pose = "/localization/pose";
 };
 
 /**
@@ -142,7 +148,7 @@ struct RobotTopics {
  * @return RobotTopics with any keys present in the file overriding the
  *         hardcoded defaults.
  */
-RobotTopics loadRobotTopics(const std::string& yaml_path);
+RobotTopics loadRobotTopics(const std::string & yaml_path);
 
 //=============================================================================
 // GestureExecutionNode
@@ -167,92 +173,102 @@ RobotTopics loadRobotTopics(const std::string& yaml_path);
  * nodding gestures (deictic pointing via inverse kinematics), reporting
  * elapsed-time feedback while a gesture runs.
  */
-class GestureExecutionNode : public rclcpp_lifecycle::LifecycleNode {
+class GestureExecutionNode : public rclcpp_lifecycle::LifecycleNode
+{
 public:
-    using CallbackReturn =
-        rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
-    using GestureAction = dec_interfaces::action::Gesture;
-    using GoalHandleGesture = rclcpp_action::ServerGoalHandle<GestureAction>;
+  using CallbackReturn =
+    rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
+  using GestureAction = dec_interfaces::action::Gesture;
+  using GoalHandleGesture = rclcpp_action::ServerGoalHandle<GestureAction>;
 
-    GestureExecutionNode();
+  GestureExecutionNode();
 
-    /** @brief Load the gesture and topic YAML data and create the trajectory
-     *         and marker publishers plus the action server. */
-    CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;
+  /** @brief Load the gesture and topic YAML data and create the trajectory
+   *         and marker publishers plus the action server. */
+  CallbackReturn on_configure(const rclcpp_lifecycle::State & state) override;
 
-    /** @brief Activate the publishers and subscribe to /joint_states and
-     *         /localization/pose. */
-    CallbackReturn on_activate  (const rclcpp_lifecycle::State& state) override;
+  /** @brief Activate the publishers and subscribe to /joint_states and
+   *         /localization/pose. */
+  CallbackReturn on_activate(const rclcpp_lifecycle::State & state) override;
 
-    /** @brief Destroy the joint-state and pose subscriptions. */
-    CallbackReturn on_deactivate(const rclcpp_lifecycle::State& state) override;
+  /** @brief Destroy the joint-state and pose subscriptions. */
+  CallbackReturn on_deactivate(const rclcpp_lifecycle::State & state) override;
 
-    /** @brief Destroy the lifecycle publishers and the action server. */
-    CallbackReturn on_cleanup   (const rclcpp_lifecycle::State& state) override;
+  /** @brief Destroy the lifecycle publishers and the action server. */
+  CallbackReturn on_cleanup(const rclcpp_lifecycle::State & state) override;
 
-    /** @brief Log that the node is shutting down. */
-    CallbackReturn on_shutdown  (const rclcpp_lifecycle::State& state) override;
+  /** @brief Log that the node is shutting down. */
+  CallbackReturn on_shutdown(const rclcpp_lifecycle::State & state) override;
 
 private:
-    void initJointStates();
+  void initJointStates();
 
-    // ── Subscription callbacks ──────────────────────────────────────────────
-    void jointStatesCallback(const sensor_msgs::msg::JointState::SharedPtr msg);
-    void robotPoseCallback(const nav_msgs::msg::Odometry::SharedPtr msg);
+  // ── Subscription callbacks ──────────────────────────────────────────────
+  void jointStatesCallback(const sensor_msgs::msg::JointState::SharedPtr msg);
+  void robotPoseCallback(const nav_msgs::msg::Odometry::SharedPtr msg);
 
-    // ── Action server callbacks ─────────────────────────────────────────────
-    rclcpp_action::GoalResponse handleGoal(
-        const rclcpp_action::GoalUUID& uuid, std::shared_ptr<const GestureAction::Goal> goal);
-    rclcpp_action::CancelResponse handleCancel(const std::shared_ptr<GoalHandleGesture> goal_handle);
-    void handleAccepted(const std::shared_ptr<GoalHandleGesture> goal_handle);
-    void execute(const std::shared_ptr<GoalHandleGesture> goal_handle);
-    void publishElapsedFeedback(const std::shared_ptr<GoalHandleGesture> goal_handle, double start_time);
+  // ── Action server callbacks ─────────────────────────────────────────────
+  rclcpp_action::GoalResponse handleGoal(
+    const rclcpp_action::GoalUUID & uuid, std::shared_ptr<const GestureAction::Goal> goal);
+  rclcpp_action::CancelResponse handleCancel(const std::shared_ptr<GoalHandleGesture> goal_handle);
+  void handleAccepted(const std::shared_ptr<GoalHandleGesture> goal_handle);
+  void execute(const std::shared_ptr<GoalHandleGesture> goal_handle);
+  void publishElapsedFeedback(
+    const std::shared_ptr<GoalHandleGesture> goal_handle,
+    double start_time);
 
-    // ── Gesture execution ────────────────────────────────────────────────────
-    bool executeGesture(const std::string& gesture_type, const std::string& gesture_name,
-                        int64_t gesture_duration_ms, int64_t bow_nod_angle,
-                        double location_x, double location_y, double location_z);
-    bool executeDeicticGesture(double point_x, double point_y, double point_z, int64_t duration_ms);
-    bool checkJointLimits(int arm, double shoulder_pitch, double shoulder_roll);
-    bool executePointingMotion(int arm, double shoulder_pitch, double shoulder_roll, int64_t duration_ms,
-                                double pointing_x, double pointing_y, double pointing_z);
-    std::array<double, 2> calculateHeadAnglesToTarget(double target_x, double target_y, double target_z);
-    bool executeIconicGesture(const std::string& gesture_name, int64_t duration_ms);
-    bool executeBowingGesture(int64_t bow_angle, int64_t duration_ms);
-    bool executeNoddingGesture(int64_t nod_angle, int64_t duration_ms);
+  // ── Gesture execution ────────────────────────────────────────────────────
+  bool executeGesture(
+    const std::string & gesture_type, const std::string & gesture_name,
+    int64_t gesture_duration_ms, int64_t bow_nod_angle,
+    double location_x, double location_y, double location_z);
+  bool executeDeicticGesture(double point_x, double point_y, double point_z, int64_t duration_ms);
+  bool checkJointLimits(int arm, double shoulder_pitch, double shoulder_roll);
+  bool executePointingMotion(
+    int arm, double shoulder_pitch, double shoulder_roll, int64_t duration_ms,
+    double pointing_x, double pointing_y, double pointing_z);
+  std::array<double, 2> calculateHeadAnglesToTarget(
+    double target_x, double target_y,
+    double target_z);
+  bool executeIconicGesture(const std::string & gesture_name, int64_t duration_ms);
+  bool executeBowingGesture(int64_t bow_angle, int64_t duration_ms);
+  bool executeNoddingGesture(int64_t nod_angle, int64_t duration_ms);
 
-    // Publishes a JointAnglesTrajectory directly from already-flattened,
-    // joint-major joint_angles/times (one entry per (joint, waypoint) pair).
-    void publishJointTrajectory(const std::vector<std::string>& joint_names,
-                                const std::vector<float>& joint_angles,
-                                const std::vector<float>& times, bool use_bezier);
+  // Publishes a JointAnglesTrajectory directly from already-flattened,
+  // joint-major joint_angles/times (one entry per (joint, waypoint) pair).
+  void publishJointTrajectory(
+    const std::vector<std::string> & joint_names,
+    const std::vector<float> & joint_angles,
+    const std::vector<float> & times, bool use_bezier);
 
-    // Reshapes a uniform waypoint grid (same joint_names for every waypoint)
-    // into the flattened joint-major layout, splitting total_duration evenly
-    // across waypoints, then publishes it.
-    void moveJointsBezier(const std::vector<std::string>& joint_names,
-                          const std::vector<std::vector<double>>& waypoints,
-                          double total_duration, bool use_bezier = true);
+  // Reshapes a uniform waypoint grid (same joint_names for every waypoint)
+  // into the flattened joint-major layout, splitting total_duration evenly
+  // across waypoints, then publishes it.
+  void moveJointsBezier(
+    const std::vector<std::string> & joint_names,
+    const std::vector<std::vector<double>> & waypoints,
+    double total_duration, bool use_bezier = true);
 
-    void publishDeicticVisualization(double target_x, double target_y, double target_z,
-                                     double shoulder_x, double shoulder_y, double shoulder_z, int arm);
+  void publishDeicticVisualization(
+    double target_x, double target_y, double target_z,
+    double shoulder_x, double shoulder_y, double shoulder_z, int arm);
 
-    // ── Configuration ────────────────────────────────────────────────────────
-    bool verbose_mode_ = false;
-    std::unordered_map<std::string, GestureDescriptor> gestures_;
-    RobotTopics topics_;
-    HomePositions home_positions_;
+  // ── Configuration ────────────────────────────────────────────────────────
+  bool verbose_mode_ = false;
+  std::unordered_map<std::string, GestureDescriptor> gestures_;
+  RobotTopics topics_;
+  HomePositions home_positions_;
 
-    RobotPose robot_pose_;
-    std::unordered_map<std::string, double> joint_states_;
-    std::atomic<bool> executing_{false};
-    std::atomic<bool> feedback_stop_{false};
-    bool lifecycle_active_ = false;
+  RobotPose robot_pose_;
+  std::unordered_map<std::string, double> joint_states_;
+  std::atomic<bool> executing_{false};
+  std::atomic<bool> feedback_stop_{false};
+  bool lifecycle_active_ = false;
 
-    rclcpp_lifecycle::LifecyclePublisher<naoqi_bridge_msgs::msg::JointAnglesTrajectory>::SharedPtr joint_traj_pub_;
-    rclcpp_lifecycle::LifecyclePublisher<visualization_msgs::msg::Marker>::SharedPtr marker_pub_;
-    rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_sub_;
-    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr pose_sub_;
-    rclcpp_action::Server<GestureAction>::SharedPtr action_server_;
+  rclcpp_lifecycle::LifecyclePublisher<naoqi_bridge_msgs::msg::JointAnglesTrajectory>::SharedPtr
+    joint_traj_pub_;
+  rclcpp_lifecycle::LifecyclePublisher<visualization_msgs::msg::Marker>::SharedPtr marker_pub_;
+  rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_sub_;
+  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr pose_sub_;
+  rclcpp_action::Server<GestureAction>::SharedPtr action_server_;
 };
-

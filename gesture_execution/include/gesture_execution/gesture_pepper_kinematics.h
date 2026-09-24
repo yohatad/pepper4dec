@@ -19,7 +19,8 @@
 
 #include <array>
 
-namespace pepper_kinematics {
+namespace pepper_kinematics
+{
 
 constexpr int RIGHT_ARM = 0;
 constexpr int LEFT_ARM = 1;
@@ -68,8 +69,9 @@ std::array<double, 2> getArmShoulderAngles(int arm, double elbow_x, double elbow
  * @param wrist_z Z position of wrist
  * @return Elbow roll angle in radians
  */
-double getArmElbowRollAngle(int arm, double shoulder_pitch, double shoulder_roll,
-                             double wrist_x, double wrist_y, double wrist_z);
+double getArmElbowRollAngle(
+  int arm, double shoulder_pitch, double shoulder_roll,
+  double wrist_x, double wrist_y, double wrist_z);
 
 /**
  * @brief Calculate elbow yaw angle given other joint angles and wrist position.
@@ -82,8 +84,9 @@ double getArmElbowRollAngle(int arm, double shoulder_pitch, double shoulder_roll
  * @param wrist_z Z position of wrist
  * @return Elbow yaw angle in radians
  */
-double getArmElbowYawAngle(int arm, double shoulder_pitch, double shoulder_roll, double elbow_roll,
-                            double wrist_x, double wrist_y, double wrist_z);
+double getArmElbowYawAngle(
+  int arm, double shoulder_pitch, double shoulder_roll, double elbow_roll,
+  double wrist_x, double wrist_y, double wrist_z);
 
 /**
  * @brief Calculate both elbow angles given shoulder angles and wrist position.
@@ -95,8 +98,9 @@ double getArmElbowYawAngle(int arm, double shoulder_pitch, double shoulder_roll,
  * @param wrist_z Z position of wrist
  * @return {elbow_yaw, elbow_roll} angles in radians
  */
-std::array<double, 2> getArmElbowAngles(int arm, double shoulder_pitch, double shoulder_roll,
-                                         double wrist_x, double wrist_y, double wrist_z);
+std::array<double, 2> getArmElbowAngles(
+  int arm, double shoulder_pitch, double shoulder_roll,
+  double wrist_x, double wrist_y, double wrist_z);
 
 /**
  * @brief Calculate all arm joint angles given elbow and wrist positions.
@@ -112,8 +116,9 @@ std::array<double, 2> getArmElbowAngles(int arm, double shoulder_pitch, double s
  *         the Python implementation, which leaves them as placeholder
  *         defaults.
  */
-std::array<double, 4> getArmAngles(int arm, double elbow_x, double elbow_y, double elbow_z,
-                                    double wrist_x, double wrist_y, double wrist_z);
+std::array<double, 4> getArmAngles(
+  int arm, double elbow_x, double elbow_y, double elbow_z,
+  double wrist_x, double wrist_y, double wrist_z);
 
 /**
  * @brief Calculate head angles given camera position.
@@ -125,4 +130,3 @@ std::array<double, 4> getArmAngles(int arm, double elbow_x, double elbow_y, doub
 std::array<double, 2> getHeadAngles(double camera_x, double camera_y, double camera_z);
 
 }  // namespace pepper_kinematics
-
