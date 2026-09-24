@@ -397,10 +397,13 @@ map) still needs one rebuild to be installed.
 
 ```bash
 ros2 lifecycle get /controller_server      # every Nav2 node should be 'active'
-ros2 topic hz /points /imu/data            # both must flow before anything else works
+ros2 topic hz /points                     # lidar; must flow before anything else works
+ros2 topic hz /imu/data                   # and its IMU
 ros2 run tf2_ros tf2_echo map base_footprint
 ros2 topic echo /collision_monitor_state   # 0 = clear, otherwise slowdown/stop
-ros2 topic hz /cmd_vel_raw /cmd_vel        # what the planner asked vs what the robot got
+ros2 topic hz /cmd_vel_raw                # the controller is producing commands
+ros2 topic hz /cmd_vel                    # and they pass the collision monitor
+ros2 topic echo /cmd_vel --field linear.x # 0 while /cmd_vel_raw is not: the monitor is stopping it
 ```
 
 | Symptom | Likely cause |
