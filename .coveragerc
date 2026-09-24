@@ -1,0 +1,30 @@
+# Python coverage for the CI coverage job (see ci.yml). The ament_cmake
+# packages' pytest runs append to one data file, colcon writes one per
+# ament_python package; `coverage combine` merges them and maps build-tree
+# paths back onto this repository.
+[run]
+branch = True
+source =
+    ${COV_SRC}
+    conversation_manager
+    speech_event
+    text_to_speech
+omit =
+    */test/*
+    */launch/*
+    */setup.py
+
+[paths]
+# ament_python packages are imported from build/<pkg>/<pkg> (symlinks into
+# src/), so the first entry is where every path is reported.
+source =
+    ${COV_SRC}/
+    */build/
+
+[report]
+# colcon measures the ament_python packages with its own settings, so the
+# omit list is applied again at report time.
+omit =
+    */test/*
+    */launch/*
+    */setup.py

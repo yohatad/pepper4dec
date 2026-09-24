@@ -80,3 +80,94 @@ jobs:
           . install/setup.sh
           colcon test
           colcon test-result --verbose
+
+  # Which code the tests reach. A separate Debug build instrumented with
+  # --coverage, so the build-and-lint job keeps testing the normal build.
+  # Informational: it publishes a report and never fails on a low number.
+  coverage:
+    runs-on: ubuntu-22.04
+    container:
+      image: ros:humble-perception-jammy
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: src/pepper4dec
+
+      - name: Install build and coverage tools
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends \
+            build-essential cmake git \
+            python3-colcon-common-extensions python3-vcstool python3-rosdep python3-pip \
+            gcovr python3-pytest-cov
+
+      - name: Clone sibling ROS2 dependencies
+        run: |
+          git clone https://github.com/yohatad/naoqi_bridge_msgs2.git src/naoqi_bridge_msgs
+          git clone https://github.com/yohatad/naoqi_driver2.git src/naoqi_driver2
+          git clone https://github.com/ros-naoqi/libqi.git -b ros2 src/naoqi_libqi
+          git clone https://github.com/ros-naoqi/libqicore.git -b ros2 src/naoqi_libqicore
+          git clone https://github.com/ros-naoqi/nao_meshes2.git src/nao_meshes
+          git clone https://github.com/ros-naoqi/pepper_meshes2.git src/pepper_meshes
+          git clone https://github.com/BehaviorTree/BehaviorTree.CPP.git src/BehaviorTree.CPP
+          git clone https://github.com/BehaviorTree/BehaviorTree.ROS2.git src/BehaviorTree.ROS2
+
+      - name: rosdep install
+        run: |
+          rosdep update
+          rosdep install --from-paths src --ignore-src -y \
+            --skip-keys "fast_lio point_lio l2lidar_node"
+
+      - name: colcon build (coverage instrumented)
+        run: |
+          . /opt/ros/humble/setup.sh
+          colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_FLAGS=--coverage -DCMAKE_CXX_FLAGS=--coverage \
+            -DCMAKE_EXE_LINKER_FLAGS=--coverage -DCMAKE_SHARED_LINKER_FLAGS=--coverage
+
+      # Linters are skipped: their coverage means nothing. The ament_cmake
+      # packages' pytest runs pick up PYTEST_ADDOPTS; colcon overrides it for
+      # the ament_python packages, which get --pytest-with-coverage instead.
+      - name: colcon test (with coverage)
+        run: |
+          . /opt/ros/humble/setup.sh
+          . install/setup.sh
+          export COV_SRC=$PWD/src/pepper4dec
+          mkdir -p coverage/py
+          COVERAGE_FILE=$PWD/coverage/py/.coverage.cmake \
+          PYTEST_ADDOPTS="--cov --cov-append --cov-config=$COV_SRC/.coveragerc --cov-report=" \
+            colcon test --base-paths src/pepper4dec --ctest-args -LE linter \
+              --pytest-with-coverage --pytest-args -m "not linter"
+          colcon test-result --test-result-base build || true
+
+      - name: Coverage report
+        run: |
+          export COV_SRC=$PWD/src/pepper4dec COVERAGE_RCFILE=$PWD/src/pepper4dec/.coveragerc
+          for p in conversation_manager speech_event text_to_speech; do
+            cp build/$p/.coverage coverage/py/.coverage.$p || true
+          done
+          (cd coverage/py && python3 -m coverage combine -q && python3 -m coverage html -q -d ../python \
+            && python3 -m coverage report) > coverage/python.txt
+          mkdir -p coverage/cpp
+          gcovr --root "$COV_SRC" --object-directory build \
+            --filter "$COV_SRC/[a-z_]+/(src|include)/" --exclude-directories '.*/CMakeFiles/[0-9.]+' \
+            --exclude-unreachable-branches \
+            --html-details coverage/cpp/index.html --txt coverage/cpp.txt build
+          cat coverage/cpp.txt coverage/python.txt
+          {
+            echo "## Test coverage"
+            echo
+            echo "| | Lines covered |"
+            echo "|---|---|"
+            echo "| C++ | $(grep '^TOTAL' coverage/cpp.txt | awk '{print $NF}') |"
+            echo "| Python | $(grep '^TOTAL' coverage/python.txt | awk '{print $NF}') |"
+            echo
+            echo "Per-file HTML reports: the coverage-report artifact (cpp/ and python/)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage/cpp
+            coverage/python
+            coverage/*.txt
