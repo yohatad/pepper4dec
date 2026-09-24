@@ -208,5 +208,5 @@ because Nav2 is their runtime consumer. RTAB-Map `.db` files go to `~/.ros/`
 and are not version-controlled.
 
 ## 📜 License
-Copyright (C) 2026 Upanzi Network
+Copyright (C) 2025 Carnegie Mellon University Africa
 Licensed under the BSD-3-Clause License. See individual package licenses for details.

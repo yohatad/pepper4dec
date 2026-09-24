@@ -262,5 +262,5 @@ For issues or questions:
 - **Contact**: 
   - [yohatad123@gmail.com](mailto:yohatad123@gmail.com)
 ## 📜 License
-Copyright (C) 2026 Upanzi Network
+Copyright (C) 2025 Carnegie Mellon University Africa
 Licensed under the BSD-3-Clause License. See individual package licenses for details. Third-party pretrained model weights are **not** covered by this license — see [MODELS.md](MODELS.md).

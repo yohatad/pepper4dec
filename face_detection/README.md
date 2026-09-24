@@ -199,5 +199,5 @@ Apache-2.0) — see [MODELS.md](../MODELS.md) at the repo root for full
 attribution and licensing details on every model used across pepper4dec.
 
 ## 📜 License
-Copyright (C) 2026 Upanzi Network
+Copyright (C) 2025 Carnegie Mellon University Africa
 Licensed under the BSD-3-Clause License. See individual package licenses for details.

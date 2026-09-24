@@ -420,5 +420,5 @@ ros2 topic hz /cmd_vel_raw /cmd_vel        # what the planner asked vs what the 
 - Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a>
 
 ## 📜 License
-Copyright (C) 2026 Upanzi Network
+Copyright (C) 2025 Carnegie Mellon University Africa
 Licensed under the BSD-3-Clause License. See individual package licenses for details.
