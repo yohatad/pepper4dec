@@ -43,6 +43,10 @@ if(BUILD_TESTING)
 
   find_package(ament_cmake_flake8 REQUIRED)
   ament_flake8(CONFIG_FILE "${CMAKE_CURRENT_SOURCE_DIR}/ament_flake8.ini")
+
+  # Starts every node with its config YAML and reads the parameters back.
+  find_package(launch_testing_ament_cmake REQUIRED)
+  add_launch_test(test/test_config_params_launch.py TIMEOUT 300)
 endif()
 
 ament_package()
