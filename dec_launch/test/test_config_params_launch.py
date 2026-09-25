@@ -18,8 +18,10 @@ node's ``get_parameters`` service and compares. Catches:
 Nested YAML maps are flattened to ROS's dotted names (``a: {b: 1}`` is
 parameter ``a.b``), and ``/**`` sections apply to every node in the file.
 
-Nodes whose imports need pip-only libraries (see ``requires``) are skipped,
-by name, where those libraries are missing, as they are in CI. Nodes that
+The Python nodes run through wrapper scripts that exec a dedicated
+virtualenv listed in ~/ros2_ws/.venvs/venv_map.sh. A node whose virtualenv is
+absent (as in CI) is skipped by name, and ``requires`` (pip-only modules) is
+checked against the interpreter the node actually runs with. Nodes that
 declare their parameters in on_configure() are sent the configure
 transition first; that transition may then fail for lack of a model file or
 a camera, which is fine: the parameters are declared before that point.
@@ -34,12 +36,14 @@ Version: v1.0
 Copyright (C) 2025 Carnegie Mellon University Africa
 """
 
-import importlib.util
 import math
 import os
+import re
+import subprocess
+import sys
 import unittest
 
-from ament_index_python.packages import get_package_share_directory
+from ament_index_python.packages import get_package_prefix, get_package_share_directory
 import launch
 import launch_ros.actions
 import launch_testing.actions
@@ -94,8 +98,50 @@ def config_path(package, filename):
     return os.path.join(get_package_share_directory(package), 'config', filename)
 
 
-def missing_modules(requires):
-    return [m for m in requires if importlib.util.find_spec(m) is None]
+VENV_MAP = os.path.expanduser('~/ros2_ws/.venvs/venv_map.sh')
+
+
+def node_interpreter(package, executable):
+    """
+    Return (python the node runs with, or None; reason when None).
+
+    Wrapper scripts ``source venv_map.sh`` and exec ``$VENV_<NAME>``. For
+    those, look the variable up in the map; anything else runs on the
+    interpreter this test runs on (or is a compiled node, where it is unused).
+    """
+    path = os.path.join(get_package_prefix(package), 'lib', package, executable)
+    with open(path, 'rb') as f:
+        head = f.read(512).decode('utf-8', 'ignore')
+    var = re.search(r'exec\s+"\$(VENV_[A-Z_]+)"', head)
+    if 'venv_map.sh' not in head or not var:
+        return sys.executable, ''
+    venvs = {}
+    if os.path.exists(VENV_MAP):
+        for line in open(VENV_MAP):
+            m = re.match(r'\s*(VENV_[A-Z_]+)="(.*)"', line)
+            if m:
+                venvs[m.group(1)] = os.path.expandvars(m.group(2))
+    python = venvs.get(var.group(1))
+    if not python or not os.path.exists(python):
+        return None, f'runs in virtualenv {var.group(1)}, which is not set up here'
+    return python, ''
+
+
+def missing_modules(python, requires):
+    if not requires:
+        return []
+    probe = ('import importlib.util, sys; '
+             'print(" ".join(m for m in sys.argv[1:] if importlib.util.find_spec(m) is None))')
+    out = subprocess.run([python, '-c', probe, *requires], capture_output=True, text=True)
+    return out.stdout.split()
+
+
+def skip_reason(package, executable, requires):
+    python, reason = node_interpreter(package, executable)
+    if python is None:
+        return reason
+    missing = missing_modules(python, requires)
+    return f'needs {", ".join(missing)} (pip-only, not installed)' if missing else ''
 
 
 def flatten(params, prefix=''):
@@ -131,7 +177,8 @@ def same(expected, actual):
     return expected == actual
 
 
-RUNNABLE = [n for n in NODES if not missing_modules(n[5])]
+SKIP = {n[0]: skip_reason(n[1], n[2], n[5]) for n in NODES}
+RUNNABLE = [n for n in NODES if not SKIP[n[0]]]
 
 
 @pytest.mark.launch_test
@@ -164,9 +211,8 @@ class TestConfigParameters(unittest.TestCase):
         return future.result()
 
     def check_node(self, name, package, config, configure_first, requires):
-        missing = missing_modules(requires)
-        if missing:
-            self.skipTest(f'{name} needs {", ".join(missing)} (pip-only, not installed)')
+        if SKIP[name]:
+            self.skipTest(f'{name} {SKIP[name]}')
 
         path = config_path(package, config)
         expected, shared_only = expected_parameters(path, name)
