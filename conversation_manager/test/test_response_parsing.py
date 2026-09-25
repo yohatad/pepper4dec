@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
 Unit tests for the LLM response-parsing helpers in
-conversation_manager_implementation.py: JSON extraction from raw model output
+conversation_manager_parsing.py: JSON extraction from raw model output
 (including <think> prefixes and NAOqi prosody tags), answer/intent extraction,
 streaming JSON string decoding, and sentence-level speech tagging.
 
 Pure string/JSON logic — no ROS graph, no OpenAI call, no Chroma database.
 
-The module imports openai and chromadb at import time, so the whole file skips
-when those aren't installed (same convention as person_detection's bag-replay
-test skipping on a missing ONNX model).
+The helpers live in a standard-library-only module, so these tests run
+everywhere, CI included, without openai or chromadb installed.
 
 Run via: colcon test --packages-select conversation_manager
 
@@ -23,22 +22,8 @@ Copyright (C) 2025 Carnegie Mellon University Africa
 
 import json
 
+from conversation_manager import conversation_manager_parsing as impl
 import pytest
-
-# openai / chromadb are heavy optional deps pulled in at module import.
-#
-# Deliberately NOT pytest.importorskip: under pytest 6.2.5 (the version ament
-# ships) a module-level Skipped raised during collection aborts collection for
-# the whole session, which silently disables the sibling flake8/pep257 tests.
-# A pytestmark skipif collects normally and skips at run time instead.
-try:
-    from conversation_manager import conversation_manager_implementation as impl
-except ImportError:  # pragma: no cover - exercised only where deps are absent
-    impl = None
-
-pytestmark = pytest.mark.skipif(
-    impl is None,
-    reason='conversation_manager deps (openai, chromadb) not installed')
 
 
 # ─────────────────────────────────────────────────────────────────────────────

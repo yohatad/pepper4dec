@@ -55,7 +55,6 @@ within the DEC project.
 """
 
 import numpy as np
-import pyroomacoustics as pra
 import threading
 import time
 from collections import deque
@@ -245,6 +244,9 @@ class SoundLocalizationNode(Node):
         azimuth_grid = np.linspace(0, 2 * np.pi, self.angular_resolution, endpoint=False)
         colatitude_grid = np.array([np.pi / 2])  # 2D horizontal plane only
 
+        # Imported here, its only use, so the geometry helpers load (and are
+        # unit-tested) without pyroomacoustics installed.
+        import pyroomacoustics as pra
         self.doa = pra.doa.SRP(
             L=self.mic_positions,
             fs=self.sample_rate,
