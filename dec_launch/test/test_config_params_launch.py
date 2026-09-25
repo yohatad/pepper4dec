@@ -115,13 +115,13 @@ def node_interpreter(package, executable):
     var = re.search(r'exec\s+"\$(VENV_[A-Z_]+)"', head)
     if 'venv_map.sh' not in head or not var:
         return sys.executable, ''
-    venvs = {}
+    python = ''
     if os.path.exists(VENV_MAP):
-        for line in open(VENV_MAP):
-            m = re.match(r'\s*(VENV_[A-Z_]+)="(.*)"', line)
-            if m:
-                venvs[m.group(1)] = os.path.expandvars(m.group(2))
-    python = venvs.get(var.group(1))
+        # Source it exactly as the wrappers do: the Docker map computes its
+        # paths at source time, so reading the text is not enough.
+        python = subprocess.run(
+            ['bash', '-c', f'source "$1" && printf %s "${{{var.group(1)}}}"', '_', VENV_MAP],
+            capture_output=True, text=True).stdout
     if not python or not os.path.exists(python):
         return None, f'runs in virtualenv {var.group(1)}, which is not set up here'
     return python, ''
