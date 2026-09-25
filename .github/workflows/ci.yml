@@ -52,6 +52,9 @@ jobs:
 
       # Bug-finding checks from .clang-tidy, on this repo's C++ packages only.
       # Each package is checked against its own compile_commands.json.
+      # -std=c++17 is explicit because jammy's CMake 3.22 leaves the -std flag
+      # out of compile_commands.json when GCC's default already satisfies
+      # CMAKE_CXX_STANDARD 17, and clang-14 alone would parse rclcpp as C++14.
       - name: clang-tidy
         run: |
           . /opt/ros/humble/setup.sh
@@ -60,7 +63,7 @@ jobs:
           for p in animate_behavior behavior_controller dec_common face_detection \
                    gesture_execution overt_attention person_detection pepper_navigation; do
             echo "::group::$p"
-            run-clang-tidy -p build/$p -quiet "/pepper4dec/$p/" || rc=1
+            run-clang-tidy -p build/$p -quiet -extra-arg=-std=c++17 "/pepper4dec/$p/" || rc=1
             echo "::endgroup::"
           done
           exit $rc
