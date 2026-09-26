@@ -38,7 +38,6 @@ costmap_empty_floor_* recordings):
 Usage (bag without a pose, e.g. slam_20260823_aligned -- the defaults):
     ros2 launch pepper_navigation costmap_bag.launch.py
     ros2 bag play <bag> --clock \
-        --qos-profile-overrides-path <ws>/config/play_qos.yaml \
         --read-ahead-queue-size 2000
 
     Nothing is drawn until FAST-LIO reports LOCKED (~25 s of replay). The
@@ -47,8 +46,9 @@ Usage (bag without a pose, e.g. slam_20260823_aligned -- the defaults):
     it to base_footprint.
 
     Play from the START to see the robot: Pepper's own model is a single
-    /robot_description message at t=0, which --start-offset skips, and
-    play_qos.yaml latches it so RViz still gets it if it connects later. The
+    /robot_description message at t=0, which --start-offset skips. The player
+    re-offers it latched, as recorded, so RViz still gets it if it connects
+    later. The
     sensor rig has its own model on /sensor_rig/robot_description (a separate
     topic, so the two never compete), drawn as a second RobotModel.
 

@@ -7,7 +7,7 @@ estimate at scan rate from inside it. Owns map -> base_footprint;
 nav2_map_server serves the matching 2D grid as /map for the global costmap.
 
 The Point-LIO twin of pepper_nav2_fastloc.launch.py. Everything downstream of
-localization — costmaps, DWB, collision monitor, safety chain — is identical
+localization — costmaps, MPPI, collision monitor, safety chain — is identical
 (nav2_params_pointloc.yaml is byte-identical to the fastloc one apart from its
 header), so a behavioural difference between the two profiles is a BACKEND
 difference and nothing else.
@@ -76,7 +76,6 @@ Usage (real robot):
 Usage (bag replay):
     ros2 launch pepper_navigation pepper_nav2_pointloc.launch.py use_sim_time:=true
     ros2 bag play <bag> --clock \
-        --qos-profile-overrides-path config/play_qos.yaml \
         --read-ahead-queue-size 2000
 
 To use a DIFFERENT mapping run, change map, map_pose_file and map_scan_dir

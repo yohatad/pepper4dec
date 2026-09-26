@@ -8,12 +8,11 @@ against. After the bag finishes, call:
 Without that call nothing is written but optimized_poses.txt and Scans/.
 
 Thin wrapper over fastlio_lc_pgo/launch/fastlio_lc_l2.launch.py -- the live entry
-point -- with use_sim_time forced true. See bag_test/README.md.
+point -- with use_sim_time forced true. See "Bag replay" in the package README.
 
 Usage:
   ros2 launch pepper_slam fastlio_lc_bag.launch.py
   ros2 bag play <bag> --clock \
-    --qos-profile-overrides-path config/play_qos.yaml \
     --read-ahead-queue-size 2000
 
 The QoS overrides are REQUIRED: /imu/data and /camera/imu were recorded

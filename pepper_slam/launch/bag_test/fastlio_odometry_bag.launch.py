@@ -7,7 +7,6 @@ entry point -- with use_sim_time forced true. Nothing is duplicated here.
 
   ros2 launch pepper_slam fastlio_odometry_bag.launch.py
   ros2 bag play <bag> --clock \
-    --qos-profile-overrides-path config/play_qos.yaml \
     --read-ahead-queue-size 2000 --disable-keyboard-controls \
     --topics /points /camera/imu /imu/data /tf /tf_static
 
@@ -24,8 +23,8 @@ include tree and are not all meaningful here):
   flatten_base_frame  zero the leveled z/roll/pitch (default true)
   use_sim_time        FORCED true here; do not pass it
 
-README.md in this directory covers the four things that otherwise waste an
-afternoon: play_qos.yaml, publisher/scope, replaying /tf, and
+"Bag replay" in the package README covers the things that otherwise waste
+an afternoon: subscriber QoS, publisher/scope, replaying /tf, and
 --disable-keyboard-controls when backgrounding the player.
 
 Author: Yohannes Tadesse Haile

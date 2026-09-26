@@ -96,7 +96,6 @@ Usage (bag replay):
     ros2 launch pepper_navigation pepper_nav2_fastloc.launch.py \
         use_sim_time:=true sensor_tf_scope:=all
     ros2 bag play <bag> --clock \
-        --qos-profile-overrides-path config/play_qos.yaml \
         --read-ahead-queue-size 2000
 
 To use a DIFFERENT mapping run, change map, map_pose_file and map_scan_dir

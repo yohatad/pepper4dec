@@ -7,7 +7,6 @@ entry point -- with use_sim_time forced true.
 
   ros2 launch pepper_slam pointlio_odometry_bag.launch.py
   ros2 bag play <bag> --clock \
-    --qos-profile-overrides-path config/play_qos.yaml \
     --read-ahead-queue-size 2000 --disable-keyboard-controls \
     --topics /points /camera/imu /imu/data /tf /tf_static
 

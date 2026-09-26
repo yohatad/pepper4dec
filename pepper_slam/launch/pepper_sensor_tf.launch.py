@@ -41,7 +41,7 @@ Configuration:
 Usage:
     ros2 launch pepper_slam pepper_sensor_tf.launch.py
 
-Replaying /tf from a bag is safe and wanted — see launch/bag_test/README.md,
+Replaying /tf from a bag is safe and wanted — see "Bag replay" in the package README,
 which also covers which of publisher/scope your bag needs.
 
 Author: Yohannes Tadesse Haile
