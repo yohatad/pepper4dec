@@ -62,7 +62,6 @@
 #include "dec_interfaces/action/speech_recognition.hpp"
 #include "dec_interfaces/action/conversation_manager.hpp"
 // Services
-#include "dec_interfaces/srv/conversation_manager_prompt.hpp"
 #include <std_srvs/srv/trigger.hpp>
 #include <std_srvs/srv/set_bool.hpp>
 

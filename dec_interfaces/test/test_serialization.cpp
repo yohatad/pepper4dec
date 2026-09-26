@@ -20,7 +20,6 @@
 #include "dec_interfaces/action/tts.hpp"
 #include "dec_interfaces/msg/face_detection.hpp"
 #include "dec_interfaces/msg/person_detection.hpp"
-#include "dec_interfaces/srv/conversation_manager_prompt.hpp"
 #include "dec_interfaces/srv/get_depth_roi.hpp"
 #include "geometry_msgs/msg/point.hpp"
 #include "rclcpp/serialization.hpp"
@@ -99,17 +98,6 @@ TEST(Serialization, PersonDetectionLargeArrays)
 }
 
 // ---------------------------------------------------------------- services
-
-TEST(Serialization, ConversationManagerPrompt)
-{
-  dec_interfaces::srv::ConversationManagerPrompt::Request req;
-  req.prompt = kText;
-  EXPECT_EQ(roundTrip(req), req);
-
-  dec_interfaces::srv::ConversationManagerPrompt::Response res;
-  res.response = std::string(10000, 'x');
-  EXPECT_EQ(roundTrip(res), res);
-}
 
 TEST(Serialization, GetDepthROI)
 {
