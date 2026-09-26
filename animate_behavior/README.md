@@ -6,7 +6,7 @@
   <img src="../images/upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
-The **Animate Behavior** package is a ROS2 action server that provides natural, lifelike animation for the Pepper humanoid robot during idle periods or social interactions. It generates smooth, randomized gestural movements across various body parts (arms, hands, legs, and base rotation) to enhance the robot's expressiveness and engagement during human-robot interaction. The module uses high-frequency motion updates (30Hz) with exponential smoothing to achieve natural, fluid movements that avoid mechanical or jerky appearance. A synchronized LED cascade wave on the face LEDs runs in parallel with body animation to further enhance expressiveness.
+The **Animate Behavior** package is a ROS2 action server that keeps Pepper looking alive during idle periods and conversation: small randomized movements of the arms, hands, legs and base, smoothed at 30 Hz, with a cascade wave on the face LEDs running alongside.
 
 ## ✨ Key Features
 - **ROS2 Native**: Built for ROS2 Humble
@@ -28,13 +28,8 @@ The **Animate Behavior** package is a ROS2 action server that provides natural, 
 ### Package Installation
 
 ```bash
-# Clone the repository (if not already done)
-cd ~/ros2_ws/src
-git clone https://github.com/yohatad/pepper4dec.git
-
-# Build the workspace
 cd ~/ros2_ws
-colcon build --packages-select animate_behavior
+colcon build --packages-up-to animate_behavior
 source install/setup.bash
 ```
 
@@ -58,64 +53,7 @@ Configuration is managed via `config/animate_behavior_configuration.yaml`:
 | `led_white_hold` | Time all LEDs hold white before fading out (sec) | `2.0` |
 | `led_dark_pause` | Pause between cascade wave cycles (sec) | `0.2` |
 
-## 🎭 Behavior Types
-
-The node supports multiple animation modes for different interaction scenarios:
-
-| Behavior Type | Limbs Animated | Description |
-|--------------|----------------|-------------|
-| `All` | Arms, Hands, Legs, Base | Full-body animation including all limbs and base rotation |
-| `body` | Arms, Hands, Legs | Torso and limb movements |
-| `arms` | Arms only | Arm movements (excludes hands) |
-| `hands` | Hands only | Hand opening/closing gestures |
-| `idle` | None | LEDs only; no limb gestures or rotation |
-| `rotation` | Base only | Base rotation without limb movement |
-| `home` | All limbs | Moves all joints to neutral home position then stops |
-
-> **Note:** The `home` behavior type provides an action-based stop mechanism, immediately returning all limbs to their neutral positions, canceling any ongoing animation, and turning off all face LEDs.
-
-## Joint Movement Ranges
-
-Joint limits and home positions are taken from the CSSR4Africa D5.1 Actuator Tests deliverable. Movement factors scale the random gesture amplitude relative to `selected_range`.
-
-### Right Arm
-
-| Joint | Min (rad) | Max (rad) | Home (rad) | Factor |
-|-------|-----------|-----------|------------|--------|
-| RShoulderPitch | -2.0857 | 2.0857 | 1.7410 | 0.6 |
-| RShoulderRoll | -1.5620 | -0.0087 | -0.09664 | 0.4 |
-| RElbowYaw | -2.0857 | 2.0857 | 1.6981 | 0.6 |
-| RElbowRoll | 0.0087 | 1.5620 | 0.09664 | 0.4 |
-| RWristYaw | -1.8239 | 1.8239 | -0.05679 | 0.5 |
-
-### Left Arm
-
-| Joint | Min (rad) | Max (rad) | Home (rad) | Factor |
-|-------|-----------|-----------|------------|--------|
-| LShoulderPitch | -2.0857 | 2.0857 | 1.7625 | 0.6 |
-| LShoulderRoll | 0.0087 | 1.5620 | 0.09970 | 0.4 |
-| LElbowYaw | -2.0857 | 2.0857 | -1.7150 | 0.6 |
-| LElbowRoll | -1.5620 | -0.0087 | -0.1334 | 0.4 |
-| LWristYaw | -1.8239 | 1.8239 | 0.06592 | 0.5 |
-
-### Hands
-
-| Joint | Min | Max | Home | Factor |
-|-------|-----|-----|------|--------|
-| LHand | 0.0 | 1.0 | 0.67 | 0.5 |
-| RHand | 0.0 | 1.0 | 0.67 | 0.5 |
-
-`0.0` = fully closed, `1.0` = fully open.
-
-### Legs
-
-| Joint | Min (rad) | Max (rad) | Home (rad) | Factor |
-|-------|-----------|-----------|------------|--------|
-| HipPitch | -1.0385 | 1.0385 | -0.0107 | 0.2 |
-| HipRoll | -0.5149 | 0.5149 | -0.00766 | 0.2 |
-| KneePitch | -0.5149 | 0.5149 | 0.03221 | 0.1 |
-
-## 🚀 Running the Node
+## 🚀 Running
 
 ```bash
 # Source the workspace
@@ -197,68 +135,56 @@ ros2 action send_goal /animate_behavior dec_interfaces/action/AnimateBehavior \
   "{behavior_type: 'All', selected_range: 0.5, duration_seconds: 30}"
 ```
 
-**Animate arms only indefinitely (until cancelled):**
-```bash
-ros2 action send_goal /animate_behavior dec_interfaces/action/AnimateBehavior \
-  "{behavior_type: 'arms', selected_range: 0.7, duration_seconds: 0}"
-```
-
 **Return to home position (stop animation):**
 ```bash
 ros2 action send_goal /animate_behavior dec_interfaces/action/AnimateBehavior \
   "{behavior_type: 'home', selected_range: 0.0, duration_seconds: 0}"
 ```
 
-**Gentle hand gestures for 60 seconds:**
-```bash
-ros2 action send_goal /animate_behavior dec_interfaces/action/AnimateBehavior \
-  "{behavior_type: 'hands', selected_range: 0.3, duration_seconds: 60}"
-```
-
 ### BehaviorTree.CPP Integration
 
-```xml
-<!-- Animate during idle periods -->
-<Action ID="AnimateIdle"
-        name="animate_behavior"
-        behavior_type="body"
-        selected_range="0.4"
-        duration_seconds="0"/>
+`behavior_controller` registers the `AnimateBehavior` and `StopAnimateBehavior`
+nodes:
 
-<!-- Return to home position when stopping -->
-<Action ID="StopAnimation"
-        name="animate_behavior"
-        behavior_type="home"
-        selected_range="0.0"
-        duration_seconds="0"/>
+```xml
+<!-- Animate the body until stopped -->
+<AnimateBehavior behavior_type="body" selected_range="0.4" duration_seconds="0"/>
+
+<!-- Stop it, through the /animate_behavior/stop service -->
+<StopAnimateBehavior/>
 ```
 
-## LED Animation
+## 🎭 Behavior Types
 
-When `led_enabled` is `true` and the `/naoqi_driver/run_led` action server is available, the node runs a continuous **cascade wave** on Pepper's face LEDs in parallel with body animation.
+The node supports multiple animation modes for different interaction scenarios:
 
-### Cascade Wave Pattern
+| Behavior Type | Limbs Animated | Description |
+|--------------|----------------|-------------|
+| `All` | Arms, Hands, Legs, Base | Full-body animation including all limbs and base rotation |
+| `body` | Arms, Hands, Legs | Torso and limb movements |
+| `arms` | Arms only | Arm movements (excludes hands) |
+| `hands` | Hands only | Hand opening/closing gestures |
+| `idle` | None | LEDs only; no limb gestures or rotation |
+| `rotation` | Base only | Base rotation without limb movement |
+| `home` | All limbs | Moves all joints to neutral home position then stops |
 
-The 10 individual face LED actuators are grouped into 5 layers radiating outward from the center of each eye. On each cycle:
+> **Note:** The `home` behavior type provides an action-based stop mechanism, immediately returning all limbs to their neutral positions, canceling any ongoing animation, and turning off all face LEDs.
 
-1. **Fade in** — layers light up white one at a time from the outermost ring inward, with `led_white_step` seconds between layers.
-2. **Hold** — all LEDs stay white for `led_white_hold` seconds.
-3. **Fade out** — layers fade to dark from the innermost ring outward, with `led_dark_step` seconds between layers.
-4. **Pause** — `led_dark_pause` seconds before the next cycle starts.
+## 🦾 Joint Movement Ranges
 
-| Layer | Left actuators | Right actuators |
-|-------|---------------|-----------------|
-| 0 (outermost) | `FaceLedLeft5` | `FaceLedRight5` |
-| 1 | `FaceLedLeft6`, `FaceLedLeft4` | `FaceLedRight6`, `FaceLedRight4` |
-| 2 | `FaceLedLeft7`, `FaceLedLeft3` | `FaceLedRight7`, `FaceLedRight3` |
-| 3 | `FaceLedLeft0`, `FaceLedLeft2` | `FaceLedRight0`, `FaceLedRight2` |
-| 4 (innermost) | `FaceLedLeft1` | `FaceLedRight1` |
+Joint limits, home positions and per-joint amplitude factors are constants in
+`src/animate_behavior_implementation.cpp`, taken from the CSSR4Africa D5.1
+Actuator Tests deliverable. `selected_range` scales every joint's random
+amplitude on top of its factor.
 
-Each fade uses `MODE_RGB_FADE` with a `led_fade_duration` second transition. LEDs are turned off automatically when animation stops.
+## 🌈 LED Animation
 
-### Dependency
-
-The LED animation requires the `naoqi_driver` node to be running with the `/naoqi_driver/run_led` action server available. If the server is not found within 5 seconds at startup, LED animation is automatically disabled and body animation continues normally.
+With `led_enabled`, a cascade wave runs on the face LEDs alongside the body
+animation: the rings around each eye light white from the outside in, hold
+for `led_white_hold`, fade out from the inside out, then pause. The other
+`led_*` parameters set the timing. The LEDs turn off when animation stops. If
+`/naoqi_driver/run_led` is not available within 5 s of startup, the LEDs are
+disabled and body animation continues.
 
 ## 📁 Package Structure
 
@@ -283,31 +209,21 @@ animate_behavior/
 
 ## 🏗️ Architecture
 
-The animation system uses high-frequency motion updates (30Hz) with exponential smoothing to achieve natural, fluid movements:
-
-1. **Animation Loop**: Runs at 30Hz, publishing joint angle commands
-2. **Gesture Generation**: Randomizes target positions for each joint group
-3. **Exponential Smoothing**: Interpolates between current and target positions
-4. **Feedback Thread**: Publishes status updates at 2Hz
-5. **Action Server**: Handles goal requests and cancellation
-6. **LED Cascade**: ROS timer-based scheduler fires `MODE_RGB_FADE` goals against `/naoqi_driver/run_led` in a looping wave pattern; cancelled and turned off when animation stops
+- **Animation loop** (`gesture_update_rate`, 30 Hz): picks a new random target
+  per joint group every `gesture_interval_min`-`gesture_interval_max` seconds and
+  moves toward it with exponential smoothing, publishing `/joint_angles`.
+- **Feedback** at 2 Hz on the action.
+- **LED cascade**: timers that send `MODE_RGB_FADE` goals to `/naoqi_driver/run_led`.
 
 ## 🧪 Testing
 
 ```bash
-# Check node is running
-ros2 node list
-
-# Verify action server is available
-ros2 action list
-
-# Send a test goal
-ros2 action send_goal /animate_behavior dec_interfaces/action/AnimateBehavior \
-  "{behavior_type: 'All', selected_range: 0.5, duration_seconds: 10}"
-
-# Monitor joint commands
-ros2 topic echo /joint_angles
+cd ~/ros2_ws
+colcon test --packages-select animate_behavior
+colcon test-result --verbose
 ```
+
+Runs unit tests for the motion math: joint soft-limit clamping, randomized gesture targets and smoothing.
 
 ## 💡 Support
 

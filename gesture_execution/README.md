@@ -27,11 +27,6 @@ The **Gesture Execution** package is a ROS2 action server that executes various 
 ### Package Installation
 
 ```bash
-# Clone the repository (if not already done)
-cd ~/ros2_ws/src
-git clone https://github.com/yohatad/pepper4dec.git
-
-# Build the workspace (pulls in the dec_interfaces dependency automatically)
 cd ~/ros2_ws
 colcon build --packages-up-to gesture_execution
 source install/setup.bash
@@ -84,7 +79,7 @@ topics:
   robot_pose: "/localization/pose"
 ```
 
-## 🚀 Running the Node
+## 🚀 Running
 
 ```bash
 # Source the workspace
@@ -153,7 +148,7 @@ stack via `dec_launch`'s `dec_system.launch.py`, which drives these transitions 
 |-------|------|-------------|
 | `elapsed_seconds` | float32 | Elapsed time during gesture execution |
 
-## Gesture Types
+## 👋 Gesture Types
 
 ### 1. Deictic Gestures (Pointing)
 Points to a specific 3D location in the environment using inverse kinematics.
@@ -250,33 +245,15 @@ The gesture execution system uses Bézier interpolation for smooth motion:
 ## 🧪 Testing
 
 ```bash
-# Check node is running
-ros2 node list
-
-# Verify action server is available
-ros2 action list
-
-# Send a test gesture
-ros2 action send_goal /gesture_execution dec_interfaces/action/Gesture \
-  "{gesture_type: 'iconic', gesture_name: 'wave', gesture_duration: 3000, bow_nod_angle: 0, \
-    location_x: 0.0, location_y: 0.0, location_z: 0.0}"
-
-# Monitor joint commands
-ros2 topic echo /joint_angles_trajectory
+cd ~/ros2_ws
+colcon test --packages-select gesture_execution
+colcon test-result --verbose
 ```
 
-### RViz2 Visualization
-```bash
-# Run the visualization test
-ros2 run gesture_execution gesture_test_visualization
+Runs unit tests for the forward and inverse kinematics helpers.
 
-# In another terminal, launch RViz2
-ros2 run rviz2 rviz2
-```
-**RViz2 Setup:**
-1. Add a "Marker" display
-2. Set topic to: `/gesture_execution/visualization`
-3. Ensure "Global Options" → "Fixed Frame" is set to `base_link`
+To see gesture targets in RViz, run `ros2 run gesture_execution gesture_test_visualization`
+and add a Marker display on `/gesture_execution/visualization` (fixed frame `base_link`).
 
 ## 💡 Support
 

@@ -28,13 +28,8 @@ The **Text-to-Speech (TTS)** package is a ROS2 package designed to synthesize an
 ### Package Installation
 
 ```bash
-# Clone the repository (if not already done)
-cd ~/ros2_ws/src
-git clone https://github.com/yohatad/pepper4dec.git
-
-# Build the workspace
 cd ~/ros2_ws
-colcon build --packages-select text_to_speech
+colcon build --packages-up-to text_to_speech
 source install/setup.bash
 ```
 
@@ -101,7 +96,7 @@ also works at runtime; changes take effect on the next `configure`).
 | `elevenlabs_style` | ElevenLabs style exaggeration (0.0–1.0) | `0.0` |
 | `elevenlabs_speed` | ElevenLabs speaking speed multiplier | `1.0` |
 
-## 🚀 Running the Node
+## 🚀 Running
 
 ```bash
 # Source the workspace
@@ -180,81 +175,6 @@ ros2 action send_goal /text_to_speech dec_interfaces/action/TTS "{text: 'Hello, 
 |-------|------|-------------|
 | `status` | string | "queuing" (sentences being enqueued), "speaking" (audio actively playing) |
 
-## 🏗️ Architecture
-
-```mermaid
-flowchart TD
-    A(["/text_to_speech/input"]) --> C["Sentence Queue"]
-    B(["/text_to_speech action goal"]) --> C
-    C --> D["speak_sentence()"]
-    D --> E{"engine"}
-    E -- "naoqi_ros" --> F(["/speech"])
-    E -- "kokoro_local /\nelevenlabs_local" --> G["sounddevice"]
-    E -- "kokoro_pepper /\nelevenlabs_pepper" --> H{"playback_method"}
-    H -- "stream" --> I["send_audio_buffer"]
-    I --> J["ALAudioDevice"]
-    H -- "file" --> K["SCP + play_audio"]
-    K --> L["ALAudioPlayer"]
-```
-
-### Node Lifecycle
-
-`TextToSpeechNode` is a `LifecycleNode`; `dec_launch`'s `nav2_lifecycle_manager` drives it through these transitions on startup. Several steps are gated by `engine` — see the table below.
-
-```mermaid
-stateDiagram-v2
-    [*] --> Unconfigured
-
-    Unconfigured --> Inactive: configure
-    Inactive --> Active: activate
-    Active --> Inactive: deactivate
-    Inactive --> Unconfigured: cleanup
-
-    Unconfigured --> Finalized: shutdown
-    Inactive --> Finalized: shutdown
-    Active --> Finalized: shutdown
-    Finalized --> [*]
-```
-
-| Transition | What happens |
-|---|---|
-| `configure` | Create the sentence queue/state; warm up Kokoro (`kokoro_local`/`kokoro_pepper` only); create the local `AudioPlayer` (`kokoro_local`/`elevenlabs_local` only); create the `/text_to_speech/speaking` publisher (+ NAOqi speech topic publisher for `naoqi_ros`); create the mic-mute client, and the pepper-backend load/unload/send-buffer/play_audio clients (`kokoro_pepper`/`elevenlabs_pepper` only); create the `/text_to_speech` action server |
-| `activate` | Subscribe to `/text_to_speech/input`, start the background playback thread |
-| `deactivate` | Stop the playback thread, drain the sentence queue, destroy the subscription |
-| `cleanup` | Destroy publishers/clients/action server (engine-dependent, mirroring `configure`), release the audio player |
-| `shutdown` | Log shutdown and exit (reachable from any state) |
-
-## 🧪 Testing
-
-```bash
-# Check node is running
-ros2 node list
-
-# Verify action server is available
-ros2 action list
-
-# Send a test message
-ros2 topic pub --once /text_to_speech/input std_msgs/String 'data: "Hello, I am Pepper."'
-
-# Test via action server
-ros2 action send_goal /text_to_speech dec_interfaces/action/TTS "{text: 'Hello, how can I help you?'}"
-```
-
-### Testing Audio Playback Directly
-
-```bash
-cd ~/ros2_ws/src/pepper4dec/text_to_speech
-
-# Stream mode (robot speakers)
-~/ros2_ws/.venvs/tts_virtual_env/bin/python3 manual_tests/test_play_audio.py "Hello." --method stream
-
-# File mode (robot speakers, requires SSH key)
-~/ros2_ws/.venvs/tts_virtual_env/bin/python3 manual_tests/test_play_audio.py "Hello." --method file
-
-# Local speakers only
-~/ros2_ws/.venvs/tts_virtual_env/bin/python3 manual_tests/test_play_audio.py "Hello." --local
-```
-
 ## 📁 Package Structure
 
 ```
@@ -283,6 +203,54 @@ text_to_speech/
 ├── setup.cfg
 ├── requirements.txt
 └── README.md
+```
+
+## 🏗️ Architecture
+
+```mermaid
+flowchart TD
+    A(["/text_to_speech/input"]) --> C["Sentence Queue"]
+    B(["/text_to_speech action goal"]) --> C
+    C --> D["speak_sentence()"]
+    D --> E{"engine"}
+    E -- "naoqi_ros" --> F(["/speech"])
+    E -- "kokoro_local /\nelevenlabs_local" --> G["sounddevice"]
+    E -- "kokoro_pepper /\nelevenlabs_pepper" --> H{"playback_method"}
+    H -- "stream" --> I["send_audio_buffer"]
+    I --> J["ALAudioDevice"]
+    H -- "file" --> K["SCP + play_audio"]
+    K --> L["ALAudioPlayer"]
+```
+
+### Node Lifecycle
+
+`TextToSpeechNode` is a `LifecycleNode`; `dec_launch`'s `nav2_lifecycle_manager` drives it through these transitions on startup (the standard ROS 2 lifecycle). Several steps are gated by `engine` — see the table below.
+
+| Transition | What happens |
+|---|---|
+| `configure` | Create the sentence queue/state; warm up Kokoro (`kokoro_local`/`kokoro_pepper` only); create the local `AudioPlayer` (`kokoro_local`/`elevenlabs_local` only); create the `/text_to_speech/speaking` publisher (+ NAOqi speech topic publisher for `naoqi_ros`); create the mic-mute client, and the pepper-backend load/unload/send-buffer/play_audio clients (`kokoro_pepper`/`elevenlabs_pepper` only); create the `/text_to_speech` action server |
+| `activate` | Subscribe to `/text_to_speech/input`, start the background playback thread |
+| `deactivate` | Stop the playback thread, drain the sentence queue, destroy the subscription |
+| `cleanup` | Destroy publishers/clients/action server (engine-dependent, mirroring `configure`), release the audio player |
+| `shutdown` | Log shutdown and exit (reachable from any state) |
+
+## 🧪 Testing
+
+```bash
+cd ~/ros2_ws
+colcon test --packages-select text_to_speech
+colcon test-result --verbose
+```
+
+Besides the linters, this runs unit tests for sentence splitting, speech-duration estimation and the audio resampling/chunking.
+
+To test playback without the node, from `text_to_speech/`:
+
+```bash
+PY=~/ros2_ws/.venvs/tts_virtual_env/bin/python3
+$PY manual_tests/test_play_audio.py "Hello." --method stream   # robot speakers
+$PY manual_tests/test_play_audio.py "Hello." --method file     # robot speakers, needs the SSH key
+$PY manual_tests/test_play_audio.py "Hello." --local           # local speakers
 ```
 
 ## 💡 Support

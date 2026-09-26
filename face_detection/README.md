@@ -27,11 +27,6 @@ The **Face and Mutual Gaze Detection and Localization** package detects multiple
 ### Package Installation
 
 ```bash
-# Clone the repository (if not already done)
-cd ~/ros2_ws/src
-git clone https://github.com/yohatad/pepper4dec.git
-
-# Build the workspace (pulls in the dec_interfaces/dec_common dependencies automatically)
 cd ~/ros2_ws
 colcon build --packages-up-to face_detection person_detection
 source install/setup.bash
@@ -60,7 +55,7 @@ Configuration is managed via ROS2 parameters, loaded from `config/face_detection
 | `person_detection_timeout` | Timeout for person detection messages (s) | `0.5` |
 | `prioritize_face_depth` | Prefer face-region depth over person-region depth when both are available | `true` |
 
-## 🚀 Running the Node
+## 🚀 Running
 
 ```bash
 # Source the workspace
@@ -73,29 +68,10 @@ ros2 launch face_detection face_detection.launch.py
 ros2 launch face_detection face_detection.launch.py launch_camera:=false
 ```
 
-### Manual Node Execution
-
-```bash
-# Start Camera Driver (if not using bags)
-ros2 run realsense2_camera realsense2_camera_node \
-  --ros-args \
-  -p rgb_camera.color_profile:=640x480x15 \
-  -p depth_module.depth_profile:=640x480x15 \
-  -p align_depth.enable:=true \
-  -p enable_sync:=true
-
-# Start Person Detection Node
-ros2 run person_detection person_detection
-
-# Start Face Detection Node
-ros2 run face_detection face_detection
-```
-
-Both this and the launch file above start the node unconfigured. Transition it
-manually with `ros2 lifecycle set /face_detection configure` then
-`... activate`, or launch the whole stack via `dec_launch`'s
-`dec_system.launch.py`, which drives these transitions automatically through
-`nav2_lifecycle_manager`.
+`ros2 run face_detection face_detection` runs the node without the launch
+file. Either way it starts unconfigured: run
+`ros2 lifecycle set /face_detection configure`, then `activate`, or use
+`dec_launch`'s `dec_system.launch.py`, which does it for you.
 
 ## 🖥️ ROS Interface
 
@@ -176,15 +152,12 @@ The face detection system consists of three main components:
 ## 🧪 Testing
 
 ```bash
-# Check node is running
-ros2 node list
-
-# Monitor face detection output
-ros2 topic echo /face_detection/data
-
-# Verify topics
-ros2 topic list
+cd ~/ros2_ws
+colcon test --packages-select face_detection
+colcon test-result --verbose
 ```
+
+Runs unit tests for the age/gender smoothing (median age, confidence-weighted gender vote over a sliding window).
 
 ## 💡 Support
 

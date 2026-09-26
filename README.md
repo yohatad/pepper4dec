@@ -63,7 +63,7 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 
 ### **Navigation & Localization**
 - **`pepper_slam`** - 3D mapping and odometry backends: FAST-LIO / Point-LIO lidar-inertial mapping and odometry on the Unitree L2, and RTAB-Map (RGB-D). Launch files and parameters only; the SLAM backends themselves are upstream packages
-- **`pepper_navigation`** - Nav2 stack (path planning, obstacle avoidance, keepout zones, collision-monitor safety layer) localizing by default with FAST-LIO against a prior 3D map (`fastlio_localization`). The localization backend is a launch-time profile behind shared costmaps and tuning, so alternatives can be swapped in and compared directly
+- **`pepper_navigation`** - Nav2 stack (path planning, obstacle avoidance, collision-monitor safety layer) localizing by default with FAST-LIO against a prior 3D map (`fastlio_localization`). The localization backend is a launch-time profile behind shared costmaps and tuning, so alternatives can be swapped in and compared directly
 
 Localization-only deployments get their `map → base_footprint` pose (`/localization/pose`) from **`fast_lio`**'s `fastlio_localization` node; `gesture_execution` consumes that pose for pointing IK.
 
@@ -185,7 +185,7 @@ ros2 launch dec_launch bag_static_tf.launch.py
 Each package contains configuration files in their `config/` directories:
 - `behavior_controller/config/behavior_controller_configuration.yaml` - Mission parameters and active scenario
 - `face_detection/config/face_detection_configuration.yaml` - Perception settings
-- `pepper_slam/config/` and `pepper_navigation/config/` - SLAM, EKF, costmap and Nav2 tuning
+- `pepper_slam/config/` and `pepper_navigation/config/` - SLAM, costmap and Nav2 tuning
 - Gesture, attention, speech and TTS parameters in their respective package configs
 
 ## 🧪 Testing

@@ -28,13 +28,8 @@ The **Speech Event Recognition and Localization** package provides real-time spe
 ### Package Installation
 
 ```bash
-# Clone the repository (if not already done)
-cd ~/ros2_ws/src
-git clone https://github.com/yohatad/pepper4dec.git
-
-# Build the workspace
 cd ~/ros2_ws
-colcon build --packages-select speech_event
+colcon build --packages-up-to speech_event
 source install/setup.bash
 ```
 
@@ -76,7 +71,7 @@ Configuration is managed via `config/speech_event_configuration.yaml`:
 | `noise_profile_path` | Path to a `.npy` mean-magnitude-spectrum file recorded at 16 kHz; leave empty for online-only estimation | `"data/noise_profile.npy"` |
 | `noise_alpha` | Wiener filter aggressiveness (0.0–1.0); higher = more suppression, more distortion risk | `0.5` |
 
-## 🚀 Running the Node
+## 🚀 Running
 
 ```bash
 # Source the workspace
@@ -148,7 +143,7 @@ ros2 run speech_event speech_event_localization
 |-------|------|-------------|
 | `status` | string | "waiting", "speech", "transcribing" |
 
-## Sound Source Localization
+## 🎙️ Sound Source Localization
 
 The `speech_event_localization` node provides real-time sound source localization using SRP-PHAT beamforming.
 
@@ -229,22 +224,7 @@ flowchart TD
 
 ### Node Lifecycle
 
-`SpeechRecognitionNode` is a `LifecycleNode`; `dec_launch`'s `nav2_lifecycle_manager` drives it through these transitions on startup:
-
-```mermaid
-stateDiagram-v2
-    [*] --> Unconfigured
-
-    Unconfigured --> Inactive: configure
-    Inactive --> Active: activate
-    Active --> Inactive: deactivate
-    Inactive --> Unconfigured: cleanup
-
-    Unconfigured --> Finalized: shutdown
-    Inactive --> Finalized: shutdown
-    Active --> Finalized: shutdown
-    Finalized --> [*]
-```
+`SpeechRecognitionNode` is a `LifecycleNode`; `dec_launch`'s `nav2_lifecycle_manager` drives it through these transitions on startup (the standard ROS 2 lifecycle):
 
 | Transition | What happens |
 |---|---|
@@ -257,22 +237,12 @@ stateDiagram-v2
 ## 🧪 Testing
 
 ```bash
-# Check node is running
-ros2 node list
-
-# Verify action server is available
-ros2 action list
-
-# Send a test transcription request
-ros2 action send_goal /speech_recognition dec_interfaces/action/SpeechRecognition \
-  "{wait: 5.0}"
-
-# Monitor VAD probabilities
-ros2 topic echo /speech_event/vad_speech_prob
-
-# Monitor transcribed text (standalone mode)
-ros2 topic echo /speech_event/text
+cd ~/ros2_ws
+colcon test --packages-select speech_event
+colcon test-result --verbose
 ```
+
+Besides the linters, this runs unit tests for the denoiser (bandpass, fan detection, harmonic notches) and the localization angle helpers.
 
 ## 💡 Support
 
