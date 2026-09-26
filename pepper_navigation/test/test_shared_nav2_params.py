@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Guard the nav2 param sections that are meant to be identical across modes.
 
-Of the six nav2 param files (amcl / fastloc / pointloc / rtabmap_loc / base /
-wheel_odom), only 3 of 10 top-level nodes are true duplicates -- and those are
-the drift risk: tuning a controller gain means editing six files, with nothing
-to tell you if you edit five.
+Of the five nav2 param files (amcl / fastloc / pointloc / rtabmap_loc, plus
+the l2voxel_test bag variant), only 3 of 10 top-level nodes are true
+duplicates -- and those are the drift risk: tuning a controller gain means
+editing five files, with nothing to tell you if you edit four.
 
 Extracting them into a shared base was considered and rejected: it would leave
 7 nodes mode-specific at the cost of a launch-time yaml merge, a new code path
@@ -21,8 +21,8 @@ import yaml
 
 SHARED = ("behavior_server", "controller_server", "planner_server")
 FILES = ("nav2_params_amcl.yaml", "nav2_params_fastloc.yaml",
-         "nav2_params_rtabmap_loc.yaml", "nav2_params.yaml",
-         "nav2_params_wheel_odom.yaml", "nav2_params_pointloc.yaml")
+         "nav2_params_rtabmap_loc.yaml", "nav2_params_pointloc.yaml",
+         "nav2_params_l2voxel_test.yaml")
 
 
 def _load():
@@ -40,7 +40,7 @@ def _load():
 def _drift(node, loaded):
     """Return a list of human-readable drift reports for one shared node.
 
-    An empty list means the node is byte-identical across all six files.
+    An empty list means the node is byte-identical across all the param files.
     """
     have = {f: d[node] for f, d in loaded.items() if node in d}
     missing = [f for f in FILES if f not in have]
@@ -63,7 +63,7 @@ def _drift(node, loaded):
 
 @pytest.mark.parametrize("node", SHARED)
 def test_shared_section_identical_across_param_files(node):
-    """Each shared nav2 section must be identical in all six param files."""
+    """Each shared nav2 section must be identical in all the param files."""
     drift = _drift(node, _load())
     assert not drift, "\n".join(drift)
 

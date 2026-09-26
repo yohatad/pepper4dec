@@ -18,7 +18,6 @@
   <exec_depend>rtabmap_sync</exec_depend>
   <exec_depend>rtabmap_util</exec_depend>
   <exec_depend>rtabmap_viz</exec_depend>
-  <exec_depend>slam_toolbox</exec_depend>
   <exec_depend>image_transport</exec_depend>
   <exec_depend>fast_lio</exec_depend>
   <exec_depend>rviz2</exec_depend>

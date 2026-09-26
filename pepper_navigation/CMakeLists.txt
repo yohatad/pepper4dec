@@ -62,17 +62,13 @@ install(TARGETS send_goal
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
-# Note: generate_keepout.py moved to ros2_ws/utils/ -- it is an offline
-# map-editing utility (no rclpy), so it does not belong in a ROS package.
-# Run it manually: python3 utils/generate_keepout.py
-
 # Install python helper scripts
 install(PROGRAMS
   scripts/wait_for_map_then_start.py
   scripts/localization_recovery.py
   scripts/localization_watchdog.py
   scripts/tf_nav_relay.py
-  # bag_test only: replay helpers (see launch/bag_test/README.md)
+  # bag_test only: replay helpers (see "Bag replay" in README.md)
   scripts/cloud_delay.py
   scripts/costmap_explain.py
   scripts/depth_to_cloud.py
