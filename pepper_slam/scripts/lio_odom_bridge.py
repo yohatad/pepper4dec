@@ -173,8 +173,8 @@ class LioMapOdomBridge(Node):
         # base_footprint, so every existing launch keeps its exact behaviour
         # until it asks for the guard.
         self.declare_parameter('guard_enable', False)
-        # Physical bounds, not tuning knobs. Nav2 commands at most 0.5 m/s and
-        # 0.5 rad/s (pepper_navigation/config/nav2_params.yaml:133-137), so
+        # Physical bounds, not tuning knobs. Nav2 commands at most 0.35 m/s and
+        # 0.3 rad/s (FollowPath in pepper_navigation/config/nav2_params_*.yaml), so
         # these sit above what the base can be told to do, with margin. Anything
         # faster is a broken estimate, not a fast robot.
         self.declare_parameter('max_linear_speed', 0.7)
