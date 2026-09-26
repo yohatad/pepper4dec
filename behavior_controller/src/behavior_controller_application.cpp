@@ -107,8 +107,13 @@ BehaviorControllerNode::BehaviorControllerNode()
   declare_parameter<bool>("verbose_mode", false);
 
   // Create the companion BT node immediately so main() can add it to the
-  // executor before any lifecycle transition is triggered.
-  bt_node_ = rclcpp::Node::make_shared("behavior_controller_bt");
+  // executor before any lifecycle transition is triggered. Its own __node
+  // remap overrides the process-wide one a launch file's name= applies,
+  // which would otherwise rename it to behavior_controller as well: two
+  // nodes with one name answer get_parameters at random.
+  bt_node_ = rclcpp::Node::make_shared(
+    "behavior_controller_bt",
+    rclcpp::NodeOptions().arguments({"--ros-args", "-r", "__node:=behavior_controller_bt"}));
 
   RCLCPP_INFO(get_logger(), "behavior_controller: created (UNCONFIGURED)");
 }
