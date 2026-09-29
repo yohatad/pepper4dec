@@ -200,6 +200,17 @@ def generate_launch_description():
         'watchdog', default_value='true',
         description='Cancel navigation goals while fastlio_localization reports '
                     'itself lost. Set false to monitor without ever holding nav.')
+    declare_odom_frame_cmd = DeclareLaunchArgument(
+        'odom_frame', default_value='',
+        description='Empty (default): fastlio_localization broadcasts map -> '
+                    'base_footprint and the local costmap rolls in map. '
+                    '"odom": REP-105 map -> odom -> base_footprint instead, '
+                    'with odom -> base_footprint from wheel odometry '
+                    '(pepper_slam wheel_odom_tf.py) and the local costmap in '
+                    'odom, so relocalization jumps never reach the controller. '
+                    'See pepper_slam/FRAMES.md.')
+    odom_frame = LaunchConfiguration('odom_frame')
+    odom_on = IfCondition(PythonExpression(["'", odom_frame, "' != ''"]))
     declare_log_level_cmd = DeclareLaunchArgument(
         'log_level', default_value='warn',
         description='rclcpp logger severity for every node this file launches '
@@ -249,6 +260,7 @@ def generate_launch_description():
                 'map_pose_file': LaunchConfiguration('map_pose_file'),
                 'map_scan_dir': LaunchConfiguration('map_scan_dir'),
                 'rviz': 'false',
+                'odom_frame': odom_frame,
             }.items(),
         ),
     ])
@@ -258,7 +270,12 @@ def generate_launch_description():
     configured_params = RewrittenYaml(
         source_file=nav2_params_file,
         root_key='',
-        param_rewrites={'use_sim_time': use_sim_time},
+        param_rewrites={
+            'use_sim_time': use_sim_time,
+            # Full path, so the global costmap stays in map.
+            'local_costmap.local_costmap.ros__parameters.global_frame':
+                PythonExpression(["'", odom_frame, "' or 'map'"]),
+        },
         convert_types=True)
 
     # Serves the 2D grid as /map for the global costmap static layer.
@@ -477,6 +494,19 @@ def generate_launch_description():
     # naoqi_driver's joint tree (~4150 transforms/s) saturated the costmap's
     # TF thread until it stopped updating. See scripts/tf_nav_relay.py. Only
     # nodes that LISTEN to TF are remapped -- never one that broadcasts it.
+    # odom -> base_footprint from /pepper_odom, only with odom_frame set: in the
+    # default mode the localizer owns base_footprint's parent and a second one
+    # would split the tree.
+    wheel_odom_tf = Node(
+        package='pepper_slam',
+        executable='wheel_odom_tf.py',
+        name='wheel_odom_tf',
+        output='screen',
+        arguments=['--ros-args', '--log-level', log_level],
+        parameters=[{'use_sim_time': use_sim_time, 'odom_frame': odom_frame}],
+        condition=odom_on,
+    )
+
     tf_nav_relay = Node(
         package='pepper_navigation',
         executable='tf_nav_relay.py',
@@ -498,6 +528,7 @@ def generate_launch_description():
         declare_rviz_cmd,
         declare_rviz_config_cmd,
         declare_watchdog_cmd,
+        declare_odom_frame_cmd,
         declare_log_level_cmd,
         sensor_tf,
         fastloc,
@@ -516,5 +547,6 @@ def generate_launch_description():
         localization_recovery,
         localization_watchdog,
         # Last: it reads use_sim_time, declared above.
+        wheel_odom_tf,
         tf_nav_relay,
     ])

@@ -47,6 +47,7 @@ install(PROGRAMS
   scripts/odom_compare.py
   scripts/check_frame_contract.py
   scripts/static_tf_publisher.py
+  scripts/wheel_odom_tf.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

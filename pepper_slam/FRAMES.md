@@ -64,13 +64,20 @@ PGO (`fastlio_lc_l2`, `pointlio_lc_l2`):
 map -> pgo_init -> lio_init -> base_footprint -> ...
 ```
 
-Localization (`fastlio_localization`, via `pepper_nav2_fastloc`):
+Localization (`fastlio_localization` / `pointlio_localization`, via
+`pepper_nav2_fastloc` / `pepper_nav2_pointloc`), default `odom_frame:=''`:
 
 ```
 map -> base_footprint -> ...      NO odom, NO lio_init
 ```
 
-This one is the exception to everything above. `fastlio_localization` loads the
+With `odom_frame:=odom` (REP-105, opt-in, see below):
+
+```
+map -> odom -> base_footprint -> ...      NO lio_init
+```
+
+The default is the exception to everything above. `fastlio_localization` loads the
 prior map into the ikd-Tree its iEKF registers against, so after the initial
 lock the filter state **is** the map pose -- there is no separate odometry
 estimate to name, and no `map -> odom` correction to publish. It broadcasts
@@ -78,6 +85,21 @@ estimate to name, and no `map -> odom` correction to publish. It broadcasts
 `lio_odom_bridge` nor any fusion node runs in that stack; adding one would give
 `base_footprint` two parents. The local costmap therefore rolls in `map`, not
 `odom` -- see `local_costmap.global_frame` in `nav2_params_fastloc.yaml`.
+
+The cost of that shortcut: every step in the filter's pose (lock handover,
+`/initialpose` seed, re-arm) lands directly on `base_footprint`, where the
+local costmap and controller see it, and nothing gates it. The overlap health
+check only reports a bad lock, after 5 s. If the localizer stalls,
+`base_footprint` stops moving too.
+
+`odom_frame:=odom` restores the REP-105 split. The localizer broadcasts
+`map -> odom`, composed at the scan stamp so that
+`map -> odom -> base_footprint` equals its own pose (planar: x, y, z, yaw).
+`wheel_odom_tf.py` supplies `odom -> base_footprint` from `/pepper_odom`, and
+the local costmap moves to `odom`. The edge goes through a jump gate
+(`map_odom.hpp` in both localizers): a step over 0.30 m / 10 deg per scan is
+held for up to 2 s, then adopted with an ERROR, while a deliberate handover or
+seed resets the gate and passes. **Not yet verified on the robot.**
 
 In the other three stacks `base_footprint` is a child of `lio_init` -- that is
 the edge the bridge publishes. A lookup of `odom -> base_footprint` traverses
@@ -89,7 +111,9 @@ the edge the bridge publishes. A lookup of `odom -> base_footprint` traverses
 | `base_footprint -> l2lidar_frame` | static | `static_tf_publisher` | **the mount calibration** |
 | `lio_init -> base_footprint` | dynamic ~11 Hz | `lio_odom_bridge` | **the odometry** -- continuous, drifts, never corrected |
 | `map -> lio_init` | dynamic, jumps | AMCL / RTAB-Map | **the correction** -- discontinuous, does not drift |
-| `map -> base_footprint` | dynamic, scan rate | `fastlio_localization` | pose and correction in one: the map is inside the filter, so there is no separate correction edge |
+| `map -> base_footprint` | dynamic, scan rate | `fastlio_localization`, `pointlio_localization` (default) | pose and correction in one: the map is inside the filter, so there is no separate correction edge |
+| `map -> odom` | dynamic, scan rate, gated | `fastlio_localization`, `pointlio_localization` (`odom_frame:=odom`) | the filter pose with wheel odometry composed out |
+| `odom -> base_footprint` | dynamic, 50 Hz | `wheel_odom_tf` (loc stacks, `odom_frame:=odom` only) | wheel odometry, planar |
 | `odom <-> lio_init` | static, one-time | `lio_odom_bridge` | **the leveling** (0.2571 m, from calibration) |
 | `map -> pgo_init` | static, one-time | `pgo_map_odom_bridge` | the leveling, map side |
 
@@ -123,7 +147,7 @@ depending on who owns it:
 |---|---|
 | `fastlio_mapping`, `pointlio_mapping`, `pepper_nav2_amcl` | `odom -> lio_init` (odom is parent) |
 | `fastlio_lc_l2`, `pointlio_lc_l2` (PGO) | `map -> pgo_init`; no `odom` frame here |
-| `fastlio_localization` (`pepper_nav2_fastloc`) | none -- no `lio_init` and no `odom`; the prior map is already leveled and the filter publishes `map -> base_footprint` straight out |
+| `fastlio_localization`, `pointlio_localization` | none -- no `lio_init`; the prior map is already leveled. Default: `map -> base_footprint` straight out. `odom_frame:=odom`: `map -> odom`, with `odom` planar wheel odometry, floor-referenced by construction |
 
 `pgo_init` exists only during mapping. Both artifacts are written **into** the
 leveled frame (octomap builds the grid in `map`; `pgo_node` transforms
