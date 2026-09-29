@@ -197,14 +197,16 @@ local_costmap:
       width: 10
       height: 10
       resolution: 0.05
-      robot_radius: 0.20
+      robot_radius: 0.25
       plugins: ["l2_voxel", "inflation_layer"]
 
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 4.0
-        # Must exceed the 0.206 m inscribed radius; ~14 cm band for MPPI's CostCritic.
-        inflation_radius: 0.35
+        # Must exceed the inscribed radius: robot_radius 0.25 + Nav2's default
+        # 0.01 m footprint_padding, as a 16-gon, is 0.255 m. 0.40 leaves ~14 cm:
+        # MPPI's CostCritic steers on this gradient, and ~4 cm was too thin.
+        inflation_radius: 0.40
 
       # The L2 in a 3D VoxelLayer instead of the 2D ObstacleLayer, to see
       # whether the vertical evidence rule cuts its noise. ONE source does both
@@ -256,7 +258,7 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_footprint
       use_sim_time: False
-      robot_radius: 0.20
+      robot_radius: 0.25
       resolution: 0.05
       track_unknown_space: true
       plugins: ["static_layer", "voxel_layer", "inflation_layer"]
@@ -290,9 +292,9 @@ global_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 4.0
-        # Above the 0.206 m inscribed radius, and low enough that the planner
-        # still fits through doorways.
-        inflation_radius: 0.30
+        # Above the 0.255 m inscribed radius (~9 cm band), low enough for
+        # doorways.
+        inflation_radius: 0.35
       always_send_full_costmap: True
 
 planner_server:

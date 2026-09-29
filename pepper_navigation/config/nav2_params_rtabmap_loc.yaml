@@ -194,6 +194,9 @@ local_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 4.0
+        # Must exceed the inscribed radius: robot_radius 0.25 + Nav2's default
+        # 0.01 m footprint_padding, as a 16-gon, is 0.255 m. 0.40 leaves ~14 cm:
+        # MPPI's CostCritic steers on this gradient, and ~4 cm was too thin.
         inflation_radius: 0.40
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
@@ -302,7 +305,9 @@ global_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 4.0
-        inflation_radius: 0.30
+        # Above the 0.255 m inscribed radius (~9 cm band), low enough for
+        # doorways.
+        inflation_radius: 0.35
       always_send_full_costmap: True
 
 planner_server:

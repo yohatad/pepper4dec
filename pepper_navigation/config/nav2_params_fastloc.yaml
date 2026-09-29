@@ -184,7 +184,7 @@ local_costmap:
       width: 10
       height: 10
       resolution: 0.05
-      robot_radius: 0.20
+      robot_radius: 0.25
       # RealSense only: the L2 was too noisy here. It still feeds the global
       # costmap and the collision monitor. A layer runs only if named here.
       plugins: ["voxel_layer", "inflation_layer"]                  # in use
@@ -194,9 +194,10 @@ local_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 4.0
-        # Must exceed the 0.206 m inscribed radius. 0.35 leaves ~14 cm: MPPI's
-        # CostCritic steers on this gradient, and ~4 cm (0.25) was too thin.
-        inflation_radius: 0.35
+        # Must exceed the inscribed radius: robot_radius 0.25 + Nav2's default
+        # 0.01 m footprint_padding, as a 16-gon, is 0.255 m. 0.40 leaves ~14 cm:
+        # MPPI's CostCritic steers on this gradient, and ~4 cm was too thin.
+        inflation_radius: 0.40
       
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
@@ -281,7 +282,7 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_footprint
       use_sim_time: False
-      robot_radius: 0.20
+      robot_radius: 0.25
       resolution: 0.05
       track_unknown_space: true
       plugins: ["static_layer", "voxel_layer", "inflation_layer"]
@@ -315,8 +316,9 @@ global_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 4.0
-        # Above the 0.206 m inscribed radius, low enough for doorways.
-        inflation_radius: 0.30
+        # Above the 0.255 m inscribed radius (~9 cm band), low enough for
+        # doorways.
+        inflation_radius: 0.35
       always_send_full_costmap: True
 
 planner_server:
