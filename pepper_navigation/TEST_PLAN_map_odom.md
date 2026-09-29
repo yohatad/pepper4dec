@@ -8,9 +8,9 @@ the feature branches are merged.
 | Repo | Branch | Commits |
 |---|---|---|
 | pepper4dec | `devel` | `6ac6313` opt-in map -> odom (fastloc/pointloc), `fda18c4` robot_radius 0.25 + geometry test, `0c4a347` KISS-ICP Nav2 profile |
-| point_lio | `feature/map-odom-frame` | `57ef9c8` no map -> base_footprint before the lock, `c75dbf4` opt-in map -> odom |
-| FAST_LIO | `feature/map-odom-frame` | `54a356f` opt-in map -> odom |
-| kiss-icp | unchanged (`045c48b`) | needs building |
+| point_lio | `feature/map-odom-frame` | `57ef9c8` no map -> base_footprint before the lock, `c75dbf4` opt-in map -> odom, `aaa4441` odom_lookup_timeout 0.1 in l2lidar_rsimu.yaml |
+| FAST_LIO | `feature/map-odom-frame` | `54a356f` opt-in map -> odom, `68ce6e7` odom_lookup_timeout 0.1 in l2_rsimu.yaml |
+| kiss-icp | `main` | `7fce03c` floor lock (z/roll/pitch pinned to 0, fed back into the pipeline) |
 
 Nothing here is merged into `main` / `ros2`. Merge only after the tests pass.
 
@@ -99,15 +99,42 @@ rtabmap_loc cannot be tested: no map database yet.
 
 `ros2 launch pepper_navigation pepper_nav2_kissicp.launch.py map:=<path>`
 
+Background. Bag replay before `7fce03c` showed z swinging +91 cm to -22 cm and
+roll/pitch +-14 / +-11 deg within ~15 s of driving. The floor lock (`floor_lock`,
+default true) now zeros z/roll/pitch every frame and writes the level pose back
+into KISS-ICP's own state, so tilt cannot compound. This matches
+`flatten_base_frame` in pepper_slam's `lio_odom_bridge.py` (on by default in
+`fastlio_odometry.launch.py`), with one difference: the bridge only flattens the
+published pose, which is enough there because the IMU keeps the LIO filter
+level. KISS-ICP has no IMU, so its lock must feed back.
+
+Because of the lock, z/roll/pitch in `odom -> base_footprint` read exactly 0 (the
+published pose IS the locked pose), so checking them proves nothing. What can
+still show a problem is x/y/yaw.
+
 | Check | Expected |
 |---|---|
-| kiss_icp_node log | Base frame `base_footprint`, odom frame `odom`; no repeated "wheel prior unavailable" |
+| kiss_icp_node log | Base frame `base_footprint`, odom frame `odom`, `Floor lock ...: 1`; no repeated "wheel prior unavailable" |
 | `view_frames` | `map -> odom` (amcl) `-> base_footprint` (kiss); one parent each |
 | `ros2 topic hz /odom_lio` | ~10 Hz |
-| Stand still 60 s | `odom -> base_footprint` drifts less than a few cm |
-| `tf2_echo odom base_footprint` z / roll / pitch | z within +-5 cm, roll and pitch under 3 deg |
+| Stand still 60 s | `odom -> base_footprint` x/y drift less than a few cm, yaw under 1 deg |
+| Same bag or route, record `/odom_lio` here and `/localization/pose` from fastloc (test 2) | KISS-ICP x/y path follows fastloc's shape; no sudden jumps; yaw agrees within a few deg per turn |
 | Set a pose, drive a loop | AMCL converges and stays localized |
 | Same route as test 6 | Goal reached; compare smoothness and relocalization with the FAST-LIO amcl stack |
+
+### 7b. Root-cause A/B (the lock hides the cause, it does not remove it)
+
+The floor constrains z/roll/pitch, so a working ICP should not swing that far.
+Run the same bag with `floor_lock: false` so the wobble is visible, and compare:
+
+| Run | Config | Expected if this is the cause |
+|---|---|---|
+| A | `kiss_config:=$(ros2 pkg prefix kiss_icp)/share/kiss_icp/config/l2_indoor.yaml` (validated, ATE ~0.24 m) | Stable z/roll/pitch |
+| B | `pepper_l2.yaml` with `prior.source: constant_velocity` | Stable: the wheel prior (naoqi host-time stamps) was the cause |
+| C | `pepper_l2.yaml` with `data.min_range: 0.8` | Stable: Pepper's own body/arms inside 0.5-0.8 m were the cause |
+
+If A is stable and B or C fixes it, change `pepper_l2.yaml` to match and keep
+the floor lock as a safety net rather than the fix.
 
 ## Known caveats
 
@@ -116,6 +143,22 @@ rtabmap_loc cannot be tested: no map database yet.
 - The map -> odom jump gate only logs; it does not yet raise a diagnostic the
   Nav2 watchdog acts on.
 - KISS-ICP has no IMU and no pose guard (unlike `lio_odom_guard` on the LIO stacks).
+  The floor lock bounds z/roll/pitch only; x/y/yaw are unguarded.
+- The 0.1 s `odom_lookup_timeout` is set only in `l2_rsimu.yaml` (FAST-LIO) and
+  `l2lidar_rsimu.yaml` (Point-LIO). With `config_file:=l2.yaml` or
+  `l2lidar_node.yaml` the 0.05 s code default applies and the "held" warnings
+  may return.
+
+## Bag replay results so far (slam_20260823_aligned, 2026-09-29)
+
+| Test | Result |
+|---|---|
+| 1 Point-LIO pre-lock | Pass |
+| 2 fastloc default | Pass |
+| 3 fastloc odom mode | Pass after `odom_lookup_timeout: 0.1`; pose agreement 0-3 cm |
+| 4 pointloc odom mode | Pass with the same fix; agreement 0.2-1.1 cm, map -> odom drift ~2.6 cm/s |
+| 5, 6 | Need the live robot |
+| 7 | Frames, rates and AMCL correct; z/roll/pitch wobble led to the floor lock. Re-run with the checks above |
 
 ## After the tests
 
