@@ -1,0 +1,432 @@
+# Nav2 params for AMCL + map_server on KISS-ICP odometry
+# (pepper_nav2_kissicp.launch.py). A copy of nav2_params_amcl.yaml with the
+# odometry source swapped; everything downstream of odometry is identical, so
+# a behavioural difference between the two is an odometry one.
+#
+# TF: amcl owns map -> odom; kiss_icp_node owns odom -> base_footprint. With
+# base_frame: base_footprint KISS-ICP reports the base pose in a world frame
+# anchored at the base's START pose, so odom is already level and
+# floor-referenced -- no lio_init, no lio_odom_bridge. Its /kiss/odometry is
+# remapped onto /odom_lio, the topic odom_topic below expects.
+#
+# AMCL localizes on /scan, flattened from /points by pointcloud_to_laserscan;
+# the costmaps still use 3D /points.
+
+# AMCL: particle filter over /scan against map_server's grid.
+amcl:
+  ros__parameters:
+    use_sim_time: False
+    # Kept at the FAST-LIO baseline's 0.05 so the two stacks compare like for
+    # like. Raise if KISS-ICP (no IMU) drifts more and AMCL lags behind it.
+    alpha1: 0.05
+    alpha2: 0.05
+    alpha3: 0.05
+    alpha4: 0.05
+    alpha5: 0.05
+    base_frame_id: "base_footprint"
+    global_frame_id: "map"
+    # The levelled odom -- see the header.
+    odom_frame_id: "odom"
+    beam_skip_distance: 0.5
+    beam_skip_error_threshold: 0.9
+    beam_skip_threshold: 0.3
+    do_beamskip: false
+    lambda_short: 0.1
+    laser_likelihood_max_dist: 2.0
+    laser_model_type: "likelihood_field"
+    # Match pointcloud_to_laserscan. 0.8 m drops Pepper's own body, which
+    # otherwise stops AMCL converging.
+    laser_min_range: 0.8
+    laser_max_range: 20.0
+    # 60 of 720 was too thin to catch the few features that fix position
+    # along a corridor.
+    max_beams: 180
+    max_particles: 2000
+    min_particles: 500
+    pf_err: 0.05
+    pf_z: 0.99
+    # No random-particle recovery: it would hide real divergence.
+    recovery_alpha_fast: 0.0
+    recovery_alpha_slow: 0.0
+    # Every update: 2 measured jumpier (5.6 vs 3.4 cm mean).
+    resample_interval: 1
+    # Holonomic base: allow lateral motion even though the controller never commands it.
+    robot_model_type: "nav2_amcl::OmniMotionModel"
+    save_pose_rate: 0.5
+    # likelihood_field reads only z_hit/z_rand/sigma_hit. 0.9/0.1 with a
+    # tight sigma_hit rewards good matches; z_rand 0.5 flattened the weights.
+    sigma_hit: 0.1
+    tf_broadcast: true
+    transform_tolerance: 1.0
+    update_min_a: 0.2
+    update_min_d: 0.25
+    z_hit: 0.9
+    z_max: 0.05
+    z_rand: 0.1
+    z_short: 0.05
+    scan_topic: scan  # no leading slash; pointcloud_to_laserscan publishes /scan
+    # Start UNLOCALIZED and wait for RViz's 2D Pose Estimate: the map origin
+    # [-19.5, -28.5] is nowhere near where Pepper starts.
+    set_initial_pose: false
+
+bt_navigator:
+  ros__parameters:
+    use_sim_time: False
+    global_frame: map
+    robot_base_frame: base_footprint
+    # Only used for velocity checks, so the unlevelled frame is harmless.
+    odom_topic: /odom_lio   # shared LIO odometry; every mapping launch remaps onto it
+    bt_loop_duration: 2
+    default_server_timeout: 20
+    wait_for_service_timeout: 5
+
+    default_nav_to_pose_bt_xml: /opt/ros/humble/share/nav2_bt_navigator/behavior_trees/navigate_to_pose_w_replanning_and_recovery.xml
+    plugin_lib_names:
+      - nav2_compute_path_to_pose_action_bt_node
+      - nav2_compute_path_through_poses_action_bt_node
+      - nav2_smooth_path_action_bt_node
+      - nav2_follow_path_action_bt_node
+      - nav2_spin_action_bt_node
+      - nav2_wait_action_bt_node
+      - nav2_back_up_action_bt_node
+      - nav2_drive_on_heading_bt_node
+      - nav2_clear_costmap_service_bt_node
+      - nav2_is_stuck_condition_bt_node
+      - nav2_goal_reached_condition_bt_node
+      - nav2_goal_updated_condition_bt_node
+      - nav2_globally_updated_goal_condition_bt_node
+      - nav2_is_path_valid_condition_bt_node
+      - nav2_initial_pose_received_condition_bt_node
+      - nav2_reinitialize_global_localization_service_bt_node
+      - nav2_rate_controller_bt_node
+      - nav2_distance_controller_bt_node
+      - nav2_speed_controller_bt_node
+      - nav2_truncate_path_action_bt_node
+      - nav2_truncate_path_local_action_bt_node
+      - nav2_goal_updater_node_bt_node
+      - nav2_recovery_node_bt_node
+      - nav2_pipeline_sequence_bt_node
+      - nav2_round_robin_node_bt_node
+      - nav2_transform_available_condition_bt_node
+      - nav2_time_expired_condition_bt_node
+      - nav2_path_expiring_timer_condition
+      - nav2_distance_traveled_condition_bt_node
+      - nav2_single_trigger_bt_node
+      - nav2_goal_updated_controller_bt_node
+      - nav2_is_battery_low_condition_bt_node
+      - nav2_navigate_through_poses_action_bt_node
+      - nav2_navigate_to_pose_action_bt_node
+      - nav2_remove_passed_goals_action_bt_node
+      - nav2_planner_selector_bt_node
+      - nav2_controller_selector_bt_node
+      - nav2_goal_checker_selector_bt_node
+      - nav2_controller_cancel_bt_node
+      - nav2_path_longer_on_approach_bt_node
+      - nav2_wait_cancel_bt_node
+      - nav2_spin_cancel_bt_node
+      - nav2_back_up_cancel_bt_node
+      - nav2_drive_on_heading_cancel_bt_node
+
+controller_server:
+  ros__parameters:
+    use_sim_time: False
+    controller_frequency: 20.0
+    min_x_velocity_threshold: 0.001
+    min_y_velocity_threshold: 0.001
+    min_theta_velocity_threshold: 0.001
+    failure_tolerance: 0.3
+    progress_checker_plugin: "progress_checker"
+    goal_checker_plugins: ["general_goal_checker"]
+    controller_plugins: ["FollowPath"]
+
+    progress_checker:
+      plugin: "nav2_controller::SimpleProgressChecker"
+      required_movement_radius: 0.1
+      movement_time_allowance: 30.0
+
+    general_goal_checker:
+      stateful: True
+      plugin: "nav2_controller::SimpleGoalChecker"
+      xy_goal_tolerance: 0.15
+      yaw_goal_tolerance: 0.15
+
+    # Shared with the other profiles (test_shared_nav2_params.py).
+    FollowPath:
+      plugin: "nav2_mppi_controller::MPPIController"
+      # Horizon = time_steps * model_dt = 2.8 s, ~1.0 m at vx_max: inside the
+      # 3 m local costmap and under prune_distance.
+      time_steps: 56
+      model_dt: 0.05             # must equal 1 / controller_frequency
+      batch_size: 2000
+      iteration_count: 1
+      # Sampling noise per axis; vy 0 as the base is driven diff-drive style.
+      vx_std: 0.2
+      vy_std: 0.0
+      wz_std: 0.3
+      # vx_min 0: no reversing.
+      vx_max: 0.35
+      vx_min: 0.0
+      vy_max: 0.0
+      wz_max: 0.3
+      motion_model: "DiffDrive"
+      prune_distance: 1.7
+      transform_tolerance: 0.2
+      temperature: 0.3
+      gamma: 0.015
+      reset_period: 1.0
+      regenerate_noises: false
+      visualize: false
+      TrajectoryVisualizer:
+        trajectory_step: 5
+        time_step: 3
+      critics: ["ConstraintCritic", "CostCritic", "GoalCritic", "GoalAngleCritic",
+                "PathAlignCritic", "PathFollowCritic", "PathAngleCritic", "PreferForwardCritic"]
+      ConstraintCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 4.0
+      # Reads the local costmap's inflation layer: needs an inflation band
+      # beyond the inscribed radius to have a gradient to steer on.
+      CostCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 3.81
+        critical_cost: 300.0
+        consider_footprint: false   # circular robot (robot_radius)
+        collision_cost: 1000000.0
+        near_goal_distance: 1.0
+        trajectory_point_step: 2
+      GoalCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 5.0
+        threshold_to_consider: 1.4
+      GoalAngleCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 3.0
+        threshold_to_consider: 0.5
+      PathAlignCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 14.0
+        max_path_occupancy_ratio: 0.05
+        trajectory_point_step: 4
+        threshold_to_consider: 0.5
+        offset_from_furthest: 20
+        use_path_orientations: false
+      PathFollowCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 5.0
+        offset_from_furthest: 5
+        threshold_to_consider: 1.4
+      PathAngleCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 2.0
+        offset_from_furthest: 4
+        threshold_to_consider: 0.5
+        max_angle_to_furthest: 1.0
+        forward_preference: true
+      PreferForwardCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 5.0
+        threshold_to_consider: 0.5
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      update_frequency: 15.0
+      publish_frequency: 2.0
+      # Levelled odom: smooth (map jumps with AMCL) and level, which the
+      # height bands below need.
+      global_frame: odom
+      robot_base_frame: base_footprint
+      use_sim_time: False
+      rolling_window: true
+      width: 3
+      height: 3
+      resolution: 0.05
+      robot_radius: 0.25
+      plugins: ["voxel_layer", "inflation_layer"]
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        cost_scaling_factor: 4.0
+        # Must exceed the inscribed radius: robot_radius 0.25 + Nav2's default
+        # 0.01 m footprint_padding, as a 16-gon, is 0.255 m. 0.40 leaves ~14 cm:
+        # MPPI's CostCritic steers on this gradient, and ~4 cm was too thin.
+        inflation_radius: 0.40
+      voxel_layer:
+        plugin: "nav2_costmap_2d::VoxelLayer"
+        enabled: True
+        # Grid spans origin_z .. origin_z + z_voxels*z_resolution.
+        publish_voxel_map: True
+        # Below the floor, so the sensor is always inside the grid; outside
+        # it VoxelLayer clears nothing.
+        origin_z: -0.30            # bottom of grid, i.e. 0.30 m BELOW the floor
+        # 16 is the max (one 32-bit word per column). 0.125 * 16 = 2.0 m.
+        z_resolution: 0.125        # voxel height
+        z_voxels: 16               # 16 * 0.125 = 2.0 m -> covers -0.30 .. 1.70
+        max_obstacle_height: 1.70
+        mark_threshold: 0          # marked voxels in a column to flag the 2D cell (0 = any)
+        unknown_threshold: 15
+        combination_method: 1
+        # L2: 360 deg. RealSense: dense forward detail the L2 misses.
+        observation_sources: points realsense
+        points:
+          # Self-hit and ground filtered (points_costmap_filter in the launch).
+          topic: /points_costmap
+          data_type: "PointCloud2"
+          clearing: True
+          marking: True
+          # 0.30, not 0.10: levelling is a one-time snapshot, so the apparent
+          # floor drifts over a run.
+          min_obstacle_height: 0.30
+          max_obstacle_height: 1.70
+          raytrace_max_range: 3.0
+          # Skip Pepper's own body (0.3-0.6 m out).
+          raytrace_min_range: 0.8
+          obstacle_max_range: 2.5
+          obstacle_min_range: 0.8
+        realsense:
+          # Needs the driver's pointcloud.enable:=true. Forward only.
+          topic: /camera/depth/color/points
+          data_type: "PointCloud2"
+          clearing: True
+          marking: True
+          # Floor-referenced, same as the points source above.
+          min_obstacle_height: 0.30
+          max_obstacle_height: 1.70
+          # D435i reliable depth ~0.3-3 m; below 0.3 m it is blind.
+          raytrace_max_range: 5.0
+          raytrace_min_range: 0.3
+          obstacle_max_range: 5.0
+          obstacle_min_range: 0.3
+      always_send_full_costmap: True
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      update_frequency: 5.0
+      publish_frequency: 1.0
+      global_frame: map
+      robot_base_frame: base_footprint
+      use_sim_time: False
+      robot_radius: 0.25
+      resolution: 0.05
+      track_unknown_space: true
+      plugins: ["static_layer", "voxel_layer", "inflation_layer"]
+      voxel_layer:
+        plugin: "nav2_costmap_2d::VoxelLayer"
+        enabled: True
+        publish_voxel_map: True
+        # Below the floor, as in the local costmap.
+        origin_z: -0.30
+        z_resolution: 0.125        # see local costmap: z_voxels max is 16
+        z_voxels: 16               # 16 * 0.125 = 2.0 m -> covers -0.30 .. 1.70
+        max_obstacle_height: 1.70
+        mark_threshold: 0
+        unknown_threshold: 15
+        combination_method: 1
+        observation_sources: points
+        points:
+          # Same filtered topic as the local costmap.
+          topic: /points_costmap
+          data_type: "PointCloud2"
+          clearing: True
+          marking: True
+          # Higher than local's 0.30: only burn confidently tall structure
+          # into the persistent map.
+          min_obstacle_height: 0.80
+          max_obstacle_height: 1.70
+          raytrace_max_range: 5.0
+          # Skip Pepper's own body.
+          raytrace_min_range: 0.2
+          obstacle_max_range: 2.5
+          obstacle_min_range: 0.2
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        map_subscribe_transient_local: True
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        cost_scaling_factor: 4.0
+        # Above the 0.255 m inscribed radius (~9 cm band), low enough for
+        # doorways.
+        inflation_radius: 0.35
+      always_send_full_costmap: True
+
+planner_server:
+  ros__parameters:
+    expected_planner_frequency: 20.0
+    use_sim_time: False
+    planner_plugins: ["GridBased"]
+    GridBased:
+      plugin: "nav2_navfn_planner/NavfnPlanner"
+      tolerance: 0.5
+      use_astar: false
+      allow_unknown: true
+
+behavior_server:
+  ros__parameters:
+    use_sim_time: False
+    global_frame: map
+    robot_base_frame: base_footprint
+    transform_tolerance: 0.1
+    simulate_ahead_time: 2.0
+    # Matches FollowPath's rotation limits, so Spin can't outrun the controller.
+    max_rotational_vel: 0.3
+    min_rotational_vel: 0.15
+    rotational_acc_lim: 0.8
+    behavior_plugins: ["spin", "backup", "wait"]
+    spin:
+      plugin: "nav2_behaviors/Spin"
+    backup:
+      plugin: "nav2_behaviors/BackUp"
+    wait:
+      plugin: "nav2_behaviors/Wait"
+
+# Collision monitor: independent safety stop on the L2, between the controller
+# and the base (cmd_vel_raw -> monitor -> cmd_vel). Reads /points_safety, the
+# L2 with Pepper's own body filtered out, or the robot would stop itself.
+collision_monitor:
+  ros__parameters:
+    use_sim_time: False
+    base_frame_id: "base_footprint"
+    # Levelled odom, as in the local costmap.
+    odom_frame_id: "odom"
+    cmd_vel_in_topic: "cmd_vel_raw"
+    cmd_vel_out_topic: "cmd_vel"
+    state_topic: "collision_monitor_state"
+    transform_tolerance: 0.2
+    source_timeout: 1.0
+    base_shift_correction: True
+    stop_pub_timeout: 2.0
+    polygons: ["PolygonStop", "PolygonSlow"]
+    PolygonStop:
+      type: "circle"
+      radius: 0.40          # hard stop inside this radius of base_footprint
+      action_type: "stop"
+      max_points: 3         # trigger when > this many points fall inside
+      visualize: True
+      polygon_pub_topic: "polygon_stop"
+      enabled: True
+    PolygonSlow:
+      type: "circle"
+      radius: 0.80          # slow to slowdown_ratio inside this radius
+      action_type: "slowdown"
+      slowdown_ratio: 0.3
+      max_points: 3
+      visualize: True
+      polygon_pub_topic: "polygon_slowdown"
+      enabled: True
+    observation_sources: ["pointcloud"]
+    pointcloud:
+      type: "pointcloud"
+      topic: "/points_safety"   # L2 minus its own housing (points_safety_filter)
+      # 0.22, not 0.10: the L2 reads the floor up to ~0.20 m high within
+      # 0.6 m, which filled both zones. MEASURED: no false trigger at 0.22.
+      min_height: 0.22
+      max_height: 1.80
+      enabled: True

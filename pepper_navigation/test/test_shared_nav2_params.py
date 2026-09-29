@@ -22,7 +22,7 @@ import yaml
 SHARED = ("behavior_server", "controller_server", "planner_server")
 FILES = ("nav2_params_amcl.yaml", "nav2_params_fastloc.yaml",
          "nav2_params_rtabmap_loc.yaml", "nav2_params_pointloc.yaml",
-         "nav2_params_l2voxel_test.yaml")
+         "nav2_params_kissicp.yaml", "nav2_params_l2voxel_test.yaml")
 
 # The robot's size, and the clearance kept around it, live inside sections
 # that are otherwise mode-specific (the costmaps and collision monitor differ
