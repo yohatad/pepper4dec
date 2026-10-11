@@ -105,6 +105,8 @@ git clone https://github.com/ros-naoqi/pepper_meshes2.git pepper_meshes
 # Behavior trees
 git clone https://github.com/BehaviorTree/BehaviorTree.CPP.git
 git clone https://github.com/BehaviorTree/BehaviorTree.ROS2.git
+# Fixes a halt crash in BehaviorTree.ROS2 (see the patch header)
+git -C BehaviorTree.ROS2 apply ../pepper4dec/patches/behaviortree_ros2-reset-goal-handle.patch
 ```
 
 The lidar stack additionally needs the L2 driver (`l2lidar_node`, publishing

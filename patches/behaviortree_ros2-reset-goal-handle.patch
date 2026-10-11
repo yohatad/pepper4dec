@@ -1,0 +1,33 @@
+BehaviorTree.ROS2: reset RosActionNode's goal handle when a new goal starts.
+
+RosActionNode::tick() clears future_goal_handle_ when it sends a new goal but
+keeps goal_handle_ from the previous run until the server answers. Halting the
+node in that window (e.g. a Parallel whose other child succeeds on the same
+tick, as DetectVisitor does in lab_tour.xml / dec_Tour.xml) makes cancelGoal()
+cancel the previous, finished goal: rclcpp_action throws
+UnknownGoalHandleError out of halt(), and behavior_controller aborts.
+Reproduced by behavior_controller's test
+HaltingAnActionNodeBeforeItsSecondGoalIsAnsweredIsSafe. Reported upstream in
+issue #57 (comment of 2024-05-20, after the issue was closed) and #110. Not
+fixed upstream as of 6c6aa07 (open PR #129 only swallows the error and leaves
+the new goal running).
+
+Apply from the workspace src/ directory:
+  git -C BehaviorTree.ROS2 apply ../pepper4dec/patches/behaviortree_ros2-reset-goal-handle.patch
+
+diff --git a/behaviortree_ros2/include/behaviortree_ros2/bt_action_node.hpp b/behaviortree_ros2/include/behaviortree_ros2/bt_action_node.hpp
+index 11bfc96..661be9c 100644
+--- a/behaviortree_ros2/include/behaviortree_ros2/bt_action_node.hpp
++++ b/behaviortree_ros2/include/behaviortree_ros2/bt_action_node.hpp
+@@ -395,6 +395,11 @@ inline NodeStatus RosActionNode<T>::tick()
+ 
+     goal_received_ = false;
+     future_goal_handle_ = {};
++    // Forget the previous run's goal. Until the server answers the new one,
++    // cancelGoal() must wait on future_goal_handle_; with a stale handle it
++    // would cancel the finished goal, and rclcpp_action throws
++    // UnknownGoalHandleError out of halt().
++    goal_handle_.reset();
+     on_feedback_state_change_ = NodeStatus::RUNNING;
+     result_ = {};
+ 

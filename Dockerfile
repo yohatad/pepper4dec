@@ -151,6 +151,13 @@ RUN git clone --depth 1 https://github.com/yohatad/naoqi_bridge_msgs2.git src/na
 
 COPY . src/pepper4dec
 
+# BehaviorTree.ROS2 crashes when an action node is halted before the server
+# answers its second goal (see the patch header). Upstream has no fix yet, so
+# patch the fresh clone. If this stops applying, upstream changed the code:
+# check whether they fixed it and drop the patch.
+RUN git -C src/BehaviorTree.ROS2 apply \
+      ${WS}/src/pepper4dec/patches/behaviortree_ros2-reset-goal-handle.patch
+
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ros-humble-gtsam net-tools && \
     rosdep install --from-paths src --ignore-src -r -y --skip-keys "python3-pip" && \
