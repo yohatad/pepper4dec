@@ -18,21 +18,28 @@
   
   <!-- Main Tour Guide Behavior Tree -->
   <BehaviorTree ID="TourGuide">
+    <!-- _autoremap="true" on every SubTree: subtrees share this tree's
+         blackboard, so SelectExhibit's {exhibit_goal_*} reach
+         NavigateToLocation, {tour_declined} reaches EndTour, and the
+         caller's {*_speech} phrases reach every subtree. Without it each
+         SubTree gets an empty blackboard of its own. -->
     <Sequence name="MainTourSequence">
-      <SubTree ID="DetectVisitor"/>
-      <SubTree ID="EngageVisitor"/>
+      <!-- The node re-ticks the tree after each tour: forget the last answer -->
+      <Action ID="SetBlackboardValue" key="tour_declined" value="false"/>
+      <SubTree ID="DetectVisitor" _autoremap="true"/>
+      <SubTree ID="EngageVisitor" _autoremap="true"/>
       
       <!-- Handle visitor response - if they decline, skip to EndTour gracefully -->
       <Fallback name="TourDecision">
         <Sequence name="AcceptedTour">
-          <SubTree ID="QueryVisitorResponse"/>
-          <SubTree ID="VisitExhibit"/>
+          <SubTree ID="QueryVisitorResponse" _autoremap="true"/>
+          <SubTree ID="VisitExhibit" _autoremap="true"/>
         </Sequence>
         <!-- If QueryVisitorResponse fails (visitor declined), we still end gracefully -->
         <Action ID="SetBlackboardValue" key="tour_declined" value="true"/>
       </Fallback>
       
-      <SubTree ID="EndTour"/>
+      <SubTree ID="EndTour" _autoremap="true"/>
     </Sequence>
   </BehaviorTree>
 
@@ -55,7 +62,7 @@
     <Sequence name="EngageVisitorSequence">
       <!-- Stop animations, perform welcome gesture, then resume -->
       <Action ID="StopAnimateBehavior"/>
-      <Action ID="Gesture" gesture_type="welcome" gesture_duration="2000"/>
+      <Action ID="Gesture" gesture_type="iconic" gesture_name="welcome" gesture_duration="2000"/>
 
       <!-- Animate in background for the rest of engagement;
            Parallel succeeds when the inner Sequence completes,
@@ -109,50 +116,61 @@
       <!-- Return to starting position before beginning the tour loop -->
       <Action ID="Navigate" goal_x="4.0" goal_y="6.8" goal_theta="1.5708"/>
       
-      <!-- Loop through exhibits using WhileDoElse for cleaner exit -->
-      <WhileDoElse name="ExhibitLoop">
-        <!-- While condition: check if exhibits remain -->
-        <Condition ID="IsListWithExhibit"/>
-        
-        <!-- Do: visit exhibit -->
-        <Sequence name="SingleExhibitVisit">
-          <!-- Select and navigate to exhibit -->
-          <Action ID="SelectExhibit"
-                  exhibit_speech="{exhibit_speech}"
-                  exhibit_goal_x="{exhibit_goal_x}"
-                  exhibit_goal_y="{exhibit_goal_y}"
-                  exhibit_goal_theta="{exhibit_goal_theta}"
-                  exhibit_location_x="{exhibit_location_x}"
-                  exhibit_location_y="{exhibit_location_y}"
-                  exhibit_location_z="{exhibit_location_z}"/>
-          <Action ID="SpeechWithFeedback" say="{follow_me_speech}"/>
+      <!-- Visit exhibits until the queue is empty. WhileDoElse is not a loop
+           (it ticks its branch once and returns), so KeepRunningUntilFailure
+           repeats the visit. It stops at the first FAILURE: either the queue
+           ran out (done), or a visit failed and left its exhibit queued. -->
+      <Fallback name="ExhibitLoop">
+        <KeepRunningUntilFailure>
+          <Sequence name="NextExhibit">
+            <Condition ID="IsListWithExhibit"/>
+            <Sequence name="SingleExhibitVisit">
+              <!-- Select and navigate to exhibit -->
+              <Action ID="SelectExhibit"
+                      exhibit_speech="{exhibit_speech}"
+                      exhibit_goal_x="{exhibit_goal_x}"
+                      exhibit_goal_y="{exhibit_goal_y}"
+                      exhibit_goal_theta="{exhibit_goal_theta}"
+                      exhibit_location_x="{exhibit_location_x}"
+                      exhibit_location_y="{exhibit_location_y}"
+                      exhibit_location_z="{exhibit_location_z}"/>
+              <Action ID="SpeechWithFeedback" say="{follow_me_speech}"/>
           
-          <!-- Navigate to location with recovery -->
-          <SubTree ID="NavigateToLocation"/>
+              <!-- Navigate to location with recovery -->
+              <SubTree ID="NavigateToLocation" _autoremap="true"/>
           
-          <!-- Present exhibit -->
-          <Sequence name="PresentExhibit">
-            <Action ID="SetOvertAttention" enabled="true"/>
+              <!-- Present exhibit -->
+              <Sequence name="PresentExhibit">
+                <Action ID="SetOvertAttention" enabled="true"/>
 
-            <!-- Speak description and point simultaneously -->
-            <Parallel success_count="2" failure_count="1">
-              <Action ID="SpeechWithFeedback" say="{exhibit_speech}"/>
-              <Action ID="Gesture"
-                      gesture_type="point"
-                      location_x="{exhibit_location_x}"
-                      location_y="{exhibit_location_y}"
-                      location_z="{exhibit_location_z}"
-                      gesture_duration="3000"/>
-            </Parallel>
-          </Sequence>
+                <!-- Speak description and point simultaneously. An exhibit
+                     with no gesture_message_english is pointed at in silence:
+                     the speech is skipped, and success_count="-1" (all
+                     children) counts a skipped child as done. -->
+                <Parallel success_count="-1" failure_count="1">
+                  <Action ID="SpeechWithFeedback" say="{exhibit_speech}"
+                          _skipIf="exhibit_speech == ''"/>
+                  <Action ID="Gesture"
+                          gesture_type="deictic"
+                          location_x="{exhibit_location_x}"
+                          location_y="{exhibit_location_y}"
+                          location_z="{exhibit_location_z}"
+                          gesture_duration="3000"/>
+                </Parallel>
+              </Sequence>
           
-          <!-- Mark exhibit as visited -->
-          <Action ID="PopExhibitFromList" exhibit_list="{exhibit_queue}"/>
+              <!-- Mark exhibit as visited -->
+              <Action ID="PopExhibitFromList" exhibit_list="{exhibit_queue}"/>
+            </Sequence>
+          </Sequence>
+        </KeepRunningUntilFailure>
+        <Sequence name="AllExhibitsVisited">
+          <Inverter>
+            <Condition ID="IsListWithExhibit"/>
+          </Inverter>
+          <Action ID="LogEvent" level="info" message="All exhibits visited"/>
         </Sequence>
-        
-        <!-- Else: no more exhibits, log and exit cleanly -->
-        <Action ID="LogEvent" level="info" message="All exhibits visited"/>
-      </WhileDoElse>
+      </Fallback>
     </Sequence>
   </BehaviorTree>
 
@@ -171,7 +189,8 @@
       </Fallback>
       
       <Action ID="Gesture"
-              gesture_type="goodbye"
+              gesture_type="iconic"
+              gesture_name="wave"
               gesture_duration="2000"/>
       <!-- Return to standby position -->
       <Action ID="Navigate" goal_x="4.0" goal_y="6.8" goal_theta="1.5708" />

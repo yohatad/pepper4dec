@@ -38,15 +38,15 @@ Built-in BehaviorTree.CPP nodes — no registration required.
 | `<Fallback>` | Runs children left-to-right; stops and returns SUCCESS on the first success |
 | `<Parallel success_count="N" failure_count="M">` | Runs children concurrently; succeeds when N succeed, fails when M fail |
 | `<IfThenElse>` | First child is the condition; runs second child on SUCCESS, third on FAILURE |
-| `<WhileDoElse>` | First child is the condition; runs second child while true, third child when false |
+| `<WhileDoElse>` | Like `IfThenElse` but reactive: re-checks the condition every tick while the branch runs. **Not a loop**: it returns once the branch finishes |
 | `<Inverter>` | Inverts child result (SUCCESS ↔ FAILURE) |
 | `<ForceSuccess>` | Always returns SUCCESS regardless of child result |
 | `<ForceFailure>` | Always returns FAILURE regardless of child result |
 | `<AlwaysSuccess/>` | Leaf that always returns SUCCESS |
 | `<AlwaysFailure/>` | Leaf that always returns FAILURE |
 | `<RetryUntilSuccessful num_attempts="N">` | Retries child up to N times until it returns SUCCESS |
-| `<KeepRunningUntilFailure>` | Re-ticks child until it returns FAILURE |
-| `<SubTree ID="TreeID"/>` | Executes another `<BehaviorTree>` block by ID |
+| `<KeepRunningUntilFailure>` | Re-ticks child until it returns FAILURE (use it to loop; see the exhibit loop below) |
+| `<SubTree ID="TreeID" _autoremap="true"/>` | Executes another `<BehaviorTree>` block by ID. Without `_autoremap="true"` (or explicit port remapping) the subtree gets an empty blackboard of its own and cannot read or write the parent's keys |
 
 ---
 
@@ -104,17 +104,24 @@ Calls the `animate_behavior/stop` service (std_srvs/Trigger) to immediately halt
 
 ### `Gesture` — Perform a Gesture
 
-Sends a goal to the `Gesture` action server. Supports both iconic gestures (wave, welcome, goodbye) and deictic gestures (pointing to a 3D location).
+Sends a goal to the `Gesture` action server (`gesture_execution`). It points
+at a map-frame location only for `gesture_type="deictic"`. For
+`gesture_type="iconic"` it plays the gesture named by `gesture_name`, which must
+be one of the gestures in `gesture_execution/data/gesture.yaml` (`welcome`,
+`wave`, `shake`); `bow` and `nod` use `bow_nod_angle`. Any other type is played
+as an iconic gesture of that name, so a typo such as `gesture_type="point"`
+makes the action fail.
 
 ```xml
-<!-- Iconic gesture (e.g., wave, welcome, goodbye) -->
+<!-- Iconic gesture: welcome, wave (also used for goodbye) or shake -->
 <Action ID="Gesture"
-        gesture_type="welcome"
+        gesture_type="iconic"
+        gesture_name="welcome"
         gesture_duration="2000"/>
 
 <!-- Deictic gesture pointing at a 3D location -->
 <Action ID="Gesture"
-        gesture_type="point"
+        gesture_type="deictic"
         location_x="{exhibit_location_x}"
         location_y="{exhibit_location_y}"
         location_z="{exhibit_location_z}"
@@ -357,7 +364,7 @@ Use the built-in `CheckBlackboard` condition:
 ```xml
 <Sequence>
   <Action ID="StopAnimateBehavior"/>
-  <Action ID="Gesture" gesture_type="welcome" gesture_duration="2000"/>
+  <Action ID="Gesture" gesture_type="iconic" gesture_name="welcome" gesture_duration="2000"/>
   <Action ID="AnimateBehavior" behavior_type="All" selected_range="0.5" duration_seconds="0"/>
 </Sequence>
 ```
@@ -432,19 +439,48 @@ Use the built-in `CheckBlackboard` condition:
 
 ### Subtree Decomposition
 
+`_autoremap="true"` lets each subtree share the parent's blackboard, so keys
+written in one subtree (e.g. `tour_declined`) are visible in the next.
+
 ```xml
 <BehaviorTree ID="TourGuide">
   <Sequence>
-    <SubTree ID="DetectVisitor"/>
-    <SubTree ID="EngageVisitor"/>
-    <SubTree ID="VisitExhibit"/>
-    <SubTree ID="EndTour"/>
+    <SubTree ID="DetectVisitor" _autoremap="true"/>
+    <SubTree ID="EngageVisitor" _autoremap="true"/>
+    <SubTree ID="VisitExhibit" _autoremap="true"/>
+    <SubTree ID="EndTour" _autoremap="true"/>
   </Sequence>
 </BehaviorTree>
 
 <BehaviorTree ID="DetectVisitor">
   <!-- detection logic -->
 </BehaviorTree>
+```
+
+### Exhibit Loop
+
+`KeepRunningUntilFailure` repeats a visit while exhibits remain. It stops at
+the first FAILURE, so the `Fallback` then tells the two cases apart: an empty
+queue means every exhibit was visited (SUCCESS); a non-empty one means a visit
+failed and left its exhibit queued (FAILURE).
+
+```xml
+<Fallback name="ExhibitLoop">
+  <KeepRunningUntilFailure>
+    <Sequence>
+      <Condition ID="IsListWithExhibit"/>
+      <Sequence name="SingleExhibitVisit">
+        <Action ID="SelectExhibit" .../>
+        <!-- navigate, present -->
+        <Action ID="PopExhibitFromList" exhibit_list="{exhibit_queue}"/>
+      </Sequence>
+    </Sequence>
+  </KeepRunningUntilFailure>
+  <Sequence name="AllExhibitsVisited">
+    <Inverter><Condition ID="IsListWithExhibit"/></Inverter>
+    <Action ID="LogEvent" level="info" message="All exhibits visited"/>
+  </Sequence>
+</Fallback>
 ```
 
 ---

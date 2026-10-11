@@ -7,43 +7,51 @@
       <!-- Load ordered exhibit list from KnowledgeManager -->
       <Action ID="RetrieveListOfExhibits" exhibit_list="{exhibit_queue}"/>
 
-      <!-- Loop through every exhibit -->
-      <WhileDoElse name="ExhibitLoop">
+      <!-- Visit exhibits until the queue is empty. WhileDoElse is not a loop
+           (it ticks its branch once and returns), so KeepRunningUntilFailure
+           repeats the visit. It stops at the first FAILURE: either the queue
+           ran out (done), or a visit failed and left its exhibit queued. -->
+      <Fallback name="ExhibitLoop">
+        <KeepRunningUntilFailure>
+          <Sequence name="NextExhibit">
+            <Condition ID="IsListWithExhibit" exhibit_list="{exhibit_queue}"/>
+            <Sequence name="VisitAndPoint">
+              <!-- Pull nav goal + pointing target for the next exhibit -->
+              <Action ID="SelectExhibit"
+                      exhibit_speech="{exhibit_speech}"
+                      exhibit_goal_x="{exhibit_goal_x}"
+                      exhibit_goal_y="{exhibit_goal_y}"
+                      exhibit_goal_theta="{exhibit_goal_theta}"
+                      exhibit_location_x="{exhibit_location_x}"
+                      exhibit_location_y="{exhibit_location_y}"
+                      exhibit_location_z="{exhibit_location_z}"/>
 
-        <!-- While: exhibits remain -->
-        <Condition ID="IsListWithExhibit" exhibit_list="{exhibit_queue}"/>
+              <!-- Navigate to the exhibit -->
+              <Action ID="Navigate"
+                      goal_x="{exhibit_goal_x}"
+                      goal_y="{exhibit_goal_y}"
+                      goal_theta="{exhibit_goal_theta}"/>
 
-        <!-- Do: navigate then point -->
-        <Sequence name="VisitAndPoint">
-          <!-- Pull nav goal + pointing target for the next exhibit -->
-          <Action ID="SelectExhibit"
-                  exhibit_speech="{exhibit_speech}"
-                  exhibit_goal_x="{exhibit_goal_x}"
-                  exhibit_goal_y="{exhibit_goal_y}"
-                  exhibit_goal_theta="{exhibit_goal_theta}"
-                  exhibit_location_x="{exhibit_location_x}"
-                  exhibit_location_y="{exhibit_location_y}"
-                  exhibit_location_z="{exhibit_location_z}"/>
+              <!-- Deictic point at the exhibit target -->
+              <Action ID="Gesture"
+                      gesture_type="deictic"
+                      location_x="{exhibit_location_x}"
+                      location_y="{exhibit_location_y}"
+                      location_z="{exhibit_location_z}"
+                      gesture_duration="3000"/>
 
-          <!-- Navigate to the exhibit -->
-          <Action ID="Navigate"
-                  goal_x="{exhibit_goal_x}"
-                  goal_y="{exhibit_goal_y}"
-                  goal_theta="{exhibit_goal_theta}"/>
-
-          <!-- Deictic point at the exhibit target -->
-          <Action ID="Gesture"
-                  gesture_type="point"
-                  location_x="{exhibit_location_x}"
-                  location_y="{exhibit_location_y}"
-                  location_z="{exhibit_location_z}"
-                  gesture_duration="3000"/>
-
-          <!-- Remove visited exhibit from queue -->
-          <Action ID="PopExhibitFromList" exhibit_list="{exhibit_queue}"/>
+              <!-- Remove visited exhibit from queue -->
+              <Action ID="PopExhibitFromList" exhibit_list="{exhibit_queue}"/>
+            </Sequence>
+          </Sequence>
+        </KeepRunningUntilFailure>
+        <Sequence name="AllExhibitsVisited">
+          <Inverter>
+            <Condition ID="IsListWithExhibit" exhibit_list="{exhibit_queue}"/>
+          </Inverter>
+          <Action ID="LogEvent" level="info" message="All exhibits visited"/>
         </Sequence>
-
-      </WhileDoElse>
+      </Fallback>
 
     </Sequence>
   </BehaviorTree>
