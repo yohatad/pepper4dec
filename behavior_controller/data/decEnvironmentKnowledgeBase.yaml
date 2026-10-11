@@ -50,7 +50,7 @@ locations:
     gesture_target:
       x: 3.2
       y: 0.4
-      z: 270.0
+      z: 0.0
     gesture_message_english: "Now that your account is set up and you can make payments, let's talk about what powers good decisions - data. You know how frustrating it is when information is scattered everywhere and hard to find? That's exactly the problem across Africa - governments, researchers, and businesses all have data, but it's locked away in disconnected systems that don't talk to each other. The Open Data Portal solves that. Think of it as a single library where anyone - a government official, a researcher, a student, or an entrepreneur - can come to find, share, and use data easily. It even uses machine learning to automatically describe datasets and score their quality, so you know what you're working with. Whether it's data on public health, education, agriculture, or finance, it's all here in one place. There's also a built-in community forum where people can collaborate and contribute. This is what turns raw data into real decisions."
     cultural_knowledge: ["DeicticShape"]
 
@@ -63,7 +63,7 @@ locations:
     gesture_target:
       x: 1.6
       y: 0.4
-      z: 270.0
+      z: 0.0
     gesture_message_english: "And here is proof of what good data can do in healthcare! We have two projects that show this beautifully. The first is HumekaFL - imagine a mother gives birth in a rural clinic far from any specialist. The doctor needs to know immediately if the baby is in distress. This system listens to the newborn's cry and alerts the doctor within seconds, giving them the information they need to act fast and save that baby's life. Patient data stays on-site, so privacy is protected. The second is our Malaria Diagnosis project. Traditionally, a doctor would spend a long time examining slides under a microscope to identify which type of malaria a patient has. Now, that same diagnosis can be done digitally and quickly, so patients get the right treatment faster. Doctors also have access to a live dashboard showing malaria patterns across regions, helping hospitals prepare and respond before outbreaks get worse. In both cases, the story is the same: better data means faster care, better decisions, and ultimately more lives saved."
     cultural_knowledge: ["DeicticShape"]
 
@@ -76,7 +76,7 @@ locations:
     gesture_target:
       x: 1.2
       y: 3.2
-      z: 180.0
+      z: 0.0
     gesture_message_english: "All the digital services you've seen today rely on one thing - a reliable internet connection. This is where our connectivity work comes in. Through the Measurement of Internet Resilience Africa Project or MIRA for short working in partnership with the Internet Society, we've built devices that measure internet strength and stability across Africa, starting right here in Kigali and expanding to more countries. Think of it as a health check for the internet - so we know exactly where it's weak and how to fix it. But what about places with no internet at all? Our second initiative tackles just that - a low-cost mesh network using wireless signals that can connect communities without traditional internet. We're already planning to deploy it in a refugee camp with World Vision, to help share health, sanitation, and education content across the camp. Because connectivity isn't a luxury - it's the foundation everything else is built on."
     cultural_knowledge: ["DeicticShape"]
 
@@ -89,7 +89,7 @@ locations:
     gesture_target:
       x: 1.2
       y: 5.2
-      z: 180.0
+      z: 0.0
     gesture_message_english: ""
     cultural_knowledge: ["DeicticShape"]
 
@@ -102,7 +102,7 @@ locations:
     gesture_target:
       x: 1.2
       y: 7.6
-      z: 180.0
+      z: 0.0
     gesture_message_english: ""
     cultural_knowledge: ["DeicticShape"]
 

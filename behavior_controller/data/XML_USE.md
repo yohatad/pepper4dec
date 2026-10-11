@@ -338,18 +338,22 @@ Use the built-in `CheckBlackboard` condition:
 
 ### Blackboard Variables Used in `dec_Tour.xml`
 
+The node puts every phrase under `utility_phrases.english` in
+`cultureKnowledgeBase.yaml` on the root blackboard under its key, so adding a
+phrase there makes it available as `{key}` in any scenario.
+
 | Key | Type | Set By | Used By |
 |-----|------|--------|---------|
-| `welcome_speech` | string | caller / init | `SpeechWithFeedback` |
-| `query_tour_speech` | string | caller / init | `SpeechWithFeedback` |
-| `press_yes_no_speech` | string | caller / init | `SpeechWithFeedback` |
-| `maybe_another_time_speech` | string | caller / init | `SpeechWithFeedback` |
-| `follow_me_speech` | string | caller / init | `SpeechWithFeedback` |
-| `brief_goodbye_speech` | string | caller / init | `SpeechWithFeedback` |
-| `goodbye_speech` | string | caller / init | `SpeechWithFeedback` |
+| `welcome_speech` | string | `cultureKnowledgeBase.yaml` `utility_phrases` | `SpeechWithFeedback` |
+| `query_tour_speech` | string | `cultureKnowledgeBase.yaml` `utility_phrases` | `SpeechWithFeedback` |
+| `press_yes_no_speech` | string | `cultureKnowledgeBase.yaml` `utility_phrases` | `SpeechWithFeedback` |
+| `maybe_another_time_speech` | string | `cultureKnowledgeBase.yaml` `utility_phrases` | `SpeechWithFeedback` |
+| `follow_me_speech` | string | `cultureKnowledgeBase.yaml` `utility_phrases` | `SpeechWithFeedback` |
+| `brief_goodbye_speech` | string | `cultureKnowledgeBase.yaml` `utility_phrases` | `SpeechWithFeedback` |
+| `goodbye_speech` | string | `cultureKnowledgeBase.yaml` `utility_phrases` | `SpeechWithFeedback` |
 | `exhibit_goal_x` | double | `SelectExhibit` | `Navigate` |
 | `exhibit_goal_y` | double | `SelectExhibit` | `Navigate` |
-| `exhibit_goal_theta` | double | `SelectExhibit` | `Navigate` |
+| `exhibit_goal_theta` | double | `SelectExhibit` (radians; the KB gives degrees) | `Navigate` |
 | `exhibit_location_x` | double | `SelectExhibit` | `Gesture` |
 | `exhibit_location_y` | double | `SelectExhibit` | `Gesture` |
 | `exhibit_location_z` | double | `SelectExhibit` | `Gesture` |

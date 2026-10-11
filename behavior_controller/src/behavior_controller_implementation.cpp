@@ -1483,7 +1483,8 @@ BT::NodeStatus SelectExhibit::tick()
   setOutput("exhibit_speech", info.gestureMessage);
   setOutput("exhibit_goal_x", info.robotPose.x);
   setOutput("exhibit_goal_y", info.robotPose.y);
-  setOutput("exhibit_goal_theta", info.robotPose.theta);
+  // The knowledge base gives the heading in degrees; Navigate takes radians.
+  setOutput("exhibit_goal_theta", info.robotPose.theta * M_PI / 180.0);
   setOutput("exhibit_location_x", info.gestureTarget.x);
   setOutput("exhibit_location_y", info.gestureTarget.y);
   setOutput("exhibit_location_z", info.gestureTarget.z);
@@ -1721,6 +1722,15 @@ BT::NodeStatus IsVisitorResponseYes::onFailure(BT::ActionNodeErrorCode error)
 namespace behavior_controller
 {
 
+BT::Blackboard::Ptr createRootBlackboard()
+{
+  auto blackboard = BT::Blackboard::create();
+  for (const auto & [phraseId, phrase] : KnowledgeManager::instance().getUtilityPhrases()) {
+    blackboard->set(phraseId, phrase);
+  }
+  return blackboard;
+}
+
 BT::Tree initializeTree(
   const std::string & scenario,
   std::shared_ptr<rclcpp::Node> node_handle)
@@ -1805,7 +1815,7 @@ BT::Tree initializeTree(
     RCLCPP_INFO(logger, "[initializeTree] Loading tree: %s", xmlPath.c_str());
   }
 
-  BT::Tree tree = factory.createTreeFromFile(xmlPath);
+  BT::Tree tree = factory.createTreeFromFile(xmlPath, createRootBlackboard());
 
   if (ConfigManager::instance().isVerbose()) {
     RCLCPP_INFO(logger, "[initializeTree] Tree loaded successfully");

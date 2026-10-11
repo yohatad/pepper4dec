@@ -73,12 +73,18 @@ bow_extent_gratitude: 10
 sway_intensity: "ANIMATE_BEHAVIOR"
 
 # Utility Phrases
+# The behavior controller puts each phrase on the behavior tree's blackboard
+# under its key, so a scenario XML says one with
+# <SpeechWithFeedback say="{welcome_speech}"/>.
 utility_phrases:
   english:
-    1: "Please press Yes or No on my screen"
-    2: "Please follow me"
-    3: "Maybe another time"
-    4: "Hello! Welcome to the Robotics Lab! I'm Pepper, your friendly robot tour guide."
-    5: "Would you like a tour of the lab?"
-    6: "Here is the door"
-    7: "Goodbye"
+    press_yes_no_speech: "Please press Yes or No on my screen"
+    follow_me_speech: "Please follow me"
+    maybe_another_time_speech: "Maybe another time"
+    welcome_speech: "Hello! Welcome to the Robotics Lab! I'm Pepper, your friendly robot tour guide."
+    query_tour_speech: "Would you like a tour of the lab?"
+    door_speech: "Here is the door"
+    # After a visitor declines the tour
+    brief_goodbye_speech: "Goodbye"
+    # After a completed tour
+    goodbye_speech: "Thank you for taking the tour with me. Goodbye!"

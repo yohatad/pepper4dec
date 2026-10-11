@@ -99,6 +99,9 @@ TEST(KnowledgeBaseValidator, AcceptsShippedKnowledgeBases) {
   EXPECT_TRUE(
     behavior_controller::validateEnvironmentKnowledgeBase(
       std::string(kFixtureDir) + "/../../data/labEnvironmentKnowledgeBase.yaml"));
+  EXPECT_TRUE(
+    behavior_controller::validateEnvironmentKnowledgeBase(
+      std::string(kFixtureDir) + "/../../data/decEnvironmentKnowledgeBase_short.yaml"));
 }
 
 TEST(KnowledgeBaseValidator, RejectsTourReferencingUndefinedLocation) {
@@ -111,6 +114,12 @@ TEST(KnowledgeBaseValidator, RejectsThetaOutOfRange) {
   EXPECT_FALSE(
     behavior_controller::validateEnvironmentKnowledgeBase(
       std::string(kFixtureDir) + "/data/theta_out_of_range.yaml"));
+}
+
+TEST(KnowledgeBaseValidator, RejectsTargetHigherThanThreeMetres) {
+  EXPECT_FALSE(
+    behavior_controller::validateEnvironmentKnowledgeBase(
+      std::string(kFixtureDir) + "/data/target_too_high.yaml"));
 }
 
 TEST(KnowledgeBaseValidator, RejectsMissingFile) {

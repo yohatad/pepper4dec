@@ -80,7 +80,8 @@ struct Position3D
 /** @brief A 2D robot pose in the map frame: position plus heading. */
 struct RobotPose
 {
-  double x = 0.0, y = 0.0, theta = 0.0;
+  double x = 0.0, y = 0.0;
+  double theta = 0.0;  ///< heading in degrees, as in the knowledge base
   RobotPose() = default;
   RobotPose(double x_val, double y_val, double theta_val)
   : x(x_val), y(y_val), theta(theta_val) {}
@@ -158,6 +159,8 @@ public:
   [[nodiscard]] bool loadFromPackage(const std::string & packagePath);
 
   std::string getUtilityPhrase(const std::string & phraseId);
+  /// Every utility phrase, keyed by phrase ID.
+  const std::unordered_map<std::string, std::string> & getUtilityPhrases();
   LocationInfo getLocationInfo(const std::string & locationId);
   TourSpec getTourSpecification();
 
@@ -790,16 +793,29 @@ namespace behavior_controller
  *
  * This function creates a BehaviorTreeFactory, registers all custom nodes
  * (both RosServiceNode-based and BtActionNode-based), and loads the XML
- * behavior tree definition for the specified scenario.
+ * behavior tree definition for the specified scenario on
+ * createRootBlackboard(), so the knowledge base must be loaded first.
  *
  * @param scenario      Base name (without ".xml") of the tree file under data/
  * @param node_handle   Shared pointer to your ROS2 node (used by all BT nodes)
  * @return BT::Tree     The fully constructed behavior tree
- * @throws std::runtime_error if the XML file cannot be found or loaded
+ * @throws std::runtime_error if the XML file cannot be found or loaded, or
+ *         the knowledge base is not loaded
  */
 BT::Tree initializeTree(
   const std::string & scenario,
   std::shared_ptr<rclcpp::Node> node_handle);
+
+/**
+ * @brief Root blackboard for a scenario tree.
+ *
+ * Holds every utility phrase of the culture knowledge base under its phrase
+ * ID, so the XML can say one as {welcome_speech}. initializeTree() builds
+ * its tree on it.
+ *
+ * @throws std::runtime_error if the knowledge base is not loaded
+ */
+BT::Blackboard::Ptr createRootBlackboard();
 
 /**
  * @brief Validate the format of an environment knowledge base YAML file.
@@ -809,7 +825,7 @@ BT::Tree initializeTree(
  * location entry contains all mandatory fields with legal values:
  *   - robot_location_description  (non-empty string)
  *   - robot_location_pose         (map: x, y numeric; theta in [0, 360])
- *   - gesture_target              (map: x, y, z numeric; z >= 0)
+ *   - gesture_target              (map: x, y, z numeric; z in [0, 3] m)
  *   - gesture_message_english     (string, may be empty)
  *   - cultural_knowledge          (non-empty sequence of non-empty strings)
  *

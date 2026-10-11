@@ -190,6 +190,14 @@ std::string KnowledgeManager::getUtilityPhrase(const std::string & phraseId)
   throw std::runtime_error("Utility phrase not found: " + phraseId);
 }
 
+const std::unordered_map<std::string, std::string> & KnowledgeManager::getUtilityPhrases()
+{
+  if (!loaded) {
+    throw std::runtime_error("Knowledge base not loaded");
+  }
+  return utilityPhrases;
+}
+
 LocationInfo KnowledgeManager::getLocationInfo(const std::string & locationId)
 {
   if (!loaded) {
@@ -662,7 +670,7 @@ bool validateEnvironmentKnowledgeBase(const std::string & filePath)
       }
     }
 
-    // gesture_target: map with x, y, z (numeric), z >= 0
+    // gesture_target: map with x, y, z (numeric), z in [0, 3] m
     if (!loc["gesture_target"] || !loc["gesture_target"].IsMap()) {
       RCLCPP_ERROR(
         logger,
@@ -690,14 +698,15 @@ bool validateEnvironmentKnowledgeBase(const std::string & filePath)
           }
         }
       }
-      // z must be non-negative (it is a height)
+      // z is a height in metres: at most 3 m, which catches a heading in
+      // degrees typed into it
       if (gt["z"]) {
         try {
           double z = gt["z"].as<double>();
-          if (z < 0.0) {
+          if (z < 0.0 || z > 3.0) {
             RCLCPP_ERROR(
               logger,
-              "[KB Validation] Location '%s': gesture_target.z=%.2f must be >= 0",
+              "[KB Validation] Location '%s': gesture_target.z=%.2f is outside [0, 3] m",
               locId.c_str(), z);
             valid = false;
           }

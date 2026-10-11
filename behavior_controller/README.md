@@ -43,7 +43,7 @@ Managed via `config/behavior_controller_configuration.yaml`:
 | Parameter | Description | Default Value |
 |-----------|-------------|---------------|
 | `scenario_specification` | XML behavior tree file name (without `.xml`) in `data/` | `asr_cm_tts_pipeline` |
-| `culture_knowledge_base` | YAML file with utility phrases | `cultureKnowledgeBase.yaml` |
+| `culture_knowledge_base` | YAML file with utility phrases, each put on the BT blackboard under its key (`{welcome_speech}`, …) | `cultureKnowledgeBase.yaml` |
 | `environment_knowledge_base` | YAML file with locations, tour stops, and gesture targets | `decEnvironmentKnowledgeBase_short.yaml` |
 | `verbose_mode` | Print per-tick action goals, feedback, and results | `true` |
 
