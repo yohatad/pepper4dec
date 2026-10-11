@@ -29,7 +29,7 @@ Nodes started:
     nav2_collision_monitor/collision_monitor.
     nav2_costmap_2d/nav2_costmap_2d_markers x2 — voxel visualization.
     pepper_navigation/localization_recovery.py.
-    pepper_navigation/tf_nav_relay.py.
+    pepper_navigation/tf_nav_relay.
     rviz2/rviz2 — only when rviz is true.
     nav2_lifecycle_manager/lifecycle_manager (node:
     lifecycle_manager_navigation).
@@ -387,11 +387,11 @@ def generate_launch_description():
 
     # Nav2 reads /tf_nav, a copy of /tf holding only the navigation edges:
     # naoqi_driver's joint tree (~4150 transforms/s) saturated the costmap's
-    # TF thread until it stopped updating. See scripts/tf_nav_relay.py. Only
+    # TF thread until it stopped updating. See src/tf_nav_relay.cpp. Only
     # nodes that LISTEN to TF are remapped -- never one that broadcasts it.
     tf_nav_relay = Node(
         package='pepper_navigation',
-        executable='tf_nav_relay.py',
+        executable='tf_nav_relay',
         name='tf_nav_relay',
         output='screen',
         parameters=[{'use_sim_time': use_sim_time}],

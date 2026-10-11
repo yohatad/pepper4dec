@@ -23,6 +23,8 @@
   <depend>nav2_collision_monitor</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_action</depend>
+  <!-- src/tf_nav_relay.cpp -->
+  <depend>tf2_msgs</depend>
   <!-- scripts/: wait_for_map_then_start.py, localization_recovery.py,
        localization_watchdog.py -->
   <depend>rclpy</depend>
@@ -67,7 +69,6 @@
   <!-- Imported by the launch files and Python nodes. -->
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>nav2_common</exec_depend>
-  <exec_depend>tf2_msgs</exec_depend>
 
   <test_depend>python3-pytest</test_depend>
   <test_depend>ament_lint_auto</test_depend>

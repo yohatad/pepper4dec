@@ -27,6 +27,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(nav2_msgs REQUIRED)
+find_package(tf2_msgs REQUIRED)
 
 # Dev/debug tooling (src/tools/) - not part of the production navigation
 # pipeline. pepper_odom_covariance now lives in its own top-level package.
@@ -62,12 +63,24 @@ install(TARGETS send_goal
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
+# tf_nav_relay: /tf without Pepper's joint tree, on /tf_nav, for the Nav2
+# servers. C++ because it takes every /tf message (~4150 transforms/s).
+add_executable(tf_nav_relay
+  src/tf_nav_relay.cpp
+)
+ament_target_dependencies(tf_nav_relay
+  rclcpp
+  tf2_msgs
+)
+install(TARGETS tf_nav_relay
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
+)
+
 # Install python helper scripts
 install(PROGRAMS
   scripts/wait_for_map_then_start.py
   scripts/localization_recovery.py
   scripts/localization_watchdog.py
-  scripts/tf_nav_relay.py
   # bag_test only: replay helpers (see "Bag replay" in README.md)
   scripts/cloud_delay.py
   scripts/costmap_explain.py

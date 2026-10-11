@@ -11,7 +11,7 @@ Nodes started:
     nav2_planner/planner_server -- carries the GLOBAL costmap.
     nav2_lifecycle_manager/lifecycle_manager -- brings those three up.
     nav2_costmap_2d/nav2_costmap_2d_markers x2 -- the voxel grids.
-    pepper_navigation/tf_nav_relay.py -- /tf without Pepper's joint tree.
+    pepper_navigation/tf_nav_relay -- /tf without Pepper's joint tree.
     pepper_navigation/cloud_delay.py -- see 'Timing' below.
     pepper_navigation/costmap_explain.py -- colours each point by what the
         costmap does with it (marked / ignored / below the floor).
@@ -207,7 +207,7 @@ def generate_launch_description():
             'rviz': 'false'}.items())], condition=IfCondition(localize))
 
     helpers = [
-        Node(package='pepper_navigation', executable='tf_nav_relay.py',
+        Node(package='pepper_navigation', executable='tf_nav_relay',
              name='tf_nav_relay', output='screen', parameters=[sim],
              condition=IfCondition(localize)),
         Node(package='pepper_navigation', executable='depth_to_cloud.py',

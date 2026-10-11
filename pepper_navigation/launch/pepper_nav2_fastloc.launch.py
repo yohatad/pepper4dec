@@ -492,7 +492,7 @@ def generate_launch_description():
 
     # Nav2 reads /tf_nav, a copy of /tf holding only the navigation edges:
     # naoqi_driver's joint tree (~4150 transforms/s) saturated the costmap's
-    # TF thread until it stopped updating. See scripts/tf_nav_relay.py. Only
+    # TF thread until it stopped updating. See src/tf_nav_relay.cpp. Only
     # nodes that LISTEN to TF are remapped -- never one that broadcasts it.
     # odom -> base_footprint from /pepper_odom, only with odom_frame set: in the
     # default mode the localizer owns base_footprint's parent and a second one
@@ -509,7 +509,7 @@ def generate_launch_description():
 
     tf_nav_relay = Node(
         package='pepper_navigation',
-        executable='tf_nav_relay.py',
+        executable='tf_nav_relay',
         name='tf_nav_relay',
         output='screen',
         parameters=[{'use_sim_time': use_sim_time}],

@@ -333,13 +333,14 @@ pepper_navigation/
 │   ├── wait_for_map_then_start.py      # starts Nav2 once map -> base_footprint exists
 │   ├── localization_watchdog.py        # cancels goals while the localizer reports lost
 │   ├── localization_recovery.py        # /localization_recover, dispatched per backend
-│   ├── tf_nav_relay.py                 # /tf without Pepper's joint tree, on /tf_nav
 │   └── cloud_delay.py, costmap_explain.py, depth_to_cloud.py, points_to_image.py  # costmap_bag helpers
 ├── utils/
 │   └── collision_zone_viewer.py/.rviz  # what the collision monitor counts; run by hand
-├── src/tools/
-│   ├── send_goal.cpp                   # one-shot goal sender
-│   └── odom_path_publisher.cpp         # traversed path for RViz
+├── src/
+│   ├── tf_nav_relay.cpp                # /tf without Pepper's joint tree, on /tf_nav
+│   └── tools/
+│       ├── send_goal.cpp               # one-shot goal sender
+│       └── odom_path_publisher.cpp     # traversed path for RViz
 ├── test/
 │   └── test_shared_nav2_params.py      # guards the params blocks shared across profiles
 ├── CMakeLists.txt
