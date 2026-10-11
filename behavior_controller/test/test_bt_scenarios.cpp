@@ -554,8 +554,8 @@ INSTANTIATE_TEST_SUITE_P(
 // tour on the same blackboard. A visitor who declined must not leave the next
 // one, who accepts, with the short goodbye. The second tour also halts
 // DetectVisitor's AnimateBehavior on the tick it sends its goal (the visitor
-// is already in view): without patches/behaviortree_ros2-reset-goal-handle.patch
-// that aborts the process.
+// is already in view): without the halt-crash fix on the pepper4dec branch of
+// yohatad/BehaviorTree.ROS2, that aborts the process.
 TEST_F(ScenarioTest, NextTourStartsAfreshAfterADecline) {
   ASSERT_NO_FATAL_FAILURE(loadKnowledgeBase("labEnvironmentKnowledgeBase.yaml"));
   startWorld("no thank you");

@@ -34,12 +34,10 @@ jobs:
           git clone https://github.com/ros-naoqi/libqicore.git -b ros2 src/naoqi_libqicore
           git clone https://github.com/ros-naoqi/nao_meshes2.git src/nao_meshes
           git clone https://github.com/ros-naoqi/pepper_meshes2.git src/pepper_meshes
-          git clone https://github.com/BehaviorTree/BehaviorTree.CPP.git src/BehaviorTree.CPP
-          git clone https://github.com/BehaviorTree/BehaviorTree.ROS2.git src/BehaviorTree.ROS2
-          # The halt-crash fix the Dockerfile and README also apply (see the
-          # patch header). Without it behavior_controller's BT tests abort on
-          # the crash they guard against.
-          git -C src/BehaviorTree.ROS2 apply ../pepper4dec/patches/behaviortree_ros2-reset-goal-handle.patch
+          # Fork carrying the halt-crash fix (pepper4dec branch, one commit on
+          # upstream humble; see its message). Back to upstream once fixed there.
+          # BehaviorTree.CPP is not cloned: rosdep installs ros-humble-behaviortree-cpp.
+          git clone -b pepper4dec https://github.com/yohatad/BehaviorTree.ROS2.git src/BehaviorTree.ROS2
 
       - name: rosdep install
         run: |
@@ -116,12 +114,10 @@ jobs:
           git clone https://github.com/ros-naoqi/libqicore.git -b ros2 src/naoqi_libqicore
           git clone https://github.com/ros-naoqi/nao_meshes2.git src/nao_meshes
           git clone https://github.com/ros-naoqi/pepper_meshes2.git src/pepper_meshes
-          git clone https://github.com/BehaviorTree/BehaviorTree.CPP.git src/BehaviorTree.CPP
-          git clone https://github.com/BehaviorTree/BehaviorTree.ROS2.git src/BehaviorTree.ROS2
-          # The halt-crash fix the Dockerfile and README also apply (see the
-          # patch header). Without it behavior_controller's BT tests abort on
-          # the crash they guard against.
-          git -C src/BehaviorTree.ROS2 apply ../pepper4dec/patches/behaviortree_ros2-reset-goal-handle.patch
+          # Fork carrying the halt-crash fix (pepper4dec branch, one commit on
+          # upstream humble; see its message). Back to upstream once fixed there.
+          # BehaviorTree.CPP is not cloned: rosdep installs ros-humble-behaviortree-cpp.
+          git clone -b pepper4dec https://github.com/yohatad/BehaviorTree.ROS2.git src/BehaviorTree.ROS2
 
       - name: rosdep install
         run: |

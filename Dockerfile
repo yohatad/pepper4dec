@@ -126,23 +126,24 @@ WORKDIR ${WS}
 # These are stable/data packages that don't change per-project, so tracking
 # an upstream git ref and recompiling them on every build was pure waste.
 #
-# BehaviorTree.CPP stays source-built, NOT swapped for ros-humble-behaviortree-cpp:
-# that apt package (4.9.1) has a real packaging bug on jammy -- its library
-# actually installs to lib/x86_64-linux-gnu/libbehaviortree_cpp.so (a
-# multiarch-triplet subdirectory), but the package's own
-# ament_cmake_export_libraries-extras.cmake looks for it at the non-multiarch
-# path and never finds it, so anything doing find_package(behaviortree_cpp)
-# -- i.e. BehaviorTree.ROS2 -- fails to configure. Confirmed by installing
-# the apt package standalone and checking `dpkg -L`. Not our bug to work
-# around; revisit if a newer apt release fixes it upstream.
+# BehaviorTree.CPP is not cloned either: rosdep installs
+# ros-humble-behaviortree-cpp. It used to be source-built because the 4.9.1
+# apt package installed its library under lib/x86_64-linux-gnu/ while its own
+# CMake config looked in lib/, so find_package(behaviortree_cpp) failed for
+# BehaviorTree.ROS2. 4.10.0 installs to lib/ (checked with dpkg -c), and
+# BehaviorTree.ROS2 plus behavior_controller build and pass their tests on it.
 RUN git clone --depth 1 https://github.com/yohatad/naoqi_driver2.git src/naoqi_driver2 && \
     git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/yohatad/FAST_LIO_ROS2.git src/fast_lio && \
     git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/yohatad/point_lio_ros2.git src/point_lio && \
     git clone --depth 1 https://github.com/yohatad/fastlio_lc_pgo.git src/fastlio_lc_pgo && \
     git clone --depth 1 https://github.com/yohatad/l2lidar_node.git src/l2lidar_node && \
-    git clone --depth 1 https://github.com/BehaviorTree/BehaviorTree.CPP.git src/BehaviorTree.CPP && \
-    git clone --depth 1 https://github.com/BehaviorTree/BehaviorTree.ROS2.git src/BehaviorTree.ROS2
+    git clone --depth 1 -b pepper4dec https://github.com/yohatad/BehaviorTree.ROS2.git src/BehaviorTree.ROS2
 
+# BehaviorTree.ROS2 is cloned from a fork: its pepper4dec branch is upstream
+# humble plus one commit fixing a crash when an action node is halted before
+# the server answers its second goal (see that commit's message). Return to
+# upstream once they fix it.
+#
 # naoqi_bridge_msgs2 is a fork carrying the custom srv definitions
 # (SetAudioVolume, StopAudio, UnloadAudioFile) that dec_system depends on;
 # ros-naoqi upstream does not have them. Public, so a plain HTTPS clone works
@@ -150,13 +151,6 @@ RUN git clone --depth 1 https://github.com/yohatad/naoqi_driver2.git src/naoqi_d
 RUN git clone --depth 1 https://github.com/yohatad/naoqi_bridge_msgs2.git src/naoqi_bridge_msgs
 
 COPY . src/pepper4dec
-
-# BehaviorTree.ROS2 crashes when an action node is halted before the server
-# answers its second goal (see the patch header). Upstream has no fix yet, so
-# patch the fresh clone. If this stops applying, upstream changed the code:
-# check whether they fixed it and drop the patch.
-RUN git -C src/BehaviorTree.ROS2 apply \
-      ${WS}/src/pepper4dec/patches/behaviortree_ros2-reset-goal-handle.patch
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ros-humble-gtsam net-tools && \

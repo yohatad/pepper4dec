@@ -8,7 +8,7 @@ Temporary. Delete this file once the tests below have passed on the robot and
 | Repo | Branch | Commits |
 |---|---|---|
 | pepper4dec | `devel` | `38b590a` BehaviorTree.ROS2 halt-crash patch, `ab42f61` tour trees (loop, SubTree blackboards, empty messages, gesture types), `fa9078d` phrases, radian headings, DEC target heights, `53e33b3` BT tests |
-| BehaviorTree.ROS2 | `humble` | No commit: `patches/behaviortree_ros2-reset-goal-handle.patch` applied to the working tree |
+| BehaviorTree.ROS2 | `pepper4dec` (fork `yohatad/BehaviorTree.ROS2`) | `cc5294d` halt-crash fix (was `patches/behaviortree_ros2-reset-goal-handle.patch`) |
 
 Nothing here is merged into `main`. Fast-forward it only after the tests pass.
 
@@ -17,8 +17,9 @@ Nothing here is merged into `main`. Fast-forward it only after the tests pass.
 ```bash
 cd ~/ros2_ws/src
 git -C pepper4dec switch devel && git -C pepper4dec pull
-# Skip if `git -C BehaviorTree.ROS2 diff --stat` already lists bt_action_node.hpp
-git -C BehaviorTree.ROS2 apply ../pepper4dec/patches/behaviortree_ros2-reset-goal-handle.patch
+# The fork with the halt-crash fix; skip if `git -C BehaviorTree.ROS2 branch` already shows pepper4dec
+git -C BehaviorTree.ROS2 remote set-url origin https://github.com/yohatad/BehaviorTree.ROS2.git
+git -C BehaviorTree.ROS2 fetch origin && git -C BehaviorTree.ROS2 switch pepper4dec
 cd .. && colcon build --symlink-install --packages-select behaviortree_ros2 behavior_controller
 source install/setup.bash
 colcon test --packages-select behavior_controller && colcon test-result --verbose
@@ -91,4 +92,4 @@ Same config as 2. Do 3 (decline), then stay in view of the camera.
 
 | Check | Expected |
 |---|---|
-| `docker compose build` | The `git -C src/BehaviorTree.ROS2 apply ...` step succeeds |
+| `docker compose build` | Builds, with BehaviorTree.ROS2 cloned from the fork's `pepper4dec` branch |
