@@ -24,7 +24,7 @@ Nodes started:
     nav2_map_server/map_server, nav2_amcl/amcl,
     nav2_controller/controller_server, nav2_planner/planner_server,
     nav2_behaviors/behavior_server, nav2_bt_navigator/bt_navigator.
-    pepper_slam/cloud_range_filter.py x2 (points_safety_filter,
+    pepper_slam/cloud_range_filter x2 (points_safety_filter,
     points_costmap_filter).
     nav2_collision_monitor/collision_monitor.
     nav2_costmap_2d/nav2_costmap_2d_markers x2 — voxel visualization.
@@ -270,7 +270,7 @@ def generate_launch_description():
     # inside both monitor zones, so legs never triggered a stop.
     points_safety_filter = Node(
         package='pepper_slam',
-        executable='cloud_range_filter.py',
+        executable='cloud_range_filter',
         name='points_safety_filter',
         output='screen',
         parameters=[{
@@ -289,7 +289,7 @@ def generate_launch_description():
     # into mis-marking the real floor as an obstacle over a long run.
     points_costmap_filter = Node(
         package='pepper_slam',
-        executable='cloud_range_filter.py',
+        executable='cloud_range_filter',
         name='points_costmap_filter',
         output='screen',
         parameters=[{

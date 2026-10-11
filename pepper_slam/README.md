@@ -203,11 +203,14 @@ pepper_slam/
 │   ├── lio_odom_bridge.py              # odom -> base_footprint from the LIO pose; levels lio_init once
 │   ├── lio_odom_guard.py               # divergence gate; a module imported by the bridge
 │   ├── pgo_map_odom_bridge.py          # map -> odom from a pose-graph-optimized trajectory
-│   ├── cloud_range_filter.py           # range / outlier / ground filters; feeds Nav2's /points_safety and /points_costmap
 │   ├── cloud_to_odom_frame.py          # re-expresses a cloud in the odom frame
 │   ├── check_frame_contract.py         # asserts the LIO frame contract, whichever backend runs
 │   ├── odom_compare.py                 # side-by-side odometry comparison
 │   └── static_tf_publisher.py          # a whole static TF chain from one node
+├── src/
+│   ├── cloud_range_filter.cpp          # range / outlier / ground filters; feeds Nav2's /points_safety and /points_costmap
+│   ├── cloud_filters.cpp               # those filters, ROS-free (include/pepper_slam/cloud_filters.h)
+│   └── wheel_odom_tf.cpp               # odom -> base_footprint from /pepper_odom, for the loc stacks
 ├── test/                               # pytest suites, resolve_launch.py and its baselines
 ├── urdf/                               # the L2 + D435i rig xacro, alone and on Pepper's body
 ├── FRAMES.md                           # the frame contract in full
@@ -228,7 +231,8 @@ colcon test-result --verbose
 ```
 
 Besides the linters, this runs `test_leveling_frame_contract.py` (skipped when
-the LIO packages are not built) and `test_lio_odom_guard.py`.
+the LIO packages are not built), `test_lio_odom_guard.py` and
+`test_cloud_filters` (the `cloud_range_filter` filters on synthetic clouds).
 
 **Refactoring a launch file:** `test/resolve_launch.py` resolves one to the
 nodes, parameters and remappings it will start. Compare against the snapshots

@@ -15,7 +15,7 @@ Launch files included:
 Nodes started:
     nav2_controller/controller_server, nav2_planner/planner_server,
     nav2_behaviors/behavior_server, nav2_bt_navigator/bt_navigator.
-    pepper_slam/cloud_range_filter.py (node: points_safety_filter).
+    pepper_slam/cloud_range_filter (node: points_safety_filter).
     nav2_collision_monitor/collision_monitor.
     pepper_navigation/localization_recovery.py.
     nav2_lifecycle_manager/lifecycle_manager x2 — one for navigation
@@ -195,7 +195,7 @@ def generate_launch_description():
     # inside both monitor zones, so legs never triggered a stop.
     points_safety_filter = Node(
         package='pepper_slam',
-        executable='cloud_range_filter.py',
+        executable='cloud_range_filter',
         name='points_safety_filter',
         output='screen',
         parameters=[{

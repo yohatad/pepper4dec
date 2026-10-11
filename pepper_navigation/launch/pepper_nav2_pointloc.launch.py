@@ -183,7 +183,7 @@ def generate_launch_description():
                     'base_footprint and the local costmap rolls in map. '
                     '"odom": REP-105 map -> odom -> base_footprint instead, '
                     'with odom -> base_footprint from wheel odometry '
-                    '(pepper_slam wheel_odom_tf.py) and the local costmap in '
+                    '(pepper_slam wheel_odom_tf) and the local costmap in '
                     'odom, so relocalization jumps never reach the controller. '
                     'See pepper_slam/FRAMES.md.')
     odom_frame = LaunchConfiguration('odom_frame')
@@ -287,7 +287,7 @@ def generate_launch_description():
     # inside both monitor zones, so legs never triggered a stop.
     points_safety_filter = Node(
         package='pepper_slam',
-        executable='cloud_range_filter.py',
+        executable='cloud_range_filter',
         name='points_safety_filter',
         output='screen',
         parameters=[{
@@ -431,7 +431,7 @@ def generate_launch_description():
     # would split the tree.
     wheel_odom_tf = Node(
         package='pepper_slam',
-        executable='wheel_odom_tf.py',
+        executable='wheel_odom_tf',
         name='wheel_odom_tf',
         output='screen',
         parameters=[{'use_sim_time': use_sim_time, 'odom_frame': odom_frame}],

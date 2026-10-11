@@ -95,7 +95,7 @@ check only reports a bad lock, after 5 s. If the localizer stalls,
 `odom_frame:=odom` restores the REP-105 split. The localizer broadcasts
 `map -> odom`, composed at the scan stamp so that
 `map -> odom -> base_footprint` equals its own pose (planar: x, y, z, yaw).
-`wheel_odom_tf.py` supplies `odom -> base_footprint` from `/pepper_odom`, and
+`wheel_odom_tf` supplies `odom -> base_footprint` from `/pepper_odom`, and
 the local costmap moves to `odom`. The edge goes through a jump gate
 (`map_odom.hpp` in both localizers): a step over 0.30 m / 10 deg per scan is
 held for up to 2 s, then adopted with an ERROR, while a deliberate handover or

@@ -17,7 +17,7 @@ Nodes started:
     nav2_map_server/map_server, nav2_controller/controller_server,
     nav2_planner/planner_server, nav2_behaviors/behavior_server,
     nav2_bt_navigator/bt_navigator — the Nav2 pipeline.
-    pepper_slam/cloud_range_filter.py (node: points_safety_filter)
+    pepper_slam/cloud_range_filter (node: points_safety_filter)
         Range-limited cloud feeding the collision monitor.
     nav2_collision_monitor/collision_monitor — the safety chain.
     nav2_costmap_2d/nav2_costmap_2d_markers x2 (local_voxel_markers,
@@ -206,7 +206,7 @@ def generate_launch_description():
                     'base_footprint and the local costmap rolls in map. '
                     '"odom": REP-105 map -> odom -> base_footprint instead, '
                     'with odom -> base_footprint from wheel odometry '
-                    '(pepper_slam wheel_odom_tf.py) and the local costmap in '
+                    '(pepper_slam wheel_odom_tf) and the local costmap in '
                     'odom, so relocalization jumps never reach the controller. '
                     'See pepper_slam/FRAMES.md.')
     odom_frame = LaunchConfiguration('odom_frame')
@@ -327,7 +327,7 @@ def generate_launch_description():
     # inside both monitor zones, so legs never triggered a stop.
     points_safety_filter = Node(
         package='pepper_slam',
-        executable='cloud_range_filter.py',
+        executable='cloud_range_filter',
         name='points_safety_filter',
         output='screen',
         arguments=['--ros-args', '--log-level', log_level],
@@ -499,7 +499,7 @@ def generate_launch_description():
     # would split the tree.
     wheel_odom_tf = Node(
         package='pepper_slam',
-        executable='wheel_odom_tf.py',
+        executable='wheel_odom_tf',
         name='wheel_odom_tf',
         output='screen',
         arguments=['--ros-args', '--log-level', log_level],

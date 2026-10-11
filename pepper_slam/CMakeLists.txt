@@ -1,11 +1,63 @@
 cmake_minimum_required(VERSION 3.8)
 project(pepper_slam)
 
-# Launch/params only - no compiled nodes. Every SLAM component (RTAB-Map,
-# SLAM Toolbox, FAST-LIO) is an upstream package launched by name, so this
-# package needs no find_package() beyond ament_cmake itself; the runtime
-# requirements are declared as exec_depend in package.xml.
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 17)
+endif()
+
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
+# Every SLAM component (RTAB-Map, SLAM Toolbox, FAST-LIO) is an upstream
+# package launched by name; their runtime requirements are declared as
+# exec_depend in package.xml. The only compiled code here is the Pepper glue
+# that runs on every scan or every odometry tick (src/).
 find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
+
+# The filters behind cloud_range_filter, free of ROS so the tests can drive
+# them directly (test/test_cloud_filters.cpp).
+add_library(cloud_filters STATIC
+  src/cloud_filters.cpp
+)
+target_include_directories(cloud_filters PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
+
+# cloud_range_filter: range / outlier / ground filters; feeds Nav2's
+# /points_safety and /points_costmap and octomap's
+# /cloud_registered_body_filtered.
+add_executable(cloud_range_filter
+  src/cloud_range_filter.cpp
+)
+target_link_libraries(cloud_range_filter cloud_filters)
+ament_target_dependencies(cloud_range_filter
+  rclcpp
+  sensor_msgs
+  tf2
+  tf2_ros
+)
+
+# wheel_odom_tf: odom -> base_footprint from /pepper_odom, for the loc stacks.
+add_executable(wheel_odom_tf
+  src/wheel_odom_tf.cpp
+)
+ament_target_dependencies(wheel_odom_tf
+  rclcpp
+  nav_msgs
+  geometry_msgs
+  tf2_ros
+)
+
+install(TARGETS cloud_range_filter wheel_odom_tf
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
+)
 
 # One plain install(DIRECTORY), matching FAST_LIO/CMakeLists.txt:132-135.
 #
@@ -42,12 +94,10 @@ install(PROGRAMS
   # whether it lands on install/lib/pepper_slam or back on scripts/.
   scripts/lio_odom_guard.py
   scripts/pgo_map_odom_bridge.py
-  scripts/cloud_range_filter.py
   scripts/cloud_to_odom_frame.py
   scripts/odom_compare.py
   scripts/check_frame_contract.py
   scripts/static_tf_publisher.py
-  scripts/wheel_odom_tf.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -56,6 +106,10 @@ if(BUILD_TESTING)
   # the following line skips the linter which checks for copyrights
   # comment the line when a copyright and license is added to all source files
   set(ament_cmake_copyright_FOUND TRUE)
+  # headers are C++; left unset, cppcheck parses .h files as C
+  set(ament_cmake_cppcheck_LANGUAGE "c++")
+  # ROS 2 style; the .h headers are C++, which uncrustify must be told.
+  set(ament_cmake_uncrustify_ADDITIONAL_ARGS LANGUAGE CPP)
   # flake8 is run manually below so rtabmap_base.launch.py (vendored
   # from an upstream rtabmap_ros example, not our style) can be excluded.
   # ament_cmake_flake8_FOUND doesn't suppress the auto-discovered hook here
@@ -63,7 +117,13 @@ if(BUILD_TESTING)
   # AMENT_LINT_AUTO_EXCLUDE is the mechanism ament_lint_auto actually
   # documents for "run this linter manually instead of automatically".
   set(AMENT_LINT_AUTO_EXCLUDE ament_cmake_flake8 ament_cmake_pep257)
+  # cpplint runs manually below, without its copyright rule: license
+  # headers are kept out of the source files on purpose (see LICENSE).
+  list(APPEND AMENT_LINT_AUTO_EXCLUDE ament_cmake_cpplint)
   ament_lint_auto_find_test_dependencies()
+
+  find_package(ament_cmake_cpplint REQUIRED)
+  ament_cpplint(FILTERS "-legal/copyright")
 
   find_package(ament_cmake_flake8 REQUIRED)
   ament_flake8(CONFIG_FILE "${CMAKE_CURRENT_SOURCE_DIR}/ament_flake8.ini")
@@ -97,6 +157,12 @@ if(BUILD_TESTING)
   # without a spin, a bag or a running estimator.
   ament_add_pytest_test(test_lio_odom_guard
     "${CMAKE_CURRENT_SOURCE_DIR}/test/test_lio_odom_guard.py")
+
+  # cloud_range_filter's range, outlier and ground-plane filters on synthetic
+  # clouds, including a brute-force check of the outlier filter's grid.
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_cloud_filters test/test_cloud_filters.cpp)
+  target_link_libraries(test_cloud_filters cloud_filters)
 endif()
 
 ament_package()
