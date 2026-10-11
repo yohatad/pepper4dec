@@ -115,6 +115,23 @@ if(BUILD_TESTING)
   target_compile_definitions(test_behavior_controller_utilities PRIVATE
     TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures"
   )
+
+  # Behavior tree tests: in-process stub servers stand in for the rest of
+  # the system (test/bt_test_harness.hpp). The isolated runner gives each
+  # binary its own ROS_DOMAIN_ID, so a robot stack running on this machine
+  # cannot answer them. Their main() initialises rclcpp.
+  find_package(ament_cmake_ros REQUIRED)
+  foreach(bt_test test_bt_nodes test_bt_scenarios)
+    ament_add_ros_isolated_gtest(${bt_test} test/${bt_test}.cpp
+      TIMEOUT 600
+      SKIP_LINKING_MAIN_LIBRARIES
+    )
+    target_link_libraries(${bt_test} ${PROJECT_NAME}_lib)
+    target_compile_definitions(${bt_test} PRIVATE
+      TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures"
+      TEST_PACKAGE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+    )
+  endforeach()
 endif()
 
 ament_package()

@@ -1722,38 +1722,12 @@ BT::NodeStatus IsVisitorResponseYes::onFailure(BT::ActionNodeErrorCode error)
 namespace behavior_controller
 {
 
-BT::Blackboard::Ptr createRootBlackboard()
+void registerNodes(BT::BehaviorTreeFactory & factory, const BT::RosNodeParams & params)
 {
-  auto blackboard = BT::Blackboard::create();
-  for (const auto & [phraseId, phrase] : KnowledgeManager::instance().getUtilityPhrases()) {
-    blackboard->set(phraseId, phrase);
+  std::shared_ptr<rclcpp::Node> node_handle = params.nh.lock();
+  if (!node_handle) {
+    throw std::runtime_error("registerNodes: RosNodeParams holds no ROS node");
   }
-  return blackboard;
-}
-
-BT::Tree initializeTree(
-  const std::string & scenario,
-  std::shared_ptr<rclcpp::Node> node_handle)
-{
-  auto logger = node_handle->get_logger();
-
-  // Locate the XML tree file
-  std::string packagePath =
-    ament_index_cpp::get_package_share_directory("behavior_controller");
-  std::string xmlPath = packagePath + "/data/" + scenario + ".xml";
-
-  if (!fileExists(xmlPath)) {
-    throw std::runtime_error("Behavior tree XML not found: " + xmlPath);
-  }
-
-  // Build RosNodeParams shared by all RosActionNode wrappers
-  BT::RosNodeParams params;
-  params.nh = node_handle;
-  params.server_timeout = std::chrono::milliseconds(5000);
-  params.wait_for_server_timeout = std::chrono::milliseconds(10000);
-
-  // Create factory and register nodes
-  BT::BehaviorTreeFactory factory;
 
   factory.registerNodeType<RetrieveListOfExhibits>("RetrieveListOfExhibits");
   factory.registerNodeType<IsListWithExhibit>("IsListWithExhibit");
@@ -1805,6 +1779,41 @@ BT::Tree initializeTree(
     [node_handle](const std::string & name, const BT::NodeConfig & config) {
       return std::make_unique<GetVisitorResponse>(name, config, node_handle);
     });
+}
+
+BT::Blackboard::Ptr createRootBlackboard()
+{
+  auto blackboard = BT::Blackboard::create();
+  for (const auto & [phraseId, phrase] : KnowledgeManager::instance().getUtilityPhrases()) {
+    blackboard->set(phraseId, phrase);
+  }
+  return blackboard;
+}
+
+BT::Tree initializeTree(
+  const std::string & scenario,
+  std::shared_ptr<rclcpp::Node> node_handle)
+{
+  auto logger = node_handle->get_logger();
+
+  // Locate the XML tree file
+  std::string packagePath =
+    ament_index_cpp::get_package_share_directory("behavior_controller");
+  std::string xmlPath = packagePath + "/data/" + scenario + ".xml";
+
+  if (!fileExists(xmlPath)) {
+    throw std::runtime_error("Behavior tree XML not found: " + xmlPath);
+  }
+
+  // Build RosNodeParams shared by all RosActionNode wrappers
+  BT::RosNodeParams params;
+  params.nh = node_handle;
+  params.server_timeout = std::chrono::milliseconds(5000);
+  params.wait_for_server_timeout = std::chrono::milliseconds(10000);
+
+  // Create factory and register nodes
+  BT::BehaviorTreeFactory factory;
+  registerNodes(factory, params);
 
   if (ConfigManager::instance().isVerbose()) {
     RCLCPP_INFO(

@@ -138,6 +138,12 @@ behavior_controller/
 │   ├── behavior_controller_application.cpp      # node entry point, BT engine setup
 │   ├── behavior_controller_implementation.cpp   # BT leaf node implementations
 │   └── behavior_controller_utilities.cpp        # ConfigManager/KnowledgeManager
+├── test/
+│   ├── bt_test_harness.hpp                      # stub servers + fixture for the BT tests
+│   ├── test_behavior_controller_utilities.cpp
+│   ├── test_bt_nodes.cpp
+│   ├── test_bt_scenarios.cpp
+│   └── fixtures/                                # config and knowledge-base YAML fixtures
 ├── CMakeLists.txt
 ├── package.xml
 └── README.md
@@ -204,7 +210,17 @@ colcon test --packages-select behavior_controller
 colcon test-result --verbose
 ```
 
-Runs unit tests for the utilities that need no ROS runtime: text helpers and knowledge-base parsing.
+| Test | What it covers |
+|------|----------------|
+| `test_behavior_controller_utilities` | Text helpers, config and knowledge-base loading (no ROS runtime) |
+| `test_bt_nodes` | Each BT node class against in-process stub servers: goals built from ports, outputs from feedback/results, failure, abort, rejection, missing server, halt/cancel; the topic-driven nodes' waits and timeouts; the tour-loop nodes on the fixture knowledge base |
+| `test_bt_scenarios` | Every `data/*.xml` builds against the registered node types; each scenario is ticked end to end against a simulated system and visitor, checking where the robot drove, what it pointed at and what it said |
+
+The BT tests run under `ament_add_ros_isolated_gtest`, so each gets its own `ROS_DOMAIN_ID` and a running robot stack cannot interfere. To run one binary directly, set a free domain yourself:
+
+```bash
+ROS_DOMAIN_ID=87 ./build/behavior_controller/test_bt_scenarios --gtest_filter='*Tour*'
+```
 
 ## 💡 Support
 

@@ -807,6 +807,20 @@ BT::Tree initializeTree(
   std::shared_ptr<rclcpp::Node> node_handle);
 
 /**
+ * @brief Register every custom BehaviorTree node type with a factory.
+ *
+ * The ROS action and service wrappers share @p params (node handle and
+ * server timeouts); the topic-driven stateful nodes subscribe through the
+ * same node. initializeTree() calls this; tests call it to build trees from
+ * any XML against the same registrations.
+ *
+ * @param factory  Factory to register the node types with
+ * @param params   Node handle and timeouts for the ROS-backed nodes
+ * @throws std::runtime_error if params.nh holds no node
+ */
+void registerNodes(BT::BehaviorTreeFactory & factory, const BT::RosNodeParams & params);
+
+/**
  * @brief Root blackboard for a scenario tree.
  *
  * Holds every utility phrase of the culture knowledge base under its phrase
