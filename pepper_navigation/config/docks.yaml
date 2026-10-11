@@ -1,0 +1,16 @@
+# opennav_docking dock database for Pepper's charging station.
+#
+# pose: [x, y, yaw] of base_footprint in the map when Pepper is docked, with
+# yaw pointing INTO the station (the opposite of where docked Pepper faces).
+# Measure it once (TEST_PLAN_docking.md, test 3): dock with NAOqi's own
+# ALRecharge.goToStation, then
+#   ros2 run tf2_ros tf2_echo map base_footprint
+# and enter x, y and the yaw + 180 degrees (in radians).
+#
+# The NaN placeholder keeps pepper_docking.launch.py from starting until the
+# pose is set.
+docks:
+  home_dock:
+    type: pepper_station
+    frame: map
+    pose: [.nan, .nan, .nan]

@@ -1,0 +1,137 @@
+# Docking onto Pepper's official charging station (pepper_docking.launch.py).
+#
+# The sequence, run by opennav_docking's docking_server:
+#   1. Nav2 drives to the staging pose, facing the station from ~0.6 m.
+#   2. dock_detector measures where the station really is (L2 lidar + bottom
+#      camera) and publishes it on detected_dock_pose.
+#   3. rotate_to_dock: the robot turns 180 deg, as the station is entered
+#      backwards and Pepper's lidar and cameras only look forward.
+#   4. It backs onto the measured pose, steering by the map pose, and stops
+#      when NAOqi reports it plugged in (docking/battery_state).
+#
+# Geometry (metres, along the dock's heading, which points into the station):
+#   docked base_footprint --station_offset--> station centre
+#   the station's front face is depth/2 = 0.185 before its centre
+#   staging base_footprint is |staging_x_offset| before the docked pose
+# With station_offset 0.25 the front face is 0.065 m beyond the docked base,
+# and staging_x_offset -0.67 puts the L2 (0.133 m ahead of base_footprint)
+# 0.6 m from the front face. station_offset is a placeholder until measured on
+# the robot (TEST_PLAN_docking.md, test 3); the launch file hands
+# -external_detection_translation_x to dock_detector as its station_offset, so
+# set it here only.
+
+docking_server:
+  ros__parameters:
+    base_frame: base_footprint
+    # The default localization profiles publish map -> base_footprint directly
+    # (no odom frame), and the map pose is lidar-inertial: the right frame to
+    # back onto the station blind.
+    fixed_frame: map
+    controller_frequency: 20.0
+    initial_perception_timeout: 10.0   # lidar accumulates 1.5 s; the head must be still
+    wait_charge_timeout: 10.0
+    dock_approach_timeout: 40.0
+    rotate_to_dock_timeout: 20.0
+    rotation_angular_tolerance: 0.05
+    undock_linear_tolerance: 0.05
+    undock_angular_tolerance: 0.10
+    max_retries: 2
+    dock_prestaging_tolerance: 0.5
+    # Enter backwards, after a 180 deg turn at the staging pose: needs
+    # opennav_docking's humble branch (0.0.2 from apt predates rotate_to_dock).
+    dock_backwards: true
+    rotate_to_dock: true
+
+    dock_plugins: ['pepper_station']
+    pepper_station:
+      plugin: 'opennav_docking::SimpleChargingDock'
+      use_external_detection_pose: true
+      external_detection_timeout: 1.0
+      # detected_dock_pose is the station's centre, yaw into the station, on
+      # the floor: no rotation offset; the translation moves it back to the
+      # docked base_footprint (= -station_offset).
+      external_detection_translation_x: -0.25
+      external_detection_translation_y: 0.0
+      external_detection_rotation_yaw: 0.0
+      external_detection_rotation_pitch: 0.0
+      external_detection_rotation_roll: 0.0
+      filter_coef: 0.3
+      # isCharging() is `current > charging_threshold` on docking/battery_state,
+      # where current is +1 A while NAOqi reports Pepper plugged in.
+      use_battery_status: true
+      charging_threshold: 0.0
+      docking_threshold: 0.05
+      staging_x_offset: -0.67
+      staging_yaw_offset: 0.0
+
+    controller:
+      # The robot starts the backward approach up to max_shift to the side of
+      # the station's true line and has ~0.6 m to correct it. With the humble
+      # branch's defaults (2.0 / 1.0) it touched the contacts 3-4 deg off;
+      # these settle within 0.3 deg in test_docking_sim_launch.py, for
+      # stations moved up to 15 cm and 10 deg.
+      k_phi: 5.0
+      k_delta: 3.0
+      beta: 0.4
+      lambda: 2.0
+      v_linear_min: 0.05
+      v_linear_max: 0.15
+      v_angular_max: 0.6
+      slowdown_radius: 0.30
+      rotate_to_heading_angular_vel: 0.6
+      rotate_to_heading_max_angular_accel: 1.5
+      use_collision_detection: true
+      costmap_topic: /local_costmap/costmap_raw
+      footprint_topic: /local_costmap/published_footprint
+      transform_tolerance: 0.2
+      projection_time: 3.0
+      simulation_time_step: 0.1
+      # Collisions within this distance of the docked pose are the station
+      # itself (its back edge is ~0.44 m beyond it), not obstacles.
+      dock_collision_threshold: 0.5
+
+dock_detector:
+  ros__parameters:
+    fixed_frame: map
+    base_frame: base_footprint
+    dock_id: home_dock
+    # dock_database and station_offset are set by the launch file.
+    station:
+      depth: 0.37      # along the docking direction; MEASURE the real station
+      width: 0.39
+      height: 0.075
+    max_shift: 0.30          # m the station may have moved from the map's pose
+    max_yaw_error: 0.35      # rad
+    size_tolerance: 0.06     # m, measured width against station.width
+    min_visible_depth: 0.5   # fraction of the depth that must be in view
+    active_radius: 2.5       # m: measure only this close to the station
+    tf_tolerance_s: 0.2      # use the latest map pose if a cloud is this much newer
+    lidar_topic: /points
+    lidar:
+      accumulate_s: 1.5
+      rate: 5.0
+      sigma_xy: 0.01
+      sigma_yaw: 0.02
+    camera:
+      enabled: true
+      image_topic: /naoqi_driver/camera/bottom/image_raw
+      info_topic: /naoqi_driver/camera/bottom/camera_info
+      rate: 5.0
+      max_saturation: 60     # HSV, 0-255: white is unsaturated...
+      min_brightness: 60
+      min_contrast: 40       # ...and this much brighter than the floor
+      sigma_xy: 0.01
+      sigma_yaw: 0.02
+    fusion:
+      max_age_s: 0.5
+      max_disagreement_xy: 0.05
+      max_disagreement_yaw: 0.10
+
+naoqi_battery_state:
+  ros__parameters:
+    current_sign: 1.0        # set to -1.0 if NAOqi reports charging as negative
+
+lifecycle_manager_docking:
+  ros__parameters:
+    autostart: true
+    node_names: ['docking_server']

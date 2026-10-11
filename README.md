@@ -107,6 +107,14 @@ git clone https://github.com/BehaviorTree/BehaviorTree.CPP.git
 git clone https://github.com/BehaviorTree/BehaviorTree.ROS2.git
 # Fixes a halt crash in BehaviorTree.ROS2 (see the patch header)
 git -C BehaviorTree.ROS2 apply ../pepper4dec/patches/behaviortree_ros2-reset-goal-handle.patch
+
+# Docking (pepper_navigation): the humble branch, which has rotate_to_dock;
+# the following packages are not needed
+git clone -b humble https://github.com/open-navigation/opennav_docking.git
+git -C opennav_docking checkout 9d7819a
+touch opennav_docking/opennav_following/COLCON_IGNORE \
+  opennav_docking/opennav_following_bt/COLCON_IGNORE \
+  opennav_docking/opennav_following_demo/COLCON_IGNORE
 ```
 
 The lidar stack additionally needs the L2 driver (`l2lidar_node`, publishing

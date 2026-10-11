@@ -66,7 +66,13 @@
   <exec_depend>python3-scipy</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
 
-  <!-- Docking: dock_detector.py and naoqi_battery_state.py. -->
+  <!-- Docking (pepper_docking.launch.py, dock_detector.py,
+       naoqi_battery_state.py). opennav_docking must be its humble branch,
+       built from source in the workspace (README.md, "Docking"): rosdep
+       would otherwise install the apt 0.0.2 release, which lacks
+       rotate_to_dock, and the launch file refuses to run with it. -->
+  <exec_depend>opennav_docking</exec_depend>
+  <exec_depend>opennav_docking_msgs</exec_depend>
   <exec_depend>cv_bridge</exec_depend>
   <exec_depend>python3-opencv</exec_depend>
 
@@ -83,6 +89,11 @@
   <!-- The docking tests render synthetic lidar scans and camera images. -->
   <test_depend>python3-numpy</test_depend>
   <test_depend>python3-opencv</test_depend>
+  <!-- test_docking_sim_launch.py: the docking launch file against
+       test/docking_world.py, on a private ROS domain. -->
+  <test_depend>launch_testing</test_depend>
+  <test_depend>launch_testing_ament_cmake</test_depend>
+  <test_depend>domain_coordinator</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

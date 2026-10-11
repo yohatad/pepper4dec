@@ -143,6 +143,16 @@ RUN git clone --depth 1 https://github.com/yohatad/naoqi_driver2.git src/naoqi_d
     git clone --depth 1 https://github.com/BehaviorTree/BehaviorTree.CPP.git src/BehaviorTree.CPP && \
     git clone --depth 1 https://github.com/BehaviorTree/BehaviorTree.ROS2.git src/BehaviorTree.ROS2
 
+# opennav_docking for pepper_navigation's docking, pinned on its humble branch:
+# the apt release (0.0.2) predates rotate_to_dock, which docking backwards with
+# forward-only sensors needs. rosdep below pulls in nav2_graceful_controller.
+# The opennav_following packages are not used.
+RUN git clone -b humble https://github.com/open-navigation/opennav_docking.git src/opennav_docking && \
+    git -C src/opennav_docking checkout 9d7819a214495f395f5a06244129728cbaed2bc8 && \
+    touch src/opennav_docking/opennav_following/COLCON_IGNORE \
+          src/opennav_docking/opennav_following_bt/COLCON_IGNORE \
+          src/opennav_docking/opennav_following_demo/COLCON_IGNORE
+
 # naoqi_bridge_msgs2 is a fork carrying the custom srv definitions
 # (SetAudioVolume, StopAudio, UnloadAudioFile) that dec_system depends on;
 # ros-naoqi upstream does not have them. Public, so a plain HTTPS clone works

@@ -1,0 +1,14 @@
+# naoqi_driver parameters that switch on Pepper's bottom camera, for docking
+# (pepper_navigation's dock_detector). Loaded by naoqi_driver.launch.py
+# bottom_camera:=true.
+#
+# These are naoqi_driver's boot-config parameters, which exist on naoqi_driver2's
+# feature/modern-cpp branch. On master the driver reads only
+# share/boot_config.json: set converters.bottom_camera there instead.
+/**:
+  ros__parameters:
+    converters:
+      bottom_camera:
+        enabled: true
+        resolution: 2      # kVGA, 640 x 480: the size dock_detector was sized for
+        fps: 10

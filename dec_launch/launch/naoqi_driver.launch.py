@@ -37,6 +37,12 @@ Launch arguments:
     qi_listen_url (default: "tcp://0.0.0.0:0")
         Endpoint NAOqi connects back to for audio.
     namespace (default: "")
+    bottom_camera (default: "false")
+        Also publish Pepper's bottom camera (640 x 480, 10 fps) on
+        /naoqi_driver/camera/bottom/image_raw, for docking. Loads
+        config/naoqi_bottom_camera.yaml as the driver's params_file, so needs
+        naoqi_driver2's boot-config parameters (feature/modern-cpp); a
+        params_file given on the command line still applies when false.
     use_camera (default: "false")
         Start the gscam2 Pepper front camera alongside the driver. FALSE here,
         unlike naoqi_driver2's own bringup, which defaults it true: this system
@@ -82,7 +88,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
 
 
 def generate_launch_description():
@@ -90,6 +96,8 @@ def generate_launch_description():
     bringup_launch = os.path.join(
         get_package_share_directory('naoqi_driver'),
         'launch', 'pepper_bringup.launch.py')
+    bottom_camera_params = os.path.join(
+        get_package_share_directory('dec_launch'), 'config', 'naoqi_bottom_camera.yaml')
 
     return LaunchDescription([
 
@@ -119,6 +127,9 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'namespace', default_value='',
             description='Namespace for the driver node.'),
+        DeclareLaunchArgument(
+            'bottom_camera', default_value='false',
+            description="Also publish Pepper's bottom camera, for docking."),
         # Overrides the included bringup's own 'true': this system's vision is
         # the bottom RealSense, and the front camera needs a stream started on
         # the robot by hand first.
@@ -143,6 +154,10 @@ def generate_launch_description():
                 'qi_listen_url': LaunchConfiguration('qi_listen_url'),
                 'namespace': LaunchConfiguration('namespace'),
                 'use_camera': LaunchConfiguration('use_camera'),
+                'params_file': PythonExpression([
+                    "'", bottom_camera_params, "' if '", LaunchConfiguration('bottom_camera'),
+                    "'.lower() == 'true' else '",
+                    LaunchConfiguration('params_file', default=''), "'"]),
             }.items(),
         ),
     ])

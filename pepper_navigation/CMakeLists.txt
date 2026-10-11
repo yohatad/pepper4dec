@@ -161,9 +161,21 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/test/test_shared_nav2_params.py")
 
   # Docking: station detection against ray-cast lidar scans and camera images
-  # (test/dock_sim.py).
+  # (test/dock_sim.py), the battery relay, and the docking config's geometry.
   ament_add_pytest_test(test_dock_perception
     "${CMAKE_CURRENT_SOURCE_DIR}/test/test_dock_perception.py")
+  ament_add_pytest_test(test_docking_config
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/test_docking_config.py")
+  # Docking end to end, the real launch file against a simulated Pepper and
+  # station (test/docking_world.py). Needs opennav_docking's humble branch
+  # built in the workspace; skipped until it is.
+  find_package(opennav_docking QUIET)
+  if(opennav_docking_FOUND)
+    find_package(launch_testing_ament_cmake REQUIRED)
+    add_launch_test(test/test_docking_sim_launch.py TIMEOUT 300)
+  else()
+    message(STATUS "opennav_docking not found: test_docking_sim_launch skipped")
+  endif()
 endif()
 
 ament_package()

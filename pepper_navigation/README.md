@@ -213,6 +213,67 @@ ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
 `ros2 run pepper_navigation send_goal` sends one fixed goal from
 `src/tools/send_goal.cpp`; edit the coordinates there and rebuild.
 
+## 🔌 Docking
+
+Docks Pepper onto its official charging station with
+[opennav_docking](https://github.com/open-navigation/opennav_docking)'s docking
+server, running next to any Nav2 profile. Nav2 drives to a staging pose in
+front of the station; `dock_detector` measures where the station really is
+(it may have been nudged from its map pose) with the L2 and the bottom camera;
+the robot turns around, backs on blind, and stops when NAOqi reports it plugged
+in. The sequence and the geometry are documented in `config/docking.yaml`.
+
+One-time setup:
+
+1. opennav_docking's humble branch, from source. The apt release (0.0.2) has
+   no `rotate_to_dock`, and `pepper_docking.launch.py` refuses to run with it.
+   ```bash
+   cd ~/ros2_ws/src
+   git clone -b humble https://github.com/open-navigation/opennav_docking.git
+   git -C opennav_docking checkout 9d7819a
+   touch opennav_docking/opennav_following/COLCON_IGNORE \
+     opennav_docking/opennav_following_bt/COLCON_IGNORE \
+     opennav_docking/opennav_following_demo/COLCON_IGNORE
+   cd ~/ros2_ws
+   rosdep install --from-paths src --ignore-src -r -y     # nav2_graceful_controller
+   colcon build --symlink-install --packages-select \
+     opennav_docking_msgs opennav_docking_core opennav_docking pepper_navigation
+   ```
+2. The bottom camera: start the driver with
+   `ros2 launch dec_launch naoqi_driver.launch.py bottom_camera:=true`. This
+   needs naoqi_driver2's boot-config parameters (`feature/modern-cpp`); on
+   `master`, enable `converters.bottom_camera` (resolution 2) in its
+   `share/boot_config.json` instead.
+3. The station's docked pose in `config/docks.yaml`, measured once
+   (`TEST_PLAN_docking.md`, test 3). It ships as NaN, and the launch file
+   refuses to start until it is set.
+
+Running:
+
+```bash
+ros2 launch pepper_navigation pepper_nav2_fastloc.launch.py
+ros2 launch pepper_navigation pepper_docking.launch.py    # odom_topic:=/odom_lio for amcl, kissicp, rtabmap_loc
+
+# Overt attention off, head still and pitched down so the bottom camera sees the station
+ros2 topic pub --once /joint_angles naoqi_bridge_msgs/msg/JointAnglesWithSpeed \
+  "{joint_names: [HeadYaw, HeadPitch], joint_angles: [0.0, 0.2], speed: 0.1}"
+
+ros2 action send_goal /dock_robot opennav_docking_msgs/action/DockRobot \
+  "{use_dock_id: true, dock_id: home_dock}" --feedback
+ros2 action send_goal /undock_robot opennav_docking_msgs/action/UndockRobot \
+  "{dock_type: pepper_station}"
+```
+
+| Topic | Type | |
+|---|---|---|
+| `/dock_robot`, `/undock_robot` | `opennav_docking_msgs` actions | dock at `home_dock`; drive back off it |
+| `/detected_dock_pose` | `geometry_msgs/PoseStamped` | the fused station pose the docking server backs onto |
+| `/dock_detector/status` | `std_msgs/String` | what each sensor sees, and how far the station is from its map pose |
+| `/dock_detector/camera_debug` | `sensor_msgs/Image` | the bottom camera with the white blob (green), the map's pose (orange) and the measured one (red) |
+| `/dock_detector/lidar_pose`, `/dock_detector/camera_pose` | `geometry_msgs/PoseStamped` | each sensor on its own |
+| `/battery_state` | `sensor_msgs/BatteryState` | Pepper's battery, from naoqi_driver's `/diagnostics` |
+| `/docking/battery_state` | `sensor_msgs/BatteryState` | plugged in as +1 A / -1 A: what the docking server reads as "charging" |
+
 ## 🧭 Frames
 
 Who publishes what, per profile. The local costmap rolls in the odometry frame
@@ -311,7 +372,9 @@ pepper_navigation/
 │   ├── nav2_params_pointloc.yaml       # Nav2 params, pointloc profile
 │   ├── nav2_params_rtabmap_loc.yaml    # Nav2 params, RTAB-Map profile
 │   ├── nav2_params_amcl.yaml           # Nav2 params, AMCL profile
-│   └── nav2_params_l2voxel_test.yaml   # fastloc with the L2 as a local voxel layer; bag tests only
+│   ├── nav2_params_l2voxel_test.yaml   # fastloc with the L2 as a local voxel layer; bag tests only
+│   ├── docking.yaml                    # docking server, dock_detector and battery relay
+│   └── docks.yaml                      # the charging station's docked pose in the map
 ├── launch/
 │   ├── pepper_nav2_fastloc.launch.py   # Nav2 + fastlio_localization (default)
 │   ├── pepper_nav2_pointloc.launch.py  # Nav2 + pointlio_localization
@@ -319,6 +382,7 @@ pepper_navigation/
 │   ├── pepper_nav2_amcl.launch.py      # Nav2 + AMCL on FAST-LIO odom
 │   ├── rviz_remote.launch.py           # RViz only, for a laptop watching the robot
 │   ├── odom_test.launch.py             # odometry-only bringup with a path publisher
+│   ├── pepper_docking.launch.py        # docking server + dock_detector + battery relay
 │   └── bag_test/
 │       └── costmap_bag.launch.py       # the two costmaps on a recorded bag, for tuning
 ├── map/
@@ -333,6 +397,9 @@ pepper_navigation/
 │   ├── wait_for_map_then_start.py      # starts Nav2 once map -> base_footprint exists
 │   ├── localization_watchdog.py        # cancels goals while the localizer reports lost
 │   ├── localization_recovery.py        # /localization_recover, dispatched per backend
+│   ├── dock_detector.py                # node: station pose from the L2 and the bottom camera
+│   ├── dock_perception.py              # its geometry and vision, without ROS
+│   ├── naoqi_battery_state.py          # /diagnostics -> battery_state, docking/battery_state
 │   └── cloud_delay.py, costmap_explain.py, depth_to_cloud.py, points_to_image.py  # costmap_bag helpers
 ├── utils/
 │   └── collision_zone_viewer.py/.rviz  # what the collision monitor counts; run by hand
@@ -342,7 +409,11 @@ pepper_navigation/
 │       ├── send_goal.cpp               # one-shot goal sender
 │       └── odom_path_publisher.cpp     # traversed path for RViz
 ├── test/
-│   └── test_shared_nav2_params.py      # guards the params blocks shared across profiles
+│   ├── test_shared_nav2_params.py      # guards the params blocks shared across profiles
+│   ├── test_dock_perception.py         # station detection on ray-cast scans and images
+│   ├── test_docking_config.py          # docking geometry, wiring and the battery relay
+│   ├── test_docking_sim_launch.py      # docking end to end against a simulated Pepper
+│   └── dock_sim.py, docking_world.py   # the ray caster and simulated world they use
 ├── CMakeLists.txt
 ├── package.xml
 └── README.md
@@ -361,6 +432,22 @@ if `behavior_server`, `controller_server` or `planner_server` differ between
 the nav2 param files. It also runs standalone:
 `python3 test/test_shared_nav2_params.py`.
 
+The docking tests need no robot:
+
+- `test_dock_perception.py`: the lidar and the bottom camera each find the
+  station within 1.5 cm and 1 degree on scenes ray-cast from Pepper's real
+  sensor poses (moved station, white wall behind it, legs beside it, dim
+  light), and refuse a missing, too distant, wrongly sized or hidden one.
+- `test_docking_config.py`: the staging pose puts the L2 0.6 m from the
+  station and the bottom camera sees all of it; the server turns around,
+  backs in and ignores the station as an obstacle; the files agree.
+- `test_docking_sim_launch.py`: the real `pepper_docking.launch.py` against
+  `test/docking_world.py`, a simulated Pepper and a station moved 12 cm and
+  8 degrees from its map pose. Docks, checks the robot is square on the true
+  contacts, undocks. Runs on a private ROS domain and refuses to send a goal
+  if any other node is visible. Registered only once opennav_docking is built;
+  `DOCKING_SIM_SHIFT="along,across,degrees"` tries other station shifts.
+
 ## 🔧 Troubleshooting
 
 | Symptom | Likely cause and check |
@@ -373,6 +460,10 @@ the nav2 param files. It also runs standalone:
 | `map -> odom` jitter or TF warnings | Two publishers of one transform: check `bridge_level_frame`, and `ros2 run tf2_ros tf2_echo map base_footprint` |
 | AMCL particles never tighten | Flattened `/scan` does not match the grid: retune `scan_min_height` / `scan_max_height` |
 | Global costmap all unknown | `/map` never arrived: wrong `map:=` path, or `map_server` never activated |
+| `pepper_docking.launch.py`: "has no rotate_to_dock" | opennav_docking is the apt release: build its humble branch (see Docking) |
+| `pepper_docking.launch.py`: "home_dock has no pose" | Measure the docked pose into `config/docks.yaml` (`TEST_PLAN_docking.md`, test 3) |
+| Docking fails with 904 (FAILED_TO_DETECT_DOCK) | `ros2 topic echo /dock_detector/status`: "robot moving" (it measures only standing still), "no white blob" (head pitch, overt attention, `/naoqi_driver/camera/bottom/image_raw`), "not found" (station moved more than `max_shift`) |
+| Docking fails with 906 (FAILED_TO_CHARGE) | Backed on but never plugged in: `ros2 topic echo /docking/battery_state`, then recheck `station_offset` (`TEST_PLAN_docking.md`, test 3) |
 
 ## 💡 Support
 
