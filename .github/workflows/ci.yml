@@ -36,6 +36,10 @@ jobs:
           git clone https://github.com/ros-naoqi/pepper_meshes2.git src/pepper_meshes
           git clone https://github.com/BehaviorTree/BehaviorTree.CPP.git src/BehaviorTree.CPP
           git clone https://github.com/BehaviorTree/BehaviorTree.ROS2.git src/BehaviorTree.ROS2
+          # The halt-crash fix the Dockerfile and README also apply (see the
+          # patch header). Without it behavior_controller's BT tests abort on
+          # the crash they guard against.
+          git -C src/BehaviorTree.ROS2 apply ../pepper4dec/patches/behaviortree_ros2-reset-goal-handle.patch
 
       - name: rosdep install
         run: |
@@ -61,7 +65,8 @@ jobs:
           . install/setup.sh
           rc=0
           for p in animate_behavior behavior_controller dec_common face_detection \
-                   gesture_execution overt_attention person_detection pepper_navigation; do
+                   gesture_execution overt_attention person_detection pepper_navigation \
+                   pepper_slam; do
             echo "::group::$p"
             run-clang-tidy -p build/$p -quiet -extra-arg=-std=c++17 "/pepper4dec/$p/" || rc=1
             echo "::endgroup::"
@@ -113,6 +118,10 @@ jobs:
           git clone https://github.com/ros-naoqi/pepper_meshes2.git src/pepper_meshes
           git clone https://github.com/BehaviorTree/BehaviorTree.CPP.git src/BehaviorTree.CPP
           git clone https://github.com/BehaviorTree/BehaviorTree.ROS2.git src/BehaviorTree.ROS2
+          # The halt-crash fix the Dockerfile and README also apply (see the
+          # patch header). Without it behavior_controller's BT tests abort on
+          # the crash they guard against.
+          git -C src/BehaviorTree.ROS2 apply ../pepper4dec/patches/behaviortree_ros2-reset-goal-handle.patch
 
       - name: rosdep install
         run: |

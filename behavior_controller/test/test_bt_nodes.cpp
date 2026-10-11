@@ -79,6 +79,11 @@ void loadFixtureKnowledgeBase()
   ASSERT_TRUE(KnowledgeManager::instance().loadFromPackage(kFixtureDir));
 }
 
+}  // namespace
+
+// The tests sit outside the anonymous namespace: cppcheck 2.7 (Humble's, run
+// in CI) reports a syntax error on a TEST_F that follows a definition inside one.
+
 //=============================================================================
 // ROS action wrappers
 //=============================================================================
@@ -155,26 +160,26 @@ TEST_F(BtRosTest, HaltingAnimateBehaviorCancelsItsGoal) {
 TEST_F(BtRosTest, HaltingAnActionNodeBeforeItsSecondGoalIsAnsweredIsSafe) {
   ::testing::GTEST_FLAG(death_test_style) = "threadsafe";
   EXPECT_EXIT(
-    {
-      auto server = serveAction<AnimateBehavior>(
-        "/animate_behavior", [](const AnimateBehavior::Goal &) {
-          Reply<AnimateBehavior> reply;
-          reply.outcome = Outcome::kRunUntilCanceled;
-          return reply;
-        });
-      auto tree = treeFromText(
-        R"(<Parallel success_count="1" failure_count="1">
+  {
+    auto server = serveAction<AnimateBehavior>(
+      "/animate_behavior", [](const AnimateBehavior::Goal &) {
+        Reply<AnimateBehavior> reply;
+        reply.outcome = Outcome::kRunUntilCanceled;
+        return reply;
+      });
+    auto tree = treeFromText(
+      R"(<Parallel success_count="1" failure_count="1">
            <AnimateBehavior duration_seconds="0"/>
            <AlwaysSuccess/>
          </Parallel>)");
-      for (int run = 0; run < 2; ++run) {
-        if (tickUntilDone(tree) != NodeStatus::SUCCESS) {
-          std::_Exit(1);
-        }
+    for (int run = 0; run < 2; ++run) {
+      if (tickUntilDone(tree) != NodeStatus::SUCCESS) {
+        std::_Exit(1);
       }
-      const bool both_canceled = waitFor([&]() {return server->canceledCount() == 2;});
-      std::_Exit(server->goals().size() == 2u && both_canceled ? 0 : 1);
-    }, ::testing::ExitedWithCode(0), "");
+    }
+    const bool both_canceled = waitFor([&]() {return server->canceledCount() == 2;});
+    std::_Exit(server->goals().size() == 2u && both_canceled ? 0 : 1);
+  }, ::testing::ExitedWithCode(0), "");
 }
 
 TEST_F(BtRosTest, GestureSendsEveryPort) {
@@ -390,7 +395,7 @@ TEST_F(BtRosTest, IsVisitorResponseYesFollowsTheClassifiedAnswer) {
     });
 
   for (const auto & [utterance, expected] : std::vector<std::pair<std::string, NodeStatus>>{
-      {"yes please", NodeStatus::SUCCESS}, {"no thank you", NodeStatus::FAILURE}})
+    {"yes please", NodeStatus::SUCCESS}, {"no thank you", NodeStatus::FAILURE}})
   {
     SCOPED_TRACE(utterance);
     auto tree = treeFromText(R"(<IsVisitorResponseYes visitor_response="{visitor_response}"/>)");
@@ -658,8 +663,6 @@ TEST_F(BtRosTest, BlackboardNodesSetAndCompareStrings) {
 
   EXPECT_EQ(tickUntilDone(tree), NodeStatus::SUCCESS);
 }
-
-}  // namespace
 
 int main(int argc, char ** argv)
 {

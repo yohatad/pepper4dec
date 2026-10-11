@@ -377,6 +377,11 @@ private:
   mutable std::mutex events_mutex_;
 };
 
+}  // namespace
+
+// The tests sit outside the anonymous namespace: cppcheck 2.7 (Humble's, run
+// in CI) reports a syntax error on a TEST_F that follows a definition inside one.
+
 //=============================================================================
 // Scenario files resolve against the registered node types
 //=============================================================================
@@ -456,6 +461,9 @@ TEST_F(ScenarioTest, InitializeTreeProvidesTheTourPhrases) {
 // Tour simulations (lab_tour.xml, dec_Tour.xml)
 //=============================================================================
 
+namespace
+{
+
 struct Tour
 {
   std::string xml;
@@ -470,6 +478,8 @@ void PrintTo(const Tour & tour, std::ostream * os)
 class TourTest : public ScenarioTest, public ::testing::WithParamInterface<Tour>
 {
 };
+
+}  // namespace
 
 TEST_P(TourTest, VisitorWhoAcceptsIsShownEveryExhibitInOrder) {
   ASSERT_NO_FATAL_FAILURE(loadKnowledgeBase(GetParam().environment_kb));
@@ -639,8 +649,6 @@ TEST_F(ScenarioTest, GestureNavTestRunsItsFixedSequence) {
       describePoint(5.0, 6.8, 1.2), "say This is the exhibit.",
       describeNavigation(0.0, 0.0, 0.0), "gesture wave"}));
 }
-
-}  // namespace
 
 int main(int argc, char ** argv)
 {
