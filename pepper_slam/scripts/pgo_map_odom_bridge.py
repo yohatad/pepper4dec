@@ -141,8 +141,11 @@ class PgoMapOdomBridge(Node):
             self.level_source = 'calibration'
         self.buf_size = int(self.get_parameter('odom_buffer_size').value)
 
+        # TF is read only for the one-time level frame, so the listener exists
+        # only until that is published (see _try_publish_level).
         self.tf_buffer = Buffer()
-        self.tf_listener = TransformListener(self.tf_buffer, self)
+        self.tf_listener = (TransformListener(self.tf_buffer, self)
+                            if self.publish_level else None)
         self.tf_broadcaster = TransformBroadcaster(self)
         self.static_tf_broadcaster = StaticTransformBroadcaster(self)
 
@@ -300,6 +303,10 @@ class PgoMapOdomBridge(Node):
         out.transform.rotation.w = float(q[3])
         self.static_tf_broadcaster.sendTransform(out)
         self._level_published = True
+        # Left subscribed, the listener would keep deserializing
+        # naoqi_driver's joint tree on /tf (~4150 transforms/s) for the whole
+        # run: MEASURED ~11% of a core.
+        self.tf_listener.unregister()
         self.get_logger().info(
             f"Published static {self.level_frame} -> {self.map_frame} "
             f"(one-time leveling from {self.level_source}, z=0 on the "

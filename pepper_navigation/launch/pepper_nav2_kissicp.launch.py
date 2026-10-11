@@ -308,6 +308,9 @@ def generate_launch_description():
             'ground_z_thresh': 0.20,
             'ground_ransac_iterations': 300,
         }],
+        # It only listens, and only for base_footprint <- l2lidar_frame,
+        # which is all /tf_static: the joint tree on /tf is dead weight here.
+        remappings=[('/tf', '/tf_nav')],
     )
 
     collision_monitor = Node(
