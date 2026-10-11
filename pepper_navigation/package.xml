@@ -66,6 +66,10 @@
   <exec_depend>python3-scipy</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
 
+  <!-- Docking: dock_detector.py and naoqi_battery_state.py. -->
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+
   <!-- Imported by the launch files and Python nodes. -->
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>nav2_common</exec_depend>
@@ -76,6 +80,9 @@
   <test_depend>ament_cmake_pytest</test_depend>
   <!-- test_shared_nav2_params.py parses the four nav2 param files. -->
   <test_depend>python3-yaml</test_depend>
+  <!-- The docking tests render synthetic lidar scans and camera images. -->
+  <test_depend>python3-numpy</test_depend>
+  <test_depend>python3-opencv</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

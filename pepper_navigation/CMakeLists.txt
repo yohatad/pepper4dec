@@ -81,6 +81,11 @@ install(PROGRAMS
   scripts/wait_for_map_then_start.py
   scripts/localization_recovery.py
   scripts/localization_watchdog.py
+  # docking (pepper_docking.launch.py); dock_perception.py is imported by
+  # dock_detector.py from the same directory
+  scripts/dock_detector.py
+  scripts/dock_perception.py
+  scripts/naoqi_battery_state.py
   # bag_test only: replay helpers (see "Bag replay" in README.md)
   scripts/cloud_delay.py
   scripts/costmap_explain.py
@@ -154,6 +159,11 @@ if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_shared_nav2_params
     "${CMAKE_CURRENT_SOURCE_DIR}/test/test_shared_nav2_params.py")
+
+  # Docking: station detection against ray-cast lidar scans and camera images
+  # (test/dock_sim.py).
+  ament_add_pytest_test(test_dock_perception
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/test_dock_perception.py")
 endif()
 
 ament_package()
