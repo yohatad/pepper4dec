@@ -86,7 +86,7 @@ Same config as 2. Do 3 (decline), then stay in view of the camera.
 |---|---|
 | Stops 7 and 8 | Robot points without speaking and carries on (they have no `gesture_message_english`). Before the fix the tour ended at 7 |
 | All 9 stops | Visited in order, then the goodbye |
-| Pointing at stops 4 to 8 | Their target heights were 270 / 180 m (headings typed into z) and are now a 0.0 placeholder. Note where the arm points, and measure the real heights to put in the KB |
+| Pointing at the booths (stops 2 to 8) | Every booth target is 0.82 m high, the lab's exhibit height (stops 4 to 8 had headings, 270 / 180, typed into the height). Note where the arm points at each booth, and measure the real heights to put in the KB if they differ |
 
 ## 6. Docker image
 
