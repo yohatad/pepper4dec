@@ -20,6 +20,8 @@
 
 #include <gtest/gtest.h>
 
+#include <fstream>
+
 #include <string>
 #include <vector>
 
@@ -152,6 +154,7 @@ TEST(Singletons, ConfigManagerLoadsGoodConfig) {
   EXPECT_EQ(config.getCultureKnowledgeBasePath(), "testCultureKB.yaml");
   EXPECT_EQ(config.getEnvironmentKnowledgeBasePath(), "testEnvKB.yaml");
   EXPECT_FALSE(config.isVerbose());
+  EXPECT_DOUBLE_EQ(config.getVisitorCooldown(), 2.5);
 }
 
 TEST(Singletons, ConfigManagerAppliesDefaultsForMissingKeys) {
@@ -165,6 +168,7 @@ TEST(Singletons, ConfigManagerAppliesDefaultsForMissingKeys) {
   EXPECT_EQ(
     config.getEnvironmentKnowledgeBasePath(),
     "labEnvironmentKnowledgeBase.yaml");
+  EXPECT_DOUBLE_EQ(config.getVisitorCooldown(), 15.0);
 }
 
 TEST(Singletons, ConfigManagerRejectsMissingFile) {
@@ -210,4 +214,31 @@ TEST(Singletons, KnowledgeManagerLoadsFixturePackage) {
   ASSERT_EQ(tour.getLocationCount(), 2u);
   EXPECT_EQ(tour.locationIds[0], "1");
   EXPECT_EQ(tour.locationIds[1], "booth");
+}
+
+// The environment knowledge base's utility_phrases replace the culture's: the
+// lab and the DEC each name themselves in the welcome and the tour question.
+// Loading another environment must not keep the previous one's phrases.
+TEST(Singletons, EnvironmentPhrasesReplaceTheCultureDefaults) {
+  const std::string package = std::string(kFixtureDir) + "/../..";
+  const auto load = [&package](const std::string & environment) {
+      const std::string config = ::testing::TempDir() + "behavior_controller_phrases.yaml";
+      std::ofstream(config) <<
+        "culture_knowledge_base: \"cultureKnowledgeBase.yaml\"\n"
+        "environment_knowledge_base: \"" << environment << "\"\n";
+      return ConfigManager::instance().loadFromFile(config) &&
+             KnowledgeManager::instance().loadFromPackage(package);
+    };
+  auto & km = KnowledgeManager::instance();
+
+  ASSERT_TRUE(load("labEnvironmentKnowledgeBase.yaml"));
+  EXPECT_NE(km.getUtilityPhrase("query_tour_speech").find("Upanzi lab"), std::string::npos);
+  const std::string culture_default = km.getUtilityPhrase("follow_me_speech");
+
+  ASSERT_TRUE(load("decEnvironmentKnowledgeBase.yaml"));
+  EXPECT_NE(
+    km.getUtilityPhrase("query_tour_speech").find("Digital Experience Center"),
+    std::string::npos);
+  EXPECT_EQ(km.getUtilityPhrase("welcome_speech"), "Hello, and welcome!");
+  EXPECT_EQ(km.getUtilityPhrase("follow_me_speech"), culture_default);  // not overridden
 }

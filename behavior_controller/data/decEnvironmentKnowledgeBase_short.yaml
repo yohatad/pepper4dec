@@ -1,6 +1,13 @@
 # Environment Knowledge Base
 tour_specification: [1, 2, 3, 4, 5, 6, 7]
 
+# Replace the culture knowledge base's phrases of the same name. The first
+# stop introduces the place, so the welcome stays short where it does.
+utility_phrases:
+  english:
+    welcome_speech: "Hello, and welcome!"
+    query_tour_speech: "Would you like me to guide you through the Digital Experience Center?"
+
 locations:
   1:
     robot_location_description: "Pepper's starting location"

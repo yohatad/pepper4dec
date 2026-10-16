@@ -105,6 +105,7 @@ BehaviorControllerNode::BehaviorControllerNode()
   declare_parameter<std::string>("culture_knowledge_base", "cultureKnowledgeBase.yaml");
   declare_parameter<std::string>("environment_knowledge_base", "labEnvironmentKnowledgeBase.yaml");
   declare_parameter<bool>("verbose_mode", false);
+  declare_parameter<double>("visitor_cooldown", 15.0);
 
   // Create the companion BT node immediately so main() can add it to the
   // executor before any lifecycle transition is triggered. Its own __node

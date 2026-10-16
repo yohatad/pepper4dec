@@ -402,6 +402,10 @@ TEST_F(BtRosTest, IsVisitorResponseYesFollowsTheClassifiedAnswer) {
     tree.rootBlackboard()->set("visitor_response", utterance);
     EXPECT_EQ(tickUntilDone(tree), expected);
     EXPECT_EQ(server->goals().back().prompt, utterance);
+    // The classified answer, lowercase, for the tours to tell "no" from unclear.
+    std::string answer;
+    ASSERT_TRUE(tree.rootBlackboard()->get("visitor_answer", answer));
+    EXPECT_EQ(answer, expected == NodeStatus::SUCCESS ? "yes" : "no");
   }
 }
 

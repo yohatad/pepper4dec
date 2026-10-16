@@ -81,10 +81,16 @@ utility_phrases:
     press_yes_no_speech: "Please press Yes or No on my screen"
     follow_me_speech: "Please follow me"
     maybe_another_time_speech: "Maybe another time"
-    welcome_speech: "Hello! Welcome to the Robotics Lab! I'm Pepper, your friendly robot tour guide."
-    query_tour_speech: "Would you like a tour of the lab?"
+    # Defaults: an environment knowledge base's own utility_phrases replace
+    # these (its welcome and tour question name the place).
+    welcome_speech: "Hello! I'm Pepper, your friendly robot tour guide."
+    query_tour_speech: "Would you like me to give you a tour?"
+    # When the answer to the tour question was neither yes nor no
+    repeat_question_speech: "Sorry, I did not catch that. Would you like a tour? Please say yes or no."
     door_speech: "Here is the door"
-    # After a visitor declines the tour
+    # When Pepper cannot reach an exhibit and moves on to the next one
+    exhibit_unreachable_speech: "Sorry, I cannot get to this exhibit. Let's go on to the next one."
+    # When the tour cannot go on at all
+    tour_failed_speech: "Sorry, I cannot continue the tour right now."
+    # After a declined or failed tour (a completed tour says goodbye at its last stop)
     brief_goodbye_speech: "Goodbye"
-    # After a completed tour
-    goodbye_speech: "Thank you for taking the tour with me. Goodbye!"

@@ -27,6 +27,7 @@
 #include <mutex>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <optional>
 #include <csignal>
 #include <fstream>
@@ -134,6 +135,8 @@ public:
   std::string getScenarioSpecification() const;
   std::string getCultureKnowledgeBasePath() const;
   std::string getEnvironmentKnowledgeBasePath() const;
+  /// Seconds a tour waits after its goodbye before looking for the next visitor.
+  double getVisitorCooldown() const;
 
 private:
   ConfigManager() = default;
@@ -141,6 +144,7 @@ private:
   std::string scenarioSpecification = "lab_tour";
   std::string cultureKnowledgeBasePath = "cultureKnowledgeBase.yaml";
   std::string environmentKnowledgeBasePath = "labEnvironmentKnowledgeBase.yaml";
+  double visitorCooldown = 15.0;
 
   // Non-copyable
   ConfigManager(const ConfigManager &) = delete;
@@ -166,6 +170,9 @@ public:
 
 private:
   KnowledgeManager() = default;
+  /// Adds a knowledge base's utility_phrases, replacing phrases already read.
+  void readUtilityPhrases(const YAML::Node & knowledgeBase);
+
   std::unordered_map<std::string, std::string> utilityPhrases;
   std::unordered_map<std::string, LocationInfo> locations;
   std::optional<TourSpec> tourSpec;

@@ -56,10 +56,11 @@ Shipped config: `asr_cm_tts_pipeline`, `decEnvironmentKnowledgeBase_short.yaml`.
 | Stand in view | Robot stops idling and plays the iconic `welcome` gesture |
 | Welcome speech | "Hello! Welcome to the Robotics Lab! I'm Pepper, your friendly robot tour guide." (was: tree failed here) |
 | Answer "yes" | Drives to the start pose (4.0, 6.8) |
-| Each exhibit, in order 1 to 5 | Says "Please follow me", drives there, points at the exhibit with the arm (deictic), says its description. All five, not just the first |
+| Each stop, in order 1 to 5 | Says "Please follow me", drives there and says its description. At the exhibits (2 to 4) it also points with the arm (deictic); at the start and end stops (1 and 5, no target) it does not point. All five, not just the first |
 | Heading on arrival (`ros2 run tf2_ros tf2_echo map base_footprint`) | Yaw about -90 deg (270) at exhibits 1, 2, 3, 5; 180 deg at exhibit 4. Before the fix it was about -10 deg everywhere |
 | Pointing | Arm aims at the exhibit, not straight ahead and not up |
-| End | Waves (iconic `wave`), says "Thank you for taking the tour with me. Goodbye!", drives back to (4.0, 6.8) |
+| End | After stop 5's "I hope you enjoyed the tour...", waves (iconic `wave`) with no second goodbye, drives back to (4.0, 6.8), then idles about 15 s (`visitor_cooldown`) before looking for a visitor again |
+| (Optional) An unreachable exhibit: block the way to exhibit 3 | After three tries: "Sorry, I cannot get to this exhibit. Let's go on to the next one.", then exhibit 4. The tour ends normally (wave, no "Goodbye") |
 
 ## 3. Lab tour, visitor declines
 
@@ -68,6 +69,8 @@ Same config as 2.
 | Check | Expected |
 |---|---|
 | Answer "no" | "Maybe another time", then "Goodbye", a wave, back to (4.0, 6.8). No exhibit is visited |
+| Say nothing for 10 s | Same as "no". Afterwards speech_event is no longer listening (its log); before the fix the microphone stayed on |
+| Answer something unclear ("maybe") | "Sorry, I did not catch that. Would you like a tour? Please say yes or no." Unclear again: same as "no". "Yes" the second time: the tour starts |
 
 ## 4. Two tours in a row (halt crash)
 
@@ -75,8 +78,8 @@ Same config as 2. Do 3 (decline), then stay in view of the camera.
 
 | Check | Expected |
 |---|---|
-| After the first tour ends | A new tour starts at once. behavior_controller keeps running: `ros2 node list` still shows `/behavior_controller`, and the log has no `terminate called` / `UnknownGoalHandleError` (before the patch it aborted here) |
-| Answer "yes" this time | Full tour, ending with the long goodbye, not the short "Goodbye" left over from the first tour |
+| After the first tour ends | About 15 s later (`visitor_cooldown`) a new tour starts. behavior_controller keeps running: `ros2 node list` still shows `/behavior_controller`, and the log has no `terminate called` / `UnknownGoalHandleError` (before the patch it aborted here) |
+| Answer "yes" this time | Full tour, ending with the last stop's goodbye and a wave, not the short "Goodbye" left over from the first tour |
 
 ## 5. DEC tour
 
@@ -84,8 +87,10 @@ Same config as 2. Do 3 (decline), then stay in view of the camera.
 
 | Check | Expected |
 |---|---|
+| Welcome and question | "Hello, and welcome!", then "Would you like me to guide you through the Digital Experience Center?" (the lab's wording before) |
 | Stops 7 and 8 | Robot points without speaking and carries on (they have no `gesture_message_english`). Before the fix the tour ended at 7 |
-| All 9 stops | Visited in order, then the goodbye |
+| Stops 1 and 9 (start, end) | Spoken without pointing (no target) |
+| All 9 stops | Visited in order; stop 9's text ends with "goodbye", then a wave and no second goodbye |
 | Pointing at the booths (stops 2 to 8) | Every booth target is 0.82 m high, the lab's exhibit height (stops 4 to 8 had headings, 270 / 180, typed into the height). Note where the arm points at each booth, and measure the real heights to put in the KB if they differ |
 
 ## 6. Docker image

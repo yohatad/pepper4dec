@@ -165,8 +165,9 @@ std::string standby()
 /// The phrases the tours read but nothing in them writes: the node provides
 /// them from the culture knowledge base (createRootBlackboard()).
 const char * const kTourPhraseKeys[] = {
-  "welcome_speech", "follow_me_speech", "maybe_another_time_speech",
-  "brief_goodbye_speech", "goodbye_speech"};
+  "welcome_speech", "query_tour_speech", "repeat_question_speech", "follow_me_speech",
+  "exhibit_unreachable_speech", "tour_failed_speech", "maybe_another_time_speech",
+  "brief_goodbye_speech"};
 
 /// "say <phrase>" for the culture knowledge base phrase @p id.
 std::string say(const std::string & id)
@@ -174,7 +175,20 @@ std::string say(const std::string & id)
   return "say " + KnowledgeManager::instance().getUtilityPhrase(id);
 }
 
-const char kTourQuestion[] = "say Would you like me to guide you through the Upanzi lab?";
+/// "say" the tour question: the environment knowledge base's query_tour_speech.
+std::string tourQuestion()
+{
+  return say("query_tour_speech");
+}
+
+/// The node's root blackboard with the pause between visitors set to
+/// @p cooldown_msec: 0 by default, so that a tour ends at its goodbye.
+BT::Blackboard::Ptr tourBlackboard(unsigned cooldown_msec = 0)
+{
+  auto blackboard = behavior_controller::createRootBlackboard();
+  blackboard->set<unsigned>("visitor_cooldown_msec", cooldown_msec);
+  return blackboard;
+}
 
 /**
  * @brief The rest of the system, simulated.
@@ -191,6 +205,9 @@ const char kTourQuestion[] = "say Would you like me to guide you through the Upa
  *
  * The gesture server follows gesture_execution's contract (see
  * describeGesture()) and aborts any other gesture, as the real one does.
+ *
+ * Navigation succeeds, except to goals passed to makeUnreachable(), which it
+ * aborts.
  *
  * Every goal and request is logged as an event ("navigate ...", "gesture
  * ...", "say ...", "ask ...", "mic on", ...) in the order the robot made it.
@@ -247,9 +264,15 @@ protected:
         return reply;
       });
     serveAction<NavigateToPose>(
-      "/navigate_to_pose", [this](const NavigateToPose::Goal & goal) {
-        log(describeNavigation(goal.pose));
-        return Reply<NavigateToPose>();
+      "/navigate_to_pose", [this, unreachable = unreachable_](const NavigateToPose::Goal & goal) {
+        const std::string navigation = describeNavigation(goal.pose);
+        log(navigation);
+        Reply<NavigateToPose> reply;
+        std::lock_guard<std::mutex> lock(unreachable->mutex);
+        if (unreachable->goals.count(navigation) != 0) {
+          reply.outcome = Outcome::kAbort;
+        }
+        return reply;
       });
     serveAction<SpeechWithFeedback>(
       "/naoqi_driver/naoqi_driver/speech_with_feedback",
@@ -310,6 +333,13 @@ protected:
       });
   }
 
+  /// Navigation to @p navigation (as describeNavigation() writes it) aborts from now on.
+  void makeUnreachable(const std::string & navigation)
+  {
+    std::lock_guard<std::mutex> lock(unreachable_->mutex);
+    unreachable_->goals.insert(navigation);
+  }
+
   void setVisitorSays(const std::string & says)
   {
     std::lock_guard<std::mutex> lock(visitor_->mutex);
@@ -356,6 +386,12 @@ private:
     std::string says;
   };
 
+  struct Unreachable
+  {
+    std::mutex mutex;
+    std::set<std::string> goals;
+  };
+
   std::string visitorSays() const
   {
     std::lock_guard<std::mutex> lock(visitor_->mutex);
@@ -373,6 +409,7 @@ private:
   /// /speech_event/text was heard.
   std::shared_ptr<std::atomic<int>> turns_taken_ = std::make_shared<std::atomic<int>>(0);
   std::shared_ptr<Visitor> visitor_ = std::make_shared<Visitor>();
+  std::shared_ptr<Unreachable> unreachable_ = std::make_shared<Unreachable>();
   Events events_;
   mutable std::mutex events_mutex_;
 };
@@ -455,6 +492,9 @@ TEST_F(ScenarioTest, InitializeTreeProvidesTheTourPhrases) {
     EXPECT_TRUE(tree.rootBlackboard()->get(key, phrase) && !phrase.empty())
       << "{" << key << "} is not set";
   }
+  unsigned cooldown_msec = 0;
+  EXPECT_TRUE(tree.rootBlackboard()->get("visitor_cooldown_msec", cooldown_msec));
+  EXPECT_EQ(cooldown_msec, 15000u);  // the default visitor_cooldown, 15 s
 }
 
 //=============================================================================
@@ -484,7 +524,7 @@ class TourTest : public ScenarioTest, public ::testing::WithParamInterface<Tour>
 TEST_P(TourTest, VisitorWhoAcceptsIsShownEveryExhibitInOrder) {
   ASSERT_NO_FATAL_FAILURE(loadKnowledgeBase(GetParam().environment_kb));
   startWorld("yes please");
-  auto tree = treeFromFile(dataPath(GetParam().xml), behavior_controller::createRootBlackboard());
+  auto tree = treeFromFile(dataPath(GetParam().xml), tourBlackboard());
   StatusRecorder recorder(tree);
 
   ASSERT_EQ(tickUntilDone(tree, milliseconds(120000)), NodeStatus::SUCCESS)
@@ -492,18 +532,22 @@ TEST_P(TourTest, VisitorWhoAcceptsIsShownEveryExhibitInOrder) {
     << "What the robot did:\n" << eventLog();
 
   // Drive to the start, to every exhibit in tour order, then to standby;
-  // welcome, point at each exhibit, wave goodbye; at each exhibit say
-  // "follow me" and then its description, if it has one.
+  // welcome, point at each exhibit that has a target (not the start and end
+  // stops, whose target is 0, 0, 0), wave goodbye; at each exhibit say
+  // "follow me" and then its description, if it has one. The last stop says
+  // goodbye, so the tour adds none of its own.
   Events navigation{standby()};
   Events gestures{"gesture welcome"};
-  Events speech{say("welcome_speech"), kTourQuestion};
+  Events speech{say("welcome_speech"), tourQuestion()};
   auto & knowledge = KnowledgeManager::instance();
   for (const auto & id : knowledge.getTourSpecification().locationIds) {
     const LocationInfo info = knowledge.getLocationInfo(id);
     navigation.push_back(
       describeNavigation(info.robotPose.x, info.robotPose.y, info.robotPose.theta));
-    gestures.push_back(
-      describePoint(info.gestureTarget.x, info.gestureTarget.y, info.gestureTarget.z));
+    const auto & target = info.gestureTarget;
+    if (target.x != 0.0 || target.y != 0.0 || target.z != 0.0) {
+      gestures.push_back(describePoint(target.x, target.y, target.z));
+    }
     speech.push_back(say("follow_me_speech"));
     if (!info.gestureMessage.empty()) {
       speech.push_back("say " + info.gestureMessage);
@@ -511,18 +555,17 @@ TEST_P(TourTest, VisitorWhoAcceptsIsShownEveryExhibitInOrder) {
   }
   navigation.push_back(standby());
   gestures.push_back("gesture wave");
-  speech.push_back(say("goodbye_speech"));
 
   EXPECT_EQ(events("navigate"), navigation);
   EXPECT_EQ(events("gesture"), gestures);
   EXPECT_EQ(events("say"), speech);
-  EXPECT_TRUE(recorder.reached("FullGoodbye", NodeStatus::SUCCESS));
+  EXPECT_TRUE(recorder.reached("CompletedTour", NodeStatus::SUCCESS));
 }
 
 TEST_P(TourTest, VisitorWhoDeclinesGetsTheShortGoodbye) {
   ASSERT_NO_FATAL_FAILURE(loadKnowledgeBase(GetParam().environment_kb));
   startWorld("no thank you");
-  auto tree = treeFromFile(dataPath(GetParam().xml), behavior_controller::createRootBlackboard());
+  auto tree = treeFromFile(dataPath(GetParam().xml), tourBlackboard());
   StatusRecorder recorder(tree);
 
   ASSERT_EQ(tickUntilDone(tree, milliseconds(60000)), NodeStatus::SUCCESS)
@@ -533,7 +576,7 @@ TEST_P(TourTest, VisitorWhoDeclinesGetsTheShortGoodbye) {
   EXPECT_EQ(events("gesture"), (Events{"gesture welcome", "gesture wave"}));
   EXPECT_EQ(
     events("say"),
-    (Events{say("welcome_speech"), kTourQuestion, say("maybe_another_time_speech"),
+    (Events{say("welcome_speech"), tourQuestion(), say("maybe_another_time_speech"),
       say("brief_goodbye_speech")}));
   EXPECT_TRUE(recorder.reached("DeclinedGoodbye", NodeStatus::SUCCESS));
 }
@@ -559,7 +602,7 @@ INSTANTIATE_TEST_SUITE_P(
 TEST_F(ScenarioTest, NextTourStartsAfreshAfterADecline) {
   ASSERT_NO_FATAL_FAILURE(loadKnowledgeBase("labEnvironmentKnowledgeBase.yaml"));
   startWorld("no thank you");
-  auto tree = treeFromFile(dataPath("lab_tour.xml"), behavior_controller::createRootBlackboard());
+  auto tree = treeFromFile(dataPath("lab_tour.xml"), tourBlackboard());
   {
     StatusRecorder first(tree);
     ASSERT_EQ(tickUntilDone(tree, milliseconds(60000)), NodeStatus::SUCCESS)
@@ -572,10 +615,141 @@ TEST_F(ScenarioTest, NextTourStartsAfreshAfterADecline) {
   ASSERT_EQ(tickUntilDone(tree, milliseconds(120000)), NodeStatus::SUCCESS)
     << "Leaf nodes that failed:\n" << second.failedLeaves()
     << "What the robot did:\n" << eventLog();
-  EXPECT_TRUE(second.reached("FullGoodbye", NodeStatus::SUCCESS));
+  EXPECT_TRUE(second.reached("CompletedTour", NodeStatus::SUCCESS));
   EXPECT_FALSE(second.reached("DeclinedGoodbye", NodeStatus::SUCCESS));
   const auto tour_stops = KnowledgeManager::instance().getTourSpecification().locationIds.size();
   EXPECT_EQ(events("navigate").size(), 1 + (tour_stops + 2)) << eventLog();
+}
+
+// Silence: GetVisitorResponse times out. The microphone must not stay on, and
+// the visitor gets the declined goodbye.
+TEST_F(ScenarioTest, VisitorWhoStaysSilentLeavesTheMicOff) {
+  ASSERT_NO_FATAL_FAILURE(loadKnowledgeBase("labEnvironmentKnowledgeBase.yaml"));
+  startWorld("yes", /*turns=*/ 0);  // never heard
+  auto tree = treeFromFile(dataPath("lab_tour.xml"), tourBlackboard());
+  StatusRecorder recorder(tree);
+
+  ASSERT_EQ(tickUntilDone(tree, milliseconds(60000)), NodeStatus::SUCCESS)
+    << "Leaf nodes that failed:\n" << recorder.failedLeaves()
+    << "What the robot did:\n" << eventLog();
+
+  const Events mic = events("mic");
+  ASSERT_FALSE(mic.empty());
+  EXPECT_EQ(mic.back(), "mic off") << eventLog();
+  EXPECT_EQ(
+    events("say"),
+    (Events{say("welcome_speech"), tourQuestion(), say("maybe_another_time_speech"),
+      say("brief_goodbye_speech")}));
+  EXPECT_TRUE(recorder.reached("DeclinedGoodbye", NodeStatus::SUCCESS));
+}
+
+// An answer that is neither yes nor no gets the question once more; a second
+// unclear answer declines.
+TEST_F(ScenarioTest, UnclearAnswerIsAskedOnceMoreThenDeclines) {
+  ASSERT_NO_FATAL_FAILURE(loadKnowledgeBase("labEnvironmentKnowledgeBase.yaml"));
+  startWorld("maybe later");
+  auto tree = treeFromFile(dataPath("lab_tour.xml"), tourBlackboard());
+  StatusRecorder recorder(tree);
+
+  ASSERT_EQ(tickUntilDone(tree, milliseconds(60000)), NodeStatus::SUCCESS)
+    << "Leaf nodes that failed:\n" << recorder.failedLeaves()
+    << "What the robot did:\n" << eventLog();
+
+  EXPECT_EQ(
+    events("say"),
+    (Events{say("welcome_speech"), tourQuestion(), say("repeat_question_speech"),
+      say("maybe_another_time_speech"), say("brief_goodbye_speech")}));
+  EXPECT_EQ(events("ask").size(), 2u) << eventLog();
+  EXPECT_TRUE(recorder.reached("DeclinedGoodbye", NodeStatus::SUCCESS));
+}
+
+TEST_F(ScenarioTest, UnclearAnswerThenYesStartsTheTour) {
+  ASSERT_NO_FATAL_FAILURE(loadKnowledgeBase("labEnvironmentKnowledgeBase.yaml"));
+  startWorld("hmm");
+  auto tree = treeFromFile(dataPath("lab_tour.xml"), tourBlackboard());
+  StatusRecorder recorder(tree);
+
+  // Answer yes once the question is asked again, before the mic is back on.
+  const std::string asked_again = say("repeat_question_speech");
+  tickUntil(tree, [&]() {return !events(asked_again).empty();}, milliseconds(30000));
+  ASSERT_FALSE(events(asked_again).empty()) << eventLog();
+  setVisitorSays("yes please");
+
+  ASSERT_EQ(tickUntilDone(tree, milliseconds(120000)), NodeStatus::SUCCESS)
+    << "Leaf nodes that failed:\n" << recorder.failedLeaves()
+    << "What the robot did:\n" << eventLog();
+  EXPECT_TRUE(recorder.reached("CompletedTour", NodeStatus::SUCCESS));
+}
+
+// An exhibit Pepper cannot reach is skipped with an apology; the tour goes on
+// to the next one and ends as a completed tour, not as a declined one.
+TEST_F(ScenarioTest, UnreachableExhibitIsSkippedWithAnApology) {
+  ASSERT_NO_FATAL_FAILURE(loadKnowledgeBase("labEnvironmentKnowledgeBase.yaml"));
+  auto & knowledge = KnowledgeManager::instance();
+  const auto & stops = knowledge.getTourSpecification().locationIds;
+  ASSERT_GE(stops.size(), 3u);
+  const LocationInfo skipped = knowledge.getLocationInfo(stops[1]);
+  const std::string unreachable =
+    describeNavigation(skipped.robotPose.x, skipped.robotPose.y, skipped.robotPose.theta);
+  startWorld("yes please");
+  makeUnreachable(unreachable);
+  auto tree = treeFromFile(dataPath("lab_tour.xml"), tourBlackboard());
+  StatusRecorder recorder(tree);
+
+  ASSERT_EQ(tickUntilDone(tree, milliseconds(120000)), NodeStatus::SUCCESS)
+    << "Leaf nodes that failed:\n" << recorder.failedLeaves()
+    << "What the robot did:\n" << eventLog();
+
+  EXPECT_EQ(events(unreachable).size(), 3u) << "three attempts\n" << eventLog();
+  const Events speech = events("say");
+  EXPECT_EQ(
+    std::count(speech.begin(), speech.end(), say("exhibit_unreachable_speech")), 1)
+    << eventLog();
+  EXPECT_EQ(
+    std::count(speech.begin(), speech.end(), "say " + skipped.gestureMessage), 0)
+    << "the skipped exhibit is not described\n" << eventLog();
+  const LocationInfo next = knowledge.getLocationInfo(stops[2]);
+  EXPECT_EQ(
+    events(describeNavigation(next.robotPose.x, next.robotPose.y, next.robotPose.theta)).size(),
+    1u) << "the tour goes on\n" << eventLog();
+  EXPECT_TRUE(recorder.reached("CompletedTour", NodeStatus::SUCCESS));
+  EXPECT_FALSE(recorder.reached("DeclinedGoodbye", NodeStatus::SUCCESS));
+}
+
+// When the tour cannot start (the start position is unreachable) Pepper
+// apologises and says the short goodbye; the visitor did not decline.
+TEST_F(ScenarioTest, TourThatCannotStartEndsWithAnApology) {
+  ASSERT_NO_FATAL_FAILURE(loadKnowledgeBase("labEnvironmentKnowledgeBase.yaml"));
+  startWorld("yes please");
+  makeUnreachable(standby());
+  auto tree = treeFromFile(dataPath("lab_tour.xml"), tourBlackboard());
+  StatusRecorder recorder(tree);
+
+  ASSERT_EQ(tickUntilDone(tree, milliseconds(60000)), NodeStatus::SUCCESS)
+    << "Leaf nodes that failed:\n" << recorder.failedLeaves()
+    << "What the robot did:\n" << eventLog();
+
+  EXPECT_EQ(
+    events("say"),
+    (Events{say("welcome_speech"), tourQuestion(), say("tour_failed_speech"),
+      say("brief_goodbye_speech")}));
+  EXPECT_TRUE(recorder.reached("FailedGoodbye", NodeStatus::SUCCESS));
+  EXPECT_FALSE(recorder.reached("DeclinedGoodbye", NodeStatus::SUCCESS));
+}
+
+// After the goodbye the tree waits visitor_cooldown before it starts again, so
+// the visitor who just left is not greeted again at once.
+TEST_F(ScenarioTest, TourWaitsBeforeLookingForTheNextVisitor) {
+  ASSERT_NO_FATAL_FAILURE(loadKnowledgeBase("labEnvironmentKnowledgeBase.yaml"));
+  startWorld("no thank you");
+  auto tree = treeFromFile(dataPath("lab_tour.xml"), tourBlackboard(/*cooldown_msec=*/ 500));
+  StatusRecorder recorder(tree);
+
+  ASSERT_EQ(tickUntilDone(tree, milliseconds(60000)), NodeStatus::SUCCESS)
+    << "Leaf nodes that failed:\n" << recorder.failedLeaves()
+    << "What the robot did:\n" << eventLog();
+  EXPECT_TRUE(recorder.reached("Sleep", NodeStatus::RUNNING));
+  EXPECT_TRUE(recorder.reached("VisitorCooldown", NodeStatus::SUCCESS));
 }
 
 //=============================================================================

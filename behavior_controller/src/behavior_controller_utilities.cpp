@@ -49,6 +49,7 @@ bool ConfigManager::loadFromFile(const std::string & configPath)
     environmentKnowledgeBasePath = config["environment_knowledge_base"].as<std::string>(
       "labEnvironmentKnowledgeBase.yaml");
     verbose = config["verbose_mode"].as<bool>(false);
+    visitorCooldown = config["visitor_cooldown"].as<double>(15.0);
 
     if (verbose) {
       RCLCPP_INFO(
@@ -70,6 +71,7 @@ void ConfigManager::loadFromParameters(rclcpp_lifecycle::LifecycleNode & node)
   cultureKnowledgeBasePath = node.get_parameter("culture_knowledge_base").as_string();
   environmentKnowledgeBasePath = node.get_parameter("environment_knowledge_base").as_string();
   verbose = node.get_parameter("verbose_mode").as_bool();
+  visitorCooldown = node.get_parameter("visitor_cooldown").as_double();
 }
 
 std::string ConfigManager::getScenarioSpecification()           const
@@ -85,10 +87,23 @@ std::string ConfigManager::getEnvironmentKnowledgeBasePath()    const
 {
   return environmentKnowledgeBasePath;
 }
+double ConfigManager::getVisitorCooldown()                      const
+{
+  return visitorCooldown;
+}
 
 //=============================================================================
 // KnowledgeManager - Singleton for knowledge base management
 //=============================================================================
+
+void KnowledgeManager::readUtilityPhrases(const YAML::Node & knowledgeBase)
+{
+  if (knowledgeBase["utility_phrases"] && knowledgeBase["utility_phrases"]["english"]) {
+    for (const auto & phraseNode : knowledgeBase["utility_phrases"]["english"]) {
+      utilityPhrases[phraseNode.first.as<std::string>()] = phraseNode.second.as<std::string>();
+    }
+  }
+}
 
 KnowledgeManager & KnowledgeManager::instance()
 {
@@ -112,14 +127,14 @@ bool KnowledgeManager::loadFromPackage(const std::string & packagePath)
       RCLCPP_ERROR(logger, "Culture knowledge base file not found: %s", cultureFilePath.c_str());
       return false;
     }
+    // Loading again (another environment) must not keep the last one's data.
+    utilityPhrases.clear();
+    locations.clear();
+    tourSpec.reset();
+    loaded = false;
+
     YAML::Node cultureConfig = YAML::LoadFile(cultureFilePath);
-    if (cultureConfig["utility_phrases"] && cultureConfig["utility_phrases"]["english"]) {
-      for (const auto & phraseNode : cultureConfig["utility_phrases"]["english"]) {
-        std::string phraseId = phraseNode.first.as<std::string>();
-        std::string phrase = phraseNode.second.as<std::string>();
-        utilityPhrases[phraseId] = phrase;
-      }
-    }
+    readUtilityPhrases(cultureConfig);
 
     if (ConfigManager::instance().isVerbose()) {
       RCLCPP_INFO(logger, "Loading environment knowledge base from: %s", envFilePath.c_str());
@@ -130,6 +145,9 @@ bool KnowledgeManager::loadFromPackage(const std::string & packagePath)
     }
 
     YAML::Node envConfig = YAML::LoadFile(envFilePath);
+    // The environment's own phrases (its welcome, its tour question) replace
+    // the culture knowledge base's defaults.
+    readUtilityPhrases(envConfig);
 
     // locations is required (guaranteed present by validator)
     for (const auto & locationNode : envConfig["locations"]) {

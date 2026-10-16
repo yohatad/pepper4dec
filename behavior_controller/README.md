@@ -44,7 +44,8 @@ Managed via `config/behavior_controller_configuration.yaml`:
 |-----------|-------------|---------------|
 | `scenario_specification` | XML behavior tree file name (without `.xml`) in `data/` | `asr_cm_tts_pipeline` |
 | `culture_knowledge_base` | YAML file with utility phrases, each put on the BT blackboard under its key (`{welcome_speech}`, …) | `cultureKnowledgeBase.yaml` |
-| `environment_knowledge_base` | YAML file with locations, tour stops, and gesture targets | `decEnvironmentKnowledgeBase_short.yaml` |
+| `environment_knowledge_base` | YAML file with locations, tour stops, and gesture targets; its own `utility_phrases` (the welcome, the tour question) replace the culture file's | `decEnvironmentKnowledgeBase_short.yaml` |
+| `visitor_cooldown` | Seconds the tours wait after a goodbye before looking for the next visitor (0: at once) | `15.0` |
 | `verbose_mode` | Print per-tick action goals, feedback, and results | `true` |
 
 ## 🚀 Running
@@ -105,7 +106,7 @@ All nodes registered in the factory:
 | `IsMutualGazeDiscovered` | `/face_detection/data` topic | `timeout` in |
 | `ListenForSpeech` | `/speech_event/text` topic | `transcription` out |
 | `GetVisitorResponse` | `/speech_event/text` topic | `timeout` in; `visitor_response` out |
-| `IsVisitorResponseYes` | `dec_interfaces::action::ConversationManager` | `visitor_response` in |
+| `IsVisitorResponseYes` | `dec_interfaces::action::ConversationManager` | `visitor_response` in; `answer` out: the classified answer (`yes`, `no`, anything else when unclear) |
 | `CheckBlackboard` | — (pure blackboard) | `key`, `expected` in |
 | `SetBlackboardValue` | — (pure blackboard) | `key`, `value` in |
 | `RetrieveListOfExhibits` | — (knowledge base) | `exhibit_list` out: the tour's location IDs in visit order |

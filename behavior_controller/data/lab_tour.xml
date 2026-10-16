@@ -13,32 +13,44 @@
   Either launch speech_event with action_server:=false for tour runs, or
   replace GetVisitorResponse with the SpeechRecognition action node (as
   asr_cm_tts_pipeline.xml does).
+
+  lab_tour.xml and dec_Tour.xml are the same tree: what differs between the
+  lab and the DEC (exhibits, welcome, tour question) is in the environment
+  knowledge base.
 -->
 <root BTCPP_format="4" main_tree_to_execute="TourGuide">
-  
+
   <!-- Main Tour Guide Behavior Tree -->
   <BehaviorTree ID="TourGuide">
     <!-- _autoremap="true" on every SubTree: subtrees share this tree's
          blackboard, so SelectExhibit's {exhibit_goal_*} reach
-         NavigateToLocation, {tour_declined} reaches EndTour, and the
-         caller's {*_speech} phrases reach every subtree. Without it each
-         SubTree gets an empty blackboard of its own. -->
+         NavigateToLocation, {tour_declined} and {tour_failed} reach EndTour,
+         and the caller's {*_speech} phrases reach every subtree. Without it
+         each SubTree gets an empty blackboard of its own. -->
     <Sequence name="MainTourSequence">
-      <!-- The node re-ticks the tree after each tour: forget the last answer -->
+      <!-- The node re-ticks the tree after each tour: forget the last one -->
       <Action ID="SetBlackboardValue" key="tour_declined" value="false"/>
+      <Action ID="SetBlackboardValue" key="tour_failed" value="false"/>
       <SubTree ID="DetectVisitor" _autoremap="true"/>
       <SubTree ID="EngageVisitor" _autoremap="true"/>
-      
-      <!-- Handle visitor response - if they decline, skip to EndTour gracefully -->
+
+      <!-- A visitor who declines, or does not answer, skips the tour
+           (QueryVisitorResponse sets tour_declined). A tour that cannot go
+           on ends with an apology (tour_failed). Either way EndTour runs. -->
       <Fallback name="TourDecision">
         <Sequence name="AcceptedTour">
           <SubTree ID="QueryVisitorResponse" _autoremap="true"/>
-          <SubTree ID="VisitExhibit" _autoremap="true"/>
+          <Fallback name="TourOrApology">
+            <SubTree ID="VisitExhibit" _autoremap="true"/>
+            <Sequence name="TourFailed">
+              <Action ID="SetBlackboardValue" key="tour_failed" value="true"/>
+              <Action ID="SpeechWithFeedback" say="{tour_failed_speech}"/>
+            </Sequence>
+          </Fallback>
         </Sequence>
-        <!-- If QueryVisitorResponse fails (visitor declined), we still end gracefully -->
-        <Action ID="SetBlackboardValue" key="tour_declined" value="true"/>
+        <AlwaysSuccess/>
       </Fallback>
-      
+
       <SubTree ID="EndTour" _autoremap="true"/>
     </Sequence>
   </BehaviorTree>
@@ -81,31 +93,52 @@
           </Fallback>
 
           <!-- Query for tour -->
-          <Action ID="SpeechWithFeedback" say="Would you like me to guide you through the Upanzi lab?"/>
+          <Action ID="SpeechWithFeedback" say="{query_tour_speech}"/>
         </Sequence>
       </Parallel>
     </Sequence>
   </BehaviorTree>
 
-  <!-- III. Query Visitor Response -->
+  <!-- III. Query Visitor Response: SUCCESS when the visitor says yes. An
+       unclear answer gets the question once more; "no", silence or a second
+       unclear answer declines (sets tour_declined, FAILURE). -->
   <BehaviorTree ID="QueryVisitorResponse">
     <Sequence name="QueryResponseSequence">
-      <!-- ASR only — no tablet available -->
-      <Action ID="SetSpeechListening" enabled="true"/>
-      <Action ID="GetVisitorResponse" timeout="10.0" visitor_response="{visitor_response}"/>
-      <Action ID="SetSpeechListening" enabled="false"/>
-      
-      <!-- Process response -->
-      <IfThenElse name="ProcessResponse">
-        <Action ID="IsVisitorResponseYes" visitor_response="{visitor_response}"/>
-        <!-- THEN: Visitor wants tour - return SUCCESS -->
-        <Action ID="LogEvent" level="info" message="Visitor accepted tour"/>
-        <!-- ELSE: Visitor declined - say goodbye phrase and return FAILURE -->
+      <Action ID="SetBlackboardValue" key="visitor_answer" value=""/>
+      <Fallback name="AnswerOrAskAgain">
+        <SubTree ID="ListenForYes" _autoremap="true"/>
+        <Sequence name="AskAgainIfUnclear">
+          <ScriptCondition code="visitor_answer != '' &amp;&amp; visitor_answer != 'no'"/>
+          <Action ID="SpeechWithFeedback" say="{repeat_question_speech}"/>
+          <Action ID="SetBlackboardValue" key="visitor_answer" value=""/>
+          <SubTree ID="ListenForYes" _autoremap="true"/>
+        </Sequence>
         <Sequence name="DeclineTour">
+          <Action ID="SetBlackboardValue" key="tour_declined" value="true"/>
           <Action ID="SpeechWithFeedback" say="{maybe_another_time_speech}"/>
           <AlwaysFailure/>
         </Sequence>
-      </IfThenElse>
+      </Fallback>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- Listens for one answer (ASR only, no tablet available). SUCCESS when it
+       is yes. {visitor_answer} holds the classified answer: "yes", "no",
+       anything else when unclear, empty when nothing was heard. The
+       microphone is switched off again on every path. -->
+  <BehaviorTree ID="ListenForYes">
+    <Sequence name="ListenOnce">
+      <Action ID="SetSpeechListening" enabled="true"/>
+      <Fallback name="HeardSomething">
+        <Action ID="GetVisitorResponse" timeout="10.0" visitor_response="{visitor_response}"/>
+        <Sequence name="HeardNothing">
+          <Action ID="SetSpeechListening" enabled="false"/>
+          <AlwaysFailure/>
+        </Sequence>
+      </Fallback>
+      <Action ID="SetSpeechListening" enabled="false"/>
+      <Action ID="IsVisitorResponseYes" visitor_response="{visitor_response}" answer="{visitor_answer}"/>
+      <Action ID="LogEvent" level="info" message="Visitor accepted tour"/>
     </Sequence>
   </BehaviorTree>
 
@@ -115,53 +148,62 @@
       <Action ID="RetrieveListOfExhibits" exhibit_list="{exhibit_queue}"/>
       <!-- Return to starting position before beginning the tour loop -->
       <Action ID="Navigate" goal_x="4.0" goal_y="6.8" goal_theta="1.5708"/>
-      
+
       <!-- Visit exhibits until the queue is empty. WhileDoElse is not a loop
            (it ticks its branch once and returns), so KeepRunningUntilFailure
-           repeats the visit. It stops at the first FAILURE: either the queue
-           ran out (done), or a visit failed and left its exhibit queued. -->
+           repeats the visit. An exhibit Pepper cannot get to (or present) is
+           skipped with an apology, so the loop stops only when the queue ran
+           out. -->
       <Fallback name="ExhibitLoop">
         <KeepRunningUntilFailure>
           <Sequence name="NextExhibit">
             <Condition ID="IsListWithExhibit"/>
-            <Sequence name="SingleExhibitVisit">
-              <!-- Select and navigate to exhibit -->
-              <Action ID="SelectExhibit"
-                      exhibit_speech="{exhibit_speech}"
-                      exhibit_goal_x="{exhibit_goal_x}"
-                      exhibit_goal_y="{exhibit_goal_y}"
-                      exhibit_goal_theta="{exhibit_goal_theta}"
-                      exhibit_location_x="{exhibit_location_x}"
-                      exhibit_location_y="{exhibit_location_y}"
-                      exhibit_location_z="{exhibit_location_z}"/>
-              <Action ID="SpeechWithFeedback" say="{follow_me_speech}"/>
-          
-              <!-- Navigate to location with recovery -->
-              <SubTree ID="NavigateToLocation" _autoremap="true"/>
-          
-              <!-- Present exhibit -->
-              <Sequence name="PresentExhibit">
-                <Action ID="SetOvertAttention" enabled="true"/>
+            <Fallback name="VisitOrSkip">
+              <Sequence name="SingleExhibitVisit">
+                <!-- Select and navigate to exhibit -->
+                <Action ID="SelectExhibit"
+                        exhibit_speech="{exhibit_speech}"
+                        exhibit_goal_x="{exhibit_goal_x}"
+                        exhibit_goal_y="{exhibit_goal_y}"
+                        exhibit_goal_theta="{exhibit_goal_theta}"
+                        exhibit_location_x="{exhibit_location_x}"
+                        exhibit_location_y="{exhibit_location_y}"
+                        exhibit_location_z="{exhibit_location_z}"/>
+                <Action ID="SpeechWithFeedback" say="{follow_me_speech}"/>
 
-                <!-- Speak description and point simultaneously. An exhibit
-                     with no gesture_message_english is pointed at in silence:
-                     the speech is skipped, and success_count="-1" (all
-                     children) counts a skipped child as done. -->
-                <Parallel success_count="-1" failure_count="1">
-                  <Action ID="SpeechWithFeedback" say="{exhibit_speech}"
-                          _skipIf="exhibit_speech == ''"/>
-                  <Action ID="Gesture"
-                          gesture_type="deictic"
-                          location_x="{exhibit_location_x}"
-                          location_y="{exhibit_location_y}"
-                          location_z="{exhibit_location_z}"
-                          gesture_duration="3000"/>
-                </Parallel>
+                <!-- Navigate to location with recovery -->
+                <SubTree ID="NavigateToLocation" _autoremap="true"/>
+
+                <!-- Present exhibit -->
+                <Sequence name="PresentExhibit">
+                  <Action ID="SetOvertAttention" enabled="true"/>
+
+                  <!-- Speak the description and point at the exhibit together.
+                       A stop with no gesture_message_english is pointed at in
+                       silence; one with no target (0, 0, 0), such as the start
+                       and end stops, is described without pointing. A skipped
+                       child counts as done (success_count="-1": all children). -->
+                  <Parallel success_count="-1" failure_count="1">
+                    <Action ID="SpeechWithFeedback" say="{exhibit_speech}"
+                            _skipIf="exhibit_speech == ''"/>
+                    <Action ID="Gesture"
+                            gesture_type="deictic"
+                            location_x="{exhibit_location_x}"
+                            location_y="{exhibit_location_y}"
+                            location_z="{exhibit_location_z}"
+                            gesture_duration="3000"
+                            _skipIf="exhibit_location_x == 0 &amp;&amp; exhibit_location_y == 0 &amp;&amp; exhibit_location_z == 0"/>
+                  </Parallel>
+                </Sequence>
+
+                <!-- Mark exhibit as visited -->
+                <Action ID="PopExhibitFromList" exhibit_list="{exhibit_queue}"/>
               </Sequence>
-          
-              <!-- Mark exhibit as visited -->
-              <Action ID="PopExhibitFromList" exhibit_list="{exhibit_queue}"/>
-            </Sequence>
+              <Sequence name="SkipExhibit">
+                <Action ID="SpeechWithFeedback" say="{exhibit_unreachable_speech}"/>
+                <Action ID="PopExhibitFromList" exhibit_list="{exhibit_queue}"/>
+              </Sequence>
+            </Fallback>
           </Sequence>
         </KeepRunningUntilFailure>
         <Sequence name="AllExhibitsVisited">
@@ -177,23 +219,37 @@
   <!-- V. End Tour -->
   <BehaviorTree ID="EndTour">
     <Sequence name="EndTourSequence">
-      <!-- Different goodbye based on whether tour was completed or declined -->
+      <!-- A completed tour has already said goodbye at its last stop, so it
+           only waves. A declined or failed one gets the short goodbye. -->
       <Fallback name="SelectGoodbye">
         <Sequence name="DeclinedGoodbye">
           <Condition ID="CheckBlackboard" key="tour_declined" expected="true"/>
           <Action ID="SpeechWithFeedback" say="{brief_goodbye_speech}"/>
         </Sequence>
-        <Sequence name="FullGoodbye">
-          <Action ID="SpeechWithFeedback" say="{goodbye_speech}"/>
+        <Sequence name="FailedGoodbye">
+          <Condition ID="CheckBlackboard" key="tour_failed" expected="true"/>
+          <Action ID="SpeechWithFeedback" say="{brief_goodbye_speech}"/>
         </Sequence>
+        <Action ID="LogEvent" name="CompletedTour" level="info" message="Tour completed"/>
       </Fallback>
-      
+
       <Action ID="Gesture"
               gesture_type="iconic"
               gesture_name="wave"
               gesture_duration="2000"/>
-      <!-- Return to standby position -->
-      <Action ID="Navigate" goal_x="4.0" goal_y="6.8" goal_theta="1.5708" />
+      <!-- Return to standby position; failing to must not skip the pause -->
+      <Fallback name="ReturnToStandby">
+        <Action ID="Navigate" goal_x="4.0" goal_y="6.8" goal_theta="1.5708"/>
+        <Action ID="LogEvent" level="warn" message="Could not return to the standby position"/>
+      </Fallback>
+
+      <!-- The tree starts again at once: give the visitor time to walk away,
+           or Pepper greets them again (visitor_cooldown, in the configuration) -->
+      <Parallel success_count="1" failure_count="1" name="VisitorCooldown"
+                _skipIf="visitor_cooldown_msec == 0">
+        <Action ID="AnimateBehavior" behavior_type="All" selected_range="0.5" duration_seconds="0"/>
+        <Sleep msec="{visitor_cooldown_msec}"/>
+      </Parallel>
     </Sequence>
   </BehaviorTree>
 
@@ -322,6 +378,7 @@
 
     <Action ID="IsVisitorResponseYes">
       <input_port name="visitor_response" default="{visitor_response}">Raw ASR utterance classified by ConversationManager</input_port>
+      <output_port name="answer" default="{visitor_answer}">Classified answer: yes, no, anything else (unclear), or empty</output_port>
     </Action>
 
     <!-- Conditions -->

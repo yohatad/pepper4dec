@@ -340,17 +340,23 @@ Use the built-in `CheckBlackboard` condition:
 
 The node puts every phrase under `utility_phrases.english` in
 `cultureKnowledgeBase.yaml` on the root blackboard under its key, so adding a
-phrase there makes it available as `{key}` in any scenario.
+phrase there makes it available as `{key}` in any scenario. The environment
+knowledge base may have its own `utility_phrases`, which replace the culture
+file's: the lab and the DEC set their own `welcome_speech` and
+`query_tour_speech`. The node also sets `visitor_cooldown_msec` (unsigned)
+from the `visitor_cooldown` parameter.
 
 | Key | Type | Set By | Used By |
 |-----|------|--------|---------|
-| `welcome_speech` | string | `cultureKnowledgeBase.yaml` `utility_phrases` | `SpeechWithFeedback` |
-| `query_tour_speech` | string | `cultureKnowledgeBase.yaml` `utility_phrases` | `SpeechWithFeedback` |
+| `welcome_speech` | string | `utility_phrases` (the environment's, else the culture's) | `SpeechWithFeedback` |
+| `query_tour_speech` | string | `utility_phrases` (the environment's, else the culture's) | `SpeechWithFeedback` |
+| `repeat_question_speech` | string | `cultureKnowledgeBase.yaml` `utility_phrases` | `SpeechWithFeedback` |
+| `exhibit_unreachable_speech` | string | `cultureKnowledgeBase.yaml` `utility_phrases` | `SpeechWithFeedback` |
+| `tour_failed_speech` | string | `cultureKnowledgeBase.yaml` `utility_phrases` | `SpeechWithFeedback` |
 | `press_yes_no_speech` | string | `cultureKnowledgeBase.yaml` `utility_phrases` | `SpeechWithFeedback` |
 | `maybe_another_time_speech` | string | `cultureKnowledgeBase.yaml` `utility_phrases` | `SpeechWithFeedback` |
 | `follow_me_speech` | string | `cultureKnowledgeBase.yaml` `utility_phrases` | `SpeechWithFeedback` |
 | `brief_goodbye_speech` | string | `cultureKnowledgeBase.yaml` `utility_phrases` | `SpeechWithFeedback` |
-| `goodbye_speech` | string | `cultureKnowledgeBase.yaml` `utility_phrases` | `SpeechWithFeedback` |
 | `exhibit_goal_x` | double | `SelectExhibit` | `Navigate` |
 | `exhibit_goal_y` | double | `SelectExhibit` | `Navigate` |
 | `exhibit_goal_theta` | double | `SelectExhibit` (radians; the KB gives degrees) | `Navigate` |
@@ -358,6 +364,9 @@ phrase there makes it available as `{key}` in any scenario.
 | `exhibit_location_y` | double | `SelectExhibit` | `Gesture` |
 | `exhibit_location_z` | double | `SelectExhibit` | `Gesture` |
 | `tour_declined` | string | `SetBlackboardValue` | `CheckBlackboard` |
+| `tour_failed` | string | `SetBlackboardValue` | `CheckBlackboard` |
+| `visitor_answer` | string | `IsVisitorResponseYes` (`answer`) | `ScriptCondition` |
+| `visitor_cooldown_msec` | unsigned | the node (`visitor_cooldown` parameter) | `Sleep` |
 
 ---
 

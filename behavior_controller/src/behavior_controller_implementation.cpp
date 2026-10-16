@@ -1662,6 +1662,9 @@ BT::PortsList IsVisitorResponseYes::providedPorts()
     BT::InputPort<std::string>(
       "visitor_response", "{visitor_response}",
       "Raw ASR utterance written by GetVisitorResponse"),
+    BT::OutputPort<std::string>(
+      "answer", "{visitor_answer}",
+      "The classified answer, lowercase: yes, no, anything else (unclear), or empty"),
   };
 }
 
@@ -1697,10 +1700,12 @@ BT::NodeStatus IsVisitorResponseYes::onResultReceived(const WrappedResult & resu
     RCLCPP_WARN(
       rclcpp::get_logger("behavior_controller"),
       "[IsVisitorResponseYes] ConversationManager action failed");
+    setOutput("answer", std::string{});
     return BT::NodeStatus::FAILURE;
   }
 
   const std::string answer = TextUtils::toLowerCase(result.result->response);
+  setOutput("answer", answer);
   const bool yes = (answer == "yes");
 
   RCLCPP_INFO(
@@ -1787,6 +1792,10 @@ BT::Blackboard::Ptr createRootBlackboard()
   for (const auto & [phraseId, phrase] : KnowledgeManager::instance().getUtilityPhrases()) {
     blackboard->set(phraseId, phrase);
   }
+  // The tours' Sleep between visitors (visitor_cooldown, in seconds).
+  const double cooldown = std::max(0.0, ConfigManager::instance().getVisitorCooldown());
+  blackboard->set<unsigned>(
+    "visitor_cooldown_msec", static_cast<unsigned>(std::lround(cooldown * 1000.0)));
   return blackboard;
 }
 
