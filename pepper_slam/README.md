@@ -159,9 +159,12 @@ ros2 bag play <bag> --clock --read-ahead-queue-size 2000
 - **Rig transforms:** every wrapper defaults `publisher:=none`, which suits
   bags recorded with `record_qos.yaml`. For `slam_recording*` and
   `slam_bench_run*` (no `/tf_static`), pass `publisher:=urdf scope:=all`.
-- **IMU:** the wrappers use the RealSense IMU. To try the L2's own, pass both
-  `config_file:=l2.yaml` and `lidar_imu_frame:=l2lidar_frame_imu`; with only
-  the first, `odom -> base_footprint` never closes.
+- **IMU:** the wrappers use the RealSense IMU, and that is now the only
+  option: `l2.yaml`, which drove the estimator from the L2's own IMU, was
+  removed after it diverged on `slam_20260823_aligned` (map overlap 1.00 ->
+  0.29, health warnings that the estimate was diverging). It also needed
+  `lidar_imu_frame:=l2lidar_frame_imu` passed alongside it, or
+  `odom -> base_footprint` never closed.
 - **Arguments:** `--show-args` lists every argument in the include tree, far
   more than a file honours; read the "ARGUMENTS THIS FILE HONOURS" block in its
   header instead.
