@@ -8,6 +8,8 @@
  *   1b. Side-body cut  -- drop close returns OUTSIDE the forward cone, where
  *                         the L2 sees Pepper's own flanks (off by default;
  *                         needs TF).
+ *   1c. Body-box cut   -- drop returns inside boxes on Pepper's own outline in
+ *                         base_footprint (off by default; needs TF).
  *   2. Outlier removal -- drop isolated spike returns (radius outlier filter).
  *   3. Ground plane    -- RANSAC-fit and remove the near-z=0 plane in
  *                         base_footprint (off by default; needs TF).
@@ -80,6 +82,30 @@ public:
     self_cut_range_ = declare_parameter("self_cut_range", 0.0);           // m
     self_cut_angle_ = declare_parameter("self_cut_angle", 25.0);          // deg, half-width
     self_cut_angle_ *= M_PI / 180.0;
+    // Body-box cut. OFF by default (empty). Flat list, six values per box:
+    // [x_min, x_max, y_min, y_max, z_min, z_max] in ground_frame. For returns
+    // off Pepper's own body that no range cut can reach (e.g. its front at hip
+    // height, ~0.5 m from the lidar). Keep every box inside the footprint, or
+    // it can hide a real obstacle.
+    const auto boxes = declare_parameter<std::vector<double>>(
+      "body_boxes", std::vector<double>{});
+    if (boxes.size() % 6 != 0) {
+      RCLCPP_ERROR(
+        get_logger(), "body_boxes needs 6 values per box (got %zu); body-box cut disabled.",
+        boxes.size());
+    } else {
+      for (std::size_t i = 0; i < boxes.size(); i += 6) {
+        const pepper_slam::Box b{
+          boxes[i], boxes[i + 1], boxes[i + 2], boxes[i + 3], boxes[i + 4], boxes[i + 5]};
+        if (b.x_min > b.x_max || b.y_min > b.y_max || b.z_min > b.z_max) {
+          RCLCPP_ERROR(
+            get_logger(), "body_boxes box %zu has min > max; body-box cut disabled.", i / 6);
+          body_boxes_.clear();
+          break;
+        }
+        body_boxes_.push_back(b);
+      }
+    }
 
     remove_ground_ = declare_parameter("remove_ground_plane", false);
     // Body frame for both the side-body cut's bearing and the ground fit.
@@ -101,7 +127,7 @@ public:
       ror_min_neighbors_ = 0;
     }
 
-    if (remove_ground_ || self_cut_range_ > 0.0) {
+    if (remove_ground_ || self_cut_range_ > 0.0 || !body_boxes_.empty()) {
       tf_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
       // Constructed on this node (not a private one) so a launch-file
       // /tf -> /tf_nav remap reaches it.
@@ -139,6 +165,11 @@ public:
     } else {
       summary << ", side-body cut off";
     }
+    if (!body_boxes_.empty()) {
+      summary << ", body-box cut (" << body_boxes_.size() << " boxes in " << ground_frame_ << ")";
+    } else {
+      summary << ", body-box cut off";
+    }
     if (remove_ground_) {
       summary << ", ground-plane removal vs " << ground_frame_;
     } else {
@@ -162,7 +193,9 @@ private:
         points, pepper_slam::radiusOutlierKeep(points, ror_min_neighbors_, ror_radius_));
     }
     // One transform serves both body-frame filters.
-    if ((self_cut_range_ > 0.0 || remove_ground_) && !points.empty()) {
+    if ((self_cut_range_ > 0.0 || !body_boxes_.empty() || remove_ground_) &&
+      !points.empty())
+    {
       std::vector<Point> in_body;
       Point sensor{0.0, 0.0, 0.0};
       if (toBody(points, *msg, in_body, sensor)) {
@@ -175,6 +208,16 @@ private:
           RCLCPP_INFO_THROTTLE(
             get_logger(), *get_clock(), 2000,
             "side-body cut: %zu -> %zu pts (%zu dropped as own body)",
+            before, points.size(), before - points.size());
+        }
+        if (!body_boxes_.empty()) {
+          const std::size_t before = points.size();
+          const auto keep = pepper_slam::bodyBoxKeep(in_body, body_boxes_);
+          points = pepper_slam::applyMask(points, keep);
+          in_body = pepper_slam::applyMask(in_body, keep);
+          RCLCPP_INFO_THROTTLE(
+            get_logger(), *get_clock(), 2000,
+            "body-box cut: %zu -> %zu pts (%zu dropped as own body)",
             before, points.size(), before - points.size());
         }
         if (remove_ground_ && points.size() >= 3) {
@@ -287,6 +330,7 @@ private:
   double ror_radius_;
   double self_cut_range_;
   double self_cut_angle_;
+  std::vector<pepper_slam::Box> body_boxes_;
   bool remove_ground_;
   std::string ground_frame_;
   pepper_slam::GroundPlaneParams ground_;

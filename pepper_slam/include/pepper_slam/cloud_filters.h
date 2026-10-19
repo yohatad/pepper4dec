@@ -5,6 +5,7 @@
  *
  *   rangeKeep          -- drop the robot's own body (and optionally far returns)
  *   sideBodyKeep       -- drop close returns outside the forward cone
+ *   bodyBoxKeep        -- drop returns inside boxes on the robot's own outline
  *   radiusOutlierKeep  -- drop isolated spike returns
  *   groundPlaneKeep    -- RANSAC-fit and drop the near-z=0 floor plane
  *
@@ -50,6 +51,21 @@ KeepMask rangeKeep(const std::vector<Point> & points, double min_range, double m
 /// must be in the body frame. cut_range <= 0 keeps everything.
 KeepMask sideBodyKeep(
   const std::vector<Point> & points, const Point & sensor, double cut_range, double cut_angle);
+
+/// Axis-aligned box in the body frame (m), bounds inclusive.
+struct Box
+{
+  double x_min;
+  double x_max;
+  double y_min;
+  double y_max;
+  double z_min;
+  double z_max;
+};
+
+/// Keep points outside every box. points must be in the body frame. No
+/// boxes keeps everything.
+KeepMask bodyBoxKeep(const std::vector<Point> & points, const std::vector<Box> & boxes);
 
 /// Keep points with at least min_neighbors other points within radius.
 /// min_neighbors <= 0, or a cloud of at most min_neighbors points, keeps all.

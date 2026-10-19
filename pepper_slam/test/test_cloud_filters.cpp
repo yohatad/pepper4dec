@@ -116,6 +116,33 @@ TEST(SideBodyKeep, RangeAndBearingAreMeasuredFromTheSensor)
   // Same points measured from the body origin are far enough to survive.
   EXPECT_EQ(pepper_slam::sideBodyKeep(pts, {0.0, 0.0, 0.0}, 0.35, cone), (KeepMask{1, 1}));
 }
+TEST(BodyBoxKeep, NoBoxesKeepsEverything)
+{
+  const std::vector<Point> pts = {{0.18, 0.0, 0.75}, {0.30, 0.0, 0.50}};
+  EXPECT_EQ(pepper_slam::bodyBoxKeep(pts, {}), (KeepMask{1, 1}));
+}
+TEST(BodyBoxKeep, CutsInsideKeepsOutsideBoundsInclusive)
+{
+  // Pepper's front at hip height, as in the launch files.
+  const std::vector<pepper_slam::Box> boxes = {{0.10, 0.22, -0.13, 0.13, 0.60, 1.00}};
+  const std::vector<Point> pts = {
+    {0.18, 0.00, 0.75},    // the hip returns -- cut
+    {0.18, -0.08, 0.83},   // -- cut
+    {0.22, 0.13, 0.60},    // on the corner -- inclusive, cut
+    {0.30, 0.00, 0.75},    // just ahead of the body -- kept
+    {0.18, 0.00, 0.50},    // below the box -- kept
+    {0.18, 0.14, 0.75},    // beside the box -- kept
+    {0.18, 0.00, 1.01},    // above the box -- kept
+  };
+  EXPECT_EQ(pepper_slam::bodyBoxKeep(pts, boxes), (KeepMask{0, 0, 0, 1, 1, 1, 1}));
+}
+TEST(BodyBoxKeep, AnyBoxCuts)
+{
+  const std::vector<pepper_slam::Box> boxes = {
+    {0.0, 0.1, 0.0, 0.1, 0.0, 0.1}, {1.0, 1.1, 1.0, 1.1, 1.0, 1.1}};
+  const std::vector<Point> pts = {{0.05, 0.05, 0.05}, {1.05, 1.05, 1.05}, {0.5, 0.5, 0.5}};
+  EXPECT_EQ(pepper_slam::bodyBoxKeep(pts, boxes), (KeepMask{0, 0, 1}));
+}
 TEST(RadiusOutlierKeep, DisabledOrTinyCloudKeepsEverything)
 {
   const std::vector<Point> pts = {{0.0, 0.0, 0.0}, {10.0, 0.0, 0.0}, {20.0, 0.0, 0.0}};

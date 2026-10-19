@@ -52,6 +52,23 @@ KeepMask sideBodyKeep(
   return keep;
 }
 
+KeepMask bodyBoxKeep(const std::vector<Point> & points, const std::vector<Box> & boxes)
+{
+  KeepMask keep(points.size(), 1);
+  for (std::size_t i = 0; i < points.size(); ++i) {
+    const Point & p = points[i];
+    for (const Box & b : boxes) {
+      if (p.x >= b.x_min && p.x <= b.x_max && p.y >= b.y_min && p.y <= b.y_max &&
+        p.z >= b.z_min && p.z <= b.z_max)
+      {
+        keep[i] = 0;
+        break;
+      }
+    }
+  }
+  return keep;
+}
+
 KeepMask radiusOutlierKeep(const std::vector<Point> & points, int min_neighbors, double radius)
 {
   const std::size_t n = points.size();
