@@ -374,20 +374,6 @@ def generate_launch_description():
         remappings=[('/tf', '/tf_nav')],
     )
 
-    # Puts base_footprint <- SonarFront_frame on /tf_nav. Without it the
-    # monitor's sonar_front source cannot transform and is silently inert.
-    sonar_tf_bridge = Node(
-        package='pepper_navigation',
-        executable='sonar_tf_bridge.py',
-        name='sonar_tf_bridge',
-        output='screen',
-        arguments=['--ros-args', '--log-level', log_level],
-        parameters=[{
-            'use_sim_time': use_sim_time,
-            'source_frames': ['SonarFront_frame'],
-        }],
-    )
-
     # Post-contact gate. The collision monitor is preventive and isotropic --
     # its actions only zero or scale the whole command -- so it cannot block
     # forward while leaving the reverse that BackUp needs to escape.
@@ -604,7 +590,6 @@ def generate_launch_description():
         bt_navigator,
         points_safety_filter,
         collision_monitor,
-        sonar_tf_bridge,
         bumper_guard,
         local_voxel_markers,
         global_voxel_markers,

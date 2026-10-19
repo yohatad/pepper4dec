@@ -399,7 +399,7 @@ collision_monitor:
       visualize: True
       polygon_pub_topic: "polygon_slowdown"
       enabled: True
-    observation_sources: ["pointcloud", "laser", "sonar_front"]
+    observation_sources: ["pointcloud"]
     pointcloud:
       type: "pointcloud"
       topic: "/points_safety"   # L2 minus its own housing (points_safety_filter)
@@ -407,19 +407,3 @@ collision_monitor:
       min_height: 0.22
       max_height: 1.80
       enabled: True
-    laser:
-      # Pepper's 3 base laser boards as one 240 deg scan, already in
-      # base_footprint. Covers the flanks self_cut_range blinds, and low.
-      type: "scan"
-      topic: "/laser"
-      # OFF until measured on the robot: no bag carries /laser (the sensor is
-      # disabled in boot_config), and the boards can read the floor.
-      enabled: False
-    sonar_front:
-      # Front only: the back sonar is physically obstructed on this robot.
-      # Needs sonar_tf_bridge for base_footprint <- SonarFront_frame.
-      type: "range"
-      topic: "/sonar/front"
-      # OFF until measured on the robot: no bag carries /sonar/front, and its
-      # 0.25 m dead zone sits inside the 0.40 m stop wedge.
-      enabled: False
