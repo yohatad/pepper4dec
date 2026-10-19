@@ -179,6 +179,11 @@ if(BUILD_TESTING)
   ament_add_gtest(test_bumper_latch test/test_bumper_latch.cpp)
   target_include_directories(test_bumper_latch PRIVATE include)
 
+  # The chain's only fail-safe on sensor loss: Humble's collision_monitor
+  # holds its last verdict when a source goes stale (MEASURED, see the header).
+  ament_add_gtest(test_topic_liveness test/test_topic_liveness.cpp)
+  target_include_directories(test_topic_liveness PRIVATE include)
+
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_shared_nav2_params
     "${CMAKE_CURRENT_SOURCE_DIR}/test/test_shared_nav2_params.py")

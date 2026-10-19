@@ -78,18 +78,41 @@ colcon test-result
 
 ### Recording for future bag tests
 
-`/laser`, `/sonar/front` and `/bumper` are **absent from every existing bag**
-because all three are `"enabled": false` in naoqi's `boot_config.json`, so
-B9-B11 below are robot-only by construction, not by choice. Add these to the
-record list on the next session and they become bag-testable:
+Only `/laser`, `/sonar/front` and `/bumper` are absent from the existing bags,
+because those three are `"enabled": false` in naoqi's `boot_config.json`. Add
+them to the record list on the next session:
 
-    /laser /sonar/front /bumper /joint_states
+    /laser /sonar/front /bumper
 
-`/joint_states` is not optional for the bumper: it is `bumper_guard`'s liveness
-witness, and without it every replay reads as blind and holds its latches.
-A bag that carries `/tf` with the body tree also lets `sonar_tf_bridge` be
-replayed; the sensor-rig launch alone does not publish `SonarFront_frame`
-(see `pepper_sensor_tf.launch.py` -- it deliberately omits `pepper.urdf`).
+Everything else these tests need is already in `slam_20260823_aligned`:
+`/joint_states` (76668 msgs -- `bumper_guard`'s liveness witness), `/cmd_vel`,
+`/robot_description`, and `/tf` carrying naoqi_driver's **complete 83-frame
+body tree** rooted at `base_footprint`:
+
+    base_footprint -> base_link -> torso -> Hip -> Pelvis -> Tibia
+        -> SonarFront_frame, BumperFL/FR/B_frame, ShovelLaser_frame, ...
+
+So `sonar_tf_bridge` is testable against the real dynamic chain on replay, and
+the gate's liveness is real rather than synthetic. Only the sensor READINGS
+have to be injected. Note the sensor-rig launch does not publish these frames
+(`pepper_sensor_tf.launch.py` deliberately omits `pepper.urdf`) -- they come
+from the bag's own `/tf`, or from the driver on the robot.
+
+### Three things that bite on replay
+
+**The monitor only evaluates when `cmd_vel_in` arrives.** It is driven by the
+`cmd_vel_raw` callback, not a timer: MEASURED 1 output in 4 s with no
+`cmd_vel_raw` against 80 with it. And the bag's own recorded `/cmd_vel` is only
+**0.633 Hz**, far too sparse to drive it -- inject `cmd_vel_raw` at the
+controller's 20 Hz instead of replaying it.
+
+**A disabled source still logs `Creating Scan` / `Creating Range`.** `enabled`
+gates only whether the data is used, so the log cannot tell you which sources
+are live. Check `ros2 param get` instead.
+
+**`cloud_range_filter` takes `input_topic` / `output_topic` as PARAMETERS**, not
+remaps. Remapping `/points_in` silently leaves it on its defaults
+(`/cloud_registered_body`), and the monitor then sees no cloud at all.
 
 ---
 
@@ -141,15 +164,30 @@ Preconditions: `robot_watchdog.py` running **on the robot**, driver up.
 The numbers below come from the config; the point of the test is that the
 measured distances match and that the robot's own body never triggers them.
 
+**`/collision_monitor_state` does not exist.** `state_topic` is not a declared
+parameter in Humble's `collision_monitor` (MEASURED: `ros2 param list` has no
+such entry, and the topic is never advertised). Read the verdict off the gated
+velocity instead -- compare the monitor's input to its output:
+
+| `cmd_vel` out | verdict |
+|---|---|
+| `0.0` | STOP |
+| `0.3 x vx_in` | SLOWDOWN |
+| `vx_in` | clear |
+
+The node also logs `Robot to stop due to PolygonStop polygon` /
+`Robot to slowdown for 30.000000 percents` on each change, but only on change.
+
 ```bash
 ros2 launch pepper_navigation pepper_nav2_fastloc.launch.py
-ros2 topic echo /collision_monitor_state
+ros2 topic echo /cmd_vel_safe      # monitor in
+ros2 topic echo /cmd_vel           # after bumper_guard
 ```
 
 | Step | Expected |
 |---|---|
-| Stand still in an open room, nobody near | State `DO_NOTHING`. **If it stops while alone, the side-body cut is not working** -- check A1 |
-| Drive down a corridor | Mostly `DO_NOTHING`. Occasional `SLOWDOWN` near the walls is acceptable; constant stopping is not |
+| Stand still in an open room, nobody near | `cmd_vel` passes through unchanged. **If it stops while alone, the side-body cut is not working** -- check A1 |
+| Drive down a corridor | Mostly unchanged. Occasional `SLOWDOWN` near the walls is acceptable; constant stopping is not |
 | Walk slowly toward the front of the robot | `SLOWDOWN` at ~0.90 m, `STOP` at ~0.40 m. Measure with a tape once |
 | Approach from the side | `SLOWDOWN` at ~0.45 m. The stop zone sides are ~0.31 m |
 | Put an obstacle 0.25 m from the flank, robot stationary | Expected NOT to stop (inside the cut). Confirm the robot cannot reach it by driving forward |
@@ -261,28 +299,40 @@ silently inert. Three of those joints are revolute, which is why a
 | Bridge log | `bridging ['SonarFront_frame'] -> base_footprint`, and no repeating `no TF` warning |
 | `ros2 topic echo /tf_nav` | Exactly one `base_footprint -> SonarFront_frame` edge at ~20 Hz |
 | Compare with `ros2 run tf2_ros tf2_echo base_footprint SonarFront_frame` (full `/tf`) | Same translation and rotation |
-| Change the hip/knee posture | The bridged value tracks it. A static transform would not -- MEASURED 8.5 cm of z error on a synthetic chain |
+| Change the hip/knee posture | The bridged value tracks it. NOTE: over 75 s of `slam_20260823_aligned` the real transform did not move at all (spread 0.0 mm in x, y and z) -- Pepper held posture, so a static transform would have been just as accurate there. The bridge is correct at ANY posture, which is the actual reason to prefer it; the 8.5 cm figure quoted earlier came from a synthetic chain with invented joint angles, not from this robot |
 | Kill the bridge with the source enabled | **Record what the monitor does.** See the stale-source test below -- this is the same question |
 | Flip `sonar_front.enabled: True`. Stand still, open room | `DO_NOTHING`. A sonar reading inside 0.40 m from nothing means it is unusable as a safety source |
 | Walk toward the front | `SLOWDOWN` near 0.90 m |
 | Approach closer than 0.25 m | The sonar reads nothing -- its dead zone sits **inside** the 0.40 m stop wedge, so the L2 forward cone must be what stops the robot. Confirm it still does |
 | Cover the sonar with a hand | Reads minimum, `STOP`, and recovers when uncovered |
 
-### B12. What a stale source actually does (layer 3)
+### B12. Stale-source behaviour -- ANSWERED on the bag, FAIL
 
-**Unverified assumption, and safety-relevant.** `source_timeout: 1.0` is
-documented as the window in which data counts as valid, but Humble's
-`collision_monitor` does not ship its source, and the installed header does not
-say whether an invalid source causes a stop or is silently skipped. Everything
-written elsewhere about the chain "failing safe on a dead lidar" rests on this.
+**Run, measured, and fixed.** It does NOT fail safe. With the laser as the only
+enabled source, on `slam_20260823_aligned`:
+
+```
+while fed CLEAR at 2.50 m   : {'PASS': 80}
+after the laser goes silent : {'PASS': 161}      <- full speed, no sensor data
+```
+
+The monitor **holds its last verdict indefinitely**: last verdict SLOWDOWN and
+it slows forever, last verdict clear and it passes `vx_in` forever.
+`source_timeout` only decides whether a reading is USED. Nothing else caught
+it -- the driver's `cmd_vel_timeout` fires only if `cmd_vel` stops, and it does
+not.
+
+The fix is `bumper_guard`'s `required_topics`, which clamps translation when a
+required sensor topic goes quiet. Verified: 100/121 outputs clamped, the first
+21 being the 1.0 s `required_timeout` window.
 
 | Step | Expected |
 |---|---|
-| While driving, stop `points_safety_filter` | **Record the truth.** Either `STOP` within ~1.0 s (fails safe) or continued motion with only a log warning (fails open) |
-| Same with the laser or sonar source enabled and only *that* source stopped | Does one dead source of three stop the robot, or do the survivors carry it? |
-
-If it fails open, the chain needs a source-liveness watchdog and every
-"fails safe" claim in `pepper4dec_system_overview.txt` needs correcting.
+| While driving, stop `points_safety_filter` | `cmd_vel` linear clamps to 0 within ~1 s; `bumper_guard: sensor liveness` goes ERROR naming the topic |
+| Restart the filter | Motion resumes; the status returns to OK |
+| Launch with the filter never started | Clamped from the start -- never-seen counts as stale, not as fine |
+| Rotation while clamped | Still allowed: the footprint is a 0.25 m circle, so turning in place sweeps nothing new |
+| `localization_watchdog` log | Cancels goals too, since the status is in its `status_names` |
 
 ---
 
@@ -301,3 +351,5 @@ If it fails open, the chain needs a source-liveness watchdog and every
 | Robot stops whenever the driver hiccups | 8 -- `/joint_states` gaps are reading as blind |
 | Stops constantly after enabling the laser | 3 -- the boards are reading the floor; re-measure B10 |
 | Laser or sonar source has no effect at all | 3 -- source `enabled: False`, or for the sonar the bridge is not running |
+| Robot keeps driving with a dead lidar | 8 -- `required_topics` empty; the monitor holds its last verdict and will not stop on its own |
+| Robot clamped and will not translate, bumpers clear | 8 -- a required sensor topic is stale; check `bumper_guard: sensor liveness` |

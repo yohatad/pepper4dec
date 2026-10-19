@@ -27,8 +27,19 @@
  * the driver publishes at 50 Hz, is the liveness witness: while it is absent
  * a latch holds rather than ageing out.
  *
+ * It also carries the chain's only fail-safe on sensor loss. MEASURED on
+ * slam_20260823_aligned: Humble's collision_monitor HOLDS ITS LAST VERDICT
+ * when a source goes stale -- fed a clear laser reading and then silence, it
+ * passed 161 consecutive full-speed commands with no sensor data at all. So
+ * required_topics are watched here, in the one node that owns cmd_vel and can
+ * actually enforce a stop. Blind clamps translation but leaves rotation: the
+ * footprint is a 0.25 m circle, so turning in place sweeps nothing new, and it
+ * is how an operator recovers.
+ *
  * Parameters:
  *   cmd_vel_in_topic / cmd_vel_out_topic  default cmd_vel_safe -> cmd_vel
+ *   required_topics  sensor topics that must stay fresh (default: none, off)
+ *   required_timeout s before a required topic counts as lost (default 1.0)
  *   clear_delay      s a latch outlives the switch release (default 1.0)
  *   stuck_timeout    s of continuous press before ERROR (default 10.0)
  *   liveness_topic / liveness_timeout     default /joint_states, 1.0 s
@@ -46,8 +57,10 @@
  */
 
 #include <algorithm>
+#include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <diagnostic_msgs/msg/diagnostic_array.hpp>
 #include <geometry_msgs/msg/twist.hpp>
@@ -57,10 +70,12 @@
 #include <std_srvs/srv/trigger.hpp>
 
 #include "pepper_navigation/bumper_latch.h"
+#include "pepper_navigation/topic_liveness.h"
 
 namespace
 {
 constexpr char kStatusName[] = "bumper_guard: contact";
+constexpr char kLivenessName[] = "bumper_guard: sensor liveness";
 }  // namespace
 
 class BumperGuard : public rclcpp::Node
@@ -98,6 +113,15 @@ public:
         const std_srvs::srv::Trigger::Request::SharedPtr,
         std_srvs::srv::Trigger::Response::SharedPtr res) {onClear(res);});
 
+    const auto required = declare_parameter<std::vector<std::string>>(
+      "required_topics", std::vector<std::string>{});
+    sensors_ = pepper_navigation::TopicLiveness(
+      required, declare_parameter<double>("required_timeout", 1.0));
+    // Bound on a timer, not here: a publisher that starts after this node
+    // would otherwise never be found, and the type has to be discovered.
+    bind_timer_ = create_wall_timer(
+      std::chrono::milliseconds(500), [this] {bindSensors();});
+
     diag_timer_ = create_wall_timer(
       std::chrono::milliseconds(500), [this] {publishDiagnostics();});
 
@@ -118,6 +142,29 @@ private:
     return (nowSeconds() - last_liveness_) > liveness_timeout_;
   }
 
+  /// Generic subscriptions, so any message type counts as a heartbeat without
+  /// this node having to depend on it. SensorDataQoS deliberately: it is
+  /// BEST_EFFORT, which is compatible with both reliable and best-effort
+  /// publishers, and /points is best-effort -- a reliable subscription here
+  /// would receive nothing and read as permanently stale.
+  void bindSensors()
+  {
+    for (const auto & topic : sensors_.unseen()) {
+      if (sensor_subs_.count(topic)) {continue;}
+      const auto types = get_topic_names_and_types();
+      auto it = types.find(topic);
+      if (it == types.end() || it->second.empty()) {continue;}
+      sensor_subs_[topic] = create_generic_subscription(
+        topic, it->second.front(), rclcpp::SensorDataQoS(),
+        [this, topic](std::shared_ptr<rclcpp::SerializedMessage>) {
+          sensors_.mark(topic, nowSeconds());
+        });
+      RCLCPP_INFO(
+        get_logger(), "watching %s (%s) for liveness",
+        topic.c_str(), it->second.front().c_str());
+    }
+  }
+
   void onBumper(const naoqi_bridge_msgs::msg::Bumper & msg)
   {
     const bool pressed = msg.state == naoqi_bridge_msgs::msg::Bumper::STATE_PRESSED;
@@ -135,6 +182,15 @@ private:
     geometry_msgs::msg::Twist out = in;
     if (clamp.block_forward) {out.linear.x = std::min(out.linear.x, 0.0);}
     if (clamp.block_reverse) {out.linear.x = std::max(out.linear.x, 0.0);}
+    // Blind in every direction, so no translation at all -- not even the
+    // reverse a bumper contact leaves open.
+    if (sensors_.any_stale(nowSeconds())) {
+      out.linear.x = 0.0;
+      out.linear.y = 0.0;
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 2000,
+        "required sensor topic(s) lost; holding translation");
+    }
     // Rotation is always allowed: turning in place is how the robot gets its
     // nose off an obstacle when reversing is not enough.
     if (block_lateral_ && (clamp.block_forward || clamp.block_reverse)) {out.linear.y = 0.0;}
@@ -197,10 +253,42 @@ private:
     diagnostic_msgs::msg::DiagnosticArray arr;
     arr.header.stamp = now();
     arr.status.push_back(s);
+    if (sensors_.watching()) {arr.status.push_back(livenessStatus(t));}
     diag_pub_->publish(arr);
   }
 
+  /// Separate status so the watchdog can act on a dead sensor distinctly
+  /// from a bumper contact.
+  diagnostic_msgs::msg::DiagnosticStatus livenessStatus(double t)
+  {
+    using diagnostic_msgs::msg::DiagnosticStatus;
+    DiagnosticStatus s;
+    s.name = kLivenessName;
+    s.hardware_id = "pepper_safety_sources";
+    const auto bad = sensors_.stale_topics(t);
+    if (bad.empty()) {
+      s.level = DiagnosticStatus::OK;
+      s.message = "all required sensor topics fresh";
+    } else {
+      s.level = DiagnosticStatus::ERROR;
+      s.message = "lost: ";
+      for (std::size_t i = 0; i < bad.size(); ++i) {
+        s.message += (i ? ", " : "") + bad[i];
+      }
+    }
+    for (const auto & topic : sensors_.stale_topics(t)) {
+      diagnostic_msgs::msg::KeyValue kv;
+      kv.key = topic;
+      kv.value = "stale";
+      s.values.push_back(kv);
+    }
+    return s;
+  }
+
   pepper_navigation::BumperLatch latch_;
+  pepper_navigation::TopicLiveness sensors_;
+  std::map<std::string, rclcpp::GenericSubscription::SharedPtr> sensor_subs_;
+  rclcpp::TimerBase::SharedPtr bind_timer_;
   double liveness_timeout_;
   bool block_lateral_;
   double last_liveness_ = pepper_navigation::kNever;

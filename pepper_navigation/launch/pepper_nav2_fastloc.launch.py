@@ -401,6 +401,10 @@ def generate_launch_description():
             'use_sim_time': use_sim_time,
             'cmd_vel_in_topic': 'cmd_vel_safe',
             'cmd_vel_out_topic': 'cmd_vel',
+            # The collision monitor holds its last verdict when a source goes
+            # stale, so losing this topic must stop the robot here instead.
+            'required_topics': ['/points_safety'],
+            'required_timeout': 1.0,
         }],
     )
 
@@ -508,7 +512,8 @@ def generate_launch_description():
         parameters=[{
             'use_sim_time': use_sim_time,
             'status_names': ['fastlio_localization: pose lock',
-                             'fastlio_localization: map -> odom gate'],
+                             'fastlio_localization: map -> odom gate',
+                             'bumper_guard: sensor liveness'],
             'lost_duration': 5.0,
             # Silence after an OK only trips stale_timeout (badness is timed
             # from the first bad report), so match lost_duration here.

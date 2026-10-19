@@ -352,7 +352,8 @@ collision_monitor:
     odom_frame_id: "odom"
     cmd_vel_in_topic: "cmd_vel_raw"
     cmd_vel_out_topic: "cmd_vel"
-    state_topic: "collision_monitor_state"
+    # No state_topic: Humble's collision_monitor does not declare it and
+    # never publishes the state. Read the verdict off cmd_vel instead.
     transform_tolerance: 0.2
     source_timeout: 1.0
     # False: with True every scan also needs base_footprint's DYNAMIC parent
