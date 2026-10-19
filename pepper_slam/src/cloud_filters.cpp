@@ -33,6 +33,25 @@ KeepMask rangeKeep(const std::vector<Point> & points, double min_range, double m
   return keep;
 }
 
+KeepMask sideBodyKeep(
+  const std::vector<Point> & points, const Point & sensor, double cut_range, double cut_angle)
+{
+  if (cut_range <= 0.0) {
+    return KeepMask(points.size(), 1);
+  }
+  KeepMask keep(points.size());
+  for (std::size_t i = 0; i < points.size(); ++i) {
+    const double dx = points[i].x - sensor.x;
+    const double dy = points[i].y - sensor.y;
+    const double dz = points[i].z - sensor.z;
+    const double r = std::sqrt(dx * dx + dy * dy + dz * dz);
+    // Bearing off the body's +x, so the forward cone survives at every range:
+    // only the flanks, where the lidar sees Pepper itself, are cut.
+    keep[i] = r >= cut_range || std::fabs(std::atan2(dy, dx)) <= cut_angle;
+  }
+  return keep;
+}
+
 KeepMask radiusOutlierKeep(const std::vector<Point> & points, int min_neighbors, double radius)
 {
   const std::size_t n = points.size();

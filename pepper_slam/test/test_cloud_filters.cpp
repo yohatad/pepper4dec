@@ -84,6 +84,38 @@ TEST(RangeKeep, BoundaryIsInclusive)
   EXPECT_EQ(pepper_slam::rangeKeep(pts, 0.8, 2.0), (KeepMask{1, 1}));
 }
 
+TEST(SideBodyKeep, DisabledKeepsEverything)
+{
+  const std::vector<Point> pts = {{0.0, 0.3, 0.0}, {0.0, -0.3, 0.0}};
+  EXPECT_EQ(pepper_slam::sideBodyKeep(pts, {0.0, 0.0, 0.0}, 0.0, 0.44), (KeepMask{1, 1}));
+}
+TEST(SideBodyKeep, CutsCloseFlanksKeepsForwardAndFar)
+{
+  const double cone = 25.0 * M_PI / 180.0;
+  const std::vector<Point> pts = {
+    {0.30, 0.0, 0.0},     // close, straight ahead -- kept
+    {0.0, 0.30, 0.0},     // close, left flank -- cut
+    {0.0, -0.30, 0.0},    // close, right flank -- cut
+    {-0.30, 0.0, 0.0},    // close, behind -- cut
+    {0.0, 2.0, 0.0},      // far, to the side -- kept
+    {0.30, 0.12, 0.0},    // close, 21.8 deg off -- inside the cone, kept
+    {0.30, 0.16, 0.0},    // close, 28.1 deg off -- outside, cut
+  };
+  EXPECT_EQ(
+    pepper_slam::sideBodyKeep(pts, {0.0, 0.0, 0.0}, 0.35, cone),
+    (KeepMask{1, 0, 0, 0, 1, 1, 0}));
+}
+TEST(SideBodyKeep, RangeAndBearingAreMeasuredFromTheSensor)
+{
+  // Sensor forward of the body origin: the cut follows the sensor, but the
+  // bearing is still the body's +x.
+  const double cone = 25.0 * M_PI / 180.0;
+  const std::vector<Point> pts = {{0.50, 0.30, 0.0}, {0.50, 0.0, 0.0}};
+  const Point sensor{0.50, 0.0, 0.0};
+  EXPECT_EQ(pepper_slam::sideBodyKeep(pts, sensor, 0.35, cone), (KeepMask{0, 1}));
+  // Same points measured from the body origin are far enough to survive.
+  EXPECT_EQ(pepper_slam::sideBodyKeep(pts, {0.0, 0.0, 0.0}, 0.35, cone), (KeepMask{1, 1}));
+}
 TEST(RadiusOutlierKeep, DisabledOrTinyCloudKeepsEverything)
 {
   const std::vector<Point> pts = {{0.0, 0.0, 0.0}, {10.0, 0.0, 0.0}, {20.0, 0.0, 0.0}};

@@ -5,6 +5,9 @@
  * Applies, in order:
  *   1. Range cut       -- drop the robot's own body (points within
  *                         min_range..max_range).
+ *   1b. Side-body cut  -- drop close returns OUTSIDE the forward cone, where
+ *                         the L2 sees Pepper's own flanks (off by default;
+ *                         needs TF).
  *   2. Outlier removal -- drop isolated spike returns (radius outlier filter).
  *   3. Ground plane    -- RANSAC-fit and remove the near-z=0 plane in
  *                         base_footprint (off by default; needs TF).
@@ -71,7 +74,15 @@ public:
     // fixed-height-band consumer (nav2 costmap voxel_layer); octomap's own
     // /cloud_registered_body path already gets adaptive ground handling
     // from octomap_server's filter_ground_plane, so leave this off there.
+    // Side-body cut. OFF by default (0). The L2 sees Pepper's own flanks
+    // 0.20-0.34 m out; a plain min_range big enough to lose them would also
+    // blind the robot straight ahead, so cut by direction instead.
+    self_cut_range_ = declare_parameter("self_cut_range", 0.0);           // m
+    self_cut_angle_ = declare_parameter("self_cut_angle", 25.0);          // deg, half-width
+    self_cut_angle_ *= M_PI / 180.0;
+
     remove_ground_ = declare_parameter("remove_ground_plane", false);
+    // Body frame for both the side-body cut's bearing and the ground fit.
     ground_frame_ = declare_parameter<std::string>("ground_frame", "base_footprint");
     // inlier band around fitted plane
     ground_.distance_thresh = declare_parameter("ground_distance_thresh", 0.05);
@@ -90,7 +101,7 @@ public:
       ror_min_neighbors_ = 0;
     }
 
-    if (remove_ground_) {
+    if (remove_ground_ || self_cut_range_ > 0.0) {
       tf_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
       // Constructed on this node (not a private one) so a launch-file
       // /tf -> /tf_nav remap reaches it.
@@ -122,6 +133,12 @@ public:
     } else {
       summary << ", ROR off";
     }
+    if (self_cut_range_ > 0.0) {
+      summary << ", side-body cut below " << self_cut_range_ << " m outside +-"
+              << self_cut_angle_ * 180.0 / M_PI << " deg";
+    } else {
+      summary << ", side-body cut off";
+    }
     if (remove_ground_) {
       summary << ", ground-plane removal vs " << ground_frame_;
     } else {
@@ -144,26 +161,43 @@ private:
       points = pepper_slam::applyMask(
         points, pepper_slam::radiusOutlierKeep(points, ror_min_neighbors_, ror_radius_));
     }
-    if (remove_ground_ && !points.empty()) {
-      const std::size_t before = points.size();
-      points = pepper_slam::applyMask(points, groundKeep(points, *msg));
-      RCLCPP_INFO_THROTTLE(
-        get_logger(), *get_clock(), 2000,
-        "ground-plane filter: %zu -> %zu pts (%zu dropped as floor)",
-        before, points.size(), before - points.size());
+    // One transform serves both body-frame filters.
+    if ((self_cut_range_ > 0.0 || remove_ground_) && !points.empty()) {
+      std::vector<Point> in_body;
+      Point sensor{0.0, 0.0, 0.0};
+      if (toBody(points, *msg, in_body, sensor)) {
+        if (self_cut_range_ > 0.0) {
+          const std::size_t before = points.size();
+          const auto keep = pepper_slam::sideBodyKeep(
+            in_body, sensor, self_cut_range_, self_cut_angle_);
+          points = pepper_slam::applyMask(points, keep);
+          in_body = pepper_slam::applyMask(in_body, keep);
+          RCLCPP_INFO_THROTTLE(
+            get_logger(), *get_clock(), 2000,
+            "side-body cut: %zu -> %zu pts (%zu dropped as own body)",
+            before, points.size(), before - points.size());
+        }
+        if (remove_ground_ && points.size() >= 3) {
+          const std::size_t before = points.size();
+          points = pepper_slam::applyMask(
+            points, pepper_slam::groundPlaneKeep(in_body, ground_, rng_));
+          RCLCPP_INFO_THROTTLE(
+            get_logger(), *get_clock(), 2000,
+            "ground-plane filter: %zu -> %zu pts (%zu dropped as floor)",
+            before, points.size(), before - points.size());
+        }
+      }
     }
     pub_->publish(toCloud(msg->header, points));
   }
 
-  /// Keep-mask dropping the floor, fit in ground_frame. Fails safe: on a
-  /// missing TF or an inconclusive fit, keeps every point (never invents
-  /// obstacles, but also never silently strips more than we're confident is
-  /// floor).
-  pepper_slam::KeepMask groundKeep(const std::vector<Point> & points, const PointCloud2 & msg)
+  /// points and the sensor origin in ground_frame. Fails safe: false on a
+  /// missing TF, so the caller keeps every point (never invents obstacles,
+  /// but also never silently strips more than we're confident about).
+  bool toBody(
+    const std::vector<Point> & points, const PointCloud2 & msg,
+    std::vector<Point> & out, Point & sensor)
   {
-    if (points.size() < 3) {
-      return pepper_slam::KeepMask(points.size(), 1);
-    }
     geometry_msgs::msg::TransformStamped tf;
     try {
       tf = tf_buffer_->lookupTransform(
@@ -171,9 +205,9 @@ private:
     } catch (const tf2::TransformException & ex) {
       RCLCPP_WARN_THROTTLE(
         get_logger(), *get_clock(), 5000,
-        "TF %s <- %s unavailable, skipping ground-plane removal for this scan: %s",
+        "TF %s <- %s unavailable, skipping the body-frame filters this scan: %s",
         ground_frame_.c_str(), msg.header.frame_id.c_str(), ex.what());
-      return pepper_slam::KeepMask(points.size(), 1);
+      return false;
     }
 
     const auto & r = tf.transform.rotation;
@@ -184,13 +218,15 @@ private:
     }
     const tf2::Matrix3x3 rot(q);
     const tf2::Vector3 shift(t.x, t.y, t.z);
-    std::vector<Point> in_ground;
-    in_ground.reserve(points.size());
+    out.clear();
+    out.reserve(points.size());
     for (const Point & p : points) {
       const tf2::Vector3 g = rot * tf2::Vector3(p.x, p.y, p.z) + shift;
-      in_ground.push_back({g.x(), g.y(), g.z()});
+      out.push_back({g.x(), g.y(), g.z()});
     }
-    return pepper_slam::groundPlaneKeep(in_ground, ground_, rng_);
+    // The sensor sits at its own frame's origin.
+    sensor = {shift.x(), shift.y(), shift.z()};
+    return true;
   }
 
   /// The x/y/z of every point without a NaN coordinate. False (and an error)
@@ -249,6 +285,8 @@ private:
   double max_range_;
   int ror_min_neighbors_;
   double ror_radius_;
+  double self_cut_range_;
+  double self_cut_angle_;
   bool remove_ground_;
   std::string ground_frame_;
   pepper_slam::GroundPlaneParams ground_;

@@ -36,8 +36,10 @@ GEOMETRY = (
     "global_costmap.global_costmap.ros__parameters.robot_radius",
     "global_costmap.global_costmap.ros__parameters.inflation_layer.inflation_radius",
     "global_costmap.global_costmap.ros__parameters.inflation_layer.cost_scaling_factor",
-    "collision_monitor.ros__parameters.PolygonStop.radius",
-    "collision_monitor.ros__parameters.PolygonSlow.radius",
+    "collision_monitor.ros__parameters.PolygonStop.type",
+    "collision_monitor.ros__parameters.PolygonStop.points",
+    "collision_monitor.ros__parameters.PolygonSlow.type",
+    "collision_monitor.ros__parameters.PolygonSlow.points",
 )
 
 

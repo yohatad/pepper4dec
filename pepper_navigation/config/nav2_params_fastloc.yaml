@@ -370,16 +370,22 @@ collision_monitor:
     stop_pub_timeout: 2.0
     polygons: ["PolygonStop", "PolygonSlow"]
     PolygonStop:
-      type: "circle"
-      radius: 0.40          # hard stop inside this radius of base_footprint
+      # Wedge, not a circle: 0.40 m ahead covers body + braking + latency at
+      # vx_max 0.35; the sides clear the 0.255 m inscribed radius by ~5 cm.
+      # Needs cloud_range_filter's self_cut_range, or Pepper's own flanks sit
+      # inside it (MEASURED: 76% of corridor scans would trigger, 19% with it).
+      type: "polygon"
+      points: [0.40, 0.26, 0.40, -0.26, 0.26, -0.31, -0.26, -0.31, -0.26, 0.31, 0.26, 0.31]
       action_type: "stop"
       max_points: 3         # trigger when > this many points fall inside
       visualize: True
       polygon_pub_topic: "polygon_stop"
       enabled: True
     PolygonSlow:
-      type: "circle"
-      radius: 0.80          # slow to slowdown_ratio inside this radius
+      # Longer ahead, tighter at the sides than a 0.80 m circle, which slowed
+      # the robot in 83% of corridor scans.
+      type: "polygon"
+      points: [0.90, 0.30, 0.90, -0.30, 0.55, -0.45, -0.35, -0.45, -0.35, 0.45, 0.55, 0.45]
       action_type: "slowdown"
       slowdown_ratio: 0.3
       max_points: 3

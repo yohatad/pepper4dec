@@ -4,6 +4,7 @@
  * can drive them with synthetic clouds:
  *
  *   rangeKeep          -- drop the robot's own body (and optionally far returns)
+ *   sideBodyKeep       -- drop close returns outside the forward cone
  *   radiusOutlierKeep  -- drop isolated spike returns
  *   groundPlaneKeep    -- RANSAC-fit and drop the near-z=0 floor plane
  *
@@ -43,6 +44,12 @@ using KeepMask = std::vector<std::uint8_t>;
 /// Keep points whose distance from the sensor origin is at least min_range
 /// and, when max_range > 0, at most max_range.
 KeepMask rangeKeep(const std::vector<Point> & points, double min_range, double max_range);
+
+/// Keep points unless they are both closer to sensor than cut_range and
+/// bearing further than cut_angle (rad) off the body's +x. points and sensor
+/// must be in the body frame. cut_range <= 0 keeps everything.
+KeepMask sideBodyKeep(
+  const std::vector<Point> & points, const Point & sensor, double cut_range, double cut_angle);
 
 /// Keep points with at least min_neighbors other points within radius.
 /// min_neighbors <= 0, or a cloud of at most min_neighbors points, keeps all.
