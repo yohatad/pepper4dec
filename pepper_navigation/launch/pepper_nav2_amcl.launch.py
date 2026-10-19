@@ -50,7 +50,7 @@ Launch arguments:
 
 Configuration:
     config/nav2_params_amcl.yaml, map/pepper_map_lc.yaml, and FAST-LIO's
-    l2.yaml.
+    l2_rsimu.yaml.
 
 Prerequisites:
     sudo apt install ros-humble-pointcloud-to-laserscan
@@ -154,7 +154,7 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(
                 os.path.join(fast_lio_launch_dir, 'mapping.launch.py')),
             launch_arguments={
-                'config_file': 'l2.yaml',
+                'config_file': 'l2_rsimu.yaml',
                 'rviz': 'false',
                 'use_sim_time': use_sim_time,
             }.items(),
@@ -166,7 +166,7 @@ def generate_launch_description():
                              'launch', 'lio_odom_bridge.launch.py')),
             launch_arguments={
                 'use_sim_time': use_sim_time,
-                'config_file': 'l2.yaml',
+                'config_file': 'l2_rsimu.yaml',
                 'bridge_level_frame': 'true',
             }.items(),
         ),

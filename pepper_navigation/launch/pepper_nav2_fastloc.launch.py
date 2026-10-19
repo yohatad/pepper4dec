@@ -58,9 +58,10 @@ Launch arguments:
         MUST be from the SAME mapping run as map_pose_file and map_scan_dir.
     config_file (default: "l2_rsimu.yaml")
         FAST-LIO config: l2_rsimu.yaml (RealSense IMU, matches the prior map)
-        or l2.yaml (the L2's own).
+        (the RealSense IMU; the only L2 config, since l2.yaml was removed
+        for losing heading in slow motion).
     lidar_imu_frame (default: "camera_imu_optical_frame")
-        Body frame matching config_file; l2lidar_frame_imu for l2.yaml.
+        Body frame matching config_file (camera_imu_optical_frame).
     rviz_config (default: <share>/rviz/nav2_fastloc.rviz)
         Pass nav2_fastloc_voxel.rviz for the 3D voxel-map view (needs the
         voxel marker converters this file launches, and z_voxels <= 16 in the
@@ -180,11 +181,11 @@ def generate_launch_description():
     declare_config_file_cmd = DeclareLaunchArgument(
         'config_file', default_value='l2_rsimu.yaml',
         description='FAST-LIO config: l2_rsimu.yaml (RealSense IMU, matches the '
-                    'prior map) or l2.yaml (the L2 s own).')
+                    'prior map).')
     declare_lidar_imu_frame_cmd = DeclareLaunchArgument(
         'lidar_imu_frame', default_value='camera_imu_optical_frame',
         description='Body frame matching config_file. camera_imu_optical_frame '
-                    'for l2_rsimu.yaml, l2lidar_frame_imu for l2.yaml.')
+                    'for l2_rsimu.yaml.')
     declare_rviz_config_cmd = DeclareLaunchArgument(
         'rviz_config',
         default_value=os.path.join(pkg_share, 'rviz', 'nav2_fastloc.rviz'),

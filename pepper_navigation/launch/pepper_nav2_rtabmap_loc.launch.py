@@ -29,7 +29,7 @@ Launch arguments:
         Map database to localize against.
 
 Configuration:
-    config/nav2_params_rtabmap_loc.yaml and FAST-LIO's l2.yaml.
+    config/nav2_params_rtabmap_loc.yaml and FAST-LIO's l2_rsimu.yaml.
 
 Frames:
     FAST-LIO odom -> lio_odom_bridge's gravity-leveled odom -> RTAB-Map map.
@@ -91,7 +91,7 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(
             os.path.join(fast_lio_launch_dir, 'mapping.launch.py')),
         launch_arguments={
-            'config_file': 'l2.yaml',
+            'config_file': 'l2_rsimu.yaml',
             'rviz': 'false',
             'use_sim_time': use_sim_time,
         }.items(),
@@ -104,7 +104,7 @@ def generate_launch_description():
                          'launch', 'lio_odom_bridge.launch.py')),
         launch_arguments={
             'use_sim_time': use_sim_time,
-            'config_file': 'l2.yaml',
+            'config_file': 'l2_rsimu.yaml',
         }.items(),
     )
 
