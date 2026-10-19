@@ -355,7 +355,13 @@ collision_monitor:
     state_topic: "collision_monitor_state"
     transform_tolerance: 0.2
     source_timeout: 1.0
-    base_shift_correction: True
+    # False: with True every scan also needs base_footprint's DYNAMIC parent
+    # (odom_frame_id) at the scan stamp; when that edge goes stale Humble
+    # ignores the cloud and passes cmd_vel through at full speed (test 1a,
+    # 2026-10-19: localizer edge stopped -> 0.35 m/s with an obstacle in the
+    # stop wedge). False needs only the static sensor TF and held the stop.
+    # Cost: no motion compensation for scan age (~3.5 cm at 0.35 m/s, 0.1 s).
+    base_shift_correction: False
     stop_pub_timeout: 2.0
     polygons: ["PolygonStop", "PolygonSlow"]
     PolygonStop:
