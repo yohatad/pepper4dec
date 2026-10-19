@@ -39,10 +39,6 @@ services:
       context: .
       dockerfile: Dockerfile
       target: runtime
-      # Forwards your SSH agent so the private naoqi_bridge_msgs2 fork can be
-      # cloned. Requires a loaded agent (ssh-add -l) with access to it.
-      ssh:
-        - default
     container_name: pepper4dec
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
