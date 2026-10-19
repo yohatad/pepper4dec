@@ -17,6 +17,7 @@ structurally cannot, so each is tested on its own:
 | 5 | costmap inflation + MPPI critics | host, Nav2 |
 | 6 | localization watchdog | host |
 | 7 | lifecycle gating (`wait_for_map_then_start`) | host |
+| 8 | `bumper_guard` (post-contact directional gate) | host |
 
 ---
 
@@ -75,12 +76,42 @@ colcon test-result
 | `test_cloud_filters` | Passes, including the `SideBodyKeep` cases |
 | Whole workspace | 0 failures |
 
+### Recording for future bag tests
+
+`/laser`, `/sonar/front` and `/bumper` are **absent from every existing bag**
+because all three are `"enabled": false` in naoqi's `boot_config.json`, so
+B9-B11 below are robot-only by construction, not by choice. Add these to the
+record list on the next session and they become bag-testable:
+
+    /laser /sonar/front /bumper /joint_states
+
+`/joint_states` is not optional for the bumper: it is `bumper_guard`'s liveness
+witness, and without it every replay reads as blind and holds its latches.
+A bag that carries `/tf` with the body tree also lets `sonar_tf_bridge` be
+replayed; the sensor-rig launch alone does not publish `SonarFront_frame`
+(see `pepper_sensor_tf.launch.py` -- it deliberately omits `pepper.urdf`).
+
 ---
 
 ## B. Robot tests
 
 Run in order. **Have the emergency stop within reach for B1-B3**, since those
 tests deliberately provoke uncommanded motion.
+
+### B0. Prerequisites: turn the sensors on
+
+All three ship disabled in naoqi's `boot_config.json`. Nothing below runs
+until they report.
+
+| Step | Expected |
+|---|---|
+| Set `"laser"`, `"sonar"`, `"bumper"` to `"enabled": true`, restart the driver | `/laser`, `/sonar/front`, `/sonar/back`, `/bumper` all present |
+| `ros2 topic hz /laser` | ~10 Hz |
+| Driver log | No `no laser board has advanced its frame counter` |
+| Press each bumper by hand, `ros2 topic echo /bumper` | Three distinct ids: 0 RIGHT, 1 LEFT, 2 BACK. **The BACK event is behind a `robot_ == PEPPER` guard -- confirm it specifically** |
+
+`/sonar/back` arrives whether or not it is wanted: `converters/sonar.cpp`
+pushes both Front and Back keys for Pepper. It is simply not consumed.
 
 ### B1. The robot-side watchdog (layer 1)
 
@@ -174,6 +205,85 @@ ros2 launch naoqi_driver safe_teleop.launch.py
 | Full route with a person crossing the path | Slows, stops if needed, resumes, reaches the goal |
 | Repeat 3 times | No spurious stops on open floor; no missed stops |
 
+### B9. Bumper gate (layer 8)
+
+The one test that cannot be inferred from any other: it proves the robot can
+get **off** an obstacle. With `vx_min: 0.0` nothing but `BackUp` emits reverse,
+so if reverse does not survive a front contact, a bump is a permanent deadlock.
+
+```bash
+ros2 launch pepper_navigation pepper_nav2_fastloc.launch.py
+ros2 topic echo /diagnostics --field status    # bumper_guard: contact
+```
+
+| Step | Expected |
+|---|---|
+| `ros2 topic info /cmd_vel` and `/cmd_vel_safe` | `cmd_vel` published by `bumper_guard`, `cmd_vel_safe` by `collision_monitor`. If `collision_monitor` still owns `cmd_vel`, the gate is not in the chain |
+| Press the left bumper, robot idle | Status WARN `contact front`; `left=true`, `block_forward=true` |
+| Command +0.2 m/s while pressed | No motion; log `bumper latched: vx 0.20 -> 0.00` |
+| Command -0.1 m/s while pressed | **Robot reverses.** If it does not, `BackUp` can never free it |
+| Command rotation while pressed | Robot turns -- rotation is never gated |
+| Release, command forward within 1 s | Still blocked (`clear_delay`) |
+| Release, wait > 1 s, command forward | Moves |
+| Press the back bumper, command reverse, then forward | Reverse blocked, forward moves |
+| Hold a bumper > 10 s | Status ERROR `bumper held down -- stuck switch or debris` |
+| `ros2 service call /bumper_guard/clear std_srvs/srv/Trigger` while pressed | Refused: `a bumper is still pressed` |
+| Same call after release | `bumper latches cleared`; forward allowed at once |
+| Kill `bumper_guard` while driving | **Robot stops** -- nothing publishes `cmd_vel`, the driver times out |
+| Stop the driver with a latch set | Latch holds; status WARN `no joint_states` |
+| Drive slowly into a soft obstacle | Gate blocks forward on contact; a `BackUp` recovery frees the robot |
+
+### B10. Pepper laser as a monitor source (layer 3)
+
+Three base boards, one `/laser` scan: 61 slots, 45 live beams, two 8-slot blind
+gaps. Already in `base_footprint`, so no TF work. **Measure before enabling** --
+the boards can read the floor, and 4 floor returns past `max_points: 3` is a
+permanent stop. This is the same failure class as `self_cut_range: 0.35`.
+
+| Step | Expected |
+|---|---|
+| `ros2 topic echo /laser --once` | 61 ranges; the two blind gaps are NaN; **no value near 5.40 or 7.09** -- those are the saturation sentinels `encodeRange` exists to suppress (the right bank has been seen to emit 7.09) |
+| Stand still in an open room, source still `enabled: False`. Count beams < 0.40 m | **Must be <= 3.** More than that and enabling the source stops the robot where it stands |
+| Drive over a threshold, up to a ramp, onto dark or glossy floor | Count beams < 0.40 m in each. Record the worst case |
+| Flip `laser.enabled: True`, re-run **all of B3** | Stop rate must not rise materially. Standing alone in an open room is still `DO_NOTHING` |
+| Approach the flank at 0.30 m (inside the L2 self-cut) | Now detected -- this is what the laser buys that the L2 cannot |
+
+### B11. Front sonar as a monitor source (layer 3)
+
+Needs `sonar_tf_bridge`: the real chain is
+`base_footprint -> base_link -> torso -> Hip -> Pelvis -> Tibia -> SonarFront_frame`,
+and `tf_nav_relay` drops it at `base_link`, so without the bridge the source is
+silently inert. Three of those joints are revolute, which is why a
+`static_transform_publisher` is not a substitute.
+
+| Step | Expected |
+|---|---|
+| Bridge log | `bridging ['SonarFront_frame'] -> base_footprint`, and no repeating `no TF` warning |
+| `ros2 topic echo /tf_nav` | Exactly one `base_footprint -> SonarFront_frame` edge at ~20 Hz |
+| Compare with `ros2 run tf2_ros tf2_echo base_footprint SonarFront_frame` (full `/tf`) | Same translation and rotation |
+| Change the hip/knee posture | The bridged value tracks it. A static transform would not -- MEASURED 8.5 cm of z error on a synthetic chain |
+| Kill the bridge with the source enabled | **Record what the monitor does.** See the stale-source test below -- this is the same question |
+| Flip `sonar_front.enabled: True`. Stand still, open room | `DO_NOTHING`. A sonar reading inside 0.40 m from nothing means it is unusable as a safety source |
+| Walk toward the front | `SLOWDOWN` near 0.90 m |
+| Approach closer than 0.25 m | The sonar reads nothing -- its dead zone sits **inside** the 0.40 m stop wedge, so the L2 forward cone must be what stops the robot. Confirm it still does |
+| Cover the sonar with a hand | Reads minimum, `STOP`, and recovers when uncovered |
+
+### B12. What a stale source actually does (layer 3)
+
+**Unverified assumption, and safety-relevant.** `source_timeout: 1.0` is
+documented as the window in which data counts as valid, but Humble's
+`collision_monitor` does not ship its source, and the installed header does not
+say whether an invalid source causes a stop or is silently skipped. Everything
+written elsewhere about the chain "failing safe on a dead lidar" rests on this.
+
+| Step | Expected |
+|---|---|
+| While driving, stop `points_safety_filter` | **Record the truth.** Either `STOP` within ~1.0 s (fails safe) or continued motion with only a log warning (fails open) |
+| Same with the laser or sonar source enabled and only *that* source stopped | Does one dead source of three stop the robot, or do the survivors carry it? |
+
+If it fails open, the chain needs a source-liveness watchdog and every
+"fails safe" claim in `pepper4dec_system_overview.txt` needs correcting.
+
 ---
 
 ## What a failure means
@@ -186,3 +296,8 @@ ros2 launch naoqi_driver safe_teleop.launch.py
 | Robot drives confidently to the wrong place | 6 -- the pose lock is wrong and the watchdog is not acting |
 | Nav2 never activates | 7 -- the lock never happened; check the localizer, not Nav2 |
 | MPPI oscillates near walls | 5 -- inflation band too thin relative to the inscribed radius |
+| Robot stops dead on contact and never recovers | 8 -- reverse is being gated too; `BackUp` cannot escape |
+| Robot will not move and nothing is in the way | 8 -- a stuck bumper latch; check `bumper_guard: contact` for ERROR |
+| Robot stops whenever the driver hiccups | 8 -- `/joint_states` gaps are reading as blind |
+| Stops constantly after enabling the laser | 3 -- the boards are reading the floor; re-measure B10 |
+| Laser or sonar source has no effect at all | 3 -- source `enabled: False`, or for the sonar the bridge is not running |

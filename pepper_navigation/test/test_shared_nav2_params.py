@@ -40,6 +40,15 @@ GEOMETRY = (
     "collision_monitor.ros__parameters.PolygonStop.points",
     "collision_monitor.ros__parameters.PolygonSlow.type",
     "collision_monitor.ros__parameters.PolygonSlow.points",
+    # Observation sources: a profile that quietly loses one is a profile with
+    # a blind spot, which is exactly the kind of drift this guard is for.
+    "collision_monitor.ros__parameters.observation_sources",
+    "collision_monitor.ros__parameters.laser.type",
+    "collision_monitor.ros__parameters.laser.topic",
+    "collision_monitor.ros__parameters.laser.enabled",
+    "collision_monitor.ros__parameters.sonar_front.type",
+    "collision_monitor.ros__parameters.sonar_front.topic",
+    "collision_monitor.ros__parameters.sonar_front.enabled",
 )
 
 

@@ -200,6 +200,11 @@ def generate_launch_description():
         'watchdog', default_value='true',
         description='Cancel navigation goals while fastlio_localization reports '
                     'itself lost. Set false to monitor without ever holding nav.')
+    declare_bumper_guard_cmd = DeclareLaunchArgument(
+        'bumper_guard', default_value='true',
+        description='Insert bumper_guard between collision_monitor and cmd_vel, '
+                    'blocking the direction a bumper contact came from. Set '
+                    'false to drive straight off the collision monitor.')
     declare_odom_frame_cmd = DeclareLaunchArgument(
         'odom_frame', default_value='',
         description='Empty (default): fastlio_localization broadcasts map -> '
@@ -280,6 +285,13 @@ def generate_launch_description():
             # map is the one that jumps on relocalization.
             'collision_monitor.ros__parameters.odom_frame_id':
                 PythonExpression(["'", odom_frame, "' or 'map'"]),
+            # With the gate in, the monitor stops one hop short of the wheels
+            # and bumper_guard owns cmd_vel; without it, nothing would.
+            'collision_monitor.ros__parameters.cmd_vel_out_topic':
+                PythonExpression(
+                    ["'cmd_vel_safe' if '",
+                     LaunchConfiguration('bumper_guard'),
+                     "'.lower() in ('true', '1') else 'cmd_vel'"]),
         },
         convert_types=True)
 
@@ -359,6 +371,37 @@ def generate_launch_description():
         arguments=['--ros-args', '--log-level', log_level],
         parameters=[configured_params],
         remappings=[('/tf', '/tf_nav')],
+    )
+
+    # Puts base_footprint <- SonarFront_frame on /tf_nav. Without it the
+    # monitor's sonar_front source cannot transform and is silently inert.
+    sonar_tf_bridge = Node(
+        package='pepper_navigation',
+        executable='sonar_tf_bridge.py',
+        name='sonar_tf_bridge',
+        output='screen',
+        arguments=['--ros-args', '--log-level', log_level],
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'source_frames': ['SonarFront_frame'],
+        }],
+    )
+
+    # Post-contact gate. The collision monitor is preventive and isotropic --
+    # its actions only zero or scale the whole command -- so it cannot block
+    # forward while leaving the reverse that BackUp needs to escape.
+    bumper_guard = Node(
+        package='pepper_navigation',
+        executable='bumper_guard',
+        name='bumper_guard',
+        output='screen',
+        arguments=['--ros-args', '--log-level', log_level],
+        condition=IfCondition(LaunchConfiguration('bumper_guard')),
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'cmd_vel_in_topic': 'cmd_vel_safe',
+            'cmd_vel_out_topic': 'cmd_vel',
+        }],
     )
 
     # VoxelLayer publishes nav2_msgs/VoxelGrid, which RViz cannot draw --
@@ -543,6 +586,7 @@ def generate_launch_description():
         declare_rviz_cmd,
         declare_rviz_config_cmd,
         declare_watchdog_cmd,
+        declare_bumper_guard_cmd,
         declare_odom_frame_cmd,
         declare_log_level_cmd,
         sensor_tf,
@@ -554,6 +598,8 @@ def generate_launch_description():
         bt_navigator,
         points_safety_filter,
         collision_monitor,
+        sonar_tf_bridge,
+        bumper_guard,
         local_voxel_markers,
         global_voxel_markers,
         rviz_node,

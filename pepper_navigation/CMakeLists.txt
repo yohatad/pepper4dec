@@ -28,6 +28,27 @@ find_package(visualization_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(nav2_msgs REQUIRED)
 find_package(tf2_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(diagnostic_msgs REQUIRED)
+find_package(naoqi_bridge_msgs REQUIRED)
+
+# bumper_guard: last gate in the velocity chain. Blocks the direction a
+# bumper contact came from, leaving reverse open so BackUp can escape.
+add_executable(bumper_guard
+  src/bumper_guard.cpp
+)
+target_include_directories(bumper_guard PRIVATE include)
+ament_target_dependencies(bumper_guard
+  rclcpp
+  geometry_msgs
+  sensor_msgs
+  diagnostic_msgs
+  std_srvs
+  naoqi_bridge_msgs
+)
+install(TARGETS bumper_guard
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
+)
 
 # Dev/debug tooling (src/tools/) - not part of the production navigation
 # pipeline. pepper_odom_covariance now lives in its own top-level package.
@@ -86,6 +107,7 @@ install(PROGRAMS
   scripts/costmap_explain.py
   scripts/depth_to_cloud.py
   scripts/points_to_image.py
+  scripts/sonar_tf_bridge.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -151,6 +173,12 @@ if(BUILD_TESTING)
   # Guards that the 3 nav2 sections meant to be shared have not drifted apart
   # across the 4 param files. Previously this file existed but was never
   # registered, so it only ever ran if someone invoked it by hand.
+  # bumper_guard's latch/direction logic, with time passed in so the cases
+  # are exact instead of slept through.
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_bumper_latch test/test_bumper_latch.cpp)
+  target_include_directories(test_bumper_latch PRIVATE include)
+
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_shared_nav2_params
     "${CMAKE_CURRENT_SOURCE_DIR}/test/test_shared_nav2_params.py")
