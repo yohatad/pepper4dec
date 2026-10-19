@@ -108,6 +108,8 @@ install(PROGRAMS
   scripts/depth_to_cloud.py
   scripts/points_to_image.py
   scripts/cm_bag_judge.py
+  # live tuning aid: colours what the safety chain cuts (safety_cut_viz.launch.py)
+  scripts/safety_cut_viz.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

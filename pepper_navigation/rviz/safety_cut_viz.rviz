@@ -1,0 +1,254 @@
+Panels:
+  - Class: rviz_common/Displays
+    Help Height: 0
+    Name: Displays
+    Property Tree Widget:
+      Expanded: ~
+      Splitter Ratio: 0.6
+    Tree Height: 600
+  - Class: rviz_common/Views
+    Expanded:
+      - /Current View1
+    Name: Views
+    Splitter Ratio: 0.5
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Enabled: true
+      Name: Grid 0.1 m
+      Cell Size: 0.1
+      Plane Cell Count: 30
+      Color: 160; 160; 164
+      Alpha: 0.3
+      Line Style:
+        Line Width: 0.03
+        Value: Lines
+      Normal Cell Count: 0
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Plane: XY
+      Reference Frame: <Fixed Frame>
+      Value: true
+    - Class: rviz_default_plugins/Axes
+      Enabled: true
+      Name: base_footprint
+      Length: 0.15
+      Radius: 0.008
+      Reference Frame: <Fixed Frame>
+      Value: true
+    - Class: rviz_default_plugins/PointCloud2
+      Enabled: true
+      Name: 'RED: reaches monitor, in STOP polygon'
+      Color Transformer: RGB8
+      Style: Points
+      Size (Pixels): 6
+      Size (m): 0.01
+      Alpha: 1
+      Decay Time: 10
+      Position Transformer: XYZ
+      Use Fixed Frame: true
+      Selectable: true
+      Invert Rainbow: false
+      Use rainbow: true
+      Autocompute Intensity Bounds: true
+      Topic:
+        Value: /safety_cut_viz/stop
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Filter size: 10
+      Value: true
+    - Class: rviz_default_plugins/PointCloud2
+      Enabled: true
+      Name: 'YELLOW: reaches monitor, in SLOW polygon'
+      Color Transformer: RGB8
+      Style: Points
+      Size (Pixels): 5
+      Size (m): 0.01
+      Alpha: 1
+      Decay Time: 10
+      Position Transformer: XYZ
+      Use Fixed Frame: true
+      Selectable: true
+      Invert Rainbow: false
+      Use rainbow: true
+      Autocompute Intensity Bounds: true
+      Topic:
+        Value: /safety_cut_viz/slow
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Filter size: 10
+      Value: true
+    - Class: rviz_default_plugins/PointCloud2
+      Enabled: false
+      Name: 'GREEN: reaches monitor, outside polygons'
+      Color Transformer: RGB8
+      Style: Points
+      Size (Pixels): 3
+      Size (m): 0.01
+      Alpha: 1
+      Decay Time: 10
+      Position Transformer: XYZ
+      Use Fixed Frame: true
+      Selectable: true
+      Invert Rainbow: false
+      Use rainbow: true
+      Autocompute Intensity Bounds: true
+      Topic:
+        Value: /safety_cut_viz/clear
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Filter size: 10
+      Value: false
+    - Class: rviz_default_plugins/PointCloud2
+      Enabled: true
+      Name: 'BLUE: cut by min_range (from lidar)'
+      Color Transformer: RGB8
+      Style: Points
+      Size (Pixels): 4
+      Size (m): 0.01
+      Alpha: 1
+      Decay Time: 10
+      Position Transformer: XYZ
+      Use Fixed Frame: true
+      Selectable: true
+      Invert Rainbow: false
+      Use rainbow: true
+      Autocompute Intensity Bounds: true
+      Topic:
+        Value: /safety_cut_viz/min_range
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Filter size: 10
+      Value: true
+    - Class: rviz_default_plugins/PointCloud2
+      Enabled: true
+      Name: 'MAGENTA: cut by self_cut (side body)'
+      Color Transformer: RGB8
+      Style: Points
+      Size (Pixels): 4
+      Size (m): 0.01
+      Alpha: 1
+      Decay Time: 10
+      Position Transformer: XYZ
+      Use Fixed Frame: true
+      Selectable: true
+      Invert Rainbow: false
+      Use rainbow: true
+      Autocompute Intensity Bounds: true
+      Topic:
+        Value: /safety_cut_viz/self_cut
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Filter size: 10
+      Value: true
+    - Class: rviz_default_plugins/PointCloud2
+      Enabled: true
+      Name: 'ORANGE: cut by body_box (Pepper front)'
+      Color Transformer: RGB8
+      Style: Points
+      Size (Pixels): 4
+      Size (m): 0.01
+      Alpha: 1
+      Decay Time: 10
+      Position Transformer: XYZ
+      Use Fixed Frame: true
+      Selectable: true
+      Invert Rainbow: false
+      Use rainbow: true
+      Autocompute Intensity Bounds: true
+      Topic:
+        Value: /safety_cut_viz/body_box
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Filter size: 10
+      Value: true
+    - Class: rviz_default_plugins/PointCloud2
+      Enabled: false
+      Name: 'GREY: outside monitor height band (floor/base)'
+      Color Transformer: RGB8
+      Style: Points
+      Size (Pixels): 2
+      Size (m): 0.01
+      Alpha: 1
+      Decay Time: 10
+      Position Transformer: XYZ
+      Use Fixed Frame: true
+      Selectable: true
+      Invert Rainbow: false
+      Use rainbow: true
+      Autocompute Intensity Bounds: true
+      Topic:
+        Value: /safety_cut_viz/height
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Filter size: 10
+      Value: false
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Polygons, cut zones, verdict
+      Namespaces: {}
+      Topic:
+        Value: /safety_cut_viz/markers
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 30; 30; 34
+    Fixed Frame: base_footprint
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+      Line color: 128; 128; 0
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 2.2
+      Focal Point:
+        X: 0.25
+        Y: 0
+        Z: 0.3
+      Focal Shape Fixed Size: true
+      Focal Shape Size: 0.05
+      Invert Z Axis: false
+      Name: Current View
+      Near Clip Distance: 0.01
+      Pitch: 0.55
+      Target Frame: <Fixed Frame>
+      Value: Orbit (rviz)
+      Yaw: 3.6
+    Saved: ~
+Window Geometry:
+  Displays:
+    collapsed: false
+  Height: 900
+  Width: 1500
+  Hide Left Dock: false
+  Hide Right Dock: true
