@@ -220,13 +220,16 @@ def generate_launch_description():
             # re-check with the arms moving if autonomous life is on.
             'self_cut_range': 0.30,
             'self_cut_angle': 25.0,
-            # Body-box cut: Pepper's own front at hip/hand height, x 0.18-0.24,
-            # |y| <= 0.12, z 0.70-0.90 -- ~0.5 m from the lidar, so no range
-            # cut reaches it. MEASURED 2026-10-19, empty scene, 510 scans: it
-            # put 0-3 points in the stop wedge (8 scans at 3, trigger is > 3),
-            # leaving no margin for noise. The box stays inside robot_radius
-            # 0.25, so it cannot hide anything outside the body.
-            'body_boxes': [0.10, 0.22, -0.13, 0.13, 0.60, 1.00],
+            # Body-box cut: Pepper's own front face, x ~0.18-0.22, |y| <= 0.12,
+            # straight ahead of the lidar, so neither range cut can drop it
+            # without blinding the forward cone. MEASURED 2026-10-19, nothing
+            # around: arms at rest it showed at z 0.70-0.90 only (0-3 pts in
+            # the stop wedge, trigger > 3); minutes later, same joints but a
+            # shifted stance, the face showed from z 0.38 up and a z >= 0.60
+            # box left 43% of scans false-STOPping. z >= 0.30: 0%. A box at
+            # 0.315 m still STOPs on 100% of scans. The box stays inside
+            # robot_radius 0.25, so it cannot hide anything outside the body.
+            'body_boxes': [0.10, 0.22, -0.13, 0.13, 0.30, 1.00],
             'ror_min_neighbors': 0,   # ROR off (see cloud_range_filter notes)
         }],
     )

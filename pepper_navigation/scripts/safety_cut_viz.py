@@ -96,7 +96,7 @@ class SafetyCutViz(Node):
         p = {'base_frame': 'base_footprint', 'cloud_topic': '/points',
              # points_safety_filter, as in pepper_nav2_fastloc.launch.py
              'min_range': 0.12, 'self_cut_range': 0.30, 'self_cut_angle': 25.0,
-             'body_boxes': [0.10, 0.22, -0.13, 0.13, 0.60, 1.00],
+             'body_boxes': [0.10, 0.22, -0.13, 0.13, 0.30, 1.00],
              'params_file': os.path.join(nav, 'config', 'nav2_params_fastloc.yaml'),
              'transforms_file': os.path.join(slam, 'config', 'sensor_tf.yaml'),
              'robot_radius': 0.25}

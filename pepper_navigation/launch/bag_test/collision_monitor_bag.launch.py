@@ -107,7 +107,7 @@ def generate_launch_description():
                           'min_range': 0.12,
                           'self_cut_range': 0.30,
                           'self_cut_angle': 25.0,
-                          'body_boxes': [0.10, 0.22, -0.13, 0.13, 0.60, 1.00],
+                          'body_boxes': [0.10, 0.22, -0.13, 0.13, 0.30, 1.00],
                           'ror_min_neighbors': 0}]),
         Node(package='nav2_collision_monitor', executable='collision_monitor',
              name='collision_monitor', output='screen',
