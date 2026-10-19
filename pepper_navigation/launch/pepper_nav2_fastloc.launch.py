@@ -465,7 +465,8 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('watchdog')),
         parameters=[{
             'use_sim_time': use_sim_time,
-            'status_name': 'fastlio_localization: pose lock',
+            'status_names': ['fastlio_localization: pose lock',
+                             'fastlio_localization: map -> odom gate'],
             'lost_duration': 5.0,
             'cancel_goals': True,
             'call_recovery': True,

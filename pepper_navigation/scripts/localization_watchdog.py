@@ -6,8 +6,10 @@ map-overlap check), but nothing downstream consumed it: a wrong-but-confident
 lock left Nav2 planning against a costmap built on a bad map -> base_footprint,
 driving toward a goal computed from a pose that was wrong.
 
-This watches that status and, once it has been bad long enough to not be a
-transient, cancels the active navigate_to_pose goal -- and keeps cancelling
+It watches those statuses -- the pose lock, and in odom mode the map -> odom
+jump gate, which reports ERROR after it force-adopts a step the robot cannot
+have made -- and once any has been bad long enough to not be a transient,
+cancels the active navigate_to_pose goal -- and keeps cancelling
 while still lost, so a goal issued in that window does not slip through. It
 does not touch cmd_vel: the collision monitor already owns the safety-critical
 stop, and two arbiters of velocity are worse than one.
@@ -28,7 +30,9 @@ from std_srvs.srv import Trigger
 class LocalizationWatchdog(Node):
     def __init__(self):
         super().__init__('localization_watchdog')
-        self.declare_parameter('status_name', 'fastlio_localization: pose lock')
+        # A list: the pose lock and the map -> odom gate are separate failures
+        # and either one means the pose is not trustworthy.
+        self.declare_parameter('status_names', ['fastlio_localization: pose lock'])
         self.declare_parameter('lost_duration', 5.0)
         self.declare_parameter('stale_timeout', 10.0)     # 0 disables
         self.declare_parameter('treat_warn_as_lost', False)
@@ -40,7 +44,7 @@ class LocalizationWatchdog(Node):
         self.declare_parameter('recancel_period', 3.0)
 
         g = self.get_parameter
-        self.status_name = g('status_name').value
+        self.status_names = list(g('status_names').value)
         self.lost_duration = g('lost_duration').value
         self.stale_timeout = g('stale_timeout').value
         self.warn_is_lost = g('treat_warn_as_lost').value
@@ -56,46 +60,59 @@ class LocalizationWatchdog(Node):
         self.sub = self.create_subscription(
             DiagnosticArray, '/diagnostics', self.on_diagnostics, 10)
 
-        self.last_ok = None        # last time the status was healthy
-        self.last_seen = None      # last time the status was seen at all
+        # Per status: last time it was healthy, and last time it was seen at
+        # all. A status never seen is ignored, so a stack that publishes only
+        # one of them is not reported as permanently stale.
+        self.seen = {n: {'ok': None, 'at': None} for n in self.status_names}
         self.acting = False        # currently treating localization as lost
         self.last_cancel = None
 
         self.timer = self.create_timer(self.check_period, self.tick)
         self.get_logger().info(
-            f'watching "{self.status_name}"; will cancel goals on '
-            f'{self.lost_duration:.0f}s of bad health '
+            f'watching {self.status_names}; will cancel goals on '
+            f'{self.lost_duration:.0f}s of bad health on any of them '
             f'(cancel_goals={self.cancel_goals}, call_recovery={self.call_recovery})')
 
     def on_diagnostics(self, msg):
         for status in msg.status:
-            if status.name != self.status_name:
+            entry = self.seen.get(status.name)
+            if entry is None:
                 continue
             now = self.get_clock().now()
-            self.last_seen = now
+            entry['at'] = now
             bad = (status.level == DiagnosticStatus.ERROR or
                    (self.warn_is_lost and status.level == DiagnosticStatus.WARN))
             if not bad:
-                self.last_ok = now
-            elif self.last_ok is None:
+                entry['ok'] = now
+            elif entry['ok'] is None:
                 # First sighting is already bad: start the clock now rather
                 # than treating "never been healthy" as infinitely lost.
-                self.last_ok = now
-            return
+                entry['ok'] = now
 
     def _elapsed(self, since):
         if since is None:
             return 0.0
         return (self.get_clock().now() - since).nanoseconds / 1e9
 
+    def _worst(self):
+        """The worst watched status: (lost, reason) over the ones seen so far."""
+        reason, lost = None, False
+        for name, e in self.seen.items():
+            if e['at'] is None:
+                continue        # never reported; not our business to guess
+            if self.stale_timeout > 0.0 and self._elapsed(e['at']) > self.stale_timeout:
+                return True, f'no "{name}" status for {self._elapsed(e["at"]):.0f}s'
+            bad_for = self._elapsed(e['ok'])
+            if bad_for >= self.lost_duration:
+                lost = True
+                reason = f'"{name}" unhealthy for {bad_for:.0f}s'
+        return lost, reason
+
     def tick(self):
-        if self.last_seen is None:
+        if all(e['at'] is None for e in self.seen.values()):
             return    # nothing has reported yet; not our business to guess
 
-        stale = (self.stale_timeout > 0.0 and
-                 self._elapsed(self.last_seen) > self.stale_timeout)
-        bad_for = self._elapsed(self.last_ok)
-        lost = stale or bad_for >= self.lost_duration
+        lost, reason = self._worst()
 
         if not lost:
             if self.acting:
@@ -105,8 +122,6 @@ class LocalizationWatchdog(Node):
             return
 
         if not self.acting:
-            reason = (f'no localization status for {self._elapsed(self.last_seen):.0f}s'
-                      if stale else f'unhealthy for {bad_for:.0f}s')
             self.get_logger().error(
                 f'localization LOST ({reason}) -- holding navigation. '
                 f'The pose is not trustworthy; goals will keep being cancelled '
