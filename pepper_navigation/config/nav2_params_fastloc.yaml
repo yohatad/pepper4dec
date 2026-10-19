@@ -189,7 +189,7 @@ local_costmap:
       # costmap and the collision monitor. A layer runs only if named here.
       plugins: ["voxel_layer", "inflation_layer"]                  # in use
       # plugins: ["l2_voxel", "inflation_layer"]                   # L2 only
-      # plugins: ["l2_voxel", "voxel_layer", "inflation_layer"]    # both: set voxel_layer combination_method 1
+      # plugins: ["l2_voxel", "voxel_layer", "inflation_layer"]    # both
       
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
@@ -212,8 +212,9 @@ local_costmap:
         # Marks on MORE than 2 voxels in a column, i.e. >= 0.3 m of height.
         mark_threshold: 2
         unknown_threshold: 10       # must be < z_voxels to mean anything
-        # Overwrite: correct alone. With a layer before it, use 1 (Max).
-        combination_method: 0
+        # Max, not Overwrite: a Max layer only ADDS, so any layer order is
+        # safe and no layer can erase another's marks.
+        combination_method: 1
         # Split marking/clearing; clearing uncapped (3D rays free only what
         # they cross).
         observation_sources: realsense realsense_clear
@@ -255,7 +256,7 @@ local_costmap:
         # low obstacles.
         mark_threshold: 3
         unknown_threshold: 15
-        combination_method: 0       # Overwrite: this layer runs alone here
+        combination_method: 1       # Max: safe in any order, see voxel_layer
         observation_sources: points
         points:
           topic: /points
