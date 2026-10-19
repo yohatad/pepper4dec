@@ -107,6 +107,7 @@ install(PROGRAMS
   scripts/costmap_explain.py
   scripts/depth_to_cloud.py
   scripts/points_to_image.py
+  scripts/cm_bag_judge.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
