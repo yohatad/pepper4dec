@@ -300,11 +300,11 @@ def generate_launch_description():
             'input_topic': '/points',
             'output_topic': '/points_safety',
             'min_range': 0.22,
-            # Side-body cut: the L2 sees Pepper's own flanks 0.20-0.34 m out,
-            # 0.23-0.45 m high. MEASURED: without it the stop zone triggers in
-            # 76% of corridor scans, with it 19%. The forward cone is kept at
-            # every range, so nothing the robot drives into is cut.
-            'self_cut_range': 0.35,
+            # Side-body cut: the L2 sees Pepper itself as a shell 0.355-0.368 m
+            # out at 33-39 deg, 0.22-0.88 m high. MEASURED on the stop wedge:
+            # no cut 73% of scans trigger, 0.35 m 30%, 0.40 m 5.0%. The forward
+            # cone is kept at every range, so nothing driven into is cut.
+            'self_cut_range': 0.40,
             'self_cut_angle': 25.0,
             'ror_min_neighbors': 0,   # ROR off (see cloud_range_filter notes)
         }],

@@ -360,8 +360,8 @@ collision_monitor:
     PolygonStop:
       # Wedge, not a circle: 0.40 m ahead covers body + braking + latency at
       # vx_max 0.35; the sides clear the 0.255 m inscribed radius by ~5 cm.
-      # Needs cloud_range_filter's self_cut_range, or Pepper's own flanks sit
-      # inside it (MEASURED: 76% of corridor scans would trigger, 19% with it).
+      # Needs cloud_range_filter's self_cut_range 0.40, or Pepper's own shell
+      # sits inside it (MEASURED: 73% of scans would trigger, 5.0% with it).
       type: "polygon"
       points: [0.40, 0.26, 0.40, -0.26, 0.26, -0.31, -0.26, -0.31, -0.26, 0.31, 0.26, 0.31]
       action_type: "stop"
