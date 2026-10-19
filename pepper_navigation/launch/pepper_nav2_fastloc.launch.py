@@ -467,6 +467,9 @@ def generate_launch_description():
             'status_names': ['fastlio_localization: pose lock',
                              'fastlio_localization: map -> odom gate'],
             'lost_duration': 5.0,
+            # Silence after an OK only trips stale_timeout (badness is timed
+            # from the first bad report), so match lost_duration here.
+            'stale_timeout': 5.0,
             'cancel_goals': True,
             'call_recovery': True,
         }],

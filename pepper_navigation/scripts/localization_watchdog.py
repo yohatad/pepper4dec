@@ -60,10 +60,13 @@ class LocalizationWatchdog(Node):
         self.sub = self.create_subscription(
             DiagnosticArray, '/diagnostics', self.on_diagnostics, 10)
 
-        # Per status: last time it was healthy, and last time it was seen at
-        # all. A status never seen is ignored, so a stack that publishes only
-        # one of them is not reported as permanently stale.
-        self.seen = {n: {'ok': None, 'at': None} for n in self.status_names}
+        # Per status: when its current run of bad reports began (None while
+        # healthy), and last time it was seen at all. Badness is timed from
+        # the first bad report, not the last good one, so a gap in reporting
+        # is never counted as unhealthy -- silence is stale_timeout's job.
+        # A status never seen is ignored, so a stack that publishes only one
+        # of them is not reported as permanently stale.
+        self.seen = {n: {'bad_since': None, 'at': None} for n in self.status_names}
         self.acting = False        # currently treating localization as lost
         self.last_cancel = None
 
@@ -83,11 +86,11 @@ class LocalizationWatchdog(Node):
             bad = (status.level == DiagnosticStatus.ERROR or
                    (self.warn_is_lost and status.level == DiagnosticStatus.WARN))
             if not bad:
-                entry['ok'] = now
-            elif entry['ok'] is None:
-                # First sighting is already bad: start the clock now rather
-                # than treating "never been healthy" as infinitely lost.
-                entry['ok'] = now
+                entry['bad_since'] = None
+            elif entry['bad_since'] is None:
+                # Also covers a first sighting that is already bad: the clock
+                # starts now rather than treating "never healthy" as lost.
+                entry['bad_since'] = now
 
     def _elapsed(self, since):
         if since is None:
@@ -102,7 +105,7 @@ class LocalizationWatchdog(Node):
                 continue        # never reported; not our business to guess
             if self.stale_timeout > 0.0 and self._elapsed(e['at']) > self.stale_timeout:
                 return True, f'no "{name}" status for {self._elapsed(e["at"]):.0f}s'
-            bad_for = self._elapsed(e['ok'])
+            bad_for = self._elapsed(e['bad_since'])
             if bad_for >= self.lost_duration:
                 lost = True
                 reason = f'"{name}" unhealthy for {bad_for:.0f}s'

@@ -154,6 +154,13 @@ if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_shared_nav2_params
     "${CMAKE_CURRENT_SOURCE_DIR}/test/test_shared_nav2_params.py")
+
+  # localization_watchdog.py on sim time with a fake nav2 cancel service.
+  # Isolates itself on a random loopback-only domain. ~2 min: the 60 s
+  # default timeout is too short.
+  ament_add_pytest_test(test_localization_watchdog
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/test_localization_watchdog.py"
+    TIMEOUT 300)
 endif()
 
 ament_package()
