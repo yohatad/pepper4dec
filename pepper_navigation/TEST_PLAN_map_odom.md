@@ -11,6 +11,8 @@ the feature branches are merged.
 | point_lio | `feature/map-odom-frame` | `57ef9c8` no map -> base_footprint before the lock, `c75dbf4` opt-in map -> odom, `aaa4441` odom_lookup_timeout 0.1 in l2lidar_rsimu.yaml |
 | FAST_LIO | `feature/map-odom-frame` | `54a356f` opt-in map -> odom, `68ce6e7` odom_lookup_timeout 0.1 in l2_rsimu.yaml |
 | kiss-icp | `main` | `7fce03c` floor lock (z/roll/pitch pinned to 0, fed back into the pipeline) |
+| pepper4dec | `devel` (uncommitted) | map -> odom gate on /diagnostics + watchdog acts on it; collision polygons as wedges; `self_cut_range` in every `points_safety_filter` |
+| FAST_LIO / point_lio | `feature/map-odom-frame` (uncommitted) | `odom_lookup_timeout` 0.1 as the CODE default; `odom_gate_error_latch`; `/localization/pose` flattened in odom mode |
 
 Nothing here is merged into `main` / `ros2`. Merge only after the tests pass.
 
@@ -136,18 +138,79 @@ Run the same bag with `floor_lock: false` so the wobble is visible, and compare:
 If A is stable and B or C fixes it, change `pepper_l2.yaml` to match and keep
 the floor lock as a safety net rather than the fix.
 
+## 8. The map -> odom gate reaches the watchdog  (robot, odom mode)
+
+New: the gate publishes `<node>: map -> odom gate` on /diagnostics, and
+localization_watchdog watches it alongside the pose lock.
+
+```bash
+ros2 launch pepper_navigation pepper_nav2_fastloc.launch.py odom_frame:=odom
+ros2 topic echo /diagnostics --field status   # in another terminal
+```
+
+| Check | Expected |
+|---|---|
+| Startup log of localization_watchdog | `watching ['fastlio_localization: pose lock', 'fastlio_localization: map -> odom gate']` |
+| `/diagnostics` in normal driving | Gate status OK, message `ok; last step ... m / ... deg`; `odom_misses` NOT rising |
+| `odom_misses` after a few minutes | Still 0, or a handful at startup only. A steadily rising count means `odom -> base_footprint` is late -- see caveats |
+| 2D Pose Estimate mid-run | Gate stays OK (a seed calls `reset()`); no goal cancelled |
+| Force a bad lock: `/relocalize` somewhere ambiguous, or block the lidar | Gate goes WARN (`holding ...`) then ERROR (`adopted ...`) after ~2 s; watchdog logs `localization LOST ("...: map -> odom gate" unhealthy for 5s)` and cancels the goal |
+| After recovery | Gate returns OK within `odom_gate_error_latch` (6 s); watchdog logs `localization healthy again` |
+| Set `publish.odom_gate_error_latch: 0.0` and repeat | Gate never reports ERROR; goals are NOT cancelled (report-only mode) |
+
+## 9. `/localization/pose` agrees with TF in odom mode  (bag or robot)
+
+New: the topic is now flattened in odom mode, so it matches the tree.
+
+| Check | Expected |
+|---|---|
+| Default mode: `tf2_echo map base_footprint` vs `/localization/pose` | Identical, including roll/pitch |
+| Odom mode: same comparison | Identical. Before this fix the topic carried ~3 deg of roll/pitch the tree did not |
+| Odom mode: roll/pitch on `/localization/pose` | Exactly 0 |
+
+## 10. The lookup timeout default  (bag)
+
+New: 0.1 s is the code default in `map_odom.hpp`, not just the `*_rsimu.yaml`.
+
+| Check | Expected |
+|---|---|
+| Run odom mode with `config_file:=l2.yaml` (which does NOT set it) | No "step ... held" warnings; `ros2 param get /fastlio_localization publish.odom_lookup_timeout` returns 0.1 |
+
+## Bag replay procedure
+
+Odom mode cannot be bag-replayed from a bag whose `/tf` already carries
+`pepper_odom -> base_footprint` (see the caveats). For everything else:
+
+```bash
+# one RViz, one stack per round, re-launched each loop
+~/ros2_ws/utils/costmap_tuning/replay_loop.sh slam_20260823_aligned
+
+# or a single round by hand
+ros2 launch pepper_navigation costmap_bag.launch.py \
+    localize:=true depth_images:=true rviz:=true
+ros2 bag play ~/ros2_ws/bags/slam_20260823_aligned --clock --read-ahead-queue-size 2000
+```
+
+Do NOT use `ros2 bag play --loop`: each restart jumps the clock backwards,
+which clears every TF buffer, and the costmaps lose the map frame.
+
+Bags: `slam_20260823_aligned` (driving, needs the localizer, ~25 s to lock),
+`costmap_empty_floor_20260919_*` (recorded pose in `/tf_nav`, replays as-is).
+
 ## Known caveats
 
 - Bag replay in odom mode: if the bag's `/tf` carries `pepper_odom -> base_footprint`,
   `base_footprint` gets two parents. Test live first.
-- The map -> odom jump gate only logs; it does not yet raise a diagnostic the
-  Nav2 watchdog acts on.
+- The map -> odom jump gate publishes `<node>: map -> odom gate` on
+  /diagnostics: WARN while holding, ERROR latched for `odom_gate_error_latch`
+  (6 s, > the watchdog's 5 s lost_duration) after a forced adopt, so
+  localization_watchdog cancels goals. Set the latch to 0 for report-only.
 - KISS-ICP has no IMU and no pose guard (unlike `lio_odom_guard` on the LIO stacks).
   The floor lock bounds z/roll/pitch only; x/y/yaw are unguarded.
-- The 0.1 s `odom_lookup_timeout` is set only in `l2_rsimu.yaml` (FAST-LIO) and
-  `l2lidar_rsimu.yaml` (Point-LIO). With `config_file:=l2.yaml` or
-  `l2lidar_node.yaml` the 0.05 s code default applies and the "held" warnings
-  may return.
+- 0.1 s is now the `odom_lookup_timeout` code default in `map_odom.hpp`, so
+  every `config_file` gets it; the yaml entries are explicit overrides. It is
+  longer than the ~90 ms scan period, so watch `odom_misses` in the gate
+  status for lookups that actually run the timeout out.
 
 ## Bag replay results so far (slam_20260823_aligned, 2026-09-29)
 
