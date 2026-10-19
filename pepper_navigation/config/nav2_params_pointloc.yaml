@@ -346,9 +346,8 @@ collision_monitor:
   ros__parameters:
     use_sim_time: False
     base_frame_id: "base_footprint"
-    # map: this stack has no odom frame, and with the lookup failing the
-    # monitor published no polygons at all. base_shift_correction only needs a
-    # frame continuous over ~0.1 s, which map is here (2.1 cm median step).
+    # Default mode: map is continuous here (2.1 cm median step) and "odom"
+    # made the lookup fail. Odom mode rewrites this from the launch file.
     odom_frame_id: "map"
     cmd_vel_in_topic: "cmd_vel_raw"
     cmd_vel_out_topic: "cmd_vel"

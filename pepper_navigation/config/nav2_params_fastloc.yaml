@@ -358,8 +358,8 @@ collision_monitor:
   ros__parameters:
     use_sim_time: False
     base_frame_id: "base_footprint"
-    # map: there is no odom frame, and base_shift_correction only needs a
-    # continuous one.
+    # Default mode has no odom frame and map is continuous; odom mode
+    # rewrites this to odom from the launch file (see its param_rewrites).
     odom_frame_id: "map"
     cmd_vel_in_topic: "cmd_vel_raw"
     cmd_vel_out_topic: "cmd_vel"

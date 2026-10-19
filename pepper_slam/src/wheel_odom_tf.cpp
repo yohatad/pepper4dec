@@ -70,7 +70,17 @@ private:
     t.transform.translation.x = msg->pose.pose.position.x;
     t.transform.translation.y = msg->pose.pose.position.y;
     t.transform.translation.z = msg->pose.pose.position.z;
-    t.transform.rotation = msg->pose.pose.orientation;
+    // A degenerate quaternion would poison the whole TF tree, not just this
+    // edge, so drop the sample instead of broadcasting it.
+    const auto & q = msg->pose.pose.orientation;
+    if (q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w < 1e-12) {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 5000,
+        "%s sent a degenerate orientation; skipping this %s -> %s sample.",
+        sub_->get_topic_name(), odom_frame_.c_str(), base_frame_.c_str());
+      return;
+    }
+    t.transform.rotation = q;
     broadcaster_->sendTransform(t);
   }
 

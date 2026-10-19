@@ -275,6 +275,11 @@ def generate_launch_description():
             # Full path, so the global costmap stays in map.
             'local_costmap.local_costmap.ros__parameters.global_frame':
                 PythonExpression(["'", odom_frame, "' or 'map'"]),
+            # base_shift_correction needs the CONTINUOUS frame, which is
+            # map only while the localizer owns base_footprint; in odom mode
+            # map is the one that jumps on relocalization.
+            'collision_monitor.ros__parameters.odom_frame_id':
+                PythonExpression(["'", odom_frame, "' or 'map'"]),
         },
         convert_types=True)
 
