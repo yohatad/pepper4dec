@@ -369,7 +369,7 @@ collision_monitor:
       # Wedge, not a circle: 0.40 m ahead covers body + braking + latency at
       # vx_max 0.35; the sides clear the 0.255 m inscribed radius by ~5 cm.
       # Needs cloud_range_filter's self_cut_range 0.40, or Pepper's own shell
-      # sits inside it (MEASURED: 73% of scans would trigger, 5.0% with it).
+      # sits inside it (MEASURED whole bag: 73% of scans would trigger, 6.6% with it).
       type: "polygon"
       points: [0.40, 0.26, 0.40, -0.26, 0.26, -0.31, -0.26, -0.31, -0.26, 0.31, 0.26, 0.31]
       action_type: "stop"

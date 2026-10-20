@@ -66,9 +66,11 @@ Tests 3, 4 and 7 need `naoqi_driver` running, for `/pepper_odom`.
 | Stop `naoqi_driver` while idle | Localizer warns `no odom -> base_footprint at the scan stamp`, TF goes stale, Nav2 stops. Recovers when the driver restarts |
 | Normal route including a doorway | Goal reached; driving as smooth as default mode or better |
 
-If "held" warnings appear in normal driving, naoqi's host-time stamps on
-`/pepper_odom` are the likely cause: try `publish.odom_lookup_timeout: 0.1` and
-note the step sizes in the log.
+If "held" warnings appear in normal driving, the cause is NOT naoqi's stamps:
+MEASURED on the bag, `/pepper_odom` headers sit -3.5 ms from receive time while
+`/points` sit -98.8 ms. Suspect the estimate instead -- on an `l2.yaml` run the
+holds came with `[health] velocity ... the estimate is diverging` and falling
+map overlap, and disappeared entirely on `l2_rsimu.yaml`.
 
 ## 4. pointloc with `odom_frame:=odom`
 
@@ -124,19 +126,40 @@ still show a problem is x/y/yaw.
 | Set a pose, drive a loop | AMCL converges and stays localized |
 | Same route as test 6 | Goal reached; compare smoothness and relocalization with the FAST-LIO amcl stack |
 
-### 7b. Root-cause A/B (the lock hides the cause, it does not remove it)
+### 7b. Root-cause A/B -- RUN 2026-10-19 (bag). All three hypotheses disproved.
 
 The floor constrains z/roll/pitch, so a working ICP should not swing that far.
-Run the same bag with `floor_lock: false` so the wobble is visible, and compare:
+Run with `floor_lock: false` so the wobble is visible. MEASURED on
+`slam_20260823_aligned`, the same 80 s window and ~907 poses each:
 
-| Run | Config | Expected if this is the cause |
-|---|---|---|
-| A | `kiss_config:=$(ros2 pkg prefix kiss_icp)/share/kiss_icp/config/l2_indoor.yaml` (validated, ATE ~0.24 m) | Stable z/roll/pitch |
-| B | `pepper_l2.yaml` with `prior.source: constant_velocity` | Stable: the wheel prior (naoqi host-time stamps) was the cause |
-| C | `pepper_l2.yaml` with `data.min_range: 0.8` | Stable: Pepper's own body/arms inside 0.5-0.8 m were the cause |
+| Run | Config | z span | roll | pitch |
+|---|---|---|---|---|
+| **BASE** | `pepper_l2.yaml` as shipped (`wheel_odom`, `min_range: 0.5`) | **1.20 m** | **+-20.5 deg** | **+-18.5 deg** |
+| A | `l2_indoor.yaml` (validated, ATE ~0.24 m) | 1.75 m | +-50.5 deg | +-37.7 deg |
+| B | `pepper_l2.yaml` + `prior.source: constant_velocity` | 5.55 m | +-180.0 deg | +-81.8 deg |
+| C | `pepper_l2.yaml` + `data.min_range: 0.8` | 1.61 m | +-24.1 deg | +-23.3 deg |
 
-If A is stable and B or C fixes it, change `pepper_l2.yaml` to match and keep
-the floor lock as a safety net rather than the fix.
+**A is disproved**: the validated config wobbles more, not less. Note it has no
+`prior` section, so it ran on the code default -- `constant_velocity`
+(`OdometryServer.hpp:109`) -- which is why it lands near B.
+
+**B is not just disproved, it is inverted.** Removing the wheel prior is
+catastrophic: roll reaches +-180 deg, i.e. the attitude flips outright. The
+wheel-odometry prior is load-bearing, not the cause. This agrees with the
+separate stamp measurement: `/pepper_odom` headers sit -3.5 ms from receive
+time, so there is no naoqi host-time problem for it to cause.
+
+**C is disproved**: raising `min_range` to 0.8 m is slightly worse than 0.5 m,
+so Pepper's own body inside that band is not the driver.
+
+The pattern is the prior, not the config: both runs with `wheel_odom` (BASE,
+C) stay near +-20 deg, both without it (A, B) reach +-50 to +-180 deg.
+
+**Conclusion: the floor lock is the fix, not a mask.** KISS-ICP has no IMU, and
+on this bag its attitude diverges under every config tested -- best case still
++-20 deg of roll with the lock off. There is no config change that removes the
+need for it, so keep it enabled and treat the lock as the attitude constraint
+the estimator otherwise lacks.
 
 ## 8. The map -> odom gate reaches the watchdog  (robot, odom mode)
 
@@ -174,7 +197,16 @@ New: 0.1 s is the code default in `map_odom.hpp`, not just the `*_rsimu.yaml`.
 
 | Check | Expected |
 |---|---|
-| Run odom mode with `config_file:=l2.yaml` (which does NOT set it) | No "step ... held" warnings; `ros2 param get /fastlio_localization publish.odom_lookup_timeout` returns 0.1 |
+| `ros2 param get /fast_lio_localization publish.odom_lookup_timeout` | Returns 0.1. The node is `fast_lio_localization`; `fastlio_localization` is the diagnostic status prefix |
+
+**This test cannot be re-run as originally written.** It needed a config that
+does NOT set the parameter, so the code default had to come from
+`map_odom.hpp`. The only such config was `l2.yaml`, which has since been
+removed, and every remaining config sets it explicitly -- so the check above now
+verifies the plumbing, not the default. It WAS run against `l2.yaml` on
+2026-10-19 and returned 0.1, which is the evidence that the header default
+reaches the node. To re-verify the default itself, read
+`map_odom.hpp`'s `double lookup_timeout = 0.1;` directly.
 
 ## Bag replay procedure
 
@@ -200,7 +232,9 @@ Bags: `slam_20260823_aligned` (driving, needs the localizer, ~25 s to lock),
 ## Known caveats
 
 - Bag replay in odom mode: if the bag's `/tf` carries `pepper_odom -> base_footprint`,
-  `base_footprint` gets two parents. Test live first.
+  `base_footprint` gets two parents. NOT an issue for `slam_20260823_aligned`:
+  MEASURED, `base_footprint` is the ROOT of that bag's tree, so odom mode
+  replays cleanly (tests 3, 4, 9 and 10 were all run on it on 2026-10-19).
 - The map -> odom jump gate publishes `<node>: map -> odom gate` on
   /diagnostics: WARN while holding, ERROR latched for `odom_gate_error_latch`
   (6 s, > the watchdog's 5 s lost_duration) after a forced adopt, so
@@ -212,16 +246,56 @@ Bags: `slam_20260823_aligned` (driving, needs the localizer, ~25 s to lock),
   longer than the ~90 ms scan period, so watch `odom_misses` in the gate
   status for lookups that actually run the timeout out.
 
-## Bag replay results so far (slam_20260823_aligned, 2026-09-29)
+## Status (reviewed 2026-10-19)
 
-| Test | Result |
-|---|---|
-| 1 Point-LIO pre-lock | Pass |
-| 2 fastloc default | Pass |
-| 3 fastloc odom mode | Pass after `odom_lookup_timeout: 0.1`; pose agreement 0-3 cm |
-| 4 pointloc odom mode | Pass with the same fix; agreement 0.2-1.1 cm, map -> odom drift ~2.6 cm/s |
-| 5, 6 | Need the live robot |
-| 7 | Frames, rates and AMCL correct; z/roll/pitch wobble led to the floor lock. Re-run with the checks above |
+`DONE` verified. `STALE` passed before a change that invalidates it. `TODO`
+never run.
+
+| Test | Status | Note |
+|---|---|---|
+| 1 Point-LIO pre-lock | **DONE** 2026-09-29 | Pass |
+| 2 fastloc default | **DONE** 2026-09-29 | Pass |
+| 3 fastloc odom mode | **DONE** 2026-10-19 (bag) | Pass on `l2_rsimu.yaml`. Tree correct, zero holds, zero divergence, overlap 1.00, `odom_misses` 4. Pose vs TF p50 0.59 cm / p95 1.31 cm / max 2.02 cm, yaw p50 0.24 / p95 0.84 deg. map -> odom drift 0.40 cm/s |
+| 4 pointloc odom mode | **DONE** 2026-10-19 (bag), marginal | Same tree, zero holds, zero divergence, overlap 0.99, `odom_misses` 7, drift 0.47 cm/s. Pose vs TF p95 **2.16 cm** and yaw p95 **1.06 deg**, i.e. just over the 2 cm / 1 deg line (p50 0.96 cm / 0.33 deg, max 3.57 cm / 1.88 deg). 7.6% of xy samples over tolerance |
+| 5 robot radius 0.25 | **TODO** | needs the live robot |
+| 6 amcl at the new radius | **TODO** | needs the live robot |
+| 7 KISS-ICP profile | **PART DONE** | frames, rates and AMCL correct; z/roll/pitch wobble led to the floor lock. Re-run with the checks above |
+| 7b root-cause A/B | **DONE** 2026-10-19 (bag) | All three hypotheses disproved; B inverted (losing the wheel prior gives +-180 deg roll). The floor lock is the fix, not a mask -- keep it on |
+| 8 gate reaches the watchdog | **TODO** | robot, odom mode |
+| 9 `/localization/pose` vs TF | **DONE** 2026-10-19 (bag) | Pass on both stacks: roll and pitch are **exactly 0.000000 deg** over 1700 and 1699 samples. The flattening works |
+| 10 lookup timeout default | **DONE** 2026-10-19 (bag), not repeatable | Pass: read **0.1** under `config_file:=l2.yaml`, which did not set it, so the `map_odom.hpp` default reaches the node. `l2.yaml` has since been removed and every remaining config sets the value, so this exact check cannot be repeated -- see the note under test 10 |
+
+### Three things these runs established
+
+**`l2.yaml` diverges on this bag; `l2_rsimu.yaml` does not.** The first attempt
+at tests 3 and 9 used `l2.yaml` (as test 10 then required) and FAST-LIO came
+apart:
+overlap fell 1.00 -> 0.41 -> 0.29, `[health] velocity 1.1 m/s exceeds this
+robot's 1.00 m/s limit -- the estimate is diverging`, the gate held 0.33 / 0.30
+/ 0.54 m steps and then force-adopted 0.70 m. Pose-vs-TF error reached p50 3.3
+cm and p99 1.0 m, all of it a symptom of the divergence. The same run on
+`l2_rsimu.yaml` had zero holds and zero health warnings. **Run test 10 for the
+parameter only; never judge pose agreement on an `l2.yaml` run.** `l2.yaml`
+has since been removed for exactly this reason, and the `amcl` and
+`rtabmap_loc` profiles -- which both passed it to FAST-LIO for odometry -- now
+use `l2_rsimu.yaml`.
+
+**`/pepper_odom` is NOT host-time skewed.** MEASURED on the bag, header stamp
+minus bag receive time: `/pepper_odom` -3.5 ms (p5 -7.2, p95 -2.0), `/points`
+-98.8 ms (p5 -107, p95 -90). So naoqi's odometry is stamped essentially at
+publication and the ~99 ms figure belongs to the lidar -- one scan period of
+sensor latency. The caveat below blaming naoqi host time for held steps is
+wrong, and 0.1 s is a principled `odom_lookup_timeout`, matching the lag
+between a scan's stamp and its arrival, rather than a workaround for skew.
+
+**Compare at the pose's own stamp, not the latest transform.** Looking up
+`map -> base_footprint` at `rclpy.time.Time()` turns real motion into apparent
+disagreement; on a healthy fastloc run it inflated the max from 2.0 cm to 7.8 cm.
+
+Re-running 3 and 4 is now unblocked: `slam_20260823_aligned` has
+`base_footprint` as the **root** of its `/tf` tree, so nothing in the bag
+conflicts with a localizer owning `map -> odom` and `wheel_odom_tf` owning
+`odom -> base_footprint`.
 
 ## After the tests
 
