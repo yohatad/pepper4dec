@@ -384,7 +384,12 @@ collision_monitor:
       type: "polygon"
       points: [0.40, 0.26, 0.40, -0.26, 0.26, -0.31, -0.26, -0.31, -0.26, 0.31, 0.26, 0.31]
       action_type: "stop"
-      max_points: 3         # trigger when > this many points fall inside
+      # trigger when > this many points fall inside. 10, was 3: the L2 puts
+      # 2-8 ghost points per scan along its line of sight, at its own
+      # height, in front of anything ahead -- a box at 0.635 m STOPped on 25%
+      # of scans at 3. Real objects in the stop wedge give 50-2000 pts/scan
+      # (box 0.315-0.475 m, live 2026-10-19); empty scene max 1-2.
+      max_points: 10
       visualize: True
       polygon_pub_topic: "polygon_stop"
       enabled: True
@@ -395,7 +400,7 @@ collision_monitor:
       points: [0.90, 0.30, 0.90, -0.30, 0.55, -0.45, -0.35, -0.45, -0.35, 0.45, 0.55, 0.45]
       action_type: "slowdown"
       slowdown_ratio: 0.3
-      max_points: 3
+      max_points: 10
       visualize: True
       polygon_pub_topic: "polygon_slowdown"
       enabled: True
