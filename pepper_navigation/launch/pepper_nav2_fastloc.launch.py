@@ -71,6 +71,12 @@ Launch arguments:
     watchdog (default: "true")
         Cancel navigation goals while fastlio_localization reports itself
         lost. Set false to monitor without ever holding nav.
+    collision_monitor (default: "true")
+        TESTING ONLY. false leaves the collision monitor out entirely --
+        not started, not in the lifecycle list (a deactivated monitor drops
+        its bond and the manager treats it as a crash) -- and feeds the
+        controller and behaviours straight into bumper_guard. Nothing then
+        stops the robot BEFORE contact: keep the e-stop in hand.
 
 Configuration:
     config/nav2_params_fastloc.yaml, map/pepper_map_lc.yaml, and the FAST-LIO
@@ -116,8 +122,9 @@ within the DEC project.
 import os
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription
-from launch.conditions import IfCondition
+from launch.actions import (DeclareLaunchArgument, GroupAction, IncludeLaunchDescription,
+                            LogInfo)
+from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
@@ -206,6 +213,18 @@ def generate_launch_description():
         description='Insert bumper_guard between collision_monitor and cmd_vel, '
                     'blocking the direction a bumper contact came from. Set '
                     'false to drive straight off the collision monitor.')
+    declare_collision_monitor_cmd = DeclareLaunchArgument(
+        'collision_monitor', default_value='true',
+        description='TESTING ONLY: false runs without the collision monitor '
+                    '(controller -> bumper_guard -> cmd_vel). Nothing stops '
+                    'the robot before contact.')
+    cm_on = LaunchConfiguration('collision_monitor')
+    is_true = "'.lower() in ('true', '1')"
+    # Who receives the controller's and behaviours' output: the monitor when
+    # it runs, else the bumper gate, else (both off) the wheels directly.
+    nav_cmd_out = PythonExpression(
+        ["'cmd_vel_raw' if '", cm_on, is_true, " or '",
+         LaunchConfiguration('bumper_guard'), is_true, " else 'cmd_vel'"])
     declare_odom_frame_cmd = DeclareLaunchArgument(
         'odom_frame', default_value='',
         description='Empty (default): fastlio_localization broadcasts map -> '
@@ -319,7 +338,7 @@ def generate_launch_description():
         parameters=[configured_params],
         # Route velocity through the collision monitor: controller -> cmd_vel_raw
         # -> collision_monitor -> cmd_vel (what Pepper drives on).
-        remappings=[('cmd_vel', 'cmd_vel_raw'), ('/tf', '/tf_nav')],
+        remappings=[('cmd_vel', nav_cmd_out), ('/tf', '/tf_nav')],
     )
     planner_server = Node(
         package='nav2_planner',
@@ -337,7 +356,7 @@ def generate_launch_description():
         output='screen',
         arguments=['--ros-args', '--log-level', log_level],
         parameters=[configured_params],
-        remappings=[('cmd_vel', 'cmd_vel_raw'), ('/tf', '/tf_nav')],
+        remappings=[('cmd_vel', nav_cmd_out), ('/tf', '/tf_nav')],
     )
 
     # Safety-layer input: drop the L2's own housing/bumper (< 0.22 m from the
@@ -393,7 +412,13 @@ def generate_launch_description():
         arguments=['--ros-args', '--log-level', log_level],
         parameters=[configured_params],
         remappings=[('/tf', '/tf_nav')],
+        condition=IfCondition(cm_on),
     )
+    collision_monitor_off_warning = LogInfo(
+        msg='WARNING: collision_monitor:=false -- TESTING ONLY. No stop or '
+            'slowdown zone is active; only bumper_guard (after contact) stands '
+            'between the controller and the wheels. Keep the e-stop in hand.',
+        condition=UnlessCondition(cm_on))
 
     # Post-contact gate. The collision monitor is preventive and isotropic --
     # its actions only zero or scale the whole command -- so it cannot block
@@ -407,7 +432,8 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('bumper_guard')),
         parameters=[{
             'use_sim_time': use_sim_time,
-            'cmd_vel_in_topic': 'cmd_vel_safe',
+            'cmd_vel_in_topic': PythonExpression(
+                ["'cmd_vel_safe' if '", cm_on, is_true, " else 'cmd_vel_raw'"]),
             'cmd_vel_out_topic': 'cmd_vel',
             # The collision monitor holds its last verdict when a source goes
             # stale, so losing this topic must stop the robot here instead.
@@ -531,35 +557,40 @@ def generate_launch_description():
         }],
     )
 
-    lifecycle_manager = Node(
-        package='nav2_lifecycle_manager',
-        executable='lifecycle_manager',
-        name='lifecycle_manager_navigation',
-        output='screen',
-        arguments=['--ros-args', '--log-level', log_level],
-        parameters=[{
-            'use_sim_time': use_sim_time,
-            # OFF deliberately. local_costmap blocks configuring until a
-            # transform to its global_frame (map) exists, and with this
-            # localizer that frame appears only after ScanContext locks. That
-            # lock waits on the world, not the clock -- enough scan overlap
-            # with the prior map, and init_agree_count estimates agreeing on
-            # where it is -- so the wait is unbounded and autostart would
-            # stall the whole bringup. wait_for_map_then_start
-            # calls STARTUP the moment the frame is up.
-            'autostart': False,
-            'bond_timeout': 4.0,
-            # map_server first so /map is up before the global costmap activates.
-            'node_names': [
-                'map_server',
-                'controller_server',
-                'planner_server',
-                'behavior_server',
-                'bt_navigator',
-                'collision_monitor',
-            ],
-        }],
-    )
+    def make_lifecycle_manager(with_monitor):
+        return Node(
+            package='nav2_lifecycle_manager',
+            executable='lifecycle_manager',
+            name='lifecycle_manager_navigation',
+            output='screen',
+            # Exactly one of the two starts, so the name stays unique.
+            condition=IfCondition(cm_on) if with_monitor else UnlessCondition(cm_on),
+            arguments=['--ros-args', '--log-level', log_level],
+            parameters=[{
+                'use_sim_time': use_sim_time,
+                # OFF deliberately. local_costmap blocks configuring until a
+                # transform to its global_frame (map) exists, and with this
+                # localizer that frame appears only after ScanContext locks. That
+                # lock waits on the world, not the clock -- enough scan overlap
+                # with the prior map, and init_agree_count estimates agreeing on
+                # where it is -- so the wait is unbounded and autostart would
+                # stall the whole bringup. wait_for_map_then_start
+                # calls STARTUP the moment the frame is up.
+                'autostart': False,
+                'bond_timeout': 4.0,
+                # map_server first so /map is up before the global costmap activates.
+                'node_names': [
+                    'map_server',
+                    'controller_server',
+                    'planner_server',
+                    'behavior_server',
+                    'bt_navigator',
+                ] + (['collision_monitor'] if with_monitor else []),
+            }],
+        )
+
+    lifecycle_manager = make_lifecycle_manager(True)
+    lifecycle_manager_no_monitor = make_lifecycle_manager(False)
 
     # Nav2 reads /tf_nav, a copy of /tf holding only the navigation edges:
     # naoqi_driver's joint tree (~4150 transforms/s) saturated the costmap's
@@ -600,6 +631,8 @@ def generate_launch_description():
         declare_rviz_config_cmd,
         declare_watchdog_cmd,
         declare_bumper_guard_cmd,
+        declare_collision_monitor_cmd,
+        collision_monitor_off_warning,
         declare_odom_frame_cmd,
         declare_log_level_cmd,
         sensor_tf,
@@ -616,6 +649,7 @@ def generate_launch_description():
         global_voxel_markers,
         rviz_node,
         lifecycle_manager,
+        lifecycle_manager_no_monitor,
         nav2_starter,
         localization_recovery,
         localization_watchdog,
