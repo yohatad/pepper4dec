@@ -611,7 +611,7 @@ BT::PortsList SpeechWithFeedbackNode::providedPorts()
 {
   return {
     BT::InputPort<std::string>(
-      "action_name", "/naoqi_driver/naoqi_driver/speech_with_feedback",
+      "action_name", "/naoqi_driver/speech_with_feedback",
       "Action server name"),
     BT::InputPort<std::string>("say", "", "Text to speak (supports \\mrk=N\\ bookmarks)"),
     BT::InputPort<std::string>(

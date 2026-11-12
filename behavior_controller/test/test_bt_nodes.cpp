@@ -322,7 +322,7 @@ TEST_F(BtRosTest, ConversationManagerWithEmptyPromptSendsNothing) {
 
 TEST_F(BtRosTest, SpeechWithFeedbackSaysTextInContextualModeByDefault) {
   auto server = serveAction<SpeechWithFeedback>(
-    "/naoqi_driver/naoqi_driver/speech_with_feedback", [](const SpeechWithFeedback::Goal &) {
+    "/naoqi_driver/speech_with_feedback", [](const SpeechWithFeedback::Goal &) {
       Reply<SpeechWithFeedback> reply;
       reply.result.success = true;
       return reply;
@@ -346,7 +346,7 @@ TEST_F(BtRosTest, SpeechWithFeedbackSaysTextInContextualModeByDefault) {
 // gesture_message_english, but the node refuses to say nothing.
 TEST_F(BtRosTest, SpeechWithFeedbackRefusesEmptyText) {
   auto server = serveAction<SpeechWithFeedback>(
-    "/naoqi_driver/naoqi_driver/speech_with_feedback", [](const SpeechWithFeedback::Goal &) {
+    "/naoqi_driver/speech_with_feedback", [](const SpeechWithFeedback::Goal &) {
       Reply<SpeechWithFeedback> reply;
       reply.result.success = true;
       return reply;
@@ -359,7 +359,7 @@ TEST_F(BtRosTest, SpeechWithFeedbackRefusesEmptyText) {
 
 TEST_F(BtRosTest, SpeechWithFeedbackFailsWhenNaoqiReportsFailure) {
   serveAction<SpeechWithFeedback>(
-    "/naoqi_driver/naoqi_driver/speech_with_feedback", [](const SpeechWithFeedback::Goal &) {
+    "/naoqi_driver/speech_with_feedback", [](const SpeechWithFeedback::Goal &) {
       return Reply<SpeechWithFeedback>();  // success = false
     });
   auto tree = treeFromText(R"(<SpeechWithFeedback say="Hello"/>)");

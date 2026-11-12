@@ -275,7 +275,7 @@ protected:
         return reply;
       });
     serveAction<SpeechWithFeedback>(
-      "/naoqi_driver/naoqi_driver/speech_with_feedback",
+      "/naoqi_driver/speech_with_feedback",
       [this](const SpeechWithFeedback::Goal & goal) {
         log("say " + goal.say);
         Reply<SpeechWithFeedback> reply;
