@@ -107,6 +107,22 @@ git clone https://github.com/ros-naoqi/pepper_meshes2.git pepper_meshes
 git clone -b pepper4dec https://github.com/yohatad/BehaviorTree.ROS2.git
 ```
 
+If `src/BehaviorTree.ROS2` was already cloned from upstream
+(`BehaviorTree/BehaviorTree.ROS2`), switch it to the fork rather than
+re-cloning. Without the fix, `behavior_controller` aborts with
+`UnknownGoalHandleError` when an action node is halted before the server
+answers its next goal (e.g. a second tour in a row), and its
+`HaltingAnActionNodeBeforeItsSecondGoalIsAnsweredIsSafe` and
+`test_bt_scenarios` tests fail:
+
+```bash
+cd ~/ros2_ws/src/BehaviorTree.ROS2
+git remote rename origin upstream
+git remote add origin https://github.com/yohatad/BehaviorTree.ROS2.git
+git fetch origin && git switch -c pepper4dec --track origin/pepper4dec
+cd ~/ros2_ws && colcon build --packages-select behaviortree_ros2 behavior_controller
+```
+
 The lidar stack additionally needs the L2 driver (`l2lidar_node`, publishing
 `/points` + `/imu/data`) and the LIO packages referenced by
 `pepper_slam`/`pepper_navigation`: `fast_lio`, `point_lio`, and optionally

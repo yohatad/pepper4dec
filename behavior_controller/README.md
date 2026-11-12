@@ -6,7 +6,7 @@
   <img src="../images/upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
-The **Behavior Controller** package orchestrates robot behavior on the Pepper robot using [BehaviorTree.CPP v4](https://www.behaviortree.dev/) and [BehaviorTree.ROS2](https://github.com/BehaviorTree/BehaviorTree.ROS2). It loads a mission defined as an XML behavior tree and executes it by dispatching ROS2 action calls to speech, gesture, navigation, conversation, and face-detection nodes. At startup it loads a YAML configuration file and two knowledge bases — a culture knowledge base (utility phrases) and an environment knowledge base (locations and tour stops).
+The **Behavior Controller** package orchestrates robot behavior on the Pepper robot using [BehaviorTree.CPP v4](https://www.behaviortree.dev/) and [BehaviorTree.ROS2](https://github.com/yohatad/BehaviorTree.ROS2/tree/pepper4dec) (a fork; see Prerequisites). It loads a mission defined as an XML behavior tree and executes it by dispatching ROS2 action calls to speech, gesture, navigation, conversation, and face-detection nodes. At startup it loads a YAML configuration file and two knowledge bases — a culture knowledge base (utility phrases) and an environment knowledge base (locations and tour stops).
 
 ## ✨ Key Features
 - **ROS2 Native**: Built for ROS2 Humble
@@ -20,7 +20,14 @@ The **Behavior Controller** package orchestrates robot behavior on the Pepper ro
 ## ✅ Prerequisites
 - **ROS2 Humble** or newer
 - **BehaviorTree.CPP v4** (`behaviortree_cpp`)
-- **BehaviorTree.ROS2** (`behaviortree_ros2`)
+- **BehaviorTree.ROS2** (`behaviortree_ros2`), built from source from the
+  `pepper4dec` branch of the fork
+  [`yohatad/BehaviorTree.ROS2`](https://github.com/yohatad/BehaviorTree.ROS2/tree/pepper4dec),
+  not upstream. It is upstream `humble` plus one commit that stops a halted
+  action node from cancelling its previous, finished goal, which upstream
+  turns into an `UnknownGoalHandleError` abort. The Dockerfile and CI already
+  clone the fork; to switch an existing upstream clone, see the main
+  [README](../README.md#installation)
 - **Nav2** (`nav2_msgs`)
 - **naoqi_bridge_msgs**
 - **dec_interfaces** (custom messages, services, and actions)
