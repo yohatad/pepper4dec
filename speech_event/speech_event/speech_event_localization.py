@@ -12,7 +12,7 @@ RViz visualization marker whenever a source is detected above the confidence
 threshold. Audio chunks below an RMS intensity threshold are skipped.
 
 Subscribers:
-    /naoqi_driver/audio (naoqi_bridge_msgs/AudioBuffer)
+    /audio (naoqi_bridge_msgs/AudioBuffer)
         4-channel raw microphone audio (topic name set by the
         `microphone_topic` parameter).
 
@@ -29,7 +29,7 @@ Publishers:
         RViz arrow marker showing the estimated sound direction.
 
 Parameters (loaded from speech_event_configuration.yaml):
-    microphone_topic (string, default: "/naoqi_driver/audio")
+    microphone_topic (string, default: "/audio")
     sample_rate (int, default: 48000)
     speed_of_sound (double, default: 343.0)
     nfft (int, default: 1024)
@@ -84,7 +84,7 @@ class SoundLocalizationNode(Node):
         # Parameters
         # =====================================================
         self.declare_parameter("sample_rate", 48000)
-        self.declare_parameter("microphone_topic", "/naoqi_driver/audio")
+        self.declare_parameter("microphone_topic", "/audio")
         self.declare_parameter("speed_of_sound", 343.0)
         self.declare_parameter("nfft", 1024)
         self.declare_parameter("angular_resolution", 36)

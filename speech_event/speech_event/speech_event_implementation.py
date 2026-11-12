@@ -208,7 +208,7 @@ class SpeechRecognitionNode(LifecycleNode):
         self.declare_parameter("pre_speech_buffer_ms", 200)
         self.declare_parameter("intensity_threshold", 0.001)
         self.declare_parameter("transcription_timeout_s", 5.0)
-        self.declare_parameter("microphone_topic", "/naoqi_driver/audio")
+        self.declare_parameter("microphone_topic", "/audio")
         self.declare_parameter("action_server", True)
         self.declare_parameter("vad_always_active", False)
         self.declare_parameter("noise_cleaning_enabled", True)

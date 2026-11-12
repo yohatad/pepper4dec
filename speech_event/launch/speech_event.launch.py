@@ -22,7 +22,7 @@ Configuration:
     node name (speech_recognition, sound_localization, audio_recorder).
 
 Prerequisites:
-    naoqi_driver must be publishing /naoqi_driver/audio. The speech_recognition
+    naoqi_driver must be publishing /audio. The speech_recognition
     node loads Whisper on configure and expects a CUDA device unless the
     device parameter is set to "cpu".
 

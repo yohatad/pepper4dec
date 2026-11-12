@@ -50,7 +50,7 @@ Configuration is managed via `config/speech_event_configuration.yaml`:
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `microphone_topic` | ROS topic publishing `naoqi_bridge_msgs/AudioBuffer` | `/naoqi_driver/audio` |
+| `microphone_topic` | ROS topic publishing `naoqi_bridge_msgs/AudioBuffer` | `/audio` |
 | `sample_rate` | Target sample rate for VAD/ASR (Hz) | `16000` |
 | `input_sample_rate` | Robot's native microphone sample rate (Hz) | `48000` |
 | `device` | Device for Whisper/CTranslate2 inference (`cuda`/`cpu`) | `cuda` |
@@ -100,7 +100,7 @@ ros2 run speech_event speech_event_localization
 
 | Topic | Type | Description |
 |-------|------|-------------|
-| `/naoqi_driver/audio` | `naoqi_bridge_msgs/AudioBuffer` | Raw multi-channel audio from robot microphone (48 kHz, 4 channels) |
+| `/audio` | `naoqi_bridge_msgs/AudioBuffer` | Raw multi-channel audio from robot microphone (48 kHz, 4 channels) |
 
 ### Published Topics
 
@@ -199,7 +199,7 @@ speech_event/
 
 ```mermaid
 flowchart TD
-    A["/naoqi_driver/audio"] --> B["Resample to 16 kHz mono"]
+    A["/audio"] --> B["Resample to 16 kHz mono"]
     B --> C{"Silero VAD"}
     C -- "per-frame probability" --> D(["/speech_event/vad_speech_prob"])
     C -- "speech segment detected" --> E["Speech Segment Buffer"]
@@ -229,7 +229,7 @@ flowchart TD
 | Transition | What happens |
 |---|---|
 | `configure` | Load Silero VAD + Whisper models, construct `SpeechDenoiser`, create publishers, `set_enabled` service, and action server |
-| `activate` | Activate publishers, subscribe to `/naoqi_driver/audio` |
+| `activate` | Activate publishers, subscribe to `/audio` |
 | `deactivate` | Destroy the audio subscription, deactivate publishers |
 | `cleanup` | Destroy publishers/service/action server, release Whisper/Silero/denoiser instances |
 | `shutdown` | Log shutdown and exit (reachable from any state) |
