@@ -27,8 +27,7 @@
  * within the DEC project.
  */
 
-#ifndef PEPPER_NAVIGATION__TOPIC_LIVENESS_H_
-#define PEPPER_NAVIGATION__TOPIC_LIVENESS_H_
+#pragma once
 
 #include <map>
 #include <string>
@@ -103,5 +102,3 @@ private:
 };
 
 }  // namespace pepper_navigation
-
-#endif  // PEPPER_NAVIGATION__TOPIC_LIVENESS_H_

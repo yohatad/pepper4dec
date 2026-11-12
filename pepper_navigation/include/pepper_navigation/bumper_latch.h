@@ -27,8 +27,7 @@
  * within the DEC project.
  */
 
-#ifndef PEPPER_NAVIGATION__BUMPER_LATCH_H_
-#define PEPPER_NAVIGATION__BUMPER_LATCH_H_
+#pragma once
 
 #include <cstddef>
 
@@ -149,5 +148,3 @@ private:
 };
 
 }  // namespace pepper_navigation
-
-#endif  // PEPPER_NAVIGATION__BUMPER_LATCH_H_
