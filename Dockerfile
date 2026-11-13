@@ -72,6 +72,12 @@ RUN useradd -m -s /bin/bash pepper && mkdir -p ${WS} && chown -R pepper:pepper /
 # Locks were frozen from the known-good host venvs; the per-package
 # requirements.txt files are NOT used (they under-specify torch and list two
 # conflicting onnxruntime distributions).
+#
+# The three stages share one pip cache with sharing=shared. sharing=locked
+# made them take turns -- a cold build ran ~32 + 28 + 43 min one after another
+# instead of side by side. pip writes its cache entries atomically, so
+# concurrent installs are safe, and one cache lets sound and conversation reuse
+# the wheels they have in common (nvidia-cudnn-cu12 alone is 707 MB).
 # -----------------------------------------------------------------------------
 FROM base AS venv-sound
 ARG WS
@@ -87,7 +93,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY docker/requirements/sound.lock.txt /tmp/
 # torch 2.9.1+cu126 / torchvision 0.24.1+cu126 are not on PyPI.
-RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=shared \
     python3 -m venv ${WS}/.venvs/sound && \
     ${WS}/.venvs/sound/bin/pip install --upgrade pip setuptools wheel && \
     ${WS}/.venvs/sound/bin/pip install \
@@ -97,7 +103,7 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
 FROM base AS venv-conversation
 ARG WS
 COPY docker/requirements/conversation.lock.txt /tmp/
-RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=shared \
     python3 -m venv ${WS}/.venvs/conversation && \
     ${WS}/.venvs/conversation/bin/pip install --upgrade pip setuptools wheel && \
     ${WS}/.venvs/conversation/bin/pip install -r /tmp/conversation.lock.txt
@@ -105,7 +111,7 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
 FROM base AS venv-tts
 ARG WS
 COPY docker/requirements/tts.lock.txt /tmp/
-RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=shared \
     python3 -m venv ${WS}/.venvs/tts_virtual_env && \
     ${WS}/.venvs/tts_virtual_env/bin/pip install --upgrade pip setuptools wheel && \
     ${WS}/.venvs/tts_virtual_env/bin/pip install -r /tmp/tts.lock.txt
@@ -132,12 +138,18 @@ WORKDIR ${WS}
 # CMake config looked in lib/, so find_package(behaviortree_cpp) failed for
 # BehaviorTree.ROS2. 4.10.0 installs to lib/ (checked with dpkg -c), and
 # BehaviorTree.ROS2 plus behavior_controller build and pass their tests on it.
-RUN git clone --depth 1 https://github.com/yohatad/naoqi_driver2.git src/naoqi_driver2 && \
-    git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/yohatad/FAST_LIO_ROS2.git src/fast_lio && \
-    git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/yohatad/point_lio_ros2.git src/point_lio && \
-    git clone --depth 1 https://github.com/yohatad/fastlio_lc_pgo.git src/fastlio_lc_pgo && \
-    git clone --depth 1 https://github.com/yohatad/l2lidar_node.git src/l2lidar_node && \
-    git clone --depth 1 -b pepper4dec https://github.com/yohatad/BehaviorTree.ROS2.git src/BehaviorTree.ROS2
+#
+# The sources are fetched with ADD <git url>#<branch>, not RUN git clone. A
+# RUN line's cache key is its text, so a clone layer was reused even after its
+# branch moved, and only --no-cache picked up new commits (rebuilding the
+# multi-GB venvs too). ADD resolves the branch to its commit on every build and
+# re-fetches only when that commit changed; submodules come along.
+ADD https://github.com/yohatad/naoqi_driver2.git#master src/naoqi_driver2
+ADD https://github.com/yohatad/FAST_LIO_ROS2.git#ros2 src/fast_lio
+ADD https://github.com/yohatad/point_lio_ros2.git#main src/point_lio
+ADD https://github.com/yohatad/fastlio_lc_pgo.git#main src/fastlio_lc_pgo
+ADD https://github.com/yohatad/l2lidar_node.git#main src/l2lidar_node
+ADD https://github.com/yohatad/BehaviorTree.ROS2.git#pepper4dec src/BehaviorTree.ROS2
 
 # BehaviorTree.ROS2 is cloned from a fork: its pepper4dec branch is upstream
 # humble plus one commit fixing a crash when an action node is halted before
@@ -148,7 +160,7 @@ RUN git clone --depth 1 https://github.com/yohatad/naoqi_driver2.git src/naoqi_d
 # (SetAudioVolume, StopAudio, UnloadAudioFile) that dec_system depends on;
 # ros-naoqi upstream does not have them. Public, so a plain HTTPS clone works
 # with no credentials or forwarded SSH agent needed.
-RUN git clone --depth 1 https://github.com/yohatad/naoqi_bridge_msgs2.git src/naoqi_bridge_msgs
+ADD https://github.com/yohatad/naoqi_bridge_msgs2.git#main src/naoqi_bridge_msgs
 
 COPY . src/pepper4dec
 
@@ -177,10 +189,12 @@ RUN . /opt/ros/humble/setup.sh && \
 FROM workspace AS runtime
 ARG WS
 
-COPY --from=venv-sound        ${WS}/.venvs/sound           ${WS}/.venvs/sound
-COPY --from=venv-conversation ${WS}/.venvs/conversation    ${WS}/.venvs/conversation
-COPY --from=venv-tts          ${WS}/.venvs/tts_virtual_env ${WS}/.venvs/tts_virtual_env
-COPY docker/venv_map.sh ${WS}/.venvs/venv_map.sh
+# --chown here, not a chown -R at the end: chown rewrites every file it touches
+# into a new layer, and the venvs are ~21 GB, so that doubled the image size.
+COPY --chown=pepper:pepper --from=venv-sound        ${WS}/.venvs/sound           ${WS}/.venvs/sound
+COPY --chown=pepper:pepper --from=venv-conversation ${WS}/.venvs/conversation    ${WS}/.venvs/conversation
+COPY --chown=pepper:pepper --from=venv-tts          ${WS}/.venvs/tts_virtual_env ${WS}/.venvs/tts_virtual_env
+COPY --chown=pepper:pepper docker/venv_map.sh ${WS}/.venvs/venv_map.sh
 
 # Put ROS2 + the built workspace on each venv's path. The host venvs achieve
 # this with editable installs into the colcon build tree; a .pth is the
@@ -206,7 +220,9 @@ RUN printf '%s\n' \
       '# interpreter through .venvs/venv_map.sh in its launcher script.' \
       > /opt/pepper4dec_setup.sh && chmod +x /opt/pepper4dec_setup.sh
 
-RUN chown -R pepper:pepper /home/pepper
+# Hand the colcon tree (~1 GB) to pepper; .venvs is already owned by pepper.
+RUN find /home/pepper -path ${WS}/.venvs -prune -o -exec chown pepper:pepper {} + && \
+    chown pepper:pepper ${WS}/.venvs ${WS}/.venvs/*/lib/python3.10/site-packages/ros2_paths.pth
 
 USER pepper
 ENV HOME=/home/pepper
