@@ -88,6 +88,7 @@ also works at runtime; changes take effect on the next `configure`).
 | `sample_rate` | Synthesis sample rate in Hz | `24000` |
 | `output_device` | sounddevice output device index (-1 = system default) | `-1` |
 | `stream_volume` | PCM amplitude multiplier for stream mode | `1.0` |
+| `verbose_mode` | Log each sentence as it is synthesised and played | `false` |
 | `elevenlabs_api_key` | ElevenLabs API key | `""` |
 | `elevenlabs_voice_id` | ElevenLabs voice ID | `21m00Tcm4TlvDq8ikWAM` (Rachel) |
 | `elevenlabs_model` | ElevenLabs model ID | `eleven_turbo_v2_5` |

@@ -63,6 +63,7 @@ its own parameter set; a shared `/**` block applies `use_compressed`/`camera_typ
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `start_enabled` | Whether attention is active on startup | `true` |
+| `verbose_mode` | Log every target switch and head command | `false` |
 | `move_to_default_on_disable` | Move head to default pose when disabled | `true` |
 | `default_yaw` / `default_pitch` | Default head pose (radians) | `0.0` / `-0.2` |
 | `default_move_speed` | ALMotion speed used moving to default pose | `0.1` |

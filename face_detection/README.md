@@ -55,6 +55,8 @@ Configuration is managed via ROS2 parameters, loaded from `config/face_detection
 | `person_detection_timeout` | Timeout for person detection messages (s) | `0.5` |
 | `prioritize_face_depth` | Prefer face-region depth over person-region depth when both are available | `true` |
 
+The `age_gender_detection` node reads `config/age_gender_detection_configuration.yaml`; its `verbose_mode` (default `false`) logs each new person, inference run and result.
+
 ## 🚀 Running
 
 ```bash

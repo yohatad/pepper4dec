@@ -177,10 +177,11 @@ Standard Nav2 interfaces (`/navigate_to_pose`, `/map`, `/plan`, the costmaps,
 
 | Topic | Type | Notes |
 |---|---|---|
-| `/cmd_vel` | `geometry_msgs/Twist` | Collision-monitor-gated velocity, consumed by `naoqi_driver2` |
+| `/cmd_vel` | `geometry_msgs/Twist` | Safety-gated velocity, consumed by `naoqi_driver2`: from `bumper_guard` (fastloc) or the collision monitor (other profiles) |
+| `/cmd_vel_safe` | `geometry_msgs/Twist` | fastloc only: the collision monitor's output, gated by `bumper_guard` |
 | `/cmd_vel_raw` | `geometry_msgs/Twist` | Controller and behavior output, before the collision monitor. **Not** what the robot drives on |
-| `/collision_monitor_state` | `nav2_msgs/CollisionMonitorState` | Active safety action: none, slowdown or stop |
-| `/polygon_stop`, `/polygon_slowdown` | `geometry_msgs/PolygonStamped` | Safety zones, 0.40 m and 0.80 m |
+| `/polygon_stop`, `/polygon_slowdown` | `geometry_msgs/PolygonStamped` | Safety zones: 0.40 m and 0.90 m ahead (wedges, not circles) |
+| `/diagnostics` | `diagnostic_msgs/DiagnosticArray` | `bumper_guard`: contact, latched stop, stuck switch, sensor liveness |
 | `/localization/overlap` | `std_msgs/Float32` | fastloc / pointloc: fraction of the live scan on the prior map, 1 Hz |
 
 ### Internal Topics
@@ -200,6 +201,7 @@ Published and consumed inside the stack; listed for debugging.
 |---|---|---|
 | `/localization_recover` | `std_srvs/Trigger` | "I am lost": same call on every profile, dispatched to the running backend |
 | `/relocalize` | `std_srvs/Trigger` | fastloc / pointloc: re-arm the ScanContext search from scratch |
+| `/bumper_guard/clear` | `std_srvs/Trigger` | fastloc: lift the bumper stop once no bumper is pressed; also resets `naoqi_driver`'s own stop |
 
 ## 🎯 Sending goals
 
@@ -263,16 +265,30 @@ Nothing reaches the wheels unvetted:
 
 ```
 controller_server ─┐
-                   ├─> /cmd_vel_raw ──> collision_monitor ──> /cmd_vel ──> naoqi_driver2
-behavior_server  ──┘                          ^
-                                     /points_safety
+                   ├─> /cmd_vel_raw ──> collision_monitor ──> /cmd_vel_safe ──> bumper_guard ──> /cmd_vel ──> naoqi_driver2
+behavior_server  ──┘                          ^                                    ^
+                                     /points_safety                             /bumper
 ```
 
-`collision_monitor` slows to 30 % inside 0.80 m and stops inside 0.40 m when
-more than 3 points fall in a zone, independently of the costmaps and the
-planner. It reads `/points_safety`, the L2 cloud without the lidar's own
-housing (`points_safety_filter`); otherwise those self-hits would stop the
-robot for good. `utils/collision_zone_viewer.py` shows what it counts without
+(`bumper_guard` runs in the fastloc profile; elsewhere the collision monitor
+publishes `/cmd_vel` directly.)
+
+`collision_monitor` slows to 30 % inside a wedge reaching 0.90 m ahead
+(0.45 m to the sides) and stops inside one reaching 0.40 m ahead (0.31 m to
+the sides) when more than 10 points fall in a zone, independently of the
+costmaps and the planner. It reads `/points_safety`, the L2 cloud after
+`points_safety_filter` (C++ `cloud_range_filter`) has removed the lidar's own
+housing and Pepper's body; otherwise those self-hits would stop the robot for
+good.
+
+`bumper_guard` is the last gate. Any bumper press stops all motion, turning
+included, and the stop holds after release until
+`ros2 service call /bumper_guard/clear std_srvs/srv/Trigger`, which is refused
+while a bumper is still pressed and also resets `naoqi_driver`'s own bumper
+stop. It also stops translation if `/points_safety` goes quiet for more than
+1 s (Humble's collision monitor keeps its last verdict when its source
+stops). `naoqi_driver`'s own proximity backstop (Pepper's laser and sonar,
+0.35 m stop) and bumper stop apply in every profile, with or without Nav2. `utils/collision_zone_viewer.py` shows what it counts without
 Nav2 running (see [Tuning the costmaps on a bag](#tuning-the-costmaps-on-a-bag)).
 
 ## 🔁 Losing localization

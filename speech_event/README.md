@@ -66,6 +66,7 @@ Configuration is managed via `config/speech_event_configuration.yaml`:
 | `intensity_threshold` | RMS amplitude gate; quiet audio is skipped before VAD | `0.001` |
 | `transcription_timeout_s` | Timeout waiting for a transcription result (s) | `5.0` |
 | `action_server` | Enable action server mode (`false` = continuous, publishes to `/speech_event/text`) | `true` |
+| `verbose_mode` | Log VAD start/end and Whisper timing for every segment (both nodes; `sound_localization`: every direction) | `false` |
 | `vad_always_active` | Keep VAD running (publishing `/speech_event/vad_speech_prob`) even with no active goal, enabling barge-in monitoring during TTS playback | `true` |
 | `noise_cleaning_enabled` | Enable post-VAD noise reduction before ASR | `false` |
 | `noise_profile_path` | Path to a `.npy` mean-magnitude-spectrum file recorded at 16 kHz; leave empty for online-only estimation | `"data/noise_profile.npy"` |
