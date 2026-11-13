@@ -639,7 +639,12 @@ void Yolov11Node::processOutput(
   std::vector<float> & out_scores, std::vector<int> & out_class_ids)
 {
   // YOLOv11 output: [1, 84, 8400] — 4 box coords (cx,cy,w,h, input-pixel
-  // scale) + 80 class logits (need sigmoid), for 8400 candidate predictions.
+  // scale) + 80 class scores, for 8400 candidate predictions. The Ultralytics
+  // export applies the sigmoid inside the graph, so the scores are already
+  // probabilities in [0, 1]. Applying it again here once mapped every
+  // background score (~0) to 0.5, letting all 8400 boxes past the default 0.5
+  // threshold into the O(n^2) NMS (about 1 frame/s, phantom people) and
+  // squeezing real confidences into 0.5-0.73.
   auto shape = output.GetTensorTypeAndShapeInfo().GetShape();
   int64_t num_attrs = shape[1];
   int64_t num_preds = shape[2];
@@ -654,8 +659,7 @@ void Yolov11Node::processOutput(
     float best_prob = -1.0f;
     int best_class = 0;
     for (int c = 0; c < num_classes; ++c) {
-      float logit = data[(4 + c) * num_preds + i];
-      float prob = 1.0f / (1.0f + std::exp(-logit));
+      float prob = data[(4 + c) * num_preds + i];
       if (prob > best_prob) {
         best_prob = prob;
         best_class = c;
