@@ -9,6 +9,12 @@ Optionally publishes a one-time static map -> pgo_init so map is gravity-aligned
 for visualization.
 """
 
+import os
+# Must run before numpy is imported. numpy hands even these 4x4 products to
+# OpenBLAS, whose worker pool (one thread per core) busy-waits between calls:
+# on a 28-core laptop this node burned ~300% CPU replaying a bag; with one
+# thread it is ~3%. Small matrices gain nothing from more threads.
+os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
 import bisect
 import math
 import numpy as np

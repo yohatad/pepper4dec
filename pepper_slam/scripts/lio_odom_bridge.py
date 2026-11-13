@@ -14,6 +14,12 @@ disabled (publish_tf=false) or the tree splits. Output is stamped with the
 odometry message's own stamp.
 """
 
+import os
+# Must run before numpy is imported. numpy hands even these 4x4 products to
+# OpenBLAS, whose worker pool (one thread per core) busy-waits between calls:
+# on a 28-core laptop this node burned ~300% CPU replaying a bag; with one
+# thread it is ~3%. Small matrices gain nothing from more threads.
+os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
 import time
 
 import numpy as np
