@@ -49,7 +49,8 @@ from sensor_msgs.msg import CompressedImage, Image
 from dec_interfaces.msg import PersonDetection
 
 NODE_NAME = 'person_detection'
-CAMERA_TOPIC = '/test_camera/image_raw'
+# Unique per test: colcon runs packages' tests in parallel on one domain.
+CAMERA_TOPIC = '/test_camera/person_detection_minibag/image_raw'
 _TEST_DIR = os.path.dirname(os.path.abspath(__file__))
 # The mini-bag lives outside the package, in the workspace-level bags/ dir
 # (not checked into git), so CI/fresh checkouts won't have it — skip rather

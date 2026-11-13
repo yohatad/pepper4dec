@@ -166,7 +166,9 @@ colcon test --packages-select person_detection
 colcon test-result --verbose
 ```
 
-Runs unit tests for `getClassIndices()`, plus a bag-replay regression test that runs the real node on 12 recorded camera frames.
+Runs unit tests for `getClassIndices()`, plus two bag-replay tests of the real node:
+- `test_bag_replay_launch.py`: 12 recorded frames fed one at a time, checking detections and stable track IDs.
+- `test_cssr4africa_bags_launch.py`: the four CSSR4Africa person bags played at the recorded 15 fps. The node must report a person in at least 85-90% of the frames (the model sees one in nearly all of them) and two or more people in the multiple-people bag. Fetch the bags first with `scripts/fetch_test_bags.sh` (from the repository root); the test skips without them or the model. At camera rate it needs the GPU ONNX Runtime (see the top-level README, Installation step 5).
 
 ## 💡 Support
 

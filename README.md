@@ -80,7 +80,7 @@ Localization-only deployments get their `map → base_footprint` pose (`/localiz
 - **Pepper Robot** (or simulation environment)
 - **Intel RealSense Camera** (for perception modules)
 - **Unitree L2 Lidar** + the `l2lidar_node` driver (for LIO odometry and lidar-based localization)
-- **NVIDIA GPU (CUDA)** - optional; accelerates the ONNX-based perception nodes (`face_detection`, `age_gender_detection`, `person_detection`), which fall back to CPU automatically if unavailable
+- **NVIDIA GPU (CUDA)** - optional; accelerates the ONNX-based perception nodes (`face_detection`, `age_gender_detection`, `person_detection`), which fall back to CPU automatically if unavailable. ROS's `onnxruntime_vendor` is CPU-only, so the GPU needs the separate ONNX Runtime install in step 5 below
 
 ### Installation
 
@@ -153,6 +153,19 @@ Most perception/actuation packages (`animate_behavior`, `behavior_controller`, `
    - `models/` directories are **gitignored** — no weights are committed
    - Provenance and licensing for every pretrained model is recorded in [MODELS.md](MODELS.md); note that several are GPL-3.0/AGPL-3.0
 
+5. **GPU ONNX Runtime (optional, NVIDIA GPU only)**
+
+   `face_detection` and `person_detection` build against ROS's `onnxruntime_vendor`, a CPU-only ONNX Runtime. To run them on the GPU, unpack the official ONNX Runtime **1.23.2** GPU release outside `/opt/ros` and point `ONNXRUNTIME_ROOT` at it before building:
+   ```bash
+   mkdir -p ~/ros2_ws/.deps && cd ~/ros2_ws/.deps
+   curl -fLO https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-linux-x64-gpu-1.23.2.tgz
+   tar xzf onnxruntime-linux-x64-gpu-1.23.2.tgz && rm onnxruntime-linux-x64-gpu-1.23.2.tgz
+   echo 'export ONNXRUNTIME_ROOT=$HOME/ros2_ws/.deps/onnxruntime-linux-x64-gpu-1.23.2' >> ~/.bashrc
+   source ~/.bashrc
+   cd ~/ros2_ws && colcon build --packages-select dec_common face_detection person_detection
+   ```
+   It needs CUDA 12 and cuDNN 9 libraries on `LD_LIBRARY_PATH` (a CUDA 12 toolkit plus the `nvidia-cudnn-cu12` wheel both work). Do **not** copy GPU libraries into `/opt/ros/humble/opt/onnxruntime_vendor`: an apt upgrade replaces the core library with the CPU build, and a CUDA provider from one build loaded by another crashes (`CUDNN_FE failure 11`). The build prints `ONNX Runtime: <path>`; at runtime the nodes log `CUDAExecutionProvider is active`.
+
 ## 🚀 Running the Tour System
 
 ### Basic Launch
@@ -224,6 +237,7 @@ Coverage by tier:
 - **Unit, C++ (gtest)** - ByteTrack multi-object tracking, Pepper arm kinematics and joint-limit clamping, the animate_behavior motion math, behavior-tree utilities and knowledge-base validation, Boolean Map Saliency, age/gender temporal smoothing, camera-topic and pixel-to-angle helpers, COCO class filtering
 - **Unit, Python (pytest)** - the LIO divergence guard, the map-leveling frame contract, sound-localization geometry, the speech denoiser DSP, LLM response parsing, TTS audio helpers, and a drift check on the Nav2 parameter sections shared across localization profiles
 - **Integration** - a bag-replay regression test that runs the real YOLOv11 + ByteTrack person-detection node against recorded camera frames and asserts on the published detections. Frames are fed one at a time, so the result does not depend on machine speed
+- **Integration, CSSR4Africa bags** - `face_detection` and `person_detection` replay the CSSR4Africa RealSense test recordings (single and multiple people, mutual gaze, two lighting conditions) at the recorded 15 fps and check what each node reports and that it keeps up with the camera. They need the GPU ONNX Runtime (Installation step 5) and the bags, which `scripts/fetch_test_bags.sh` downloads from [Hugging Face](https://huggingface.co/cssr4africa/cssr4africa_unit_tests_data_files) and converts to ROS 2 (about 150 MB in `~/ros2_ws/bags/cssr4africa`)
 
 Tests that need an optional dependency (ONNX model weights, `librosa`, `pyroomacoustics`, ChromaDB) skip cleanly when it is absent, so the suite passes on a bare CI runner and exercises everything on a full workstation.
 

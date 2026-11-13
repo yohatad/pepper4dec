@@ -159,7 +159,7 @@ colcon test --packages-select face_detection
 colcon test-result --verbose
 ```
 
-Runs unit tests for the age/gender smoothing (median age, confidence-weighted gender vote over a sliding window).
+Runs unit tests for the age/gender smoothing (median age, confidence-weighted gender vote over a sliding window), and `test_cssr4africa_bags_launch.py`: the real node (RGB-only, without person_detection) is played the five CSSR4Africa face bags at the recorded 15 fps and must answer at least 80% of the frames and report faces, multiple faces and mutual gaze where the recordings show them. Fetch the bags first with `scripts/fetch_test_bags.sh` (from the repository root); the test skips without them or the models. At camera rate it needs the GPU ONNX Runtime (see the top-level README, Installation step 5).
 
 ## 💡 Support
 
