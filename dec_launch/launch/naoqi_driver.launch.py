@@ -43,6 +43,10 @@ Launch arguments:
         sees through the bottom-mounted RealSense (realsense_bottom.launch.py
         -> overt_attention), and the front camera additionally needs the stream
         started on the robot first (see Prerequisites).
+    params_file (default: dec_launch/config/naoqi_driver.yaml)
+        Driver parameters. The default turns the microphones on
+        (converters.audio.enabled), which naoqi_driver2's own boot_config
+        leaves off; speech_event needs them on /audio.
     publish_wheel_odom_tf (default: "false", set in naoqi_driver.launch.py)
         NOT declared here, and should stay false. FAST-LIO owns
         odom -> base_footprint; publishing it from wheel odometry too gives
@@ -127,6 +131,12 @@ def generate_launch_description():
             description='Also start the gscam2 Pepper front camera. Requires '
                         '~/start_camera.sh to have been run on the robot.'),
 
+        DeclareLaunchArgument(
+            'params_file',
+            default_value=os.path.join(
+                get_package_share_directory('dec_launch'), 'config', 'naoqi_driver.yaml'),
+            description='Driver parameters; the default enables the microphones (/audio).'),
+
         # publish_wheel_odom_tf is deliberately NOT declared here. It is
         # defined once, in naoqi_driver.launch.py (default false). Includes
         # share the launch context, so `publish_wheel_odom_tf:=true` on this
@@ -143,6 +153,9 @@ def generate_launch_description():
                 'qi_listen_url': LaunchConfiguration('qi_listen_url'),
                 'namespace': LaunchConfiguration('namespace'),
                 'use_camera': LaunchConfiguration('use_camera'),
+                # Not declared by pepper_bringup, but reaches the
+                # naoqi_driver.launch.py it includes (shared launch context).
+                'params_file': LaunchConfiguration('params_file'),
             }.items(),
         ),
     ])

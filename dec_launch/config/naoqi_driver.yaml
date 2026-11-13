@@ -1,0 +1,8 @@
+# naoqi_driver parameters for this system, passed as params_file by
+# launch/naoqi_driver.launch.py. They override the driver's boot_config.json,
+# whose settings are read-only parameters, so they must be set at launch.
+/**:
+  ros__parameters:
+    # naoqi_driver2's default boot_config disables audio (fa9f9ba). speech_event
+    # (speech recognition and sound localization) needs the microphones on /audio.
+    converters.audio.enabled: true
