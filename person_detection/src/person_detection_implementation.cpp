@@ -19,6 +19,7 @@
 #include "person_detection/person_detection_interface.h"
 
 #include <cv_bridge/cv_bridge.h>
+#include <dec_common/onnx_session.h>
 #include <dec_common/param_loader.h>
 #include <yaml-cpp/yaml.h>
 #include <rmw/qos_profiles.h>
@@ -436,21 +437,6 @@ bool Yolov11Node::initModel()
 {
   try {
     ort_env_ = std::make_unique<Ort::Env>(ORT_LOGGING_LEVEL_WARNING, "person_detection");
-    Ort::SessionOptions session_options;
-    session_options.SetIntraOpNumThreads(static_cast<int>(std::thread::hardware_concurrency()));
-    session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
-
-    bool cuda_enabled = false;
-    try {
-      OrtCUDAProviderOptions cuda_options{};
-      session_options.AppendExecutionProvider_CUDA(cuda_options);
-      cuda_enabled = true;
-    } catch (const std::exception & e) {
-      RCLCPP_WARN(
-        get_logger(), "%s: CUDAExecutionProvider unavailable (%s); running on CPU",
-        node_name_.c_str(), e.what());
-    }
-
     std::string package_path = ament_index_cpp::get_package_share_directory("person_detection");
     std::string model_path = package_path + "/models/person_detection_yolov11m.onnx";
     if (!std::filesystem::exists(model_path)) {
@@ -458,7 +444,14 @@ bool Yolov11Node::initModel()
       return false;
     }
 
-    session_ = std::make_unique<Ort::Session>(*ort_env_, model_path.c_str(), session_options);
+    bool cuda_enabled = false;
+    std::string cuda_error;
+    session_ = dec_common::createSession(*ort_env_, model_path, true, cuda_enabled, cuda_error);
+    if (!cuda_enabled) {
+      RCLCPP_WARN(
+        get_logger(), "%s: CUDAExecutionProvider unavailable (%s); running on CPU",
+        node_name_.c_str(), cuda_error.c_str());
+    }
 
     Ort::AllocatorWithDefaultOptions allocator;
     for (size_t i = 0; i < session_->GetInputCount(); ++i) {

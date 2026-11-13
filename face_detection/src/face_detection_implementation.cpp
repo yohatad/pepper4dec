@@ -20,6 +20,7 @@
 
 #include "face_detection/face_detection_interface.h"
 
+#include <dec_common/onnx_session.h>
 #include <cv_bridge/cv_bridge.h>
 #include <dec_common/param_loader.h>
 #include <yaml-cpp/yaml.h>
@@ -74,17 +75,10 @@ YOLOONNX::YOLOONNX(const std::string & model_path, double class_score_th)
 : class_score_th_(class_score_th)
 {
   ort_env_ = std::make_unique<Ort::Env>(ORT_LOGGING_LEVEL_ERROR, "face_detection_yolo");
-  Ort::SessionOptions session_options;
-  session_options.SetIntraOpNumThreads(static_cast<int>(std::thread::hardware_concurrency()));
-  session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
-  try {
-    OrtCUDAProviderOptions cuda_options{};
-    session_options.AppendExecutionProvider_CUDA(cuda_options);
-  } catch (const std::exception &) {
-    // Falls back to CPU; the caller logs provider status separately.
-  }
-
-  session_ = std::make_unique<Ort::Session>(*ort_env_, model_path.c_str(), session_options);
+  // Falls back to CPU if CUDA cannot run; the caller logs provider status separately.
+  bool cuda_enabled = false;
+  std::string cuda_error;
+  session_ = dec_common::createSession(*ort_env_, model_path, true, cuda_enabled, cuda_error);
 
   Ort::AllocatorWithDefaultOptions allocator;
   for (size_t i = 0; i < session_->GetInputCount(); ++i) {
@@ -380,21 +374,10 @@ SixDRepNet::CallbackReturn SixDRepNet::on_configure(const rclcpp_lifecycle::Stat
     sixdrepnet_env_ = std::make_unique<Ort::Env>(
       ORT_LOGGING_LEVEL_ERROR,
       "face_detection_sixdrepnet");
-    Ort::SessionOptions session_options;
-    session_options.SetIntraOpNumThreads(static_cast<int>(std::thread::hardware_concurrency()));
-    session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
     bool cuda_enabled = false;
-    try {
-      OrtCUDAProviderOptions cuda_options{};
-      session_options.AppendExecutionProvider_CUDA(cuda_options);
-      cuda_enabled = true;
-    } catch (const std::exception &) {
-      // CPU fallback.
-    }
-
-    sixdrepnet_session_ = std::make_unique<Ort::Session>(
-      *sixdrepnet_env_, sixdrepnet_model_path.c_str(),
-      session_options);
+    std::string cuda_error;
+    sixdrepnet_session_ = dec_common::createSession(
+      *sixdrepnet_env_, sixdrepnet_model_path, true, cuda_enabled, cuda_error);
 
     Ort::AllocatorWithDefaultOptions allocator;
     for (size_t i = 0; i < sixdrepnet_session_->GetInputCount(); ++i) {

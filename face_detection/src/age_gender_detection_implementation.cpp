@@ -19,6 +19,7 @@
 
 #include "face_detection/age_gender_detection_interface.h"
 
+#include <dec_common/onnx_session.h>
 #include <cv_bridge/cv_bridge.h>
 #include <dec_common/param_loader.h>
 
@@ -183,19 +184,10 @@ std::string AgeGenderPersonProfile::toJson() const
 MiVOLOONNX::MiVOLOONNX(const std::string & model_path, bool use_cuda)
 {
   ort_env_ = std::make_unique<Ort::Env>(ORT_LOGGING_LEVEL_ERROR, "age_gender_detection_mivolo");
-  Ort::SessionOptions session_options;
-  session_options.SetIntraOpNumThreads(static_cast<int>(std::thread::hardware_concurrency()));
-  session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
-  if (use_cuda) {
-    try {
-      OrtCUDAProviderOptions cuda_options{};
-      session_options.AppendExecutionProvider_CUDA(cuda_options);
-    } catch (const std::exception &) {
-      // Falls back to CPU; the caller logs provider status separately.
-    }
-  }
-
-  session_ = std::make_unique<Ort::Session>(*ort_env_, model_path.c_str(), session_options);
+  // Falls back to CPU if CUDA cannot run; the caller logs provider status separately.
+  bool cuda_enabled = false;
+  std::string cuda_error;
+  session_ = dec_common::createSession(*ort_env_, model_path, use_cuda, cuda_enabled, cuda_error);
 
   Ort::AllocatorWithDefaultOptions allocator;
   for (size_t i = 0; i < session_->GetInputCount(); ++i) {

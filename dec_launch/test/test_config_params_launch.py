@@ -186,7 +186,11 @@ def generate_test_description():
     nodes = [
         launch_ros.actions.Node(
             package=package, executable=executable, name=name,
-            parameters=[config_path(package, config)], output='screen')
+            parameters=[config_path(package, config)], output='screen',
+            # This test checks parameters, not the GPU: run the ONNX nodes on
+            # the CPU so a missing or mismatched CUDA stack cannot crash them
+            # (they fall back to CPU when CUDA cannot be used).
+            additional_env={'CUDA_VISIBLE_DEVICES': ''})
         for name, package, executable, config, _, _ in RUNNABLE
     ]
     return launch.LaunchDescription(nodes + [launch_testing.actions.ReadyToTest()])
