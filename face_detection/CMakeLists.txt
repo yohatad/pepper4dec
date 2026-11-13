@@ -25,7 +25,7 @@ find_package(ament_index_cpp REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 REQUIRED)
-find_package(onnxruntime_vendor REQUIRED)
+dec_find_onnxruntime()  # dec_common: onnxruntime_vendor, or ONNXRUNTIME_ROOT for the GPU
 
 # Library
 add_library(${PROJECT_NAME}_lib
@@ -129,6 +129,13 @@ if(BUILD_TESTING)
     test/test_age_gender_profile.cpp
   )
   target_link_libraries(test_age_gender_profile ${PROJECT_NAME}_age_gender_lib)
+
+  # Replays the CSSR4Africa RealSense bags (scripts/fetch_test_bags.sh);
+  # skips when the bags or the git-ignored models are missing.
+  find_package(launch_testing_ament_cmake REQUIRED)
+  add_launch_test(test/test_cssr4africa_bags_launch.py
+    TIMEOUT 600
+  )
 endif()
 
 ament_package()

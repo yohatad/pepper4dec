@@ -75,4 +75,4 @@ if(BUILD_TESTING)
   target_link_libraries(test_byte_tracker ${PROJECT_NAME})
 endif()
 
-ament_package()
+ament_package(CONFIG_EXTRAS cmake/dec_common-extras.cmake)

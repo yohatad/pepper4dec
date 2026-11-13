@@ -30,12 +30,19 @@
 namespace dec_common
 {
 
-/// Session options shared by every DEC model: all cores, full graph optimisation.
+/// Session options shared by every DEC model: all cores, full graph
+/// optimisation, and no busy-waiting between runs.
 inline Ort::SessionOptions baseSessionOptions()
 {
   Ort::SessionOptions options;
   options.SetIntraOpNumThreads(static_cast<int>(std::thread::hardware_concurrency()));
   options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+  // ONNX Runtime's worker threads spin by default while waiting for work. With
+  // one thread per core that kept every core busy (2700% CPU on a 28-core
+  // laptop for 15 frames/s of 28 ms inference), starving the other nodes and
+  // the camera feed; person_detection then lost a third of its frames.
+  options.AddConfigEntry("session.intra_op.allow_spinning", "0");
+  options.AddConfigEntry("session.inter_op.allow_spinning", "0");
   return options;
 }
 

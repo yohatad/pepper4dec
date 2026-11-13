@@ -54,6 +54,9 @@ target_link_libraries(my_node dec_common::dec_common_runner)
 | `dec_common/byte_tracker.h` | `byte_tracker::ByteTrack`: `updateWithDetections(Detections)` returns the detections with `tracker_id` filled in and drops unmatched ones; `reset()` clears all tracks |
 | `dec_common/param_loader.h` | `dec_common::declareAndGetParameter<T>(node, name, default)` |
 | `dec_common/node_runner.h` | `runNode<NodeT>(argc, argv, options, extra_nodes, after_spin)`; `NodeRunOptions` sets the startup banner, logger name and executor thread count |
+| `dec_common/onnx_session.h` | `createSession(env, model_path, try_cuda, used_cuda, cuda_error)`: an ONNX Runtime session on the GPU, rebuilt on the CPU if CUDA cannot be used; `baseSessionOptions()` (all cores, full graph optimisation, worker threads do not busy-wait). Header-only: include it after `<onnxruntime_cxx_api.h>` |
+
+The package also exports a CMake macro, `dec_find_onnxruntime()`, which `face_detection` and `person_detection` call in place of `find_package(onnxruntime_vendor REQUIRED)`. It uses ROS's CPU-only `onnxruntime_vendor` unless `ONNXRUNTIME_ROOT` (CMake or environment variable) points at an unpacked ONNX Runtime GPU release, in which case that library and only its headers are used. See the top-level README, Installation step 5.
 
 ## 📁 Package Structure
 
@@ -63,7 +66,10 @@ dec_common/
 │   ├── camera_lifecycle_node.h   # lifecycle base for the camera nodes
 │   ├── byte_tracker.h            # ByteTrack multi-object tracker
 │   ├── param_loader.h            # declareAndGetParameter()
-│   └── node_runner.h             # runNode(), header-only
+│   ├── node_runner.h             # runNode(), header-only
+│   └── onnx_session.h            # createSession(), header-only
+├── cmake/
+│   └── dec_common-extras.cmake   # dec_find_onnxruntime() for dependents
 ├── src/
 │   ├── camera_lifecycle_node.cpp
 │   └── byte_tracker.cpp
