@@ -56,13 +56,13 @@ The configuration is managed via `config/conversation_manager_configuration.yaml
 | `max_response_sentences` | Target answer length; controls the LLM token budget             | Positive integer        | `3`                              |
 | `data_default_path`      | Path to the JSON knowledge base (relative to package share dir) | String (path)           | `./data/upanzi_data.json`        |
 | `collection_name`        | ChromaDB collection name (`rag` mode only)                      | String                  | `upanzi_knowledge`               |
-| `verbose`                | Enable verbose logging                                          | Boolean                 | `false`                          |
+| `verbose_mode`           | Enable verbose logging                                          | Boolean                 | `false`                          |
 
 > **Note:**
 > - The LLM API key is provided via the `LLM_API_KEY` environment variable, never as a ROS parameter.
 > - The committed `config/conversation_manager_configuration.yaml` overrides several code
 >   defaults above (`llm_base_url: https://api.deepseek.com/v1`, `llm_model: deepseek-chat`,
->   `top_k: 5`, `verbose: true`).
+>   `top_k: 5`, `verbose_mode: true`).
 > - The configuration file is required for node startup.
 
 ### Example Configuration File (`config/conversation_manager_configuration.yaml`)
@@ -80,7 +80,7 @@ conversation_manager:
     max_response_sentences: 3
     data_default_path: ./data/upanzi_data.json
     collection_name: upanzi_knowledge
-    verbose: true
+    verbose_mode: true
 ```
 
 ## 🚀 Running
@@ -96,7 +96,7 @@ ros2 run conversation_manager conversation_manager
 You can override the ChromaDB collection name or enable extra logging at runtime:
 ```bash
 ros2 run conversation_manager conversation_manager \
-  --ros-args -p collection_name:="custom_knowledge" -p verbose:=true
+  --ros-args -p collection_name:="custom_knowledge" -p verbose_mode:=true
 ```
 
 ## 🖥️ ROS Interface

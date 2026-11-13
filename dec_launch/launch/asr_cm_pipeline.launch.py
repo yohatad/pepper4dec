@@ -20,9 +20,9 @@ Nodes started:
 Launch arguments:
     collection_name (default: "upanzi_knowledge")
         ChromaDB collection used by conversation_manager.
-    verbose (default: "false")
-        Verbose logging on conversation_manager, the only node in this
-        pipeline that declares the parameter.
+    verbose_mode (default: "false")
+        Verbose logging on conversation_manager. behavior_controller, which
+        also declares verbose_mode, reads it from its own config file.
 
 Configuration:
     speech_event/config/speech_event_configuration.yaml is passed as
@@ -37,7 +37,7 @@ Prerequisites (start separately before this launch):
 
 Usage:
     ros2 launch dec_launch asr_cm_pipeline.launch.py
-    ros2 launch dec_launch asr_cm_pipeline.launch.py verbose:=true
+    ros2 launch dec_launch asr_cm_pipeline.launch.py verbose_mode:=true
 
 Each node's ROS interface is documented in its application file.
 
@@ -71,10 +71,10 @@ def generate_launch_description():
     )
 
     declare_verbose = DeclareLaunchArgument(
-        'verbose',
+        'verbose_mode',
         default_value='false',
-        description='Enable verbose logging on conversation_manager '
-                    '(the only node in this pipeline declaring it)'
+        description='Enable verbose logging on conversation_manager; '
+                    'behavior_controller takes verbose_mode from its own config'
     )
 
     # ── Package share directories ─────────────────────────────────────────────
@@ -97,7 +97,7 @@ def generate_launch_description():
     #    speech_event_configuration.yaml stores its parameters under, and ROS2
     #    matches parameter blocks by node name. Naming it anything else leaves
     #    the node running entirely on its code defaults.
-    #    It declares no 'verbose' parameter, so the verbose argument is not
+    #    It declares no 'verbose_mode' parameter, so that argument is not
     #    passed here.
     speech_event_node = Node(
         package='speech_event',
@@ -115,7 +115,7 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'collection_name': LaunchConfiguration('collection_name'),
-            'verbose':         LaunchConfiguration('verbose'),
+            'verbose_mode':    LaunchConfiguration('verbose_mode'),
         }],
     )
 
