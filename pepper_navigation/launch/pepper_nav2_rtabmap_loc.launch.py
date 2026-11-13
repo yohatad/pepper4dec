@@ -41,7 +41,7 @@ Usage (real robot):
 
 Usage (bag replay, to sanity-check localization/costmaps without driving):
     ros2 launch pepper_navigation pepper_nav2_rtabmap_loc.launch.py use_sim_time:=true
-    ros2 bag play <bag> --clock --topics /points /imu/data /tf_static \
+    ros2 bag play <bag> --clock --topics /points /camera/imu /tf_static \
         /camera/color/image_raw /camera/color/camera_info
 
     Nav2 will localize and build costmaps, but a bag can't react to cmd_vel —

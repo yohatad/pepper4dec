@@ -119,7 +119,7 @@ ros2 launch pepper_navigation pepper_nav2_amcl.launch.py \
 
 ```bash
 ros2 launch pepper_navigation pepper_nav2_fastloc.launch.py use_sim_time:=true
-ros2 bag play <bag> --clock --topics /points /imu/data
+ros2 bag play <bag> --clock --topics /points /camera/imu
 ```
 
 Nav2 will localize and build costmaps, but a bag cannot react to `cmd_vel`;

@@ -64,7 +64,7 @@ Usage (real robot):
 
 Usage (bag replay):
     ros2 launch pepper_navigation pepper_nav2_amcl.launch.py use_sim_time:=true
-    ros2 bag play <bag> --clock --topics /points /imu/data
+    ros2 bag play <bag> --clock --topics /points /camera/imu
 
 Author: Yohannes Tadesse Haile
 Affiliation: Carnegie Mellon University Africa

@@ -12,7 +12,7 @@ frame is Z-up, which the 2D occupancy projection requires.
 
 Usage:
   ros2 launch pepper_slam rtabmap_fastlio_bag.launch.py
-  ros2 bag play <bag> --clock --topics /points /imu/data /tf_static
+  ros2 bag play <bag> --clock --topics /points /camera/imu /tf_static
 
 Replaying /tf is SAFE and wanted: publish_wheel_odom_tf has defaulted to
 false since commit 8edd1f5, so no wheel-odometry edge is recorded and

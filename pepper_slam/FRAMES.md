@@ -114,7 +114,7 @@ the edge the bridge publishes. A lookup of `odom -> base_footprint` traverses
 | `map -> base_footprint` | dynamic, scan rate | `fastlio_localization`, `pointlio_localization` (default) | pose and correction in one: the map is inside the filter, so there is no separate correction edge |
 | `map -> odom` | dynamic, scan rate, gated | `fastlio_localization`, `pointlio_localization` (`odom_frame:=odom`) | the filter pose with wheel odometry composed out |
 | `odom -> base_footprint` | dynamic, 50 Hz | `wheel_odom_tf` (loc stacks, `odom_frame:=odom` only) | wheel odometry, planar |
-| `odom <-> lio_init` | static, one-time | `lio_odom_bridge` | **the leveling** (0.2571 m, from calibration) |
+| `odom <-> lio_init` | static, one-time | `lio_odom_bridge` | **the leveling** (0.3139 m with the RealSense IMU, from calibration) |
 | `map -> pgo_init` | static, one-time | `pgo_map_odom_bridge` | the leveling, map side |
 
 Measured on the July_22 bag over 35 s: `lio_init -> base_footprint` moved in
@@ -125,7 +125,10 @@ which is why local consumers read the odom side and global ones read `map`.
 ## Where the leveling comes from
 
 `level_source: calibration` (default) reads it off the rigid mount:
-`R_level = R_base_imu`, floor offset `= t_base_imu.z = 0.2571 m`. Exact,
+`R_level = R_base_imu`, floor offset `= t_base_imu.z`: 0.3139 m for the
+RealSense IMU (`camera_imu_optical_frame`) every config now uses; it was
+0.2571 m for the L2's own IMU (`l2lidar_frame_imu`) before `l2.yaml` was
+removed. Exact,
 identical on every backend and every run, and available before any odometry
 arrives.
 
@@ -168,10 +171,12 @@ ros2 run pepper_slam check_frame_contract.py
 ros2 run pepper_slam check_frame_contract.py --ros-args -p level_frame:=map
 ```
 
-Asserts the leveling offset equals the calibration prediction (0.2571 m),
+Asserts the leveling offset equals the calibration prediction (`t_base_imu.z`,
+read from TF: 0.3139 m by default),
 `base_footprint` roll/pitch are small, and the floor plane sits at z ~= 0.
 
-Measured after the rename (2026-08-02), July_22 bag:
+Measured after the rename (2026-08-02), July_22 bag, when the estimators still
+ran on the L2 IMU (hence the 0.2571 m offset):
 
 | stack | offset | roll/pitch | floor z | verified live |
 |---|---|---|---|---|
