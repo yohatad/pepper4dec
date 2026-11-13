@@ -210,9 +210,9 @@ def generate_launch_description():
                     'itself lost. Set false to monitor without ever holding nav.')
     declare_bumper_guard_cmd = DeclareLaunchArgument(
         'bumper_guard', default_value='true',
-        description='Insert bumper_guard between collision_monitor and cmd_vel, '
-                    'blocking the direction a bumper contact came from. Set '
-                    'false to drive straight off the collision monitor.')
+        description='Insert bumper_guard between collision_monitor and cmd_vel: '
+                    'a bumper press stops all motion until /bumper_guard/clear '
+                    'is called. Set false to drive straight off the collision monitor.')
     declare_collision_monitor_cmd = DeclareLaunchArgument(
         'collision_monitor', default_value='true',
         description='TESTING ONLY: false runs without the collision monitor '

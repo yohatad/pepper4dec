@@ -1,19 +1,26 @@
 /* bumper_guard.cpp
  *
- * Last gate in the velocity chain: blocks the direction a bumper contact came
- * from, and nothing else.
+ * Last gate in the velocity chain: a bumper contact stops ALL motion --
+ * forward, reverse, sideways and turning -- until an operator resets it.
  *
  *   controller_server -> cmd_vel_raw -> collision_monitor -> cmd_vel_safe
  *                     -> bumper_guard -> cmd_vel  (what Pepper drives on)
  *
- * Why a separate node and not a collision_monitor source: the monitor's whole
- * action vocabulary is isotropic -- DO_NOTHING, STOP, SLOWDOWN, APPROACH all
- * zero or scale the entire command. None can block forward while permitting
- * reverse. With the controller at vx_min 0.0, MPPI can never reverse, so a
- * contact that only stops the robot leaves it leaning on the obstacle with no
- * command that gets it off. Series gates each of which only ever subtracts
- * authority are safe to chain; two PARALLEL arbiters of cmd_vel are not,
- * which is why localization_watchdog cancels goals instead of touching this.
+ * A press means Pepper has already hit something the lidar, the driver's
+ * laser/sonar backstop and the costmap all missed, or an operator pressed a
+ * bumper as an emergency stop. Either way it must not move again on its own,
+ * so the stop holds after the switch is released, until
+ *   ros2 service call /bumper_guard/clear std_srvs/srv/Trigger
+ * which is refused while any bumper is still pressed, and which also clears
+ * naoqi_driver's own bumper stop (driver_clear_service), so one call resets
+ * both. Until 2026-11-13 this only blocked the side that was hit and released
+ * itself 1 s later; Nav2 could then drive straight back into the obstacle.
+ *
+ * Why a separate node and not a collision_monitor source: the monitor's
+ * verdicts come from geometry and lapse as soon as the geometry does; this
+ * one has to hold until a person decides. Series gates each of which only
+ * ever subtracts authority are safe to chain; two PARALLEL arbiters of cmd_vel
+ * are not, which is why localization_watchdog cancels goals instead.
  *
  * Fails safe by dying: this node owns cmd_vel, so if it exits nothing
  * publishes cmd_vel and the driver's own command timeout halts the robot. It
@@ -40,16 +47,16 @@
  *   cmd_vel_in_topic / cmd_vel_out_topic  default cmd_vel_safe -> cmd_vel
  *   required_topics  sensor topics that must stay fresh (default: none, off)
  *   required_timeout s before a required topic counts as lost (default 1.0)
- *   clear_delay      s a latch outlives the switch release (default 1.0)
  *   stuck_timeout    s of continuous press before ERROR (default 10.0)
  *   liveness_topic / liveness_timeout     default /joint_states, 1.0 s
- *   block_lateral    also zero vy while latched (default false; vy_max is 0.0)
+ *   driver_clear_service  naoqi_driver's bumper reset, called by ~/clear
+ *                    (default /naoqi_driver/clear_bumper; "" to skip)
  *
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa
  * Email: yohatad123@gmail.com
  * Date: October 19, 2026
- * Version: v1.0
+ * Version: v2.0
  *
  * Copyright (C) 2025 Carnegie Mellon University Africa
  * This software is provided 'as-is' for research and educational purposes
@@ -83,14 +90,17 @@ class BumperGuard : public rclcpp::Node
 public:
   BumperGuard()
   : Node("bumper_guard"),
-    latch_(declare_parameter<double>("clear_delay", 1.0),
-      declare_parameter<double>("stuck_timeout", 10.0))
+    latch_(declare_parameter<double>("stuck_timeout", 10.0))
   {
     const auto in_topic = declare_parameter<std::string>("cmd_vel_in_topic", "cmd_vel_safe");
     const auto out_topic = declare_parameter<std::string>("cmd_vel_out_topic", "cmd_vel");
     const auto liveness_topic = declare_parameter<std::string>("liveness_topic", "/joint_states");
     liveness_timeout_ = declare_parameter<double>("liveness_timeout", 1.0);
-    block_lateral_ = declare_parameter<bool>("block_lateral", false);
+    const auto driver_clear = declare_parameter<std::string>(
+      "driver_clear_service", "/naoqi_driver/clear_bumper");
+    if (!driver_clear.empty()) {
+      driver_clear_client_ = create_client<std_srvs::srv::Trigger>(driver_clear);
+    }
 
     cmd_pub_ = create_publisher<geometry_msgs::msg::Twist>(out_topic, 1);
     diag_pub_ = create_publisher<diagnostic_msgs::msg::DiagnosticArray>("/diagnostics", 10);
@@ -126,9 +136,8 @@ public:
       std::chrono::milliseconds(500), [this] {publishDiagnostics();});
 
     RCLCPP_INFO(
-      get_logger(), "gating %s -> %s on /bumper (clear_delay %.1fs, liveness %s)",
-      in_topic.c_str(), out_topic.c_str(), get_parameter("clear_delay").as_double(),
-      liveness_topic.c_str());
+      get_logger(), "gating %s -> %s on /bumper: a press stops all motion until "
+      "~/clear (liveness %s)", in_topic.c_str(), out_topic.c_str(), liveness_topic.c_str());
   }
 
 private:
@@ -170,35 +179,33 @@ private:
     const bool pressed = msg.state == naoqi_bridge_msgs::msg::Bumper::STATE_PRESSED;
     latch_.set(msg.bumper, pressed, nowSeconds());
     if (pressed) {
-      RCLCPP_WARN(get_logger(), "bumper %u pressed -- blocking that direction", msg.bumper);
+      RCLCPP_WARN(
+        get_logger(), "bumper %u pressed -- all motion stopped until "
+        "`ros2 service call /bumper_guard/clear std_srvs/srv/Trigger`", msg.bumper);
     }
   }
 
   void onCmdVel(const geometry_msgs::msg::Twist & in)
   {
     latch_.set_blind(blind());
-    const auto clamp = latch_.clamp(nowSeconds());
-
     geometry_msgs::msg::Twist out = in;
-    if (clamp.block_forward) {out.linear.x = std::min(out.linear.x, 0.0);}
-    if (clamp.block_reverse) {out.linear.x = std::max(out.linear.x, 0.0);}
-    // Blind in every direction, so no translation at all -- not even the
-    // reverse a bumper contact leaves open.
-    if (sensors_.any_stale(nowSeconds())) {
+    if (latch_.stop()) {
+      // Contact: nothing moves, turning included, until ~/clear.
+      out = geometry_msgs::msg::Twist();
+      if (in.linear.x != 0.0 || in.linear.y != 0.0 || in.angular.z != 0.0) {
+        RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 2000,
+          "bumper stop: command (%.2f, %.2f, %.2f) -> 0; call ~/clear to resume",
+          in.linear.x, in.linear.y, in.angular.z);
+      }
+    } else if (sensors_.any_stale(nowSeconds())) {
+      // Blind in every direction, so no translation at all. Rotation stays:
+      // the footprint is a 0.25 m circle, so turning in place sweeps nothing new.
       out.linear.x = 0.0;
       out.linear.y = 0.0;
       RCLCPP_WARN_THROTTLE(
         get_logger(), *get_clock(), 2000,
         "required sensor topic(s) lost; holding translation");
-    }
-    // Rotation is always allowed: turning in place is how the robot gets its
-    // nose off an obstacle when reversing is not enough.
-    if (block_lateral_ && (clamp.block_forward || clamp.block_reverse)) {out.linear.y = 0.0;}
-
-    if (out.linear.x != in.linear.x || out.linear.y != in.linear.y) {
-      RCLCPP_WARN_THROTTLE(
-        get_logger(), *get_clock(), 2000,
-        "bumper latched: vx %.2f -> %.2f", in.linear.x, out.linear.x);
     }
     cmd_pub_->publish(out);
   }
@@ -206,9 +213,22 @@ private:
   void onClear(const std_srvs::srv::Trigger::Response::SharedPtr & res)
   {
     res->success = latch_.clear();
-    res->message = res->success ?
-      "bumper latches cleared" :
-      "refused: a bumper is still pressed";
+    if (!res->success) {
+      res->message = "refused: a bumper is still pressed";
+    } else if (!driver_clear_client_) {
+      res->message = "bumper stop cleared";
+    } else if (driver_clear_client_->service_is_ready()) {
+      // Fire and forget: waiting here would block this node's only thread. The
+      // driver checks the same /bumper events, so it agrees unless a press
+      // arrives in between -- in which case it rightly stays stopped.
+      driver_clear_client_->async_send_request(
+        std::make_shared<std_srvs::srv::Trigger::Request>());
+      res->message = "bumper stop cleared; reset sent to naoqi_driver";
+    } else {
+      res->message = "bumper stop cleared here, but " +
+        std::string(driver_clear_client_->get_service_name()) +
+        " is not available -- the driver may still hold its own stop";
+    }
     RCLCPP_INFO(get_logger(), "%s", res->message.c_str());
   }
 
@@ -217,7 +237,6 @@ private:
     using diagnostic_msgs::msg::DiagnosticStatus;
     const double t = nowSeconds();
     latch_.set_blind(blind());
-    const auto clamp = latch_.clamp(t);
 
     DiagnosticStatus s;
     s.name = kStatusName;
@@ -225,14 +244,14 @@ private:
     if (latch_.stuck(t)) {
       s.level = DiagnosticStatus::ERROR;
       s.message = "bumper held down -- stuck switch or debris";
-    } else if (clamp.block_forward || clamp.block_reverse) {
+    } else if (latch_.stop()) {
       s.level = DiagnosticStatus::WARN;
-      s.message = clamp.block_forward ?
-        (clamp.block_reverse ? "contact front and back" : "contact front") :
-        "contact back";
+      s.message = latch_.any_pressed() ?
+        "bumper pressed -- all motion stopped" :
+        "bumper stop latched -- call ~/clear to resume";
     } else if (latch_.blind()) {
       s.level = DiagnosticStatus::WARN;
-      s.message = "no joint_states -- bumper state unknown, latches held";
+      s.message = "no joint_states -- bumper state unknown";
     } else {
       s.level = DiagnosticStatus::OK;
       s.message = "clear";
@@ -243,11 +262,11 @@ private:
         kv.value = val ? "true" : "false";
         s.values.push_back(kv);
       };
-    add("right", latch_.latched(pepper_navigation::kRight, t));
-    add("left", latch_.latched(pepper_navigation::kLeft, t));
-    add("back", latch_.latched(pepper_navigation::kBack, t));
-    add("block_forward", clamp.block_forward);
-    add("block_reverse", clamp.block_reverse);
+    add("right", latch_.latched(pepper_navigation::kRight));
+    add("left", latch_.latched(pepper_navigation::kLeft));
+    add("back", latch_.latched(pepper_navigation::kBack));
+    add("pressed", latch_.any_pressed());
+    add("stop", latch_.stop());
     add("blind", latch_.blind());
 
     diagnostic_msgs::msg::DiagnosticArray arr;
@@ -290,7 +309,7 @@ private:
   std::map<std::string, rclcpp::GenericSubscription::SharedPtr> sensor_subs_;
   rclcpp::TimerBase::SharedPtr bind_timer_;
   double liveness_timeout_;
-  bool block_lateral_;
+  rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr driver_clear_client_;
   double last_liveness_ = pepper_navigation::kNever;
 
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_pub_;
