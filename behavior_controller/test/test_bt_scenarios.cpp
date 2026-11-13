@@ -200,8 +200,9 @@ BT::Blackboard::Ptr tourBlackboard(unsigned cooldown_msec = 0)
  * with "yes" as yes, one starting with "no" as no, and answers anything else
  * with "Answer to: <utterance>".
  *
- * After @p turns utterances the visitor goes quiet, so the pipelines that loop
- * forever come to rest waiting for speech (see runUntil()).
+ * After @p turns utterances the visitor goes quiet: /speech_event/text stays
+ * silent and speech recognition aborts after its wait, as speech_event does,
+ * so the pipelines that loop forever only keep listening (see runUntil()).
  *
  * The gesture server follows gesture_execution's contract (see
  * describeGesture()) and aborts any other gesture, as the real one does.
@@ -290,13 +291,19 @@ protected:
         return reply;
       });
     serveAction<SpeechRecognition>(
-      "/speech_recognition", [this, turns](const SpeechRecognition::Goal &) {
+      "/speech_recognition", [this, turns](const SpeechRecognition::Goal & goal) {
         log("recognize");
         Reply<SpeechRecognition> reply;
-        reply.result.transcription = visitorSays();
-        if (++*turns_taken_ > turns) {
-          reply.outcome = Outcome::kRunUntilCanceled;  // still listening
+        if (!*mic_on_ || ++*turns_taken_ > turns) {
+          // As speech_event does: with the mic muted or a silent visitor no
+          // speech starts within goal.wait, so the goal aborts. The wait is
+          // capped to keep the tests fast.
+          reply.outcome = Outcome::kAbort;
+          reply.delay = std::min(
+            milliseconds(static_cast<int64_t>(goal.wait * 1000.0f)), milliseconds(300));
+          return reply;
         }
+        reply.result.transcription = visitorSays();
         return reply;
       });
     serveAction<ConversationManager>(
@@ -621,7 +628,7 @@ TEST_F(ScenarioTest, NextTourStartsAfreshAfterADecline) {
   EXPECT_EQ(events("navigate").size(), 1 + (tour_stops + 2)) << eventLog();
 }
 
-// Silence: GetVisitorResponse times out. The microphone must not stay on, and
+// Silence: speech recognition hears nothing and aborts. The microphone must not stay on, and
 // the visitor gets the declined goodbye.
 TEST_F(ScenarioTest, VisitorWhoStaysSilentLeavesTheMicOff) {
   ASSERT_NO_FATAL_FAILURE(loadKnowledgeBase("labEnvironmentKnowledgeBase.yaml"));

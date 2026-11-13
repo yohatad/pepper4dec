@@ -61,10 +61,9 @@ speech_recognition:
     # action_server: false -> Continuous processing; transcript published to
     #                         /speech_event/text topic (standalone mode).
     # -------------------------------------------------------------------------
-    # NOTE: behavior_controller's lab_tour and dec_Tour trees read visitor
-    # speech from the /speech_event/text topic (GetVisitorResponse), which is
-    # published ONLY when this is false. Set false for those scenarios, or
-    # they time out on every visitor question.
+    # NOTE: behavior_controller's trees use the action (true), except
+    # listen_cm_tts_pipeline, which reads the /speech_event/text topic and
+    # needs false.
     action_server: true
 
     # -------------------------------------------------------------------------
