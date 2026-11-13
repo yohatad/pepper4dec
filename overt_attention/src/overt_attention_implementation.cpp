@@ -34,6 +34,7 @@ OvertAttentionNode::OvertAttentionNode()
   declare_parameter("camera_type", std::string("pepper"));
   declare_parameter("start_enabled", true);
   declare_parameter("move_to_default_on_disable", true);
+  declare_parameter("verbose_mode", false);
   declare_parameter("default_yaw", 0.0);
   declare_parameter("default_pitch", -0.2);
   declare_parameter("default_move_speed", 0.1);
@@ -84,6 +85,7 @@ OvertAttentionNode::on_configure(const rclcpp_lifecycle::State &)
 
   // Load parameters
   move_to_default_on_disable_ = get_parameter("move_to_default_on_disable").as_bool();
+  verbose_mode_ = get_parameter("verbose_mode").as_bool();
   default_yaw_ = get_parameter("default_yaw").as_double();
   default_pitch_ = get_parameter("default_pitch").as_double();
   default_move_speed_ = get_parameter("default_move_speed").as_double();
@@ -333,7 +335,9 @@ void OvertAttentionNode::onFaces(const dec_interfaces::msg::FaceDetection::Share
 
   if (msg->centroids.empty()) {
     if (current_face_id_.has_value()) {
-      RCLCPP_INFO(get_logger(), "Lost face: %s", current_face_id_->c_str());
+      if (verbose_mode_) {
+        RCLCPP_INFO(get_logger(), "Lost face: %s", current_face_id_->c_str());
+      }
       current_face_id_.reset();
       current_face_location_.reset();
     }
@@ -419,10 +423,12 @@ void OvertAttentionNode::onFaces(const dec_interfaces::msg::FaceDetection::Share
     // Reset smoothed target so we jump immediately to the new face
     target_yaw_.reset();
     target_pitch_.reset();
-    RCLCPP_INFO(
-      get_logger(), "Switching to face: %s (engaged=%s, depth=%.2fm, priority=%.2f, reason=%s)",
-      best_face->face_id.c_str(), best_face->mutual_gaze ? "True" : "False",
-      best_face->centroid.z, best_face->priority, switch_reason.c_str());
+    if (verbose_mode_) {
+      RCLCPP_INFO(
+        get_logger(), "Switching to face: %s (engaged=%s, depth=%.2fm, priority=%.2f, reason=%s)",
+        best_face->face_id.c_str(), best_face->mutual_gaze ? "True" : "False",
+        best_face->centroid.z, best_face->priority, switch_reason.c_str());
+    }
   }
 
   current_face_id_ = best_face->face_id;
@@ -508,9 +514,11 @@ void OvertAttentionNode::onSaliency(const std_msgs::msg::Float32MultiArray::Shar
   }
 
   if (current_face_id_.has_value()) {
-    RCLCPP_INFO(
-      get_logger(), "No recent faces, switching to saliency (was tracking: %s)",
-      current_face_id_->c_str());
+    if (verbose_mode_) {
+      RCLCPP_INFO(
+        get_logger(), "No recent faces, switching to saliency (was tracking: %s)",
+        current_face_id_->c_str());
+    }
     current_face_id_.reset();
     current_face_location_.reset();
 
@@ -524,12 +532,14 @@ void OvertAttentionNode::onSaliency(const std_msgs::msg::Float32MultiArray::Shar
     double clamped_yaw = clamp(head_yaw_val, -saliency_yaw_lim_, saliency_yaw_lim_);
     double clamped_pitch = clamp(head_pitch_val, saliency_pitch_dn_, saliency_pitch_up_);
     if (clamped_yaw != head_yaw_val || clamped_pitch != head_pitch_val) {
-      RCLCPP_INFO(
-        get_logger(),
-        "Head outside saliency limits (yaw=%.1f\xc2\xb0, pitch=%.1f\xc2\xb0) "
-        "\xe2\x86\x92 returning to (yaw=%.1f\xc2\xb0, pitch=%.1f\xc2\xb0)",
-        head_yaw_val * 180.0 / M_PI, head_pitch_val * 180.0 / M_PI,
-        clamped_yaw * 180.0 / M_PI, clamped_pitch * 180.0 / M_PI);
+      if (verbose_mode_) {
+        RCLCPP_INFO(
+          get_logger(),
+          "Head outside saliency limits (yaw=%.1f\xc2\xb0, pitch=%.1f\xc2\xb0) "
+          "\xe2\x86\x92 returning to (yaw=%.1f\xc2\xb0, pitch=%.1f\xc2\xb0)",
+          head_yaw_val * 180.0 / M_PI, head_pitch_val * 180.0 / M_PI,
+          clamped_yaw * 180.0 / M_PI, clamped_pitch * 180.0 / M_PI);
+      }
       publishHead(clamped_yaw, clamped_pitch, 0.0, "saliency_reenter", true);
     }
   }
@@ -693,7 +703,9 @@ void OvertAttentionNode::publishHead(
   target_msg.z = score;
   pub_target_->publish(target_msg);
 
-  RCLCPP_INFO(
-    get_logger(), "[%s] \xe2\x86\x92 yaw=%.1f\xc2\xb0, pitch=%.1f\xc2\xb0, score=%.2f",
-    source.c_str(), yaw * 180.0 / M_PI, pitch * 180.0 / M_PI, score);
+  if (verbose_mode_) {
+    RCLCPP_INFO(
+      get_logger(), "[%s] \xe2\x86\x92 yaw=%.1f\xc2\xb0, pitch=%.1f\xc2\xb0, score=%.2f",
+      source.c_str(), yaw * 180.0 / M_PI, pitch * 180.0 / M_PI, score);
+  }
 }

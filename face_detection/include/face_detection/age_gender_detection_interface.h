@@ -62,6 +62,7 @@ struct AgeGenderDetectionConfig
   // packaged; a face-only (3-channel) model would need its own ONNX
   // export before this flag does anything.
   bool face_only = false;
+  bool verbose_mode = false;
   std::string face_topic = "/face_detection/data";
   std::string person_topic = "/person_detection/data";
   std::string image_topic = "/camera/color/image_raw_custom";

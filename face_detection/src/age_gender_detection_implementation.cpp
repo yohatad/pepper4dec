@@ -64,6 +64,8 @@ AgeGenderDetectionConfig loadAgeGenderConfiguration(rclcpp_lifecycle::LifecycleN
     default_model_path);
   config.device = dec_common::declareAndGetParameter(node, "device", config.device);
   config.face_only = dec_common::declareAndGetParameter(node, "face_only", config.face_only);
+  config.verbose_mode =
+    dec_common::declareAndGetParameter(node, "verbose_mode", config.verbose_mode);
   config.face_topic = dec_common::declareAndGetParameter(node, "face_topic", config.face_topic);
   config.person_topic =
     dec_common::declareAndGetParameter(node, "person_topic", config.person_topic);
@@ -512,7 +514,9 @@ void AgeGenderDetectionNode::personCallback(
       if (is_new) {
         known_label_ids_.insert(label_id);
         person_profiles_[label_id].label_id = label_id;
-        RCLCPP_INFO(get_logger(), "%s: new person detected: %s", get_name(), label_id.c_str());
+        if (config_.verbose_mode) {
+          RCLCPP_INFO(get_logger(), "%s: new person detected: %s", get_name(), label_id.c_str());
+        }
       }
       person_profiles_[label_id].last_person_bbox = person_bbox;
 
@@ -522,9 +526,11 @@ void AgeGenderDetectionNode::personCallback(
           bool depth_ok = face_it->second.depth <= 0.0 ||
             face_it->second.depth < config_.max_depth_m;
           if (depth_ok) {
-            RCLCPP_INFO(
-              get_logger(), "%s: new person %s has mutual gaze at %.2fm, triggering estimation",
-              get_name(), label_id.c_str(), face_it->second.depth);
+            if (config_.verbose_mode) {
+              RCLCPP_INFO(
+                get_logger(), "%s: new person %s has mutual gaze at %.2fm, triggering estimation",
+                get_name(), label_id.c_str(), face_it->second.depth);
+            }
             ids_to_estimate.push_back(label_id);
           }
         }
@@ -570,10 +576,12 @@ void AgeGenderDetectionNode::faceCallback(
         if (profile_it != person_profiles_.end() &&
           shouldReEstimate(profile_it->second, std::chrono::steady_clock::now()))
         {
-          RCLCPP_INFO(
-            get_logger(), "%s: mutual gaze detected for %s at %.2fm (< %.2fm), "
-            "triggering estimation",
-            get_name(), label_id.c_str(), depth, config_.max_depth_m);
+          if (config_.verbose_mode) {
+            RCLCPP_INFO(
+              get_logger(), "%s: mutual gaze detected for %s at %.2fm (< %.2fm), "
+              "triggering estimation",
+              get_name(), label_id.c_str(), depth, config_.max_depth_m);
+          }
           ids_to_estimate.push_back(label_id);
         }
       }
@@ -696,7 +704,9 @@ void AgeGenderDetectionNode::estimateForPerson(const std::string & label_id)
   }
 
   try {
-    RCLCPP_INFO(get_logger(), "%s: running inference for %s", get_name(), label_id.c_str());
+    if (config_.verbose_mode) {
+      RCLCPP_INFO(get_logger(), "%s: running inference for %s", get_name(), label_id.c_str());
+    }
     auto result = mivolo_->predict(*face_crop, person_crop);
 
     if (result) {
@@ -709,10 +719,12 @@ void AgeGenderDetectionNode::estimateForPerson(const std::string & label_id)
         json_result = profile_it->second.toJson();
       }
 
-      RCLCPP_INFO(
-        get_logger(), "%s: [%s] age=%.1f (raw=%.1f), gender=%s (%.1f%%)", get_name(),
-        label_id.c_str(), result->age, result->age,
-        result->gender.c_str(), result->gender_confidence * 100.0);
+      if (config_.verbose_mode) {
+        RCLCPP_INFO(
+          get_logger(), "%s: [%s] age=%.1f (raw=%.1f), gender=%s (%.1f%%)", get_name(),
+          label_id.c_str(), result->age, result->age,
+          result->gender.c_str(), result->gender_confidence * 100.0);
+      }
       publishResult(json_result);
     } else {
       RCLCPP_WARN(
@@ -768,7 +780,9 @@ void AgeGenderDetectionNode::cleanupStaleData()
       recent_persons_.count(label_id) > 0 || recent_faces_.count(label_id) > 0;
     double idle = std::chrono::duration<double>(now - it->second.last_updated).count();
     if (!seen_recently && idle > profile_timeout) {
-      RCLCPP_INFO(get_logger(), "%s: cleaned up stale profile: %s", get_name(), label_id.c_str());
+      if (config_.verbose_mode) {
+        RCLCPP_INFO(get_logger(), "%s: cleaned up stale profile: %s", get_name(), label_id.c_str());
+      }
       known_label_ids_.erase(label_id);
       it = person_profiles_.erase(it);
     } else {

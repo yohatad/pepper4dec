@@ -343,6 +343,7 @@ private:
 
   // System parameters
   bool move_to_default_on_disable_ = true;
+  bool verbose_mode_ = false;  // per-target and per-command logging
   double default_yaw_ = 0.0;
   double default_pitch_ = -0.2;
   double default_move_speed_ = 0.1;

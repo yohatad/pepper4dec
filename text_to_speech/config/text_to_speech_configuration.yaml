@@ -1,6 +1,8 @@
 # Text-to-Speech Configuration
 text_to_speech:
   ros__parameters:
+    # Log each sentence as it is synthesised and played.
+    verbose_mode: false
 
     # Synthesis + playback backend:
     #   "naoqi_ros"          - Pepper's on-board ALTextToSpeech (no extra deps)

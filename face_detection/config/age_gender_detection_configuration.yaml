@@ -5,6 +5,8 @@
 
 age_gender_detection:
   ros__parameters:
+    # Log each new person, inference run and profile cleanup.
+    verbose_mode: false
 
     # MiVOLO model settings
     # mivolo_model_path defaults to <face_detection share dir>/models/face_detection_mivolo_agegender.onnx

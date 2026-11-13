@@ -125,6 +125,11 @@ SOFTWARE_VERSION = "v1.0"
 class TextToSpeechNode(LifecycleNode):
     """Lifecycle node that converts text to speech and plays it on Pepper's speakers."""
 
+    def _vlog(self, msg: str) -> None:
+        """Log at INFO only with verbose_mode on (per-event detail)."""
+        if getattr(self, 'verbose_mode', False):
+            self.get_logger().info(msg)
+
     def __init__(self):
         """Declare parameters only; backend setup is deferred to on_configure().
 
@@ -139,6 +144,7 @@ class TextToSpeechNode(LifecycleNode):
         # configure/cleanup cycles; on_configure re-reads current values on
         # every configure, so `ros2 param set` + reconfigure picks up changes.
         self.declare_parameter("engine", "naoqi_ros")
+        self.declare_parameter("verbose_mode", False)
         self.declare_parameter("naoqi_speech_topic", "/speech")
         self.declare_parameter("chars_per_second", 12.0)
         self.declare_parameter("speech_padding_s", 0.5)
@@ -160,6 +166,7 @@ class TextToSpeechNode(LifecycleNode):
     def on_configure(self, _state) -> TransitionCallbackReturn:
         """Initialize the TTS backend and create publishers, service clients, and action server."""
         self.engine = self.get_parameter("engine").value
+        self.verbose_mode = bool(self.get_parameter("verbose_mode").value)
         self.naoqi_speech_topic = self.get_parameter("naoqi_speech_topic").value
         self.chars_per_second = float(self.get_parameter("chars_per_second").value)
         self.speech_padding_s = float(self.get_parameter("speech_padding_s").value)
@@ -436,7 +443,7 @@ class TextToSpeechNode(LifecycleNode):
         msg = String()
         msg.data = sentence
         self.naoqi_pub.publish(msg)
-        self.get_logger().info(f"{self.node_name}: [naoqi_ros] speaking: '{sentence}'")
+        self._vlog(f"{self.node_name}: [naoqi_ros] speaking: '{sentence}'")
 
         duration = estimate_duration(
             sentence,
@@ -454,7 +461,7 @@ class TextToSpeechNode(LifecycleNode):
 
     def speak_kokoro_local(self, sentence: str):
         """Synthesise with Kokoro and play on the local machine's speakers."""
-        self.get_logger().info(
+        self._vlog(
             f"{self.node_name}: [kokoro_local] synthesising: '{sentence}'"
         )
         try:
@@ -468,7 +475,7 @@ class TextToSpeechNode(LifecycleNode):
         self.set_mic_enabled(False)
         try:
             duration_s = len(audio) / self.sample_rate
-            self.get_logger().info(
+            self._vlog(
                 f"{self.node_name}: [kokoro_local] playing {duration_s:.2f}s"
             )
             completed = self.audio_player.play(audio)
@@ -491,7 +498,7 @@ class TextToSpeechNode(LifecycleNode):
         """
         playback_method = self.playback_method
 
-        self.get_logger().info(
+        self._vlog(
             f"{self.node_name}: [kokoro_pepper] synthesising: '{sentence}' "
             f"(method={playback_method})"
         )
@@ -521,7 +528,7 @@ class TextToSpeechNode(LifecycleNode):
         Stream from ElevenLabs and play on the local machine's speakers.
         Audio starts as soon as the first API chunk arrives (~200 ms TTFA).
         """
-        self.get_logger().info(
+        self._vlog(
             f"{self.node_name}: [elevenlabs_local] streaming: '{sentence}'"
         )
         self.set_mic_enabled(False)
@@ -561,7 +568,7 @@ class TextToSpeechNode(LifecycleNode):
         file mode:   Collects full audio then uses SCP + ALAudioPlayer (fallback).
         """
         playback_method = self.playback_method
-        self.get_logger().info(
+        self._vlog(
             f"{self.node_name}: [elevenlabs_pepper] streaming: '{sentence}' "
             f"(method={playback_method})"
         )
@@ -695,7 +702,7 @@ class TextToSpeechNode(LifecycleNode):
         """Called when play_audio finishes (completed, cancelled, or aborted)."""
         try:
             result = future.result().result
-            self.get_logger().info(
+            self._vlog(
                 f"{self.node_name}: play_audio done — "
                 f"status={result.status}, played={result.played_secs:.1f}s"
             )

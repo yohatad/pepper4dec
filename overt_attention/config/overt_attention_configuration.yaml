@@ -31,6 +31,8 @@ saliency_node:
 # ===========================================
 overt_attention:
   ros__parameters:
+    # Log every target switch and head command (chatty; off for normal runs).
+    verbose_mode: false
     # System
     start_enabled: true
     move_to_default_on_disable: true
