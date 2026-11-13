@@ -30,16 +30,16 @@ jobs:
         run: |
           git clone https://github.com/yohatad/naoqi_bridge_msgs2.git src/naoqi_bridge_msgs
           git clone https://github.com/yohatad/naoqi_driver2.git src/naoqi_driver2
-          git clone https://github.com/ros-naoqi/libqi.git -b ros2 src/naoqi_libqi
-          git clone https://github.com/ros-naoqi/libqicore.git -b ros2 src/naoqi_libqicore
-          git clone https://github.com/ros-naoqi/nao_meshes2.git src/nao_meshes
-          git clone https://github.com/ros-naoqi/pepper_meshes2.git src/pepper_meshes
+          # naoqi_libqi / naoqi_libqicore are not cloned: rosdep installs
+          # ros-humble-naoqi-libqi / -libqicore, as the Docker image does.
           # Fork carrying the halt-crash fix (pepper4dec branch, one commit on
           # upstream humble; see its message). Back to upstream once fixed there.
           # BehaviorTree.CPP is not cloned: rosdep installs ros-humble-behaviortree-cpp.
           git clone -b pepper4dec https://github.com/yohatad/BehaviorTree.ROS2.git src/BehaviorTree.ROS2
 
       - name: rosdep install
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
           rosdep update
           # No -r: an unresolvable key fails the job. The skipped keys are
@@ -110,16 +110,16 @@ jobs:
         run: |
           git clone https://github.com/yohatad/naoqi_bridge_msgs2.git src/naoqi_bridge_msgs
           git clone https://github.com/yohatad/naoqi_driver2.git src/naoqi_driver2
-          git clone https://github.com/ros-naoqi/libqi.git -b ros2 src/naoqi_libqi
-          git clone https://github.com/ros-naoqi/libqicore.git -b ros2 src/naoqi_libqicore
-          git clone https://github.com/ros-naoqi/nao_meshes2.git src/nao_meshes
-          git clone https://github.com/ros-naoqi/pepper_meshes2.git src/pepper_meshes
+          # naoqi_libqi / naoqi_libqicore are not cloned: rosdep installs
+          # ros-humble-naoqi-libqi / -libqicore, as the Docker image does.
           # Fork carrying the halt-crash fix (pepper4dec branch, one commit on
           # upstream humble; see its message). Back to upstream once fixed there.
           # BehaviorTree.CPP is not cloned: rosdep installs ros-humble-behaviortree-cpp.
           git clone -b pepper4dec https://github.com/yohatad/BehaviorTree.ROS2.git src/BehaviorTree.ROS2
 
       - name: rosdep install
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
           rosdep update
           rosdep install --from-paths src --ignore-src -y \

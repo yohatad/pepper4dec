@@ -94,13 +94,9 @@ repo (this is the same list the CI workflow installs — see
 cd ~/ros2_ws/src
 git clone https://github.com/yohatad/pepper4dec.git
 
-# Pepper / NAOqi
+# Pepper / NAOqi (libqi, libqicore and the meshes come from apt, below)
 git clone https://github.com/yohatad/naoqi_bridge_msgs2.git naoqi_bridge_msgs
 git clone https://github.com/yohatad/naoqi_driver2.git
-git clone -b ros2 https://github.com/ros-naoqi/libqi.git naoqi_libqi
-git clone -b ros2 https://github.com/ros-naoqi/libqicore.git naoqi_libqicore
-git clone https://github.com/ros-naoqi/nao_meshes2.git nao_meshes
-git clone https://github.com/ros-naoqi/pepper_meshes2.git pepper_meshes
 
 # Behavior trees (BehaviorTree.CPP itself comes from apt, through rosdep below)
 # Fork with a fix for a halt crash (upstream humble + one commit)
@@ -131,7 +127,16 @@ navigation profiles.
 
 2. **Install the remaining dependencies and build**
 
+The NAOqi libraries and the Pepper/NAO meshes are installed from apt, as in the
+Docker image, not built from source: they are pinned, rarely change, and take
+a long time to compile. rosdep would pull in `naoqi_libqi` and `naoqi_libqicore`
+for `naoqi_driver2` anyway; the meshes are only needed to show the robot model
+in RViz.
+
 ```bash
+sudo apt install -y ros-humble-naoqi-libqi ros-humble-naoqi-libqicore \
+  ros-humble-nao-meshes ros-humble-pepper-meshes
+
 cd ~/ros2_ws
 rosdep update
 rosdep install --from-paths src --ignore-src -r -y
