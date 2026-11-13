@@ -30,9 +30,10 @@ Configuration:
     config files at startup and must not be given them here.
 
 Prerequisites (start separately before this launch):
-    ros2 launch naoqi_driver naoqi_driver.launch.py nao_ip:=<PEPPER_IP>
-    SpeechWithFeedback connects to /naoqi_driver/speech_with_feedback, which
-    naoqi_driver serves.
+    ros2 launch dec_launch naoqi_driver.launch.py nao_ip:=<PEPPER_IP>
+    That wrapper turns the microphones on (/audio, which speech_event needs);
+    naoqi_driver's own launch leaves audio off. SpeechWithFeedback connects to
+    /naoqi_driver/speech_with_feedback, which naoqi_driver serves.
 
 Usage:
     ros2 launch dec_launch asr_cm_pipeline.launch.py
