@@ -125,6 +125,15 @@ FROM base AS workspace
 ARG WS
 WORKDIR ${WS}
 
+# GPU build of ONNX Runtime for face_detection and person_detection. ROS's
+# onnxruntime_vendor (installed by rosdep) is CPU-only; dec_common's
+# dec_find_onnxruntime() prefers this release in ${WS}/.deps and gives the
+# nodes an RPATH to the CUDA 12 / cuDNN 9 libraries in the sound venv, which
+# the runtime stage copies in. Without a GPU the nodes fall back to the CPU.
+# Its own layer before the sources, so source changes do not re-download it.
+COPY scripts/install_onnxruntime_gpu.sh /tmp/
+RUN /tmp/install_onnxruntime_gpu.sh ${WS}/.deps && rm /tmp/install_onnxruntime_gpu.sh
+
 # naoqi_libqi / naoqi_libqicore / nao_meshes / pepper_meshes are NOT
 # cloned/built from source here -- they come from the pinned
 # ros-humble-naoqi-libqi / ros-humble-naoqi-libqicore / ros-humble-nao-meshes /

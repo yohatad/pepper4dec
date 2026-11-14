@@ -184,10 +184,8 @@ std::string AgeGenderPersonProfile::toJson() const
 MiVOLOONNX::MiVOLOONNX(const std::string & model_path, bool use_cuda)
 {
   ort_env_ = std::make_unique<Ort::Env>(ORT_LOGGING_LEVEL_ERROR, "age_gender_detection_mivolo");
-  // Falls back to CPU if CUDA cannot run; the caller logs provider status separately.
-  bool cuda_enabled = false;
-  std::string cuda_error;
-  session_ = dec_common::createSession(*ort_env_, model_path, use_cuda, cuda_enabled, cuda_error);
+  // Falls back to CPU if CUDA cannot run; the caller logs provider status.
+  session_ = dec_common::createSession(*ort_env_, model_path, use_cuda, cuda_enabled_, cuda_error_);
 
   Ort::AllocatorWithDefaultOptions allocator;
   for (size_t i = 0; i < session_->GetInputCount(); ++i) {
@@ -341,6 +339,11 @@ AgeGenderDetectionNode::CallbackReturn AgeGenderDetectionNode::on_configure(
     config_.mivolo_model_path.c_str(), config_.device.c_str());
   try {
     mivolo_ = std::make_unique<MiVOLOONNX>(config_.mivolo_model_path, config_.device == "cuda");
+    if (config_.device == "cuda" && !mivolo_->usesCuda()) {
+      RCLCPP_WARN(
+        get_logger(), "%s: CUDAExecutionProvider unavailable (%s); running on CPU", get_name(),
+        mivolo_->cudaError().c_str());
+    }
   } catch (const std::exception & e) {
     RCLCPP_ERROR(get_logger(), "%s: MiVOLOONNX init failed: %s", get_name(), e.what());
     return CallbackReturn::FAILURE;

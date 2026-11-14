@@ -56,7 +56,7 @@ target_link_libraries(my_node dec_common::dec_common_runner)
 | `dec_common/node_runner.h` | `runNode<NodeT>(argc, argv, options, extra_nodes, after_spin)`; `NodeRunOptions` sets the startup banner, logger name and executor thread count |
 | `dec_common/onnx_session.h` | `createSession(env, model_path, try_cuda, used_cuda, cuda_error)`: an ONNX Runtime session on the GPU, rebuilt on the CPU if CUDA cannot be used; `baseSessionOptions()` (all cores, full graph optimisation, worker threads do not busy-wait). Header-only: include it after `<onnxruntime_cxx_api.h>` |
 
-The package also exports a CMake macro, `dec_find_onnxruntime()`, which `face_detection` and `person_detection` call in place of `find_package(onnxruntime_vendor REQUIRED)`. It uses ROS's CPU-only `onnxruntime_vendor` unless `ONNXRUNTIME_ROOT` (CMake or environment variable) points at an unpacked ONNX Runtime GPU release, in which case that library and only its headers are used. See the top-level README, Installation step 5.
+The package also exports a CMake macro, `dec_find_onnxruntime()`, which `face_detection` and `person_detection` call in place of `find_package(onnxruntime_vendor REQUIRED)`. It prefers the ONNX Runtime GPU release: `ONNXRUNTIME_ROOT` (CMake or environment variable) if set, else `<workspace>/.deps/onnxruntime-linux-x64-gpu-1.23.2` as installed by `scripts/install_onnxruntime_gpu.sh`, else ROS's CPU-only `onnxruntime_vendor` with a warning. With the GPU release it uses only that release's library and headers, and gives the executables an RPATH to the CUDA 12 / cuDNN 9 libraries in the workspace's `sound` venv (plus any `DEC_CUDA_LIBRARY_DIRS`), so they need no `LD_LIBRARY_PATH` setup. See the top-level README, Installation step 5.
 
 ## 📁 Package Structure
 

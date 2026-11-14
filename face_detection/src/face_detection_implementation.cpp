@@ -75,10 +75,8 @@ YOLOONNX::YOLOONNX(const std::string & model_path, double class_score_th)
 : class_score_th_(class_score_th)
 {
   ort_env_ = std::make_unique<Ort::Env>(ORT_LOGGING_LEVEL_ERROR, "face_detection_yolo");
-  // Falls back to CPU if CUDA cannot run; the caller logs provider status separately.
-  bool cuda_enabled = false;
-  std::string cuda_error;
-  session_ = dec_common::createSession(*ort_env_, model_path, true, cuda_enabled, cuda_error);
+  // Falls back to CPU if CUDA cannot run; the caller logs provider status.
+  session_ = dec_common::createSession(*ort_env_, model_path, true, cuda_enabled_, cuda_error_);
 
   Ort::AllocatorWithDefaultOptions allocator;
   for (size_t i = 0; i < session_->GetInputCount(); ++i) {
@@ -362,8 +360,15 @@ SixDRepNet::CallbackReturn SixDRepNet::on_configure(const rclcpp_lifecycle::Stat
 
   try {
     yolo_model_ = std::make_unique<YOLOONNX>(yolo_model_path, config_.face_detection_confidence);
+    if (!yolo_model_->usesCuda()) {
+      RCLCPP_WARN(
+        get_logger(), "%s: Gold-YOLO: CUDAExecutionProvider unavailable (%s); running on CPU",
+        node_name_.c_str(), yolo_model_->cudaError().c_str());
+    }
     if (verbose_mode_) {
-      RCLCPP_INFO(get_logger(), "%s: YOLOONNX loaded successfully", node_name_.c_str());
+      RCLCPP_INFO(
+        get_logger(), "%s: YOLOONNX loaded — %s", node_name_.c_str(),
+        yolo_model_->usesCuda() ? "GPU (CUDA)" : "CPU");
     }
   } catch (const std::exception & e) {
     RCLCPP_ERROR(get_logger(), "%s: YOLOONNX init failed: %s", node_name_.c_str(), e.what());
@@ -378,6 +383,11 @@ SixDRepNet::CallbackReturn SixDRepNet::on_configure(const rclcpp_lifecycle::Stat
     std::string cuda_error;
     sixdrepnet_session_ = dec_common::createSession(
       *sixdrepnet_env_, sixdrepnet_model_path, true, cuda_enabled, cuda_error);
+    if (!cuda_enabled) {
+      RCLCPP_WARN(
+        get_logger(), "%s: SixDRepNet: CUDAExecutionProvider unavailable (%s); running on CPU",
+        node_name_.c_str(), cuda_error.c_str());
+    }
 
     Ort::AllocatorWithDefaultOptions allocator;
     for (size_t i = 0; i < sixdrepnet_session_->GetInputCount(); ++i) {

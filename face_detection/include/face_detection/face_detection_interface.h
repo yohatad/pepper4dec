@@ -120,6 +120,10 @@ public:
   // Returns (boxes as xyxy in image pixel coords, scores).
   std::pair<std::vector<cv::Rect2d>, std::vector<float>> detect(const cv::Mat & image);
 
+  /// Whether the session runs on CUDA; if not, why CUDA was given up.
+  bool usesCuda() const {return cuda_enabled_;}
+  const std::string & cudaError() const {return cuda_error_;}
+
 private:
   cv::Mat preprocess(const cv::Mat & image);
   std::pair<std::vector<cv::Rect2d>, std::vector<float>> postprocess(
@@ -127,6 +131,8 @@ private:
     int64_t num_attrs);
 
   double class_score_th_;
+  bool cuda_enabled_ = false;
+  std::string cuda_error_;
   std::unique_ptr<Ort::Env> ort_env_;
   std::unique_ptr<Ort::Session> session_;
   std::vector<std::string> input_names_;
