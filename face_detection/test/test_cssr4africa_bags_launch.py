@@ -17,10 +17,10 @@ processes (empty when it sees no face); all of them are collected. Per bag:
   mutual_gaze     a face in most answers, mutual gaze in at least 10% of them
   lighting_1/2    a face in at least half of the answers
 
-The bags are the ROS1 recordings from
-https://huggingface.co/cssr4africa/cssr4africa_unit_tests_data_files,
-converted to ROS2 by scripts/fetch_test_bags.sh into
-~/ros2_ws/bags/cssr4africa (override with PEPPER4DEC_TEST_BAGS). The test
+The bags are the ROS2 copies of the CSSR4Africa recordings,
+https://huggingface.co/cssr4africa/dec_unit_test_data_files,
+which scripts/fetch_test_bags.sh downloads into ~/ros2_ws/bags/cssr4africa
+(override with PEPPER4DEC_TEST_BAGS). The test
 skips when the bags or the git-ignored models are missing.
 
 Run via: colcon test --packages-select face_detection
