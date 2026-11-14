@@ -170,7 +170,7 @@ def read_bag(bag_dir):
 
 
 def to_angles(u, v, info):
-    """pixelToAngles of overt_attention_interface.h, in radians."""
+    """Return (yaw, pitch) in radians, as pixelToAngles in the interface header."""
     fx, cx, fy, cy = info.k[0], info.k[2], info.k[4], info.k[5]
     return -math.atan((u - cx) / fx), math.atan((v - cy) / fy)
 
