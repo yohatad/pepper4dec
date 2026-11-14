@@ -125,6 +125,11 @@ if(BUILD_TESTING)
     test/test_boolean_map_saliency.cpp
   )
   target_link_libraries(test_boolean_map_saliency ${PROJECT_NAME}_lib)
+
+  # The attention pipeline (face_detection, saliency, controller) on the
+  # CSSR4Africa RealSense bags at 15 fps; skips without the bags or models.
+  find_package(launch_testing_ament_cmake REQUIRED)
+  add_launch_test(test/test_cssr4africa_bags_launch.py TIMEOUT 600)
 endif()
 
 ament_package()

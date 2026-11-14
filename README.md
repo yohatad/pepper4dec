@@ -232,7 +232,7 @@ Coverage by tier:
 - **Unit, C++ (gtest)** - ByteTrack multi-object tracking, Pepper arm kinematics and joint-limit clamping, the animate_behavior motion math, behavior-tree utilities and knowledge-base validation, Boolean Map Saliency, age/gender temporal smoothing, camera-topic and pixel-to-angle helpers, COCO class filtering
 - **Unit, Python (pytest)** - the LIO divergence guard, the map-leveling frame contract, sound-localization geometry, the speech denoiser DSP, LLM response parsing, TTS audio helpers, and a drift check on the Nav2 parameter sections shared across localization profiles
 - **Integration** - a bag-replay regression test that runs the real YOLOv11 + ByteTrack person-detection node against recorded camera frames and asserts on the published detections. Frames are fed one at a time, so the result does not depend on machine speed
-- **Integration, CSSR4Africa bags** - `face_detection` and `person_detection` replay the CSSR4Africa RealSense test recordings (single and multiple people, mutual gaze, two lighting conditions) at the recorded 15 fps and check what each node reports and that it keeps up with the camera. They need the GPU (Installation step 5) and the bags, which `scripts/fetch_test_bags.sh` downloads (about 370 MB, into `~/ros2_ws/bags/cssr4africa`) from the [ROS 2 copy](https://huggingface.co/cssr4africa/dec_unit_test_data_files) of the [CSSR4Africa test recordings](https://huggingface.co/cssr4africa/cssr4africa_unit_tests_data_files). The ROS 2 bags keep every topic, including aligned depth and camera info; `scripts/convert_cssr4africa_bags.sh` rebuilds them from the ROS 1 originals
+- **Integration, CSSR4Africa bags** - `face_detection`, `person_detection` and `overt_attention` (with face detection on colour and depth) replay the CSSR4Africa RealSense test recordings (single and multiple people, mutual gaze, two lighting conditions) at the recorded 15 fps and check what each node reports and that it keeps up with the camera. They need the GPU (Installation step 5) and the bags, which `scripts/fetch_test_bags.sh` downloads (about 370 MB, into `~/ros2_ws/bags/cssr4africa`) from the [ROS 2 copy](https://huggingface.co/cssr4africa/dec_unit_test_data_files) of the [CSSR4Africa test recordings](https://huggingface.co/cssr4africa/cssr4africa_unit_tests_data_files). The ROS 2 bags keep every topic, including aligned depth and camera info; `scripts/convert_cssr4africa_bags.sh` rebuilds them from the ROS 1 originals
 
 Tests that need an optional dependency (ONNX model weights, `librosa`, `pyroomacoustics`, ChromaDB) skip cleanly when it is absent, so the suite passes on a bare CI runner and exercises everything on a full workstation.
 
@@ -242,6 +242,9 @@ A CUDA-capable image and a Compose file are provided; the Dockerfile builds a
 separate venv per Python node (see its header for the rationale). The image
 includes the ONNX Runtime GPU release, so the perception nodes use the GPU when
 the NVIDIA Container Toolkit is installed on the host, and the CPU otherwise.
+The build also downloads the ONNX models from
+[cssr4africa/dec_models](https://huggingface.co/cssr4africa/dec_models) with
+`scripts/fetch_models.sh` (all but the MiVOLO age/gender model).
 
 ```bash
 cp .env.example .env             # DISPLAY, ROS_DOMAIN_ID, API keys

@@ -193,7 +193,7 @@ colcon test --packages-select overt_attention
 colcon test-result --verbose
 ```
 
-Runs unit tests for the Boolean Map saliency operator on synthetic images, and the shared helpers.
+Runs unit tests for the Boolean Map saliency operator on synthetic images, and the shared helpers, plus `test_cssr4africa_bags_launch.py`: the real `face_detection` (RealSense colour with aligned depth), saliency node and attention controller on the five CSSR4Africa RealSense recordings at 15 fps, with a fixed head pose standing in for Pepper. It checks that faces carry a depth, the saliency peaks, the head joint limits, that the target points at a visible face (median error under 2 deg) and prefers the one in mutual gaze, that nothing is commanded during the face timeout, and the `set_enabled` service. Fetch the bags first with `scripts/fetch_test_bags.sh` (from the repository root); the test skips without them or the face models, and needs the GPU to keep up.
 
 ## 💡 Support
 
