@@ -386,6 +386,19 @@ protected:
     tickFor(tree, milliseconds(300));
   }
 
+  /// The first @p n events. The looping pipelines keep going during
+  /// runUntil()'s rest: a silent visitor's listen aborts after 300 ms, the
+  /// length of that rest, so whether the robot's next step is already logged
+  /// is a race (seen in CI). Their tests compare this prefix instead.
+  Events firstEvents(std::size_t n) const
+  {
+    Events log = events();
+    if (log.size() > n) {
+      log.resize(n);
+    }
+    return log;
+  }
+
 private:
   struct Visitor
   {
@@ -769,10 +782,10 @@ TEST_F(ScenarioTest, AsrPipelineSpeaksTheConversationManagersAnswer) {
 
   runUntil(tree, [this]() {return events("recognize").size() >= 3;});
   EXPECT_EQ(
-    events(),
+    firstEvents(7),
     (Events{"recognize", "ask what is this robot", "say Answer to: what is this robot",
       "recognize", "ask what is this robot", "say Answer to: what is this robot",
-      "recognize"}));
+      "recognize"})) << eventLog();
 }
 
 TEST_F(ScenarioTest, AsrPipelinePromptsWhenNothingWasHeard) {
@@ -780,7 +793,8 @@ TEST_F(ScenarioTest, AsrPipelinePromptsWhenNothingWasHeard) {
   auto tree = treeFromFile(dataPath("asr_cm_tts_pipeline.xml"));
 
   runUntil(tree, [this]() {return events("recognize").size() >= 2;});
-  EXPECT_EQ(events(), (Events{"recognize", "say Any questions?", "recognize"}));
+  EXPECT_EQ(firstEvents(3), (Events{"recognize", "say Any questions?", "recognize"}))
+    << eventLog();
 }
 
 TEST_F(ScenarioTest, ListenPipelineMutesTheMicWhileTheRobotSpeaks) {
