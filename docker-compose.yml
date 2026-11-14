@@ -43,7 +43,6 @@ services:
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - /dev/shm:/dev/shm
-      - pepper4dec-models:/home/pepper/models
       - pepper4dec-data:/home/pepper/data
     # The top-level system bringup. Pass nav_profile:=/enable_navigation:= to
     # pick a localization stack; see dec_launch/launch/dec_system.launch.py.
@@ -73,5 +72,4 @@ services:
     command: /bin/bash -c "source /opt/pepper4dec_setup.sh && rviz2"
 
 volumes:
-  pepper4dec-models:
   pepper4dec-data:

@@ -134,6 +134,15 @@ WORKDIR ${WS}
 COPY scripts/install_onnxruntime_gpu.sh /tmp/
 RUN /tmp/install_onnxruntime_gpu.sh ${WS}/.deps && rm /tmp/install_onnxruntime_gpu.sh
 
+# ONNX models from huggingface.co/cssr4africa/dec_models (SHA-256 checked).
+# .dockerignore keeps the host's models/ out of the build context, so they
+# are fetched here, into /tmp/models/<package>/models, and copied into the
+# sources below; colcon then installs them to share/<package>/models. Also a
+# layer of its own, ahead of the sources. The MiVOLO age/gender model is not
+# hosted yet, so age_gender_detection has no model in the image.
+COPY scripts/fetch_models.sh /tmp/models/scripts/
+RUN /tmp/models/scripts/fetch_models.sh
+
 # naoqi_libqi / naoqi_libqicore / nao_meshes / pepper_meshes are NOT
 # cloned/built from source here -- they come from the pinned
 # ros-humble-naoqi-libqi / ros-humble-naoqi-libqicore / ros-humble-nao-meshes /
@@ -172,6 +181,10 @@ ADD https://github.com/yohatad/BehaviorTree.ROS2.git#pepper4dec src/BehaviorTree
 ADD https://github.com/yohatad/naoqi_bridge_msgs2.git#main src/naoqi_bridge_msgs
 
 COPY . src/pepper4dec
+RUN for d in /tmp/models/*/models; do \
+      pkg=$(basename "$(dirname "$d")"); \
+      mkdir -p "src/pepper4dec/$pkg/models" && cp "$d"/* "src/pepper4dec/$pkg/models/"; \
+    done && rm -rf /tmp/models
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ros-humble-gtsam net-tools && \
