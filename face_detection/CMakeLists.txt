@@ -25,7 +25,7 @@ find_package(ament_index_cpp REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 REQUIRED)
-find_package(onnxruntime_vendor REQUIRED)
+dec_find_onnxruntime()  # dec_common: onnxruntime_vendor, or ONNXRUNTIME_ROOT for the GPU
 
 # Library
 add_library(${PROJECT_NAME}_lib
@@ -107,16 +107,20 @@ install(DIRECTORY launch/   DESTINATION share/${PROJECT_NAME}/launch)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
+  # headers are C++; left unset, cppcheck parses .h files as C
+  set(ament_cmake_cppcheck_LANGUAGE "c++")
   # the following line skips the linter which checks for copyrights
   # comment the line when a copyright and license is added to all source files
   set(ament_cmake_copyright_FOUND TRUE)
-  # the following line skips cpplint (only works in a git repo)
-  # comment the line when this package is in a git repo and when
-  # a copyright and license is added to all source files
-  set(ament_cmake_cpplint_FOUND TRUE)
-  # skip uncrustify: repo predates it and follows its own consistent style
-  set(ament_cmake_uncrustify_FOUND TRUE)
+  # ROS 2 style; the .h headers are C++, which uncrustify must be told.
+  set(ament_cmake_uncrustify_ADDITIONAL_ARGS LANGUAGE CPP)
+  # cpplint runs manually below, without its copyright rule: license
+  # headers are kept out of the source files on purpose (see LICENSE).
+  list(APPEND AMENT_LINT_AUTO_EXCLUDE ament_cmake_cpplint)
   ament_lint_auto_find_test_dependencies()
+
+  find_package(ament_cmake_cpplint REQUIRED)
+  ament_cpplint(FILTERS "-legal/copyright")
 
   find_package(ament_cmake_gtest REQUIRED)
   # AgeGenderPersonProfile / AgeGenderBoundingBox live in
@@ -125,6 +129,13 @@ if(BUILD_TESTING)
     test/test_age_gender_profile.cpp
   )
   target_link_libraries(test_age_gender_profile ${PROJECT_NAME}_age_gender_lib)
+
+  # Replays the CSSR4Africa RealSense bags (scripts/fetch_test_bags.sh);
+  # skips when the bags or the git-ignored models are missing.
+  find_package(launch_testing_ament_cmake REQUIRED)
+  add_launch_test(test/test_cssr4africa_bags_launch.py
+    TIMEOUT 600
+  )
 endif()
 
 ament_package()

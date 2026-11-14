@@ -17,11 +17,16 @@ Nodes started:
     nav2_map_server/map_server, nav2_controller/controller_server,
     nav2_planner/planner_server, nav2_behaviors/behavior_server,
     nav2_bt_navigator/bt_navigator — the Nav2 pipeline.
-    pepper_slam/cloud_range_filter.py (node: points_safety_filter)
+    pepper_slam/cloud_range_filter (node: points_safety_filter)
         Range-limited cloud feeding the collision monitor.
     nav2_collision_monitor/collision_monitor — the safety chain.
     nav2_costmap_2d/nav2_costmap_2d_markers x2 (local_voxel_markers,
-    global_voxel_markers) — voxel visualization for the 3D RViz view.
+    global_voxel_markers) — voxel visualization for the 3D RViz view. The
+        LOCAL grid covers the RealSense forward cone only: the local costmap
+        is a hybrid whose 3D layer is fed by the camera alone, with the L2 on
+        a separate 2D layer that publishes no voxels (see
+        nav2_params_fastloc.yaml). Sides and rear will look empty in the
+        local voxel view even when the L2 has marked them.
     pepper_navigation/wait_for_map_then_start.py — holds the lifecycle
         manager until /map is available.
     pepper_navigation/localization_recovery.py — /relocalize recovery.
@@ -53,9 +58,10 @@ Launch arguments:
         MUST be from the SAME mapping run as map_pose_file and map_scan_dir.
     config_file (default: "l2_rsimu.yaml")
         FAST-LIO config: l2_rsimu.yaml (RealSense IMU, matches the prior map)
-        or l2.yaml (the L2's own).
+        (the RealSense IMU; the only L2 config, since l2.yaml was removed
+        for losing heading in slow motion).
     lidar_imu_frame (default: "camera_imu_optical_frame")
-        Body frame matching config_file; l2lidar_frame_imu for l2.yaml.
+        Body frame matching config_file (camera_imu_optical_frame).
     rviz_config (default: <share>/rviz/nav2_fastloc.rviz)
         Pass nav2_fastloc_voxel.rviz for the 3D voxel-map view (needs the
         voxel marker converters this file launches, and z_voxels <= 16 in the
@@ -65,6 +71,12 @@ Launch arguments:
     watchdog (default: "true")
         Cancel navigation goals while fastlio_localization reports itself
         lost. Set false to monitor without ever holding nav.
+    collision_monitor (default: "true")
+        TESTING ONLY. false leaves the collision monitor out entirely --
+        not started, not in the lifecycle list (a deactivated monitor drops
+        its bond and the manager treats it as a crash) -- and feeds the
+        controller and behaviours straight into bumper_guard. Nothing then
+        stops the robot BEFORE contact: keep the e-stop in hand.
 
 Configuration:
     config/nav2_params_fastloc.yaml, map/pepper_map_lc.yaml, and the FAST-LIO
@@ -91,7 +103,6 @@ Usage (bag replay):
     ros2 launch pepper_navigation pepper_nav2_fastloc.launch.py \
         use_sim_time:=true sensor_tf_scope:=all
     ros2 bag play <bag> --clock \
-        --qos-profile-overrides-path config/play_qos.yaml \
         --read-ahead-queue-size 2000
 
 To use a DIFFERENT mapping run, change map, map_pose_file and map_scan_dir
@@ -111,8 +122,9 @@ within the DEC project.
 import os
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription
-from launch.conditions import IfCondition
+from launch.actions import (DeclareLaunchArgument, GroupAction, IncludeLaunchDescription,
+                            LogInfo)
+from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
@@ -176,11 +188,11 @@ def generate_launch_description():
     declare_config_file_cmd = DeclareLaunchArgument(
         'config_file', default_value='l2_rsimu.yaml',
         description='FAST-LIO config: l2_rsimu.yaml (RealSense IMU, matches the '
-                    'prior map) or l2.yaml (the L2 s own).')
+                    'prior map).')
     declare_lidar_imu_frame_cmd = DeclareLaunchArgument(
         'lidar_imu_frame', default_value='camera_imu_optical_frame',
         description='Body frame matching config_file. camera_imu_optical_frame '
-                    'for l2_rsimu.yaml, l2lidar_frame_imu for l2.yaml.')
+                    'for l2_rsimu.yaml.')
     declare_rviz_config_cmd = DeclareLaunchArgument(
         'rviz_config',
         default_value=os.path.join(pkg_share, 'rviz', 'nav2_fastloc.rviz'),
@@ -196,6 +208,34 @@ def generate_launch_description():
         'watchdog', default_value='true',
         description='Cancel navigation goals while fastlio_localization reports '
                     'itself lost. Set false to monitor without ever holding nav.')
+    declare_bumper_guard_cmd = DeclareLaunchArgument(
+        'bumper_guard', default_value='true',
+        description='Insert bumper_guard between collision_monitor and cmd_vel: '
+                    'a bumper press stops all motion until /bumper_guard/clear '
+                    'is called. Set false to drive straight off the collision monitor.')
+    declare_collision_monitor_cmd = DeclareLaunchArgument(
+        'collision_monitor', default_value='true',
+        description='TESTING ONLY: false runs without the collision monitor '
+                    '(controller -> bumper_guard -> cmd_vel). Nothing stops '
+                    'the robot before contact.')
+    cm_on = LaunchConfiguration('collision_monitor')
+    is_true = "'.lower() in ('true', '1')"
+    # Who receives the controller's and behaviours' output: the monitor when
+    # it runs, else the bumper gate, else (both off) the wheels directly.
+    nav_cmd_out = PythonExpression(
+        ["'cmd_vel_raw' if '", cm_on, is_true, " or '",
+         LaunchConfiguration('bumper_guard'), is_true, " else 'cmd_vel'"])
+    declare_odom_frame_cmd = DeclareLaunchArgument(
+        'odom_frame', default_value='',
+        description='Empty (default): fastlio_localization broadcasts map -> '
+                    'base_footprint and the local costmap rolls in map. '
+                    '"odom": REP-105 map -> odom -> base_footprint instead, '
+                    'with odom -> base_footprint from wheel odometry '
+                    '(pepper_slam wheel_odom_tf) and the local costmap in '
+                    'odom, so relocalization jumps never reach the controller. '
+                    'See pepper_slam/FRAMES.md.')
+    odom_frame = LaunchConfiguration('odom_frame')
+    odom_on = IfCondition(PythonExpression(["'", odom_frame, "' != ''"]))
     declare_log_level_cmd = DeclareLaunchArgument(
         'log_level', default_value='warn',
         description='rclcpp logger severity for every node this file launches '
@@ -245,6 +285,7 @@ def generate_launch_description():
                 'map_pose_file': LaunchConfiguration('map_pose_file'),
                 'map_scan_dir': LaunchConfiguration('map_scan_dir'),
                 'rviz': 'false',
+                'odom_frame': odom_frame,
             }.items(),
         ),
     ])
@@ -254,7 +295,24 @@ def generate_launch_description():
     configured_params = RewrittenYaml(
         source_file=nav2_params_file,
         root_key='',
-        param_rewrites={'use_sim_time': use_sim_time},
+        param_rewrites={
+            'use_sim_time': use_sim_time,
+            # Full path, so the global costmap stays in map.
+            'local_costmap.local_costmap.ros__parameters.global_frame':
+                PythonExpression(["'", odom_frame, "' or 'map'"]),
+            # base_shift_correction needs the CONTINUOUS frame, which is
+            # map only while the localizer owns base_footprint; in odom mode
+            # map is the one that jumps on relocalization.
+            'collision_monitor.ros__parameters.odom_frame_id':
+                PythonExpression(["'", odom_frame, "' or 'map'"]),
+            # With the gate in, the monitor stops one hop short of the wheels
+            # and bumper_guard owns cmd_vel; without it, nothing would.
+            'collision_monitor.ros__parameters.cmd_vel_out_topic':
+                PythonExpression(
+                    ["'cmd_vel_safe' if '",
+                     LaunchConfiguration('bumper_guard'),
+                     "'.lower() in ('true', '1') else 'cmd_vel'"]),
+        },
         convert_types=True)
 
     # Serves the 2D grid as /map for the global costmap static layer.
@@ -280,7 +338,7 @@ def generate_launch_description():
         parameters=[configured_params],
         # Route velocity through the collision monitor: controller -> cmd_vel_raw
         # -> collision_monitor -> cmd_vel (what Pepper drives on).
-        remappings=[('cmd_vel', 'cmd_vel_raw')],
+        remappings=[('cmd_vel', nav_cmd_out), ('/tf', '/tf_nav')],
     )
     planner_server = Node(
         package='nav2_planner',
@@ -289,6 +347,7 @@ def generate_launch_description():
         output='screen',
         arguments=['--ros-args', '--log-level', log_level],
         parameters=[configured_params],
+        remappings=[('/tf', '/tf_nav')],
     )
     behavior_server = Node(
         package='nav2_behaviors',
@@ -297,14 +356,15 @@ def generate_launch_description():
         output='screen',
         arguments=['--ros-args', '--log-level', log_level],
         parameters=[configured_params],
-        remappings=[('cmd_vel', 'cmd_vel_raw')],
+        remappings=[('cmd_vel', nav_cmd_out), ('/tf', '/tf_nav')],
     )
 
-    # Self-hit filter feeding the safety layer: strip Pepper's own body (< 0.8 m)
-    # from the raw L2 /points so the collision monitor doesn't freeze on it.
+    # Safety-layer input: drop the L2's own housing/bumper (< 0.22 m from the
+    # sensor). MEASURED: the old 0.8 m cut also hid everything below ~0.7 m
+    # inside both monitor zones, so legs never triggered a stop.
     points_safety_filter = Node(
         package='pepper_slam',
-        executable='cloud_range_filter.py',
+        executable='cloud_range_filter',
         name='points_safety_filter',
         output='screen',
         arguments=['--ros-args', '--log-level', log_level],
@@ -312,7 +372,34 @@ def generate_launch_description():
             'use_sim_time': use_sim_time,
             'input_topic': '/points',
             'output_topic': '/points_safety',
-            'min_range': 0.8,
+            # 0.12, was 0.22: 0.22 hid a box ~0.10 m from the lidar (x ~0.22-0.26
+            # from base_footprint) entirely -- 1 point/scan reached the stop
+            # wedge, so no STOP. 0.12 put 113/scan there. MEASURED 2026-10-19,
+            # empty scene, 510 scans: no in-band returns between 0.12 and 0.22,
+            # so 0.12 adds no false stops (stop wedge max 1 pt/scan either way).
+            # The L2 housing itself returns at ~0.007 m.
+            'min_range': 0.12,
+            # Side-body cut. The forward cone is kept at every range, so nothing
+            # driven into is cut. 0.30, was 0.40: RE-MEASURED 2026-10-19, arms
+            # at rest, nothing around, stop wedge false-STOP rate: no cut 65%,
+            # 0.25 m 0% (max 3 pts, no margin), 0.30-0.40 m 0% (max 1-2 pts;
+            # 510 scans at 0.30). The body beside the lidar sits 0.11-0.25 m
+            # from it (x 0.18-0.22, |y| <= 0.20, z 0.22-0.28). 0.30 raises the
+            # stop zone the L2 can see from 19% to ~51% at z 0.30. The earlier
+            # measurement (shell at 0.355-0.368 m, 0.40 m 5.0%) no longer holds;
+            # re-check with the arms moving if autonomous life is on.
+            'self_cut_range': 0.30,
+            'self_cut_angle': 25.0,
+            # Body-box cut: Pepper's own front face, x ~0.18-0.22, |y| <= 0.12,
+            # straight ahead of the lidar, so neither range cut can drop it
+            # without blinding the forward cone. MEASURED 2026-10-19, nothing
+            # around: arms at rest it showed at z 0.70-0.90 only (0-3 pts in
+            # the stop wedge, trigger > 3); minutes later, same joints but a
+            # shifted stance, the face showed from z 0.38 up and a z >= 0.60
+            # box left 43% of scans false-STOPping. z >= 0.30: 0%. A box at
+            # 0.315 m still STOPs on 100% of scans. The box stays inside
+            # robot_radius 0.25, so it cannot hide anything outside the body.
+            'body_boxes': [0.10, 0.22, -0.13, 0.13, 0.30, 1.00],
             'ror_min_neighbors': 0,   # ROR off (see cloud_range_filter notes)
         }],
     )
@@ -324,11 +411,45 @@ def generate_launch_description():
         output='screen',
         arguments=['--ros-args', '--log-level', log_level],
         parameters=[configured_params],
+        remappings=[('/tf', '/tf_nav')],
+        condition=IfCondition(cm_on),
+    )
+    collision_monitor_off_warning = LogInfo(
+        msg='WARNING: collision_monitor:=false -- TESTING ONLY. No stop or '
+            'slowdown zone is active; only bumper_guard (after contact) stands '
+            'between the controller and the wheels. Keep the e-stop in hand.',
+        condition=UnlessCondition(cm_on))
+
+    # Post-contact gate. The collision monitor is preventive and isotropic --
+    # its actions only zero or scale the whole command -- so it cannot block
+    # forward while leaving the reverse that BackUp needs to escape.
+    bumper_guard = Node(
+        package='pepper_navigation',
+        executable='bumper_guard',
+        name='bumper_guard',
+        output='screen',
+        arguments=['--ros-args', '--log-level', log_level],
+        condition=IfCondition(LaunchConfiguration('bumper_guard')),
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'cmd_vel_in_topic': PythonExpression(
+                ["'cmd_vel_safe' if '", cm_on, is_true, " else 'cmd_vel_raw'"]),
+            'cmd_vel_out_topic': 'cmd_vel',
+            # The collision monitor holds its last verdict when a source goes
+            # stale, so losing this topic must stop the robot here instead.
+            'required_topics': ['/points_safety'],
+            'required_timeout': 1.0,
+        }],
     )
 
     # VoxelLayer publishes nav2_msgs/VoxelGrid, which RViz cannot draw --
     # these converters turn it into a MarkerArray it can. See the equivalent
     # block in pepper_nav2_amcl.launch.py.
+    #
+    # Both costmaps still run a VoxelLayer, so both converters have a producer,
+    # but they no longer show the same thing. The local one draws the
+    # RealSense cone only -- the L2 moved to a 2D ObstacleLayer beside it,
+    # which contributes to the costmap but not to any voxel grid.
     local_voxel_markers = Node(
         package='nav2_costmap_2d',
         executable='nav2_costmap_2d_markers',
@@ -366,6 +487,7 @@ def generate_launch_description():
         output='screen',
         arguments=['--ros-args', '--log-level', log_level],
         parameters=[configured_params],
+        remappings=[('/tf', '/tf_nav')],
     )
     nav2_starter = Node(
         package='pepper_navigation',
@@ -423,41 +545,76 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('watchdog')),
         parameters=[{
             'use_sim_time': use_sim_time,
-            'status_name': 'fastlio_localization: pose lock',
+            'status_names': ['fastlio_localization: pose lock',
+                             'fastlio_localization: map -> odom gate',
+                             'bumper_guard: sensor liveness'],
             'lost_duration': 5.0,
+            # Silence after an OK only trips stale_timeout (badness is timed
+            # from the first bad report), so match lost_duration here.
+            'stale_timeout': 5.0,
             'cancel_goals': True,
             'call_recovery': True,
         }],
     )
 
-    lifecycle_manager = Node(
-        package='nav2_lifecycle_manager',
-        executable='lifecycle_manager',
-        name='lifecycle_manager_navigation',
+    def make_lifecycle_manager(with_monitor):
+        return Node(
+            package='nav2_lifecycle_manager',
+            executable='lifecycle_manager',
+            name='lifecycle_manager_navigation',
+            output='screen',
+            # Exactly one of the two starts, so the name stays unique.
+            condition=IfCondition(cm_on) if with_monitor else UnlessCondition(cm_on),
+            arguments=['--ros-args', '--log-level', log_level],
+            parameters=[{
+                'use_sim_time': use_sim_time,
+                # OFF deliberately. local_costmap blocks configuring until a
+                # transform to its global_frame (map) exists, and with this
+                # localizer that frame appears only after ScanContext locks. That
+                # lock waits on the world, not the clock -- enough scan overlap
+                # with the prior map, and init_agree_count estimates agreeing on
+                # where it is -- so the wait is unbounded and autostart would
+                # stall the whole bringup. wait_for_map_then_start
+                # calls STARTUP the moment the frame is up.
+                'autostart': False,
+                'bond_timeout': 4.0,
+                # map_server first so /map is up before the global costmap activates.
+                'node_names': [
+                    'map_server',
+                    'controller_server',
+                    'planner_server',
+                    'behavior_server',
+                    'bt_navigator',
+                ] + (['collision_monitor'] if with_monitor else []),
+            }],
+        )
+
+    lifecycle_manager = make_lifecycle_manager(True)
+    lifecycle_manager_no_monitor = make_lifecycle_manager(False)
+
+    # Nav2 reads /tf_nav, a copy of /tf holding only the navigation edges:
+    # naoqi_driver's joint tree (~4150 transforms/s) saturated the costmap's
+    # TF thread until it stopped updating. See src/tf_nav_relay.cpp. Only
+    # nodes that LISTEN to TF are remapped -- never one that broadcasts it.
+    # odom -> base_footprint from /pepper_odom, only with odom_frame set: in the
+    # default mode the localizer owns base_footprint's parent and a second one
+    # would split the tree.
+    wheel_odom_tf = Node(
+        package='pepper_slam',
+        executable='wheel_odom_tf',
+        name='wheel_odom_tf',
         output='screen',
         arguments=['--ros-args', '--log-level', log_level],
-        parameters=[{
-            'use_sim_time': use_sim_time,
-            # OFF deliberately. local_costmap blocks configuring until a
-            # transform to its global_frame (map) exists, and with this
-            # localizer that frame appears only after ScanContext locks. That
-            # lock waits on the world, not the clock -- enough scan overlap
-            # with the prior map, and init_agree_count estimates agreeing on
-            # where it is -- so the wait is unbounded and autostart would
-            # stall the whole bringup. wait_for_map_then_start
-            # calls STARTUP the moment the frame is up.
-            'autostart': False,
-            'bond_timeout': 4.0,
-            # map_server first so /map is up before the global costmap activates.
-            'node_names': [
-                'map_server',
-                'controller_server',
-                'planner_server',
-                'behavior_server',
-                'bt_navigator',
-                'collision_monitor',
-            ],
-        }],
+        parameters=[{'use_sim_time': use_sim_time, 'odom_frame': odom_frame}],
+        condition=odom_on,
+    )
+
+    tf_nav_relay = Node(
+        package='pepper_navigation',
+        executable='tf_nav_relay',
+        name='tf_nav_relay',
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}],
     )
 
     return LaunchDescription([
@@ -473,6 +630,10 @@ def generate_launch_description():
         declare_rviz_cmd,
         declare_rviz_config_cmd,
         declare_watchdog_cmd,
+        declare_bumper_guard_cmd,
+        declare_collision_monitor_cmd,
+        collision_monitor_off_warning,
+        declare_odom_frame_cmd,
         declare_log_level_cmd,
         sensor_tf,
         fastloc,
@@ -483,11 +644,16 @@ def generate_launch_description():
         bt_navigator,
         points_safety_filter,
         collision_monitor,
+        bumper_guard,
         local_voxel_markers,
         global_voxel_markers,
         rviz_node,
         lifecycle_manager,
+        lifecycle_manager_no_monitor,
         nav2_starter,
         localization_recovery,
         localization_watchdog,
+        # Last: it reads use_sim_time, declared above.
+        wheel_odom_tf,
+        tf_nav_relay,
     ])

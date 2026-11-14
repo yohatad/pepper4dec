@@ -12,7 +12,7 @@ RViz visualization marker whenever a source is detected above the confidence
 threshold. Audio chunks below an RMS intensity threshold are skipped.
 
 Subscribers:
-    /naoqi_driver/audio (naoqi_bridge_msgs/AudioBuffer)
+    /audio (naoqi_bridge_msgs/AudioBuffer)
         4-channel raw microphone audio (topic name set by the
         `microphone_topic` parameter).
 
@@ -29,7 +29,7 @@ Publishers:
         RViz arrow marker showing the estimated sound direction.
 
 Parameters (loaded from speech_event_configuration.yaml):
-    microphone_topic (string, default: "/naoqi_driver/audio")
+    microphone_topic (string, default: "/audio")
     sample_rate (int, default: 48000)
     speed_of_sound (double, default: 343.0)
     nfft (int, default: 1024)
@@ -55,7 +55,6 @@ within the DEC project.
 """
 
 import numpy as np
-import pyroomacoustics as pra
 import threading
 import time
 from collections import deque
@@ -71,6 +70,11 @@ from scipy import signal
 class SoundLocalizationNode(Node):
     """Node that estimates sound source azimuth from 4-microphone audio using SRP-PHAT."""
 
+    def _vlog(self, msg: str) -> None:
+        """Log at INFO only with verbose_mode on (per-event detail)."""
+        if getattr(self, 'verbose_mode', False):
+            self.get_logger().info(msg)
+
     def __init__(self):
         """Declare and read parameters, then create the publishers and the
         microphone subscription.
@@ -85,7 +89,7 @@ class SoundLocalizationNode(Node):
         # Parameters
         # =====================================================
         self.declare_parameter("sample_rate", 48000)
-        self.declare_parameter("microphone_topic", "/naoqi_driver/audio")
+        self.declare_parameter("microphone_topic", "/audio")
         self.declare_parameter("speed_of_sound", 343.0)
         self.declare_parameter("nfft", 1024)
         self.declare_parameter("angular_resolution", 36)
@@ -94,6 +98,7 @@ class SoundLocalizationNode(Node):
         self.declare_parameter("num_chunks_for_localization", 6)
         self.declare_parameter("update_rate_hz", 2.0)
         self.declare_parameter("confidence_threshold", 0.15)
+        self.declare_parameter("verbose_mode", False)
         self.declare_parameter("intensity_threshold", 0.001)
         self.declare_parameter("enable_smoothing", True)
         self.declare_parameter("smoothing_window", 5)
@@ -109,6 +114,7 @@ class SoundLocalizationNode(Node):
         self.num_chunks = int(self.get_parameter("num_chunks_for_localization").value)
         self.update_rate = float(self.get_parameter("update_rate_hz").value)
         self.confidence_threshold = float(self.get_parameter("confidence_threshold").value)
+        self.verbose_mode = bool(self.get_parameter("verbose_mode").value)
         self.intensity_threshold = float(self.get_parameter("intensity_threshold").value)
         self.enable_smoothing = bool(self.get_parameter("enable_smoothing").value)
         self.smoothing_window = int(self.get_parameter("smoothing_window").value)
@@ -245,6 +251,9 @@ class SoundLocalizationNode(Node):
         azimuth_grid = np.linspace(0, 2 * np.pi, self.angular_resolution, endpoint=False)
         colatitude_grid = np.array([np.pi / 2])  # 2D horizontal plane only
 
+        # Imported here, its only use, so the geometry helpers load (and are
+        # unit-tested) without pyroomacoustics installed.
+        import pyroomacoustics as pra
         self.doa = pra.doa.SRP(
             L=self.mic_positions,
             fs=self.sample_rate,
@@ -439,7 +448,7 @@ class SoundLocalizationNode(Node):
                 if confidence >= self.confidence_threshold:
                     self.publish_results(azimuth_deg, confidence)
 
-                    self.get_logger().info(
+                    self._vlog(
                         f"Sound at {azimuth_deg:.1f}° ({self.get_direction_name(azimuth_deg)}), "
                         f"confidence={confidence:.3f}, processing={elapsed*1000:.1f}ms"
                     )

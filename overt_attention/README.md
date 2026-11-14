@@ -28,11 +28,6 @@ The **Overt Visual Attention System** package implements a unified visual attent
 ### Package Installation
 
 ```bash
-# Clone the repository (if not already done)
-cd ~/ros2_ws/src
-git clone https://github.com/yohatad/pepper4dec.git
-
-# Build the workspace
 cd ~/ros2_ws
 colcon build --packages-up-to overt_attention
 source install/setup.bash
@@ -63,15 +58,12 @@ its own parameter set; a shared `/**` block applies `use_compressed`/`camera_typ
 | `num_peaks` | Max number of saliency peaks to report | `5` |
 | `process_hz` | Saliency computation rate (Hz) | `1.0` |
 
-Downsample resolution (`160x120`), minimum peak spacing (`50px`), and overlay blend alpha
-(`0.4`) are fixed internal saliency-computation/cosmetic constants, not configurable via
-parameters.
-
 **`overt_attention`**
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `start_enabled` | Whether attention is active on startup | `true` |
+| `verbose_mode` | Log every target switch and head command | `false` |
 | `move_to_default_on_disable` | Move head to default pose when disabled | `true` |
 | `default_yaw` / `default_pitch` | Default head pose (radians) | `0.0` / `-0.2` |
 | `default_move_speed` | ALMotion speed used moving to default pose | `0.1` |
@@ -94,16 +86,6 @@ parameters.
 | `ior_half_life` | Half-life for IOR decay (s) | `3.0` |
 | `ior_radius_deg` | Angular radius of an IOR-suppressed region (deg) | `15.0` |
 
-The decay threshold for dropping stale IOR entries (`0.05`) and the max tracked locations
-(`20`) are fixed internal bookkeeping constants, not configurable via parameters.
-
-The face-tracking joint limits (`face_yaw_lim: 1.8`, `face_pitch_up: 0.4`,
-`face_pitch_dn: -0.7`) are also fixed — unlike the saliency limits above, they've never
-needed adjustment from these defaults on this robot.
-
-`same_face_threshold_deg` was removed: it was converted to radians and stored but never
-actually consulted — face identity is matched by `face_id` string, not angular distance.
-
 **`attention_visualization`**
 
 | Parameter | Description | Default |
@@ -111,14 +93,10 @@ actually consulted — face identity is matched by `face_id` string, not angular
 | `show_face_ids` | Draw face IDs on the overlay | `true` |
 | `show_depth` | Draw per-face depth on the overlay | `true` |
 
-The overlay image and its markers (face boxes, saliency peaks, metrics panel) are always
-published; there's no toggle for that. Engagement (glow + "ENGAGED" label) also always
-draws — the `show_engagement` toggle was removed since it never actually gated anything.
-
 Topic names (face detection, saliency, camera, joint angles, target angles) are configured separately
 via `data/pepper_topics.yaml`, keyed by `camera_type` (`pepper` vs `realsense`).
 
-## 🚀 Running the Node
+## 🚀 Running
 
 ```bash
 # Source the workspace
@@ -131,28 +109,6 @@ ros2 launch overt_attention attention_system.launch.py
 ros2 launch overt_attention attention_system.launch.py \
   params_file:=/path/to/custom_config.yaml \
   enable_viz:=true
-```
-
-### Manual Node Execution
-
-```bash
-# Start Saliency Node
-ros2 run overt_attention overt_attention_saliency \
-  --ros-args \
-  -p use_compressed:=false \
-  -p publish_map:=true
-
-# Start Attention Controller
-ros2 run overt_attention overt_attention \
-  --ros-args \
-  -p engaged_priority_bonus:=2.0 \
-  -p face_timeout:=2.0
-
-# Start Visualization Node
-ros2 run overt_attention overt_attention_visualization \
-  --ros-args \
-  -p publish_overlay:=true \
-  -p show_metrics:=true
 ```
 
 ## 🖥️ ROS Interface
@@ -189,7 +145,7 @@ With `camera_type: "realsense"`, these resolve instead to `/camera/color/image_r
 |---------|------|-------------|
 | `/overt_attention/set_enabled` | `std_srvs/SetBool` | Enable/disable the attention system |
 
-## Attention Prioritization Logic
+## ⚖️ Attention Prioritization Logic
 
 1. **Engaged Faces**: Faces with mutual gaze receive highest priority (2x bonus)
 2. **Detected Faces**: Other faces scored by distance from center, depth, and continuity
@@ -232,19 +188,12 @@ The overt attention system consists of three main nodes:
 ## 🧪 Testing
 
 ```bash
-# Check node is running
-ros2 node list
-
-# Monitor attention targets
-ros2 topic echo /overt_attention/target_angles
-
-# Monitor head commands
-ros2 topic echo /joint_angles
-
-# Enable/disable attention system
-ros2 service call /overt_attention/set_enabled std_srvs/SetBool "{data: false}"
-ros2 service call /overt_attention/set_enabled std_srvs/SetBool "{data: true}"
+cd ~/ros2_ws
+colcon test --packages-select overt_attention
+colcon test-result --verbose
 ```
+
+Runs unit tests for the Boolean Map saliency operator on synthetic images, and the shared helpers, plus `test_cssr4africa_bags_launch.py`: the real `face_detection` (RealSense colour with aligned depth), saliency node and attention controller on the five CSSR4Africa RealSense recordings at 15 fps, with a fixed head pose standing in for Pepper. It checks that faces carry a depth, the saliency peaks, the head joint limits, that the target points at a visible face (median error under 2 deg) and prefers the one in mutual gaze, that nothing is commanded during the face timeout, and the `set_enabled` service. Fetch the bags first with `scripts/fetch_test_bags.sh` (from the repository root); the test skips without them or the face models, and needs the GPU to keep up.
 
 ## 💡 Support
 
@@ -253,5 +202,5 @@ For issues or questions:
 - Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a>
 
 ## 📜 License
-Copyright (C) 2026 Upanzi Network
+Copyright (C) 2025 Carnegie Mellon University Africa
 Licensed under the BSD-3-Clause License. See individual package licenses for details.

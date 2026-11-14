@@ -13,7 +13,7 @@ publishes transcripts to a topic, or gates audio processing behind an ASR
 action server that returns a transcript per goal.
 
 Subscribers:
-    /naoqi_driver/audio (naoqi_bridge_msgs/AudioBuffer)
+    /audio (naoqi_bridge_msgs/AudioBuffer)
         Raw multi-channel microphone audio (topic name set by the
         `microphone_topic` parameter).
 
@@ -33,7 +33,7 @@ Actions:
         speaker finishes (only created when `action_server` is true).
 
 Parameters (code defaults; overridden by speech_event_configuration.yaml):
-    microphone_topic (string, default: "/naoqi_driver/audio")
+    microphone_topic (string, default: "/audio")
     sample_rate (int, default: 16000)
     input_sample_rate (int, default: 48000)
     device (string, default: "cuda")

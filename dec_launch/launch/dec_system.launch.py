@@ -32,14 +32,12 @@ Nodes started:
 Launch arguments:
     enable_navigation (default: "true")
         Bring up pepper_navigation (the Nav2 navigation/localization stack).
-    nav_profile (default: "fastloc"; choices: amcl, fastloc, legacy,
-                 pointloc, rtabmap_loc)
+    nav_profile (default: "fastloc"; choices: amcl, fastloc, pointloc,
+                 rtabmap_loc)
         Which Nav2 bringup to use when enable_navigation is true.
         fastloc = fastlio_localization, FAST-LIO with the prior map inside the
         iEKF; pointloc = the Point-LIO equivalent; rtabmap_loc = RTAB-Map
-        localization mode; amcl = AMCL on FAST-LIO odom; legacy = AMCL on raw
-        wheel odom, kept only for reproducing old runs and publishing no
-        /localization/pose.
+        localization mode; amcl = AMCL on FAST-LIO odom.
 
 Configuration:
     None of its own; each included launch file loads its package's YAML.
@@ -56,7 +54,7 @@ Design notes:
     base_footprint and applies the map constraint inside the iEKF at scan
     rate rather than as a discrete map->odom correction beside the filter.
 
-    Every `nav_profile` except `legacy` already nests its own localization, so
+    Every `nav_profile` already nests its own localization, so
     it is launched standalone here only when navigation is off -- launching it
     twice would fight over the `map -> odom` transform.
 
@@ -87,8 +85,7 @@ from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 
 # Nav2 bringups selectable via `nav_profile`. See pepper_navigation/README.md
-# for the trade-offs; `legacy` is AMCL on naoqi's raw wheel odometry and is
-# kept only for reproducing old runs -- it publishes no /localization/pose.
+# for the trade-offs.
 NAV_PROFILES = {
     # Default. fastlio_localization: the prior map IS the ikd-Tree the iEKF
     # registers against, so the map constrains the estimate at scan rate from
@@ -98,7 +95,6 @@ NAV_PROFILES = {
     'pointloc': 'pepper_nav2_pointloc.launch.py',
     'rtabmap_loc': 'pepper_nav2_rtabmap_loc.launch.py',
     'amcl': 'pepper_nav2_amcl.launch.py',
-    'legacy': 'pepper_navigation.launch.py',
 }
 
 
@@ -142,8 +138,7 @@ def generate_launch_description():
                         'true. fastloc = fastlio_localization, FAST-LIO with '
                         'the prior map inside the iEKF (the default); '
                         'rtabmap_loc = RTAB-Map '
-                        'localization mode; amcl = AMCL on FAST-LIO odom; '
-                        'legacy = AMCL on wheel odom (no /localization/pose)'
+                        'localization mode; amcl = AMCL on FAST-LIO odom'
         ),
 
         # Perception: shared camera + person/face detection + overt attention

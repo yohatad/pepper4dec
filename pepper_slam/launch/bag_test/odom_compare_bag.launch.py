@@ -7,13 +7,11 @@ node and RViz:
 
   ros2 launch pepper_slam odom_compare_bag.launch.py
   ros2 bag play <bag> --clock \
-    --qos-profile-overrides-path config/play_qos.yaml \
     --read-ahead-queue-size 1000 --disable-keyboard-controls --rate 3
 
-REPLAY /tf HERE. The other bag_test launches tell you to remap it away,
-because the bag's wheel odometry fights lio_odom_bridge for
-base_footprint's parent. This launch wants exactly that data: /pepper_odom is
-the thing under comparison, and the bag's /tf carries it.
+REPLAY /tf, as with every bag_test launch: it carries the robot's body chain.
+The wheel odometry under comparison comes from the /pepper_odom topic in the
+bag, not from TF.
 
 WHAT TO READ. The two paths start at the same point, so separation between
 them is accumulated disagreement -- but do NOT read that gap as the error.

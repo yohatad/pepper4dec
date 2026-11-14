@@ -1,0 +1,18 @@
+# Test fixture: INVALID environment KB — gesture_target.z=270 is a heading
+# in degrees typed into the height field, outside the documented [0, 3] m.
+# The validator must reject this file.
+tour_specification: [1]
+
+locations:
+  1:
+    robot_location_description: "Target height is a heading"
+    robot_location_pose:
+      x: 0.0
+      y: 0.0
+      theta: 90.0
+    gesture_target:
+      x: 1.0
+      y: 0.0
+      z: 270.0
+    gesture_message_english: "Hi"
+    cultural_knowledge: ["TestNorm"]

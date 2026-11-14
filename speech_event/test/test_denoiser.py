@@ -6,8 +6,9 @@ harmonic notch cascade.
 
 Pure DSP on synthetic signals — no ROS graph, no microphone, no recorded audio.
 Assertions are on measurable filter behaviour (passband retained, stopband
-attenuated, notch centred), not on exact sample values. Skips when librosa
-isn't installed, since the module imports it at import time.
+attenuated, notch centred), not on exact sample values. Runs without librosa:
+the module imports it only inside SpeechDenoiser.clean(), which is not tested
+here.
 
 Run via: colcon test --packages-select speech_event
 
@@ -21,19 +22,7 @@ Copyright (C) 2025 Carnegie Mellon University Africa
 
 import numpy as np
 import pytest
-
-# Deliberately NOT pytest.importorskip: under pytest 6.2.5 (the version ament
-# ships) a module-level Skipped raised during collection aborts collection for
-# the whole session, which silently disables the sibling flake8/pep257 tests.
-# A pytestmark skipif collects normally and skips at run time instead.
-try:
-    from speech_event import speech_event_denoiser as denoiser
-except ImportError:  # pragma: no cover - exercised only where deps are absent
-    denoiser = None
-
-pytestmark = pytest.mark.skipif(
-    denoiser is None,
-    reason='speech_event deps (librosa) not installed')
+from speech_event import speech_event_denoiser as denoiser
 
 SR = 16_000
 

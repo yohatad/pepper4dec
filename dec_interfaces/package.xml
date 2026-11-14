@@ -7,7 +7,7 @@
     system running on the Pepper robot at Carnegie Mellon University Africa.
 
     Actions:  ConversationManager, TTS, SpeechRecognition, Gesture, AnimateBehavior
-    Services: ConversationManagerPrompt, GetDepthROI
+    Services: GetDepthROI
     Messages: FaceDetection, PersonDetection
   </description>
 
@@ -32,6 +32,8 @@
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>rclcpp</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

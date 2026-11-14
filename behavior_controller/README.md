@@ -1,56 +1,61 @@
 <div align="center">
-  <h1>Behavior Controller</h1>
+<h1>Behavior Controller</h1>
 </div>
 
 <div align="center">
   <img src="../images/upanzi-logo.svg" alt="Upanzi Logo" style="width:70%; height:auto;">
 </div>
 
-The **Behavior Controller** package orchestrates robot behavior on the Pepper robot using [BehaviorTree.CPP v4](https://www.behaviortree.dev/) and [BehaviorTree.ROS2](https://github.com/BehaviorTree/BehaviorTree.ROS2). It loads a mission defined as an XML behavior tree and executes it by dispatching ROS2 action calls to speech, gesture, navigation, conversation, and face-detection nodes. At startup it loads a YAML configuration file and two knowledge bases — a culture knowledge base (utility phrases) and an environment knowledge base (locations and tour stops).
+The **Behavior Controller** package orchestrates robot behavior on the Pepper robot using [BehaviorTree.CPP v4](https://www.behaviortree.dev/) and [BehaviorTree.ROS2](https://github.com/yohatad/BehaviorTree.ROS2/tree/pepper4dec) (a fork; see Prerequisites). It loads a mission defined as an XML behavior tree and executes it by dispatching ROS2 action calls to speech, gesture, navigation, conversation, and face-detection nodes. At startup it loads a YAML configuration file and two knowledge bases — a culture knowledge base (utility phrases) and an environment knowledge base (locations and tour stops).
 
 ## ✨ Key Features
 - **ROS2 Native**: Built for ROS2 Humble
 - **BehaviorTree.CPP v4**: Mission logic expressed as composable XML behavior trees
-- **Intent-aware routing**: The `ConversationManager` BT node now exposes `intent` and `confidence` output ports; the `asr_cm_tts_pipeline.xml` tree branches on intent to drive speech, navigation, gesture, or stop behavior accordingly
+- **Intent-aware routing**: The `ConversationManager` BT node exposes `intent` and `confidence` output ports; the `asr_cm_tts_pipeline.xml` tree branches on intent to drive speech, navigation, gesture, or stop behavior accordingly
 - **Streaming TTS**: Sentences stream to `/text_to_speech/input` while the LLM generates; the `TTS` BT node blocks until playback is complete
 - **Configurable**: Configuration via YAML file; active scenario selectable at runtime
 - **Knowledge Base Driven**: Loads location data and cultural phrases from YAML knowledge bases
 - **Groot2 Compatible**: Publishes BT state for live visualization in Groot2
 
-# 🛠️ Installation
-
 ## ✅ Prerequisites
 - **ROS2 Humble** or newer
 - **BehaviorTree.CPP v4** (`behaviortree_cpp`)
-- **BehaviorTree.ROS2** (`behaviortree_ros2`)
+- **BehaviorTree.ROS2** (`behaviortree_ros2`), built from source from the
+  `pepper4dec` branch of the fork
+  [`yohatad/BehaviorTree.ROS2`](https://github.com/yohatad/BehaviorTree.ROS2/tree/pepper4dec),
+  not upstream. It is upstream `humble` plus one commit that stops a halted
+  action node from cancelling its previous, finished goal, which upstream
+  turns into an `UnknownGoalHandleError` abort. The Dockerfile and CI already
+  clone the fork; to switch an existing upstream clone, see the main
+  [README](../README.md#installation)
 - **Nav2** (`nav2_msgs`)
 - **naoqi_bridge_msgs**
 - **dec_interfaces** (custom messages, services, and actions)
 - **yaml-cpp**
 
-## Package Installation
+## 🛠️ Installation
+
+### Package Installation
 
 ```bash
-cd ~/ros2_ws/src
-git clone https://github.com/yohatad/pepper4dec.git
-
 cd ~/ros2_ws
-colcon build --packages-select dec_interfaces behavior_controller
+colcon build --packages-up-to behavior_controller
 source install/setup.bash
 ```
 
-# 🔧 Configuration Parameters
+## 🔧 Configuration
 
 Managed via `config/behavior_controller_configuration.yaml`:
 
 | Parameter | Description | Default Value |
 |-----------|-------------|---------------|
 | `scenario_specification` | XML behavior tree file name (without `.xml`) in `data/` | `asr_cm_tts_pipeline` |
-| `culture_knowledge_base` | YAML file with utility phrases | `cultureKnowledgeBase.yaml` |
-| `environment_knowledge_base` | YAML file with locations, tour stops, and gesture targets | `decEnvironmentKnowledgeBase_short.yaml` |
+| `culture_knowledge_base` | YAML file with utility phrases, each put on the BT blackboard under its key (`{welcome_speech}`, …) | `cultureKnowledgeBase.yaml` |
+| `environment_knowledge_base` | YAML file with locations, tour stops, and gesture targets; its own `utility_phrases` (the welcome, the tour question) replace the culture file's | `decEnvironmentKnowledgeBase_short.yaml` |
+| `visitor_cooldown` | Seconds the tours wait after a goodbye before looking for the next visitor (0: at once) | `15.0` |
 | `verbose_mode` | Print per-tick action goals, feedback, and results | `true` |
 
-# 🚀 Running the Node
+## 🚀 Running
 
 1. **Source the workspace**:
 ```bash
@@ -70,7 +75,9 @@ ros2 launch dec_launch dec_system.launch.py
 ros2 run behavior_controller behavior_controller
 ```
 
-## Required Action Servers and Topics
+## 🖥️ ROS Interface
+
+### Required Action Servers and Topics
 
 The following must be available before the behavior controller starts executing:
 
@@ -85,7 +92,7 @@ The following must be available before the behavior controller starts executing:
 | `/navigate_to_pose` | `nav2_msgs::action::NavigateToPose` | `nav2` |
 | `/face_detection/data` | `dec_interfaces::msg::FaceDetection` (topic) | `face_detection` |
 
-# 🖥️ BT Nodes Reference
+## 🌳 BT Nodes Reference
 
 All nodes registered in the factory:
 
@@ -106,20 +113,59 @@ All nodes registered in the factory:
 | `IsMutualGazeDiscovered` | `/face_detection/data` topic | `timeout` in |
 | `ListenForSpeech` | `/speech_event/text` topic | `transcription` out |
 | `GetVisitorResponse` | `/speech_event/text` topic | `timeout` in; `visitor_response` out |
-| `IsVisitorResponseYes` | `dec_interfaces::action::ConversationManager` | `visitor_response` in |
+| `IsVisitorResponseYes` | `dec_interfaces::action::ConversationManager` | `visitor_response` in; `answer` out: the classified answer (`yes`, `no`, anything else when unclear) |
 | `CheckBlackboard` | — (pure blackboard) | `key`, `expected` in |
 | `SetBlackboardValue` | — (pure blackboard) | `key`, `value` in |
+| `RetrieveListOfExhibits` | — (knowledge base) | `exhibit_list` out: the tour's location IDs in visit order |
+| `IsListWithExhibit` | — (pure blackboard) | `exhibit_list` in; SUCCESS while it is non-empty |
+| `SelectExhibit` | — (knowledge base) | `exhibit_list` in; `exhibit_speech`, `exhibit_goal_x/y/theta`, `exhibit_location_x/y/z` out |
+| `PopExhibitFromList` | — (pure blackboard) | `exhibit_list` in; `remaining_count` out |
 | `LogEvent` | — | `message`, `level` in |
 
-# 🏗️ Architecture
+## 📁 Package Structure
 
-## Components
+```
+behavior_controller/
+├── config/
+│   └── behavior_controller_configuration.yaml
+├── data/
+│   ├── asr_cm_tts_pipeline.xml                     # default intent-routed BT scenario
+│   ├── listen_cm_tts_pipeline.xml
+│   ├── lab_tour.xml, dec_Tour.xml                   # tour scenarios
+│   ├── dec_DeicticTest.xml, dec_GestureNavTest.xml  # test scenarios
+│   ├── cultureKnowledgeBase.yaml                    # utility phrases
+│   ├── labEnvironmentKnowledgeBase.yaml              # location poses, gesture targets, tour sequence
+│   ├── decEnvironmentKnowledgeBase(_short).yaml
+│   └── XML_USE.md                                   # BT XML authoring guide
+├── include/
+│   └── behavior_controller/
+│       └── behavior_controller_interface.h    # shared class/struct declarations
+├── launch/
+│   └── behavior_controller.launch.py
+├── src/
+│   ├── behavior_controller_application.cpp      # node entry point, BT engine setup
+│   ├── behavior_controller_implementation.cpp   # BT leaf node implementations
+│   └── behavior_controller_utilities.cpp        # ConfigManager/KnowledgeManager
+├── test/
+│   ├── bt_test_harness.hpp                      # stub servers + fixture for the BT tests
+│   ├── test_behavior_controller_utilities.cpp
+│   ├── test_bt_nodes.cpp
+│   ├── test_bt_scenarios.cpp
+│   └── fixtures/                                # config and knowledge-base YAML fixtures
+├── CMakeLists.txt
+├── package.xml
+└── README.md
+```
+
+## 🏗️ Architecture
+
+### Components
 
 1. **ConfigManager** — Singleton that loads and exposes all YAML configuration at startup.
 2. **KnowledgeManager** — Singleton that loads the culture knowledge base (utility phrases) and the environment knowledge base (location poses, gesture targets, tour sequence).
 3. **BehaviorTree execution engine** — Registers all BT leaf nodes, loads the XML scenario, and ticks the tree at the executor rate.
 
-## Intent-Driven Pipeline (`asr_cm_tts_pipeline.xml`)
+### Intent-Driven Pipeline (`asr_cm_tts_pipeline.xml`)
 
 The conversation pipeline uses `ConversationManager`'s `intent` output to route behavior without a second LLM call:
 
@@ -151,7 +197,7 @@ ConversationManager  ──► {intent}, {confidence}, {llm_response}
 | `AFFIRMATIVE` | Speak "yes" (parent subtree handles) |
 | `NEGATIVE` | Speak "no" (parent subtree handles) |
 
-## Behavior Tree Scenarios
+### Behavior Tree Scenarios
 
 XML files are in the `data/` folder. The active scenario is set via `scenario_specification`.
 
@@ -164,46 +210,24 @@ XML files are in the `data/` folder. The active scenario is set via `scenario_sp
 | `dec_DeicticTest.xml` | Test tree for the exhibit-loop / deictic gesture nodes |
 | `dec_GestureNavTest.xml` | Test tree for gesture and navigation nodes |
 
-## 📁 Package Structure
-
-```
-behavior_controller/
-├── config/
-│   └── behavior_controller_configuration.yaml
-├── data/
-│   ├── asr_cm_tts_pipeline.xml                     # default intent-routed BT scenario
-│   ├── listen_cm_tts_pipeline.xml
-│   ├── lab_tour.xml, dec_Tour.xml                   # tour scenarios
-│   ├── dec_DeicticTest.xml, dec_GestureNavTest.xml  # test scenarios
-│   ├── cultureKnowledgeBase.yaml                    # utility phrases
-│   ├── labEnvironmentKnowledgeBase.yaml              # location poses, gesture targets, tour sequence
-│   ├── decEnvironmentKnowledgeBase(_short).yaml
-│   └── XML_USE.md                                   # BT XML authoring guide
-├── include/
-│   └── behavior_controller/
-│       └── behavior_controller_interface.h    # shared class/struct declarations
-├── launch/
-│   └── behavior_controller.launch.py
-├── src/
-│   ├── behavior_controller_application.cpp      # node entry point, BT engine setup
-│   ├── behavior_controller_implementation.cpp   # BT leaf node implementations
-│   └── behavior_controller_utilities.cpp        # ConfigManager/KnowledgeManager
-├── CMakeLists.txt
-├── package.xml
-└── README.md
-```
-
 ## 🧪 Testing
 
 ```bash
-# Check node is running
-ros2 node list
+cd ~/ros2_ws
+colcon test --packages-select behavior_controller
+colcon test-result --verbose
+```
 
-# Verify BT is ticking
-ros2 topic list
+| Test | What it covers |
+|------|----------------|
+| `test_behavior_controller_utilities` | Text helpers, config and knowledge-base loading (no ROS runtime) |
+| `test_bt_nodes` | Each BT node class against in-process stub servers: goals built from ports, outputs from feedback/results, failure, abort, rejection, missing server, halt/cancel; the topic-driven nodes' waits and timeouts; the tour-loop nodes on the fixture knowledge base |
+| `test_bt_scenarios` | Every `data/*.xml` builds against the registered node types; each scenario is ticked end to end against a simulated system and visitor, checking where the robot drove, what it pointed at and what it said |
 
-# Monitor BT state (Groot2)
-ros2 run groot2_gui groot2_gui
+The BT tests run under `ament_add_ros_isolated_gtest`, so each gets its own `ROS_DOMAIN_ID` and a running robot stack cannot interfere. To run one binary directly, set a free domain yourself:
+
+```bash
+ROS_DOMAIN_ID=87 ./build/behavior_controller/test_bt_scenarios --gtest_filter='*Tour*'
 ```
 
 ## 💡 Support
@@ -212,6 +236,6 @@ For issues or questions:
 - Create an issue on the [pepper4dec GitHub repository](https://github.com/yohatad/pepper4dec/issues)
 - Contact: <a href="mailto:yohatad123@gmail.com">yohatad123@gmail.com</a>
 
-# 📜 License
-Copyright (C) 2026 Upanzi Network
+## 📜 License
+Copyright (C) 2025 Carnegie Mellon University Africa
 Licensed under the BSD-3-Clause License. See individual package licenses for details.

@@ -6,8 +6,8 @@ naming used for logging and RViz labels.
 
 Both are pure functions of their arguments, so they are called unbound
 (``SoundLocalizationNode.method(None, ...)``) rather than constructing a node,
-which would need rclpy.init() and a live ROS graph. Skips when
-pyroomacoustics isn't installed, since the module imports it at import time.
+which would need rclpy.init() and a live ROS graph. Runs without
+pyroomacoustics: the module imports it only in the node's constructor.
 
 Run via: colcon test --packages-select speech_event
 
@@ -21,21 +21,9 @@ Copyright (C) 2025 Carnegie Mellon University Africa
 
 import numpy as np
 import pytest
+from speech_event import speech_event_localization as localization
 
-# Deliberately NOT pytest.importorskip: under pytest 6.2.5 (the version ament
-# ships) a module-level Skipped raised during collection aborts collection for
-# the whole session, which silently disables the sibling flake8/pep257 tests.
-# A pytestmark skipif collects normally and skips at run time instead.
-try:
-    from speech_event import speech_event_localization as localization
-    Node = localization.SoundLocalizationNode
-except ImportError:  # pragma: no cover - exercised only where deps are absent
-    localization = None
-    Node = None
-
-pytestmark = pytest.mark.skipif(
-    localization is None,
-    reason='speech_event deps (pyroomacoustics) not installed')
+Node = localization.SoundLocalizationNode
 
 
 def circular_mean(angles):

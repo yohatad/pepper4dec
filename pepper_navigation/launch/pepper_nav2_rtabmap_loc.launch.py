@@ -15,7 +15,7 @@ Launch files included:
 Nodes started:
     nav2_controller/controller_server, nav2_planner/planner_server,
     nav2_behaviors/behavior_server, nav2_bt_navigator/bt_navigator.
-    pepper_slam/cloud_range_filter.py (node: points_safety_filter).
+    pepper_slam/cloud_range_filter (node: points_safety_filter).
     nav2_collision_monitor/collision_monitor.
     pepper_navigation/localization_recovery.py.
     nav2_lifecycle_manager/lifecycle_manager x2 — one for navigation
@@ -29,7 +29,7 @@ Launch arguments:
         Map database to localize against.
 
 Configuration:
-    config/nav2_params_rtabmap_loc.yaml and FAST-LIO's l2.yaml.
+    config/nav2_params_rtabmap_loc.yaml and FAST-LIO's l2_rsimu.yaml.
 
 Frames:
     FAST-LIO odom -> lio_odom_bridge's gravity-leveled odom -> RTAB-Map map.
@@ -41,7 +41,7 @@ Usage (real robot):
 
 Usage (bag replay, to sanity-check localization/costmaps without driving):
     ros2 launch pepper_navigation pepper_nav2_rtabmap_loc.launch.py use_sim_time:=true
-    ros2 bag play <bag> --clock --topics /points /imu/data /tf_static \
+    ros2 bag play <bag> --clock --topics /points /camera/imu /tf_static \
         /camera/color/image_raw /camera/color/camera_info
 
     Nav2 will localize and build costmaps, but a bag can't react to cmd_vel —
@@ -91,7 +91,7 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(
             os.path.join(fast_lio_launch_dir, 'mapping.launch.py')),
         launch_arguments={
-            'config_file': 'l2.yaml',
+            'config_file': 'l2_rsimu.yaml',
             'rviz': 'false',
             'use_sim_time': use_sim_time,
         }.items(),
@@ -104,7 +104,7 @@ def generate_launch_description():
                          'launch', 'lio_odom_bridge.launch.py')),
         launch_arguments={
             'use_sim_time': use_sim_time,
-            'config_file': 'l2.yaml',
+            'config_file': 'l2_rsimu.yaml',
         }.items(),
     )
 
@@ -170,7 +170,7 @@ def generate_launch_description():
         parameters=[configured_params],
         # Route velocity through the collision monitor: controller -> cmd_vel_raw
         # -> collision_monitor -> cmd_vel (what Pepper drives on).
-        remappings=[('cmd_vel', 'cmd_vel_raw')],
+        remappings=[('cmd_vel', 'cmd_vel_raw'), ('/tf', '/tf_nav')],
     )
     planner_server = Node(
         package='nav2_planner',
@@ -178,6 +178,7 @@ def generate_launch_description():
         name='planner_server',
         output='screen',
         parameters=[configured_params],
+        remappings=[('/tf', '/tf_nav')],
     )
     behavior_server = Node(
         package='nav2_behaviors',
@@ -186,21 +187,49 @@ def generate_launch_description():
         output='screen',
         parameters=[configured_params],
         # Recovery motions (spin/backup) also go through the collision monitor.
-        remappings=[('cmd_vel', 'cmd_vel_raw')],
+        remappings=[('cmd_vel', 'cmd_vel_raw'), ('/tf', '/tf_nav')],
     )
 
-    # Strips Pepper's own body (< 0.8 m) so the collision monitor doesn't
-    # freeze on self-hits.
+    # Safety-layer input: drop the L2's own housing/bumper (< 0.22 m from the
+    # sensor). MEASURED: the old 0.8 m cut also hid everything below ~0.7 m
+    # inside both monitor zones, so legs never triggered a stop.
     points_safety_filter = Node(
         package='pepper_slam',
-        executable='cloud_range_filter.py',
+        executable='cloud_range_filter',
         name='points_safety_filter',
         output='screen',
         parameters=[{
             'use_sim_time': use_sim_time,
             'input_topic': '/points',
             'output_topic': '/points_safety',
-            'min_range': 0.8,
+            # 0.12, was 0.22: 0.22 hid a box ~0.10 m from the lidar (x ~0.22-0.26
+            # from base_footprint) entirely -- 1 point/scan reached the stop
+            # wedge, so no STOP. 0.12 put 113/scan there. MEASURED 2026-10-19,
+            # empty scene, 510 scans: no in-band returns between 0.12 and 0.22,
+            # so 0.12 adds no false stops (stop wedge max 1 pt/scan either way).
+            # The L2 housing itself returns at ~0.007 m.
+            'min_range': 0.12,
+            # Side-body cut. The forward cone is kept at every range, so nothing
+            # driven into is cut. 0.30, was 0.40: RE-MEASURED 2026-10-19, arms
+            # at rest, nothing around, stop wedge false-STOP rate: no cut 65%,
+            # 0.25 m 0% (max 3 pts, no margin), 0.30-0.40 m 0% (max 1-2 pts;
+            # 510 scans at 0.30). The body beside the lidar sits 0.11-0.25 m
+            # from it (x 0.18-0.22, |y| <= 0.20, z 0.22-0.28). 0.30 raises the
+            # stop zone the L2 can see from 19% to ~51% at z 0.30. The earlier
+            # measurement (shell at 0.355-0.368 m, 0.40 m 5.0%) no longer holds;
+            # re-check with the arms moving if autonomous life is on.
+            'self_cut_range': 0.30,
+            'self_cut_angle': 25.0,
+            # Body-box cut: Pepper's own front face, x ~0.18-0.22, |y| <= 0.12,
+            # straight ahead of the lidar, so neither range cut can drop it
+            # without blinding the forward cone. MEASURED 2026-10-19, nothing
+            # around: arms at rest it showed at z 0.70-0.90 only (0-3 pts in
+            # the stop wedge, trigger > 3); minutes later, same joints but a
+            # shifted stance, the face showed from z 0.38 up and a z >= 0.60
+            # box left 43% of scans false-STOPping. z >= 0.30: 0%. A box at
+            # 0.315 m still STOPs on 100% of scans. The box stays inside
+            # robot_radius 0.25, so it cannot hide anything outside the body.
+            'body_boxes': [0.10, 0.22, -0.13, 0.13, 0.30, 1.00],
             'ror_min_neighbors': 0,   # ROR off (see cloud_range_filter notes)
         }],
     )
@@ -211,6 +240,7 @@ def generate_launch_description():
         name='collision_monitor',
         output='screen',
         parameters=[configured_params],
+        remappings=[('/tf', '/tf_nav')],
     )
     bt_navigator = Node(
         package='nav2_bt_navigator',
@@ -218,6 +248,7 @@ def generate_launch_description():
         name='bt_navigator',
         output='screen',
         parameters=[configured_params],
+        remappings=[('/tf', '/tf_nav')],
     )
     lifecycle_manager = Node(
         package='nav2_lifecycle_manager',
@@ -265,6 +296,18 @@ def generate_launch_description():
         parameters=[{'use_sim_time': use_sim_time, 'backend': 'rtabmap'}],
     )
 
+    # Nav2 reads /tf_nav, a copy of /tf holding only the navigation edges:
+    # naoqi_driver's joint tree (~4150 transforms/s) saturated the costmap's
+    # TF thread until it stopped updating. See src/tf_nav_relay.cpp. Only
+    # nodes that LISTEN to TF are remapped -- never one that broadcasts it.
+    tf_nav_relay = Node(
+        package='pepper_navigation',
+        executable='tf_nav_relay',
+        name='tf_nav_relay',
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}],
+    )
+
     return LaunchDescription([
         declare_use_sim_time_cmd,
         declare_database_path_cmd,
@@ -280,4 +323,6 @@ def generate_launch_description():
         lifecycle_manager,
         lifecycle_manager_collision_monitor,
         localization_recovery,
+        # Last: it reads use_sim_time, declared above.
+        tf_nav_relay,
     ])

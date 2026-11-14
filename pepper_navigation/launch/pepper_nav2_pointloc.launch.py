@@ -7,7 +7,7 @@ estimate at scan rate from inside it. Owns map -> base_footprint;
 nav2_map_server serves the matching 2D grid as /map for the global costmap.
 
 The Point-LIO twin of pepper_nav2_fastloc.launch.py. Everything downstream of
-localization — costmaps, DWB, collision monitor, safety chain — is identical
+localization — costmaps, MPPI, collision monitor, safety chain — is identical
 (nav2_params_pointloc.yaml is byte-identical to the fastloc one apart from its
 header), so a behavioural difference between the two profiles is a BACKEND
 difference and nothing else.
@@ -76,7 +76,6 @@ Usage (real robot):
 Usage (bag replay):
     ros2 launch pepper_navigation pepper_nav2_pointloc.launch.py use_sim_time:=true
     ros2 bag play <bag> --clock \
-        --qos-profile-overrides-path config/play_qos.yaml \
         --read-ahead-queue-size 2000
 
 To use a DIFFERENT mapping run, change map, map_pose_file and map_scan_dir
@@ -178,6 +177,17 @@ def generate_launch_description():
         'watchdog', default_value='true',
         description='Cancel navigation goals while pointlio_localization reports '
                     'itself lost. Set false to monitor without ever holding nav.')
+    declare_odom_frame_cmd = DeclareLaunchArgument(
+        'odom_frame', default_value='',
+        description='Empty (default): pointlio_localization broadcasts map -> '
+                    'base_footprint and the local costmap rolls in map. '
+                    '"odom": REP-105 map -> odom -> base_footprint instead, '
+                    'with odom -> base_footprint from wheel odometry '
+                    '(pepper_slam wheel_odom_tf) and the local costmap in '
+                    'odom, so relocalization jumps never reach the controller. '
+                    'See pepper_slam/FRAMES.md.')
+    odom_frame = LaunchConfiguration('odom_frame')
+    odom_on = IfCondition(PythonExpression(["'", odom_frame, "' != ''"]))
 
     # GroupAction (scoped by default) is REQUIRED here: IncludeLaunchDescription
     # emits its launch_arguments as SetLaunchConfiguration into the CURRENT
@@ -214,6 +224,7 @@ def generate_launch_description():
                 'map_pose_file': LaunchConfiguration('map_pose_file'),
                 'map_scan_dir': LaunchConfiguration('map_scan_dir'),
                 'rviz': 'false',
+                'odom_frame': odom_frame,
             }.items(),
         ),
     ])
@@ -223,7 +234,17 @@ def generate_launch_description():
     configured_params = RewrittenYaml(
         source_file=nav2_params_file,
         root_key='',
-        param_rewrites={'use_sim_time': use_sim_time},
+        param_rewrites={
+            'use_sim_time': use_sim_time,
+            # Full path, so the global costmap stays in map.
+            'local_costmap.local_costmap.ros__parameters.global_frame':
+                PythonExpression(["'", odom_frame, "' or 'map'"]),
+            # base_shift_correction needs the CONTINUOUS frame, which is
+            # map only while the localizer owns base_footprint; in odom mode
+            # map is the one that jumps on relocalization.
+            'collision_monitor.ros__parameters.odom_frame_id':
+                PythonExpression(["'", odom_frame, "' or 'map'"]),
+        },
         convert_types=True)
 
     # Serves the 2D grid as /map for the global costmap static layer.
@@ -247,7 +268,7 @@ def generate_launch_description():
         parameters=[configured_params],
         # Route velocity through the collision monitor: controller -> cmd_vel_raw
         # -> collision_monitor -> cmd_vel (what Pepper drives on).
-        remappings=[('cmd_vel', 'cmd_vel_raw')],
+        remappings=[('cmd_vel', 'cmd_vel_raw'), ('/tf', '/tf_nav')],
     )
     planner_server = Node(
         package='nav2_planner',
@@ -255,6 +276,7 @@ def generate_launch_description():
         name='planner_server',
         output='screen',
         parameters=[configured_params],
+        remappings=[('/tf', '/tf_nav')],
     )
     behavior_server = Node(
         package='nav2_behaviors',
@@ -262,21 +284,49 @@ def generate_launch_description():
         name='behavior_server',
         output='screen',
         parameters=[configured_params],
-        remappings=[('cmd_vel', 'cmd_vel_raw')],
+        remappings=[('cmd_vel', 'cmd_vel_raw'), ('/tf', '/tf_nav')],
     )
 
-    # Self-hit filter feeding the safety layer: strip Pepper's own body (< 0.8 m)
-    # from the raw L2 /points so the collision monitor doesn't freeze on it.
+    # Safety-layer input: drop the L2's own housing/bumper (< 0.22 m from the
+    # sensor). MEASURED: the old 0.8 m cut also hid everything below ~0.7 m
+    # inside both monitor zones, so legs never triggered a stop.
     points_safety_filter = Node(
         package='pepper_slam',
-        executable='cloud_range_filter.py',
+        executable='cloud_range_filter',
         name='points_safety_filter',
         output='screen',
         parameters=[{
             'use_sim_time': use_sim_time,
             'input_topic': '/points',
             'output_topic': '/points_safety',
-            'min_range': 0.8,
+            # 0.12, was 0.22: 0.22 hid a box ~0.10 m from the lidar (x ~0.22-0.26
+            # from base_footprint) entirely -- 1 point/scan reached the stop
+            # wedge, so no STOP. 0.12 put 113/scan there. MEASURED 2026-10-19,
+            # empty scene, 510 scans: no in-band returns between 0.12 and 0.22,
+            # so 0.12 adds no false stops (stop wedge max 1 pt/scan either way).
+            # The L2 housing itself returns at ~0.007 m.
+            'min_range': 0.12,
+            # Side-body cut. The forward cone is kept at every range, so nothing
+            # driven into is cut. 0.30, was 0.40: RE-MEASURED 2026-10-19, arms
+            # at rest, nothing around, stop wedge false-STOP rate: no cut 65%,
+            # 0.25 m 0% (max 3 pts, no margin), 0.30-0.40 m 0% (max 1-2 pts;
+            # 510 scans at 0.30). The body beside the lidar sits 0.11-0.25 m
+            # from it (x 0.18-0.22, |y| <= 0.20, z 0.22-0.28). 0.30 raises the
+            # stop zone the L2 can see from 19% to ~51% at z 0.30. The earlier
+            # measurement (shell at 0.355-0.368 m, 0.40 m 5.0%) no longer holds;
+            # re-check with the arms moving if autonomous life is on.
+            'self_cut_range': 0.30,
+            'self_cut_angle': 25.0,
+            # Body-box cut: Pepper's own front face, x ~0.18-0.22, |y| <= 0.12,
+            # straight ahead of the lidar, so neither range cut can drop it
+            # without blinding the forward cone. MEASURED 2026-10-19, nothing
+            # around: arms at rest it showed at z 0.70-0.90 only (0-3 pts in
+            # the stop wedge, trigger > 3); minutes later, same joints but a
+            # shifted stance, the face showed from z 0.38 up and a z >= 0.60
+            # box left 43% of scans false-STOPping. z >= 0.30: 0%. A box at
+            # 0.315 m still STOPs on 100% of scans. The box stays inside
+            # robot_radius 0.25, so it cannot hide anything outside the body.
+            'body_boxes': [0.10, 0.22, -0.13, 0.13, 0.30, 1.00],
             'ror_min_neighbors': 0,   # ROR off (see cloud_range_filter notes)
         }],
     )
@@ -287,6 +337,7 @@ def generate_launch_description():
         name='collision_monitor',
         output='screen',
         parameters=[configured_params],
+        remappings=[('/tf', '/tf_nav')],
     )
 
     # VoxelLayer publishes nav2_msgs/VoxelGrid, which RViz cannot draw --
@@ -327,6 +378,7 @@ def generate_launch_description():
         name='bt_navigator',
         output='screen',
         parameters=[configured_params],
+        remappings=[('/tf', '/tf_nav')],
     )
     nav2_starter = Node(
         package='pepper_navigation',
@@ -369,8 +421,12 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('watchdog')),
         parameters=[{
             'use_sim_time': use_sim_time,
-            'status_name': 'point_lio_localization: pose lock',
+            'status_names': ['point_lio_localization: pose lock',
+                             'point_lio_localization: map -> odom gate'],
             'lost_duration': 5.0,
+            # Silence after an OK only trips stale_timeout (badness is timed
+            # from the first bad report), so match lost_duration here.
+            'stale_timeout': 5.0,
             'cancel_goals': True,
             'call_recovery': True,
         }],
@@ -402,6 +458,30 @@ def generate_launch_description():
         }],
     )
 
+    # Nav2 reads /tf_nav, a copy of /tf holding only the navigation edges:
+    # naoqi_driver's joint tree (~4150 transforms/s) saturated the costmap's
+    # TF thread until it stopped updating. See src/tf_nav_relay.cpp. Only
+    # nodes that LISTEN to TF are remapped -- never one that broadcasts it.
+    # odom -> base_footprint from /pepper_odom, only with odom_frame set: in the
+    # default mode the localizer owns base_footprint's parent and a second one
+    # would split the tree.
+    wheel_odom_tf = Node(
+        package='pepper_slam',
+        executable='wheel_odom_tf',
+        name='wheel_odom_tf',
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time, 'odom_frame': odom_frame}],
+        condition=odom_on,
+    )
+
+    tf_nav_relay = Node(
+        package='pepper_navigation',
+        executable='tf_nav_relay',
+        name='tf_nav_relay',
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}],
+    )
+
     return LaunchDescription([
         declare_use_sim_time_cmd,
         declare_sensor_tf_cmd,
@@ -415,6 +495,7 @@ def generate_launch_description():
         declare_rviz_cmd,
         declare_rviz_config_cmd,
         declare_watchdog_cmd,
+        declare_odom_frame_cmd,
         sensor_tf,
         pointloc,
         map_server,
@@ -431,4 +512,7 @@ def generate_launch_description():
         nav2_starter,
         localization_recovery,
         localization_watchdog,
+        # Last: it reads use_sim_time, declared above.
+        wheel_odom_tf,
+        tf_nav_relay,
     ])

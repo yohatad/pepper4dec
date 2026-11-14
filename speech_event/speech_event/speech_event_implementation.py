@@ -184,6 +184,11 @@ class OnnxWrapper():
 class SpeechRecognitionNode(LifecycleNode):
     """Lifecycle node that performs voice-activity detection and speech-to-text transcription."""
 
+    def _vlog(self, msg: str) -> None:
+        """Log at INFO only with verbose_mode on (per-event detail)."""
+        if getattr(self, 'verbose_mode', False):
+            self.get_logger().info(msg)
+
     def __init__(self):
         """Declare parameters only; model loading is deferred to on_configure().
 
@@ -208,8 +213,9 @@ class SpeechRecognitionNode(LifecycleNode):
         self.declare_parameter("pre_speech_buffer_ms", 200)
         self.declare_parameter("intensity_threshold", 0.001)
         self.declare_parameter("transcription_timeout_s", 5.0)
-        self.declare_parameter("microphone_topic", "/naoqi_driver/audio")
+        self.declare_parameter("microphone_topic", "/audio")
         self.declare_parameter("action_server", True)
+        self.declare_parameter("verbose_mode", False)
         self.declare_parameter("vad_always_active", False)
         self.declare_parameter("noise_cleaning_enabled", True)
         self.declare_parameter("noise_profile_path", "")
@@ -236,6 +242,7 @@ class SpeechRecognitionNode(LifecycleNode):
         self.transcription_timeout_s = float(self.get_parameter("transcription_timeout_s").value)
         self.microphone_topic = self.get_parameter("microphone_topic").value
         self.action_server_enabled = bool(self.get_parameter("action_server").value)
+        self.verbose_mode = bool(self.get_parameter("verbose_mode").value)
         self.vad_always_active = bool(self.get_parameter("vad_always_active").value)
         self.noise_cleaning_enabled = bool(self.get_parameter("noise_cleaning_enabled").value)
         noise_alpha = float(self.get_parameter("noise_alpha").value)
@@ -530,7 +537,7 @@ class SpeechRecognitionNode(LifecycleNode):
             goal_handle.abort()
             return SpeechRecognition.Result()
 
-        self.get_logger().info("Speech detected. Waiting for speaker to finish...")
+        self._vlog("Speech detected. Waiting for speaker to finish...")
 
         # ---- Phase 2: wait for transcription to complete ----
         transcription_timeout = self.transcription_timeout_s
@@ -737,8 +744,8 @@ class SpeechRecognitionNode(LifecycleNode):
             pre_speech_audio = np.array(list(self.pre_speech_ring), dtype=np.float32)
             self.speech_buffer = [pre_speech_audio, vad_chunk.copy()]
 
-            self.get_logger().info(f"VAD: speech START (prob={speech_prob:.3f}, "
-                                   f"pre-buffer={len(pre_speech_audio)} samples)")
+            self._vlog(f"VAD: speech START (prob={speech_prob:.3f}, "
+                       f"pre-buffer={len(pre_speech_audio)} samples)")
             self.speech_detected_event.set()
             self.publish_feedback("speech")
 
@@ -779,8 +786,8 @@ class SpeechRecognitionNode(LifecycleNode):
 
         if reason == "silence":
             silence_duration_s = self.silence_chunks * self.vad_chunk_size / self.sample_rate
-            self.get_logger().info(f"VAD: speech END (prob={speech_prob:.3f}, "
-                                   f"silence={silence_duration_s:.2f}s)")
+            self._vlog(f"VAD: speech END (prob={speech_prob:.3f}, "
+                       f"silence={silence_duration_s:.2f}s)")
         else:
             self.get_logger().info(
                 f"VAD: speech END (max duration {self.max_speech_duration_s}s reached)")
@@ -796,7 +803,7 @@ class SpeechRecognitionNode(LifecycleNode):
         duration_s = len(speech_audio) / self.sample_rate
 
         if duration_s < self.min_speech_duration:
-            self.get_logger().info(f"Ignoring short segment ({duration_s:.2f}s)")
+            self._vlog(f"Ignoring short segment ({duration_s:.2f}s)")
             self.reset_speech_state()
             return
 
@@ -875,7 +882,7 @@ class SpeechRecognitionNode(LifecycleNode):
                 f"RMS={np.sqrt(np.mean(audio**2)):.4f}  peak={np.max(np.abs(audio)):.4f}"
             )
 
-        self.get_logger().info(f"Running Whisper on {duration_s:.2f}s segment...")
+        self._vlog(f"Running Whisper on {duration_s:.2f}s segment...")
         start_time = time.time()
 
         segments, info = self.whisper.transcribe(
@@ -896,7 +903,7 @@ class SpeechRecognitionNode(LifecycleNode):
         elapsed = time.time() - start_time
         rtf = elapsed / info.duration if info.duration > 0 else 0.0
 
-        self.get_logger().info(f"ASR done. elapsed={elapsed:.3f}s, RTF={rtf:.3f}")
+        self._vlog(f"ASR done. elapsed={elapsed:.3f}s, RTF={rtf:.3f}")
         self.get_logger().info(f"Transcript: '{text}'")
 
         return text

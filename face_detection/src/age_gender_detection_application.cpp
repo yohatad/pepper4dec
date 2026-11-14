@@ -57,10 +57,12 @@
 
 #include "dec_common/node_runner.h"
 
-int main(int argc, char** argv) {
-    return dec_common::runNode<AgeGenderDetectionNode>(
-        argc, argv,
-        {"age_gender_detection v1.0 — This program comes with ABSOLUTELY NO WARRANTY.", "age_gender_detection"},
-        nullptr,
-        [](AgeGenderDetectionNode& node) { node.cleanup(); });
+int main(int argc, char ** argv)
+{
+  return dec_common::runNode<AgeGenderDetectionNode>(
+    argc, argv,
+    {"age_gender_detection v1.0 — This program comes with ABSOLUTELY NO WARRANTY.",
+      "age_gender_detection"},
+    nullptr,
+    [](AgeGenderDetectionNode & node) {node.cleanup();});
 }

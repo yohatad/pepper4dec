@@ -1,0 +1,330 @@
+/* bumper_guard.cpp
+ *
+ * Last gate in the velocity chain: a bumper contact stops ALL motion --
+ * forward, reverse, sideways and turning -- until an operator resets it.
+ *
+ *   controller_server -> cmd_vel_raw -> collision_monitor -> cmd_vel_safe
+ *                     -> bumper_guard -> cmd_vel  (what Pepper drives on)
+ *
+ * A press means Pepper has already hit something the lidar, the driver's
+ * laser/sonar backstop and the costmap all missed, or an operator pressed a
+ * bumper as an emergency stop. Either way it must not move again on its own,
+ * so the stop holds after the switch is released, until
+ *   ros2 service call /bumper_guard/clear std_srvs/srv/Trigger
+ * which is refused while any bumper is still pressed, and which also clears
+ * naoqi_driver's own bumper stop (driver_clear_service), so one call resets
+ * both. Until 2026-11-13 this only blocked the side that was hit and released
+ * itself 1 s later; Nav2 could then drive straight back into the obstacle.
+ *
+ * Why a separate node and not a collision_monitor source: the monitor's
+ * verdicts come from geometry and lapse as soon as the geometry does; this
+ * one has to hold until a person decides. Series gates each of which only
+ * ever subtracts authority are safe to chain; two PARALLEL arbiters of cmd_vel
+ * are not, which is why localization_watchdog cancels goals instead.
+ *
+ * Fails safe by dying: this node owns cmd_vel, so if it exits nothing
+ * publishes cmd_vel and the driver's own command timeout halts the robot. It
+ * never invents a command either -- it only ever republishes one it received,
+ * so an upstream that goes quiet stops the robot rather than latching the
+ * last velocity.
+ *
+ * /bumper is an EVENT topic with no header and no heartbeat (naoqi registers
+ * RightBumperPressed / LeftBumperPressed / BackBumperPressed at frequency 0),
+ * so silence cannot be told from a dead driver on its own. joint_states, which
+ * the driver publishes at 50 Hz, is the liveness witness: while it is absent
+ * a latch holds rather than ageing out.
+ *
+ * It also carries the chain's only fail-safe on sensor loss. MEASURED on
+ * slam_20260823_aligned: Humble's collision_monitor HOLDS ITS LAST VERDICT
+ * when a source goes stale -- fed a clear laser reading and then silence, it
+ * passed 161 consecutive full-speed commands with no sensor data at all. So
+ * required_topics are watched here, in the one node that owns cmd_vel and can
+ * actually enforce a stop. Blind clamps translation but leaves rotation: the
+ * footprint is a 0.25 m circle, so turning in place sweeps nothing new, and it
+ * is how an operator recovers.
+ *
+ * Parameters:
+ *   cmd_vel_in_topic / cmd_vel_out_topic  default cmd_vel_safe -> cmd_vel
+ *   required_topics  sensor topics that must stay fresh (default: none, off)
+ *   required_timeout s before a required topic counts as lost (default 1.0)
+ *   stuck_timeout    s of continuous press before ERROR (default 10.0)
+ *   liveness_topic / liveness_timeout     default /joint_states, 1.0 s
+ *   driver_clear_service  naoqi_driver's bumper reset, called by ~/clear
+ *                    (default /naoqi_driver/clear_bumper; "" to skip)
+ *
+ * Author: Yohannes Tadesse Haile
+ * Affiliation: Carnegie Mellon University Africa
+ * Email: yohatad123@gmail.com
+ * Date: October 19, 2026
+ * Version: v2.0
+ *
+ * Copyright (C) 2025 Carnegie Mellon University Africa
+ * This software is provided 'as-is' for research and educational purposes
+ * within the DEC project.
+ */
+
+#include <algorithm>
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
+
+#include <diagnostic_msgs/msg/diagnostic_array.hpp>
+#include <geometry_msgs/msg/twist.hpp>
+#include <naoqi_bridge_msgs/msg/bumper.hpp>
+#include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
+#include <std_srvs/srv/trigger.hpp>
+
+#include "pepper_navigation/bumper_latch.h"
+#include "pepper_navigation/topic_liveness.h"
+
+namespace
+{
+constexpr char kStatusName[] = "bumper_guard: contact";
+constexpr char kLivenessName[] = "bumper_guard: sensor liveness";
+}  // namespace
+
+class BumperGuard : public rclcpp::Node
+{
+public:
+  BumperGuard()
+  : Node("bumper_guard"),
+    latch_(declare_parameter<double>("stuck_timeout", 10.0))
+  {
+    const auto in_topic = declare_parameter<std::string>("cmd_vel_in_topic", "cmd_vel_safe");
+    const auto out_topic = declare_parameter<std::string>("cmd_vel_out_topic", "cmd_vel");
+    const auto liveness_topic = declare_parameter<std::string>("liveness_topic", "/joint_states");
+    liveness_timeout_ = declare_parameter<double>("liveness_timeout", 1.0);
+    const auto driver_clear = declare_parameter<std::string>(
+      "driver_clear_service", "/naoqi_driver/clear_bumper");
+    if (!driver_clear.empty()) {
+      driver_clear_client_ = create_client<std_srvs::srv::Trigger>(driver_clear);
+    }
+
+    cmd_pub_ = create_publisher<geometry_msgs::msg::Twist>(out_topic, 1);
+    diag_pub_ = create_publisher<diagnostic_msgs::msg::DiagnosticArray>("/diagnostics", 10);
+
+    // Depth 1: a stale velocity is worse than a dropped one.
+    cmd_sub_ = create_subscription<geometry_msgs::msg::Twist>(
+      in_topic, 1, [this](geometry_msgs::msg::Twist::SharedPtr msg) {onCmdVel(*msg);});
+
+    // Events are rare but must never be dropped, so this queue is deep.
+    bumper_sub_ = create_subscription<naoqi_bridge_msgs::msg::Bumper>(
+      "/bumper", 50, [this](naoqi_bridge_msgs::msg::Bumper::SharedPtr msg) {onBumper(*msg);});
+
+    liveness_sub_ = create_subscription<sensor_msgs::msg::JointState>(
+      liveness_topic, 1,
+      [this](sensor_msgs::msg::JointState::SharedPtr) {last_liveness_ = nowSeconds();});
+
+    clear_srv_ = create_service<std_srvs::srv::Trigger>(
+      "~/clear",
+      [this](
+        const std_srvs::srv::Trigger::Request::SharedPtr,
+        std_srvs::srv::Trigger::Response::SharedPtr res) {onClear(res);});
+
+    const auto required = declare_parameter<std::vector<std::string>>(
+      "required_topics", std::vector<std::string>{});
+    sensors_ = pepper_navigation::TopicLiveness(
+      required, declare_parameter<double>("required_timeout", 1.0));
+    // Bound on a timer, not here: a publisher that starts after this node
+    // would otherwise never be found, and the type has to be discovered.
+    bind_timer_ = create_wall_timer(
+      std::chrono::milliseconds(500), [this] {bindSensors();});
+
+    diag_timer_ = create_wall_timer(
+      std::chrono::milliseconds(500), [this] {publishDiagnostics();});
+
+    RCLCPP_INFO(
+      get_logger(), "gating %s -> %s on /bumper: a press stops all motion until "
+      "~/clear (liveness %s)", in_topic.c_str(), out_topic.c_str(), liveness_topic.c_str());
+  }
+
+private:
+  double nowSeconds() {return now().seconds();}
+
+  /// Blind means joint_states has gone quiet, so /bumper's silence proves
+  /// nothing. Never seen it at all counts as blind too.
+  bool blind()
+  {
+    if (last_liveness_ == pepper_navigation::kNever) {return true;}
+    return (nowSeconds() - last_liveness_) > liveness_timeout_;
+  }
+
+  /// Generic subscriptions, so any message type counts as a heartbeat without
+  /// this node having to depend on it. SensorDataQoS deliberately: it is
+  /// BEST_EFFORT, which is compatible with both reliable and best-effort
+  /// publishers, and /points is best-effort -- a reliable subscription here
+  /// would receive nothing and read as permanently stale.
+  void bindSensors()
+  {
+    for (const auto & topic : sensors_.unseen()) {
+      if (sensor_subs_.count(topic)) {continue;}
+      const auto types = get_topic_names_and_types();
+      auto it = types.find(topic);
+      if (it == types.end() || it->second.empty()) {continue;}
+      sensor_subs_[topic] = create_generic_subscription(
+        topic, it->second.front(), rclcpp::SensorDataQoS(),
+        [this, topic](std::shared_ptr<rclcpp::SerializedMessage>) {
+          sensors_.mark(topic, nowSeconds());
+        });
+      RCLCPP_INFO(
+        get_logger(), "watching %s (%s) for liveness",
+        topic.c_str(), it->second.front().c_str());
+    }
+  }
+
+  void onBumper(const naoqi_bridge_msgs::msg::Bumper & msg)
+  {
+    const bool pressed = msg.state == naoqi_bridge_msgs::msg::Bumper::STATE_PRESSED;
+    latch_.set(msg.bumper, pressed, nowSeconds());
+    if (pressed) {
+      RCLCPP_WARN(
+        get_logger(), "bumper %u pressed -- all motion stopped until "
+        "`ros2 service call /bumper_guard/clear std_srvs/srv/Trigger`", msg.bumper);
+    }
+  }
+
+  void onCmdVel(const geometry_msgs::msg::Twist & in)
+  {
+    latch_.set_blind(blind());
+    geometry_msgs::msg::Twist out = in;
+    if (latch_.stop()) {
+      // Contact: nothing moves, turning included, until ~/clear.
+      out = geometry_msgs::msg::Twist();
+      if (in.linear.x != 0.0 || in.linear.y != 0.0 || in.angular.z != 0.0) {
+        RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 2000,
+          "bumper stop: command (%.2f, %.2f, %.2f) -> 0; call ~/clear to resume",
+          in.linear.x, in.linear.y, in.angular.z);
+      }
+    } else if (sensors_.any_stale(nowSeconds())) {
+      // Blind in every direction, so no translation at all. Rotation stays:
+      // the footprint is a 0.25 m circle, so turning in place sweeps nothing new.
+      out.linear.x = 0.0;
+      out.linear.y = 0.0;
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 2000,
+        "required sensor topic(s) lost; holding translation");
+    }
+    cmd_pub_->publish(out);
+  }
+
+  void onClear(const std_srvs::srv::Trigger::Response::SharedPtr & res)
+  {
+    res->success = latch_.clear();
+    if (!res->success) {
+      res->message = "refused: a bumper is still pressed";
+    } else if (!driver_clear_client_) {
+      res->message = "bumper stop cleared";
+    } else if (driver_clear_client_->service_is_ready()) {
+      // Fire and forget: waiting here would block this node's only thread. The
+      // driver checks the same /bumper events, so it agrees unless a press
+      // arrives in between -- in which case it rightly stays stopped.
+      driver_clear_client_->async_send_request(
+        std::make_shared<std_srvs::srv::Trigger::Request>());
+      res->message = "bumper stop cleared; reset sent to naoqi_driver";
+    } else {
+      res->message = "bumper stop cleared here, but " +
+        std::string(driver_clear_client_->get_service_name()) +
+        " is not available -- the driver may still hold its own stop";
+    }
+    RCLCPP_INFO(get_logger(), "%s", res->message.c_str());
+  }
+
+  void publishDiagnostics()
+  {
+    using diagnostic_msgs::msg::DiagnosticStatus;
+    const double t = nowSeconds();
+    latch_.set_blind(blind());
+
+    DiagnosticStatus s;
+    s.name = kStatusName;
+    s.hardware_id = "pepper_bumper";
+    if (latch_.stuck(t)) {
+      s.level = DiagnosticStatus::ERROR;
+      s.message = "bumper held down -- stuck switch or debris";
+    } else if (latch_.stop()) {
+      s.level = DiagnosticStatus::WARN;
+      s.message = latch_.any_pressed() ?
+        "bumper pressed -- all motion stopped" :
+        "bumper stop latched -- call ~/clear to resume";
+    } else if (latch_.blind()) {
+      s.level = DiagnosticStatus::WARN;
+      s.message = "no joint_states -- bumper state unknown";
+    } else {
+      s.level = DiagnosticStatus::OK;
+      s.message = "clear";
+    }
+    auto add = [&s](const char * key, bool val) {
+        diagnostic_msgs::msg::KeyValue kv;
+        kv.key = key;
+        kv.value = val ? "true" : "false";
+        s.values.push_back(kv);
+      };
+    add("right", latch_.latched(pepper_navigation::kRight));
+    add("left", latch_.latched(pepper_navigation::kLeft));
+    add("back", latch_.latched(pepper_navigation::kBack));
+    add("pressed", latch_.any_pressed());
+    add("stop", latch_.stop());
+    add("blind", latch_.blind());
+
+    diagnostic_msgs::msg::DiagnosticArray arr;
+    arr.header.stamp = now();
+    arr.status.push_back(s);
+    if (sensors_.watching()) {arr.status.push_back(livenessStatus(t));}
+    diag_pub_->publish(arr);
+  }
+
+  /// Separate status so the watchdog can act on a dead sensor distinctly
+  /// from a bumper contact.
+  diagnostic_msgs::msg::DiagnosticStatus livenessStatus(double t)
+  {
+    using diagnostic_msgs::msg::DiagnosticStatus;
+    DiagnosticStatus s;
+    s.name = kLivenessName;
+    s.hardware_id = "pepper_safety_sources";
+    const auto bad = sensors_.stale_topics(t);
+    if (bad.empty()) {
+      s.level = DiagnosticStatus::OK;
+      s.message = "all required sensor topics fresh";
+    } else {
+      s.level = DiagnosticStatus::ERROR;
+      s.message = "lost: ";
+      for (std::size_t i = 0; i < bad.size(); ++i) {
+        s.message += (i ? ", " : "") + bad[i];
+      }
+    }
+    for (const auto & topic : sensors_.stale_topics(t)) {
+      diagnostic_msgs::msg::KeyValue kv;
+      kv.key = topic;
+      kv.value = "stale";
+      s.values.push_back(kv);
+    }
+    return s;
+  }
+
+  pepper_navigation::BumperLatch latch_;
+  pepper_navigation::TopicLiveness sensors_;
+  std::map<std::string, rclcpp::GenericSubscription::SharedPtr> sensor_subs_;
+  rclcpp::TimerBase::SharedPtr bind_timer_;
+  double liveness_timeout_;
+  rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr driver_clear_client_;
+  double last_liveness_ = pepper_navigation::kNever;
+
+  rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_pub_;
+  rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr diag_pub_;
+  rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_sub_;
+  rclcpp::Subscription<naoqi_bridge_msgs::msg::Bumper>::SharedPtr bumper_sub_;
+  rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr liveness_sub_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr clear_srv_;
+  rclcpp::TimerBase::SharedPtr diag_timer_;
+};
+
+int main(int argc, char ** argv)
+{
+  rclcpp::init(argc, argv);
+  rclcpp::spin(std::make_shared<BumperGuard>());
+  rclcpp::shutdown();
+  return 0;
+}

@@ -112,7 +112,7 @@
   "remaps": []
  },
  {
-  "exe": "cloud_range_filter.py",
+  "exe": "cloud_range_filter",
   "name": "cloud_range_filter",
   "ns": "<node_namespace_unspecified>",
   "params": [

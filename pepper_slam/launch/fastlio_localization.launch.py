@@ -28,7 +28,9 @@ Launch arguments:
         would give those edges two publishers and the last one silently wins.
     rviz (default: "true")
     config_file (default: "l2_rsimu.yaml")
-        FAST-LIO config (RealSense IMU); l2.yaml uses the L2's own.
+        FAST-LIO config (RealSense IMU). l2.yaml, which used the L2's own,
+        was removed: it loses heading in slow motion and diverged on
+        slam_20260823_aligned (overlap 1.00 -> 0.29).
     map_dir, map_pose_file, map_scan_dir
         Prior map location. Defaults match fast_lio's own (pepper_navigation's
         shipped map). See localization_l2.launch.py for the full set of
@@ -95,7 +97,7 @@ def generate_launch_description():
     declare_config_file_cmd = DeclareLaunchArgument(
         'config_file', default_value='l2_rsimu.yaml',
         description='FAST-LIO config: l2_rsimu.yaml (RealSense IMU, matches '
-                    'the prior map) or l2.yaml (the L2 s own).')
+                    'the prior map).')
     declare_map_dir_cmd = DeclareLaunchArgument(
         'map_dir',
         default_value=os.path.join(

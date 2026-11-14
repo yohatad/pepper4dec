@@ -78,14 +78,15 @@
 
 #include "overt_attention/overt_attention_interface.h"
 
-int main(int argc, char* argv[]) {
-    rclcpp::init(argc, argv);
-    try {
-        auto node = std::make_shared<OvertAttentionNode>();
-        rclcpp::spin(node->get_node_base_interface());
-    } catch (const std::exception& e) {
-        RCLCPP_ERROR(rclcpp::get_logger("overt_attention"), "Exception: %s", e.what());
-    }
-    rclcpp::shutdown();
-    return 0;
+int main(int argc, char * argv[])
+{
+  rclcpp::init(argc, argv);
+  try {
+    auto node = std::make_shared<OvertAttentionNode>();
+    rclcpp::spin(node->get_node_base_interface());
+  } catch (const std::exception & e) {
+    RCLCPP_ERROR(rclcpp::get_logger("overt_attention"), "Exception: %s", e.what());
+  }
+  rclcpp::shutdown();
+  return 0;
 }

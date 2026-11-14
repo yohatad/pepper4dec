@@ -35,7 +35,7 @@ Configuration:
 
 Usage:
     ros2 launch pepper_slam pointlio_odometry.launch.py
-    ros2 bag play <bag> --clock --topics /points /imu/data /tf /tf_static
+    ros2 bag play <bag> --clock --topics /points /camera/imu /tf /tf_static
 
 Author: Yohannes Tadesse Haile
 Affiliation: Carnegie Mellon University Africa

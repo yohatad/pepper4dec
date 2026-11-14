@@ -14,6 +14,7 @@
   <depend>nav2_map_server</depend>
   <depend>nav2_amcl</depend>
   <depend>nav2_controller</depend>
+  <depend>nav2_mppi_controller</depend>
   <depend>nav2_planner</depend>
   <depend>nav2_behaviors</depend>
   <depend>nav2_bt_navigator</depend>
@@ -22,6 +23,8 @@
   <depend>nav2_collision_monitor</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_action</depend>
+  <!-- src/tf_nav_relay.cpp -->
+  <depend>tf2_msgs</depend>
   <!-- scripts/: wait_for_map_then_start.py, localization_recovery.py,
        localization_watchdog.py -->
   <depend>rclpy</depend>
@@ -32,6 +35,9 @@
   <depend>visualization_msgs</depend>
   <depend>std_srvs</depend>
   <depend>nav2_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <!-- naoqi_bridge_msgs/Bumper, for bumper_guard -->
+  <depend>naoqi_bridge_msgs</depend>
 
   <!-- launched by inclusion (pepper_nav2_rtabmap_loc.launch.py), not linked.
        pepper_slam supplies rtabmap_base.launch.py, which this package
@@ -50,12 +56,31 @@
        in by nav2_bringup above; install it with
        "apt install ros-$ROS_DISTRO-pointcloud-to-laserscan". -->
   <exec_depend>pointcloud_to_laserscan</exec_depend>
+  <!-- bag_test tooling (launch/bag_test, scripts/cloud_delay.py,
+       costmap_explain.py, depth_to_cloud.py, points_to_image.py) -->
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>sensor_msgs_py</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>rcl_interfaces</exec_depend>
+  <exec_depend>tf2_ros_py</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-scipy</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
 
+  <!-- Imported by the launch files and Python nodes. -->
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>nav2_common</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
   <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
   <!-- test_shared_nav2_params.py parses the four nav2 param files. -->
   <test_depend>python3-yaml</test_depend>
+  <test_depend>rosgraph_msgs</test_depend>
+  <test_depend>builtin_interfaces</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

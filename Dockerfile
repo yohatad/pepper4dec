@@ -72,6 +72,12 @@ RUN useradd -m -s /bin/bash pepper && mkdir -p ${WS} && chown -R pepper:pepper /
 # Locks were frozen from the known-good host venvs; the per-package
 # requirements.txt files are NOT used (they under-specify torch and list two
 # conflicting onnxruntime distributions).
+#
+# The three stages share one pip cache with sharing=shared. sharing=locked
+# made them take turns -- a cold build ran ~32 + 28 + 43 min one after another
+# instead of side by side. pip writes its cache entries atomically, so
+# concurrent installs are safe, and one cache lets sound and conversation reuse
+# the wheels they have in common (nvidia-cudnn-cu12 alone is 707 MB).
 # -----------------------------------------------------------------------------
 FROM base AS venv-sound
 ARG WS
@@ -87,7 +93,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY docker/requirements/sound.lock.txt /tmp/
 # torch 2.9.1+cu126 / torchvision 0.24.1+cu126 are not on PyPI.
-RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=shared \
     python3 -m venv ${WS}/.venvs/sound && \
     ${WS}/.venvs/sound/bin/pip install --upgrade pip setuptools wheel && \
     ${WS}/.venvs/sound/bin/pip install \
@@ -97,7 +103,7 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
 FROM base AS venv-conversation
 ARG WS
 COPY docker/requirements/conversation.lock.txt /tmp/
-RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=shared \
     python3 -m venv ${WS}/.venvs/conversation && \
     ${WS}/.venvs/conversation/bin/pip install --upgrade pip setuptools wheel && \
     ${WS}/.venvs/conversation/bin/pip install -r /tmp/conversation.lock.txt
@@ -105,7 +111,7 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
 FROM base AS venv-tts
 ARG WS
 COPY docker/requirements/tts.lock.txt /tmp/
-RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=shared \
     python3 -m venv ${WS}/.venvs/tts_virtual_env && \
     ${WS}/.venvs/tts_virtual_env/bin/pip install --upgrade pip setuptools wheel && \
     ${WS}/.venvs/tts_virtual_env/bin/pip install -r /tmp/tts.lock.txt
@@ -119,6 +125,24 @@ FROM base AS workspace
 ARG WS
 WORKDIR ${WS}
 
+# GPU build of ONNX Runtime for face_detection and person_detection. ROS's
+# onnxruntime_vendor (installed by rosdep) is CPU-only; dec_common's
+# dec_find_onnxruntime() prefers this release in ${WS}/.deps and gives the
+# nodes an RPATH to the CUDA 12 / cuDNN 9 libraries in the sound venv, which
+# the runtime stage copies in. Without a GPU the nodes fall back to the CPU.
+# Its own layer before the sources, so source changes do not re-download it.
+COPY scripts/install_onnxruntime_gpu.sh /tmp/
+RUN /tmp/install_onnxruntime_gpu.sh ${WS}/.deps && rm /tmp/install_onnxruntime_gpu.sh
+
+# ONNX models from huggingface.co/cssr4africa/dec_models (SHA-256 checked).
+# .dockerignore keeps the host's models/ out of the build context, so they
+# are fetched here, into /tmp/models/<package>/models, and copied into the
+# sources below; colcon then installs them to share/<package>/models. Also a
+# layer of its own, ahead of the sources. The MiVOLO age/gender model is not
+# hosted yet, so age_gender_detection has no model in the image.
+COPY scripts/fetch_models.sh /tmp/models/scripts/
+RUN /tmp/models/scripts/fetch_models.sh
+
 # naoqi_libqi / naoqi_libqicore / nao_meshes / pepper_meshes are NOT
 # cloned/built from source here -- they come from the pinned
 # ros-humble-naoqi-libqi / ros-humble-naoqi-libqicore / ros-humble-nao-meshes /
@@ -126,30 +150,41 @@ WORKDIR ${WS}
 # These are stable/data packages that don't change per-project, so tracking
 # an upstream git ref and recompiling them on every build was pure waste.
 #
-# BehaviorTree.CPP stays source-built, NOT swapped for ros-humble-behaviortree-cpp:
-# that apt package (4.9.1) has a real packaging bug on jammy -- its library
-# actually installs to lib/x86_64-linux-gnu/libbehaviortree_cpp.so (a
-# multiarch-triplet subdirectory), but the package's own
-# ament_cmake_export_libraries-extras.cmake looks for it at the non-multiarch
-# path and never finds it, so anything doing find_package(behaviortree_cpp)
-# -- i.e. BehaviorTree.ROS2 -- fails to configure. Confirmed by installing
-# the apt package standalone and checking `dpkg -L`. Not our bug to work
-# around; revisit if a newer apt release fixes it upstream.
-RUN git clone --depth 1 https://github.com/yohatad/naoqi_driver2.git src/naoqi_driver2 && \
-    git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/yohatad/FAST_LIO_ROS2.git src/fast_lio && \
-    git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/yohatad/point_lio_ros2.git src/point_lio && \
-    git clone --depth 1 https://github.com/yohatad/fastlio_lc_pgo.git src/fastlio_lc_pgo && \
-    git clone --depth 1 https://github.com/yohatad/l2lidar_node.git src/l2lidar_node && \
-    git clone --depth 1 https://github.com/BehaviorTree/BehaviorTree.CPP.git src/BehaviorTree.CPP && \
-    git clone --depth 1 https://github.com/BehaviorTree/BehaviorTree.ROS2.git src/BehaviorTree.ROS2
+# BehaviorTree.CPP is not cloned either: rosdep installs
+# ros-humble-behaviortree-cpp. It used to be source-built because the 4.9.1
+# apt package installed its library under lib/x86_64-linux-gnu/ while its own
+# CMake config looked in lib/, so find_package(behaviortree_cpp) failed for
+# BehaviorTree.ROS2. 4.10.0 installs to lib/ (checked with dpkg -c), and
+# BehaviorTree.ROS2 plus behavior_controller build and pass their tests on it.
+#
+# The sources are fetched with ADD <git url>#<branch>, not RUN git clone. A
+# RUN line's cache key is its text, so a clone layer was reused even after its
+# branch moved, and only --no-cache picked up new commits (rebuilding the
+# multi-GB venvs too). ADD resolves the branch to its commit on every build and
+# re-fetches only when that commit changed; submodules come along.
+ADD https://github.com/yohatad/naoqi_driver2.git#master src/naoqi_driver2
+ADD https://github.com/yohatad/FAST_LIO_ROS2.git#ros2 src/fast_lio
+ADD https://github.com/yohatad/point_lio_ros2.git#main src/point_lio
+ADD https://github.com/yohatad/fastlio_lc_pgo.git#main src/fastlio_lc_pgo
+ADD https://github.com/yohatad/l2lidar_node.git#main src/l2lidar_node
+ADD https://github.com/yohatad/BehaviorTree.ROS2.git#pepper4dec src/BehaviorTree.ROS2
 
+# BehaviorTree.ROS2 is cloned from a fork: its pepper4dec branch is upstream
+# humble plus one commit fixing a crash when an action node is halted before
+# the server answers its second goal (see that commit's message). Return to
+# upstream once they fix it.
+#
 # naoqi_bridge_msgs2 is a fork carrying the custom srv definitions
 # (SetAudioVolume, StopAudio, UnloadAudioFile) that dec_system depends on;
 # ros-naoqi upstream does not have them. Public, so a plain HTTPS clone works
 # with no credentials or forwarded SSH agent needed.
-RUN git clone --depth 1 https://github.com/yohatad/naoqi_bridge_msgs2.git src/naoqi_bridge_msgs
+ADD https://github.com/yohatad/naoqi_bridge_msgs2.git#main src/naoqi_bridge_msgs
 
 COPY . src/pepper4dec
+RUN for d in /tmp/models/*/models; do \
+      pkg=$(basename "$(dirname "$d")"); \
+      mkdir -p "src/pepper4dec/$pkg/models" && cp "$d"/* "src/pepper4dec/$pkg/models/"; \
+    done && rm -rf /tmp/models
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ros-humble-gtsam net-tools && \
@@ -176,10 +211,12 @@ RUN . /opt/ros/humble/setup.sh && \
 FROM workspace AS runtime
 ARG WS
 
-COPY --from=venv-sound        ${WS}/.venvs/sound           ${WS}/.venvs/sound
-COPY --from=venv-conversation ${WS}/.venvs/conversation    ${WS}/.venvs/conversation
-COPY --from=venv-tts          ${WS}/.venvs/tts_virtual_env ${WS}/.venvs/tts_virtual_env
-COPY docker/venv_map.sh ${WS}/.venvs/venv_map.sh
+# --chown here, not a chown -R at the end: chown rewrites every file it touches
+# into a new layer, and the venvs are ~21 GB, so that doubled the image size.
+COPY --chown=pepper:pepper --from=venv-sound        ${WS}/.venvs/sound           ${WS}/.venvs/sound
+COPY --chown=pepper:pepper --from=venv-conversation ${WS}/.venvs/conversation    ${WS}/.venvs/conversation
+COPY --chown=pepper:pepper --from=venv-tts          ${WS}/.venvs/tts_virtual_env ${WS}/.venvs/tts_virtual_env
+COPY --chown=pepper:pepper docker/venv_map.sh ${WS}/.venvs/venv_map.sh
 
 # Put ROS2 + the built workspace on each venv's path. The host venvs achieve
 # this with editable installs into the colcon build tree; a .pth is the
@@ -205,7 +242,9 @@ RUN printf '%s\n' \
       '# interpreter through .venvs/venv_map.sh in its launcher script.' \
       > /opt/pepper4dec_setup.sh && chmod +x /opt/pepper4dec_setup.sh
 
-RUN chown -R pepper:pepper /home/pepper
+# Hand the colcon tree (~1 GB) to pepper; .venvs is already owned by pepper.
+RUN find /home/pepper -path ${WS}/.venvs -prune -o -exec chown pepper:pepper {} + && \
+    chown pepper:pepper ${WS}/.venvs ${WS}/.venvs/*/lib/python3.10/site-packages/ros2_paths.pth
 
 USER pepper
 ENV HOME=/home/pepper

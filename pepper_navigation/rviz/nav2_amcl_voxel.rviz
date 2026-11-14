@@ -348,7 +348,7 @@ Visualization Manager:
       Class: rviz_default_plugins/Polygon
       Color: 255; 200; 0
       Enabled: true
-      Name: Slow Zone (0.80m)
+      Name: Slow Zone (0.90m)
       Topic:
         Depth: 5
         Durability Policy: Volatile

@@ -1,0 +1,15 @@
+---
+# Bug-finding checks only; style is left to cpplint and uncrustify.
+# Disabled: easily-swappable-parameters flags every function taking two
+# doubles, narrowing-conversions every int/double mix in the image code, and
+# optin VirtualCall fires only inside message_filters' own headers.
+Checks: >
+  -*,
+  bugprone-*,
+  clang-analyzer-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -clang-analyzer-optin.cplusplus.VirtualCall
+WarningsAsErrors: '*'
+HeaderFilterRegex: '/pepper4dec/[a-z_]+/include/'
+...

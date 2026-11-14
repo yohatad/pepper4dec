@@ -1,18 +1,44 @@
 <div align="center">
 
-# Pepper Robot Tour – Digital Experience Center (DEC)
+# Pepper4DEC: Autonomous Humanoid Guide Platform
 
 <img src="images/upanzi-logo.svg" alt="Upanzi Logo" width="800px">
+
+[![CI](https://github.com/yohatad/pepper4dec/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/yohatad/pepper4dec/actions/workflows/ci.yml)
+![ROS 2 Humble](https://img.shields.io/badge/ROS_2-Humble-blue)
+![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-green)
 
 </div>
 
 ## 📋 Overview
 
-This repository contains the complete software stack for an autonomous Pepper robot-led tour at the Upanzi Digital Experience Center (DEC), developed as a spin-off of the **Culturally Sensitive Social Robotics for Africa (CSSR4Africa)** project.
+Pepper4DEC is a ROS 2 Humble stack that lets a SoftBank Pepper humanoid work autonomously as a guide in a public space. The robot navigates between points of interest on a Nav2 stack with interchangeable localization backends, detects and tracks visitors, engages whoever makes eye contact, holds LLM-backed dialogue about what it is showing, and drives speech, gaze and gestures from a single behavior tree, with no operator in the loop.
 
-The system replaces repetitive, human-led walkthroughs with a fully automated, interactive tour, where Pepper role-plays as a digital guide and engages visitors across multiple Digital Public Infrastructure (DPI) booths. The robot coordinates speech, gestures, dialogue, and task sequencing to guide visitors through the fictional Upanzi Republic, illustrating the end-to-end lifecycle of digital identity and service delivery—ranging from biometric enrollment (MOSIP) to financial transactions (MIFOS) and subsidy validation (UPMS).
+It is built as a configurable platform rather than a one-off demo. Everything that defines a deployment is data, not code:
 
-Beyond automation, the project serves as a real-world testbed for **culturally aware human-robot interaction**. Pepper adapts its dialogue, gestures, and engagement strategies to local contexts and languages, while visitor interactions are logged to support research on cross-cultural behavior modeling and adaptive dialogue management in public spaces.
+- **The mission** - a BehaviorTree.CPP XML selected by parameter (`dec_Tour.xml`, `lab_tour.xml`, ...)
+- **The venue** - an environment knowledge base describing locations and exhibits (`decEnvironmentKnowledgeBase.yaml`, `labEnvironmentKnowledgeBase.yaml`)
+- **The dialogue domain** - a JSON knowledge base and system prompt behind the RAG conversation manager
+- **The cultural register** - `cultureKnowledgeBase.yaml`, governing greetings, gestures and engagement norms
+
+Repointing the robot at a new venue, or at a different front-of-house role such as a receptionist or information desk, is a matter of supplying new data files. The reference deployment runs guided tours of the Upanzi Digital Experience Center (DEC).
+
+## 🖥️ Hardware Setup
+
+<div align="center">
+<table>
+<tr>
+<td align="center" width="50%">
+<img src="images/Full_pepper_image.jpg" alt="Pepper with the sensor collar and onboard compute" width="290px"><br>
+<em>Pepper carrying the sensor collar and the onboard compute board at the waist</em>
+</td>
+<td align="center" width="50%">
+<img src="images/Lidar_and_RealSense.jpg" alt="Unitree L2 lidar and Intel RealSense on the sensor collar" width="290px"><br>
+<em>The 3D-printed collar: Unitree L2 lidar above the Intel RealSense, both facing forward</em>
+</td>
+</tr>
+</table>
+</div>
 
 ## 🏗️ System Architecture
 
@@ -36,8 +62,8 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 - **`overt_attention`** - Unified head-attention controller: engaged faces → detected faces → Boolean Map Saliency peaks, with inhibition of return
 
 ### **Navigation & Localization**
-- **`pepper_slam`** - Mapping and odometry backends: RTAB-Map (RGB-D), SLAM Toolbox (2D lidar), and FAST-LIO / Point-LIO lidar-inertial odometry via the Unitree L2. Launch files and parameters only — the SLAM backends themselves are upstream packages
-- **`pepper_navigation`** - Nav2 stack (path planning, obstacle avoidance, keepout zones, collision-monitor safety layer) with **four interchangeable localization profiles** — AMCL, RTAB-Map, prior-map FAST-LIO (`fastlio_localization`), or prior-map Point-LIO (`pointlio_localization`) — behind identical costmaps and tuning
+- **`pepper_slam`** - 3D mapping and odometry backends: FAST-LIO / Point-LIO lidar-inertial mapping and odometry on the Unitree L2, and RTAB-Map (RGB-D). Launch files and parameters only; the SLAM backends themselves are upstream packages
+- **`pepper_navigation`** - Nav2 stack (path planning, obstacle avoidance, collision-monitor safety layer) localizing by default with FAST-LIO against a prior 3D map (`fastlio_localization`). The localization backend is a launch-time profile behind shared costmaps and tuning, so alternatives can be swapped in and compared directly
 
 Localization-only deployments get their `map → base_footprint` pose (`/localization/pose`) from **`fast_lio`**'s `fastlio_localization` node; `gesture_execution` consumes that pose for pointing IK.
 
@@ -45,23 +71,6 @@ Localization-only deployments get their `map → base_footprint` pose (`/localiz
 - **`dec_launch`** - System launch files, lifecycle sequencing, and startup configurations
 - **`dec_interfaces`** - Custom ROS2 message, service, and action definitions
 - **`dec_common`** - Shared C++ utilities: the camera lifecycle node base class, the ByteTrack multi-object tracker, and ROS2 parameter-loading helpers
-
-## 🖥️ Hardware Setup
-
-<div align="center">
-<table>
-<tr>
-<td align="center" width="50%">
-<img src="images/Full_pepper_image.jpg" alt="Pepper with the sensor collar and onboard compute" width="290px"><br>
-<em>Pepper carrying the sensor collar and the onboard compute board at the waist</em>
-</td>
-<td align="center" width="50%">
-<img src="images/Lidar_and_RealSense.jpg" alt="Unitree L2 lidar and Intel RealSense on the sensor collar" width="290px"><br>
-<em>The 3D-printed collar: Unitree L2 lidar above the Intel RealSense, both facing forward</em>
-</td>
-</tr>
-</table>
-</div>
 
 ## 🚀 Quick Start
 
@@ -71,7 +80,7 @@ Localization-only deployments get their `map → base_footprint` pose (`/localiz
 - **Pepper Robot** (or simulation environment)
 - **Intel RealSense Camera** (for perception modules)
 - **Unitree L2 Lidar** + the `l2lidar_node` driver (for LIO odometry and lidar-based localization)
-- **NVIDIA GPU (CUDA)** - optional; accelerates the ONNX-based perception nodes (`face_detection`, `age_gender_detection`, `person_detection`), which fall back to CPU automatically if unavailable
+- **NVIDIA GPU (CUDA)** - optional; accelerates the ONNX-based perception nodes (`face_detection`, `age_gender_detection`, `person_detection`), and run on it by default, falling back to the CPU automatically if it is unavailable. ROS's `onnxruntime_vendor` is CPU-only, so the build uses the official ONNX Runtime GPU release that step 2 installs
 
 ### Installation
 
@@ -85,17 +94,29 @@ repo (this is the same list the CI workflow installs — see
 cd ~/ros2_ws/src
 git clone https://github.com/yohatad/pepper4dec.git
 
-# Pepper / NAOqi
+# Pepper / NAOqi (libqi, libqicore and the meshes come from apt, below)
 git clone https://github.com/yohatad/naoqi_bridge_msgs2.git naoqi_bridge_msgs
 git clone https://github.com/yohatad/naoqi_driver2.git
-git clone -b ros2 https://github.com/ros-naoqi/libqi.git naoqi_libqi
-git clone -b ros2 https://github.com/ros-naoqi/libqicore.git naoqi_libqicore
-git clone https://github.com/ros-naoqi/nao_meshes2.git nao_meshes
-git clone https://github.com/ros-naoqi/pepper_meshes2.git pepper_meshes
 
-# Behavior trees
-git clone https://github.com/BehaviorTree/BehaviorTree.CPP.git
-git clone https://github.com/BehaviorTree/BehaviorTree.ROS2.git
+# Behavior trees (BehaviorTree.CPP itself comes from apt, through rosdep below)
+# Fork with a fix for a halt crash (upstream humble + one commit)
+git clone -b pepper4dec https://github.com/yohatad/BehaviorTree.ROS2.git
+```
+
+If `src/BehaviorTree.ROS2` was already cloned from upstream
+(`BehaviorTree/BehaviorTree.ROS2`), switch it to the fork rather than
+re-cloning. Without the fix, `behavior_controller` aborts with
+`UnknownGoalHandleError` when an action node is halted before the server
+answers its next goal (e.g. a second tour in a row), and its
+`HaltingAnActionNodeBeforeItsSecondGoalIsAnsweredIsSafe` and
+`test_bt_scenarios` tests fail:
+
+```bash
+cd ~/ros2_ws/src/BehaviorTree.ROS2
+git remote rename origin upstream
+git remote add origin https://github.com/yohatad/BehaviorTree.ROS2.git
+git fetch origin && git switch -c pepper4dec --track origin/pepper4dec
+cd ~/ros2_ws && colcon build --packages-select behaviortree_ros2 behavior_controller
 ```
 
 The lidar stack additionally needs the L2 driver (`l2lidar_node`, publishing
@@ -106,10 +127,21 @@ navigation profiles.
 
 2. **Install the remaining dependencies and build**
 
+The NAOqi libraries and the Pepper/NAO meshes are installed from apt, as in the
+Docker image, not built from source: they are pinned, rarely change, and take
+a long time to compile. rosdep would pull in `naoqi_libqi` and `naoqi_libqicore`
+for `naoqi_driver2` anyway; the meshes are only needed to show the robot model
+in RViz.
+
 ```bash
+sudo apt install -y ros-humble-naoqi-libqi ros-humble-naoqi-libqicore \
+  ros-humble-nao-meshes ros-humble-pepper-meshes
+
 cd ~/ros2_ws
 rosdep update
 rosdep install --from-paths src --ignore-src -r -y
+# GPU ONNX Runtime for face_detection / person_detection (see step 5)
+src/pepper4dec/scripts/install_onnxruntime_gpu.sh
 colcon build --symlink-install
 source install/setup.bash
 ```
@@ -119,9 +151,15 @@ source install/setup.bash
 Most perception/actuation packages (`animate_behavior`, `behavior_controller`, `face_detection`, `gesture_execution`, `overt_attention`, `person_detection`) are C++ and need no Python environment. The three Python packages (`conversation_manager`, `speech_event`, `text_to_speech`) each expect their own dedicated virtual environment under `~/ros2_ws/.venvs/` — see each package's own README for the exact venv name and `pip install -r requirements.txt` it expects. Pinned lockfiles used by the Docker image live in [`docker/requirements/`](docker/requirements/).
 
 4. **Download Model Files**
-   - Place required ONNX model files in their respective `models/` directories (`face_detection/models/`, `person_detection/models/`, `speech_event/models/`)
+   - Run `src/pepper4dec/scripts/fetch_models.sh`: it downloads the ONNX models from [cssr4africa/dec_models](https://huggingface.co/cssr4africa/dec_models) into their `models/` directories (`face_detection/models/`, `person_detection/models/`, `speech_event/models/`) and checks their SHA-256. The MiVOLO age/gender model is not hosted yet; place `face_detection_mivolo_agegender.onnx` by hand
    - `models/` directories are **gitignored** — no weights are committed
    - Provenance and licensing for every pretrained model is recorded in [MODELS.md](MODELS.md); note that several are GPL-3.0/AGPL-3.0
+
+5. **GPU inference for the perception nodes**
+
+   `face_detection` and `person_detection` run on the GPU by default. ROS's `onnxruntime_vendor` is a CPU-only ONNX Runtime, so `scripts/install_onnxruntime_gpu.sh` (step 2) downloads the official ONNX Runtime **1.23.2** GPU release into `~/ros2_ws/.deps`, and `dec_common`'s `dec_find_onnxruntime()` builds the two packages against it (the build prints `ONNX Runtime: <path> (GPU)`). The nodes find the CUDA 12 and cuDNN 9 libraries in the `sound` venv (step 3) through their RPATH, so `LD_LIBRARY_PATH` needs no CUDA entries; without that venv, a CUDA 12 toolkit and cuDNN 9 on `LD_LIBRARY_PATH` also work.
+
+   They fall back to the CPU, with a warning saying why, when there is no GPU or CUDA cannot start. Without the GPU release the build falls back to `onnxruntime_vendor` and warns; to switch an existing build over, run the script and rebuild with `colcon build --packages-select dec_common face_detection person_detection --cmake-force-configure`. `ONNXRUNTIME_ROOT` overrides the release location. Do **not** copy GPU libraries into `/opt/ros/humble/opt/onnxruntime_vendor`: an apt upgrade replaces the core library with the CPU build, and a CUDA provider from one build loaded by another crashes (`CUDNN_FE failure 11`).
 
 ## 🚀 Running the Tour System
 
@@ -141,13 +179,7 @@ ros2 launch dec_launch dec_system.launch.py nav_profile:=rtabmap_loc
 ros2 launch dec_launch dec_system.launch.py enable_navigation:=false
 ```
 
-| `nav_profile` | Nav2 bringup | Localization |
-|---|---|---|
-| `fastloc` *(default)* | `pepper_nav2_fastloc.launch.py` | FAST-LIO with the prior map inside the iEKF (`fastlio_localization`) |
-| `pointloc` | `pepper_nav2_pointloc.launch.py` | Point-LIO with the prior map inside the iEKF (`pointlio_localization`) |
-| `rtabmap_loc` | `pepper_nav2_rtabmap_loc.launch.py` | RTAB-Map localization mode against a `.db` |
-| `amcl` | `pepper_nav2_amcl.launch.py` | AMCL over a flattened `/scan`, on FAST-LIO odom |
-| `legacy` | `pepper_navigation.launch.py` | AMCL on raw wheel odometry; publishes no `/localization/pose` |
+Navigation defaults to the `fastloc` profile: FAST-LIO localizing against a prior 3D map. Other localization backends are selectable with `nav_profile:=`; see [pepper_navigation/README.md](pepper_navigation/README.md) for the full list and their trade-offs.
 
 ### Component-Based Launch
 For development and testing, individual components can be launched:
@@ -162,25 +194,18 @@ ros2 launch overt_attention attention_system.launch.py
 ros2 launch behavior_controller behavior_controller.launch.py
 ```
 
-3. **Launch SLAM Toolbox (2D Mapping)**
-```bash
-ros2 launch pepper_slam slam_toolbox.launch.py
-```
-
-4. **Launch LIO odometry** (FAST-LIO or Point-LIO on the Unitree L2)
+3. **Launch LIO odometry** (FAST-LIO or Point-LIO on the Unitree L2)
 ```bash
 ros2 launch pepper_slam fastlio_odometry.launch.py
 ros2 launch pepper_slam pointlio_odometry.launch.py
 ```
 
-5. **Launch Nav2 with the localization profile of your choice**
+4. **Launch Nav2** (fastloc profile; other profiles are listed in [pepper_navigation/README.md](pepper_navigation/README.md))
 ```bash
-ros2 launch pepper_navigation pepper_nav2_fastloc.launch.py       # prior map in the iEKF
-ros2 launch pepper_navigation pepper_nav2_rtabmap_loc.launch.py   # RTAB-Map
-ros2 launch pepper_navigation pepper_nav2_amcl.launch.py          # 2D AMCL
+ros2 launch pepper_navigation pepper_nav2_fastloc.launch.py
 ```
 
-6. **Replay a recorded bag** (static TF for sensors, no robot required)
+5. **Replay a recorded bag** (static TF for sensors, no robot required)
 ```bash
 ros2 launch dec_launch bag_static_tf.launch.py
 ```
@@ -189,13 +214,37 @@ ros2 launch dec_launch bag_static_tf.launch.py
 Each package contains configuration files in their `config/` directories:
 - `behavior_controller/config/behavior_controller_configuration.yaml` - Mission parameters and active scenario
 - `face_detection/config/face_detection_configuration.yaml` - Perception settings
-- `pepper_slam/config/` and `pepper_navigation/config/` - SLAM, EKF, costmap and Nav2 tuning
+- `pepper_slam/config/` and `pepper_navigation/config/` - SLAM, costmap and Nav2 tuning
 - Gesture, attention, speech and TTS parameters in their respective package configs
+
+## 🧪 Testing
+
+Every push to `main` or `devel` builds the workspace and runs the full suite in CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): 458 tests across the 14 packages, plus `ament_flake8`, `ament_pep257` and `ament_copyright` linting.
+
+```bash
+cd ~/ros2_ws
+colcon test --packages-select dec_common person_detection   # or any subset
+colcon test-result --verbose
+```
+
+Coverage by tier:
+
+- **Unit, C++ (gtest)** - ByteTrack multi-object tracking, Pepper arm kinematics and joint-limit clamping, the animate_behavior motion math, behavior-tree utilities and knowledge-base validation, Boolean Map Saliency, age/gender temporal smoothing, camera-topic and pixel-to-angle helpers, COCO class filtering
+- **Unit, Python (pytest)** - the LIO divergence guard, the map-leveling frame contract, sound-localization geometry, the speech denoiser DSP, LLM response parsing, TTS audio helpers, and a drift check on the Nav2 parameter sections shared across localization profiles
+- **Integration** - a bag-replay regression test that runs the real YOLOv11 + ByteTrack person-detection node against recorded camera frames and asserts on the published detections. Frames are fed one at a time, so the result does not depend on machine speed
+- **Integration, CSSR4Africa bags** - `face_detection`, `person_detection` and `overt_attention` (with face detection on colour and depth) replay the CSSR4Africa RealSense test recordings (single and multiple people, mutual gaze, two lighting conditions) at the recorded 15 fps and check what each node reports and that it keeps up with the camera. They need the GPU (Installation step 5) and the bags, which `scripts/fetch_test_bags.sh` downloads (about 370 MB, into `~/ros2_ws/bags/cssr4africa`) from the [ROS 2 copy](https://huggingface.co/cssr4africa/dec_unit_test_data_files) of the [CSSR4Africa test recordings](https://huggingface.co/cssr4africa/cssr4africa_unit_tests_data_files). The ROS 2 bags keep every topic, including aligned depth and camera info; `scripts/convert_cssr4africa_bags.sh` rebuilds them from the ROS 1 originals
+
+Tests that need an optional dependency (ONNX model weights, `librosa`, `pyroomacoustics`, ChromaDB) skip cleanly when it is absent, so the suite passes on a bare CI runner and exercises everything on a full workstation.
 
 ## 🐳 Docker
 
 A CUDA-capable image and a Compose file are provided; the Dockerfile builds a
-separate venv per Python node (see its header for the rationale).
+separate venv per Python node (see its header for the rationale). The image
+includes the ONNX Runtime GPU release, so the perception nodes use the GPU when
+the NVIDIA Container Toolkit is installed on the host, and the CPU otherwise.
+The build also downloads the ONNX models from
+[cssr4africa/dec_models](https://huggingface.co/cssr4africa/dec_models) with
+`scripts/fetch_models.sh` (all but the MiVOLO age/gender model).
 
 ```bash
 cp .env.example .env             # DISPLAY, ROS_DOMAIN_ID, API keys
@@ -222,8 +271,8 @@ docker compose --profile dev up  # live-mounts the source over the image
 - **Tooling**: Publishes BT state for live Groot2 visualization
 
 ### **Navigation System**
-- **Mapping** (`pepper_slam`): RTAB-Map (RGB-D) or SLAM Toolbox (2D lidar); FAST-LIO / Point-LIO for lidar-inertial odometry on the Unitree L2
-- **Localization** (`pepper_navigation`): four interchangeable profiles — AMCL, RTAB-Map, prior-map FAST-LIO via `fastlio_localization`, or prior-map Point-LIO via `pointlio_localization` — sharing identical costmaps and tuning so they can be compared directly
+- **Mapping** (`pepper_slam`): FAST-LIO / Point-LIO 3D lidar-inertial mapping and odometry on the Unitree L2, or RTAB-Map (RGB-D)
+- **Localization** (`pepper_navigation`): FAST-LIO against a prior 3D map via `fastlio_localization` by default; other backends are selectable as launch-time profiles sharing the same costmaps and tuning (see [pepper_navigation/README.md](pepper_navigation/README.md))
 - **Odometry**: wheel odometry (`/pepper_odom` from `naoqi_driver2`), LIO odometry
 - **Path Planning**: Nav2 with 3D voxel costmaps consuming the L2's 360° `PointCloud2` directly, no flattening step
 - **Safety**: An independent collision monitor gates every velocity command straight off the lidar, bypassing the costmaps
@@ -238,6 +287,9 @@ Detailed documentation is available:
 - **API documentation**: `ros2 interface show dec_interfaces/`
 <!-- - **Deliverable reports**: [DEC4Africa Deliverables](https://dec4africa.github.io/deliverables/) -->
 
+## 🎓 Background
+
+Developed at Carnegie Mellon University Africa as a spin-off of the **Culturally Sensitive Social Robotics for Africa (CSSR4Africa)** project. The DEC deployment replaces repetitive, human-led walkthroughs of the center's Digital Public Infrastructure demo (biometric enrollment with MOSIP, financial transactions with MIFOS, and subsidy validation with UPMS) and doubles as a testbed for culturally aware human-robot interaction: visitor interactions are logged to support research on cross-cultural behavior modeling and adaptive dialogue management in public spaces.
 
 ## ❓ Support
 
@@ -245,5 +297,5 @@ For issues or questions:
 - **Contact**: 
   - [yohatad123@gmail.com](mailto:yohatad123@gmail.com)
 ## 📜 License
-Copyright (C) 2026 Upanzi Network
+Copyright (C) 2025 Carnegie Mellon University Africa
 Licensed under the BSD-3-Clause License. See individual package licenses for details. Third-party pretrained model weights are **not** covered by this license — see [MODELS.md](MODELS.md).

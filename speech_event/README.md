@@ -28,13 +28,8 @@ The **Speech Event Recognition and Localization** package provides real-time spe
 ### Package Installation
 
 ```bash
-# Clone the repository (if not already done)
-cd ~/ros2_ws/src
-git clone https://github.com/yohatad/pepper4dec.git
-
-# Build the workspace
 cd ~/ros2_ws
-colcon build --packages-select speech_event
+colcon build --packages-up-to speech_event
 source install/setup.bash
 ```
 
@@ -55,7 +50,7 @@ Configuration is managed via `config/speech_event_configuration.yaml`:
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `microphone_topic` | ROS topic publishing `naoqi_bridge_msgs/AudioBuffer` | `/naoqi_driver/audio` |
+| `microphone_topic` | ROS topic publishing `naoqi_bridge_msgs/AudioBuffer` | `/audio` |
 | `sample_rate` | Target sample rate for VAD/ASR (Hz) | `16000` |
 | `input_sample_rate` | Robot's native microphone sample rate (Hz) | `48000` |
 | `device` | Device for Whisper/CTranslate2 inference (`cuda`/`cpu`) | `cuda` |
@@ -71,12 +66,13 @@ Configuration is managed via `config/speech_event_configuration.yaml`:
 | `intensity_threshold` | RMS amplitude gate; quiet audio is skipped before VAD | `0.001` |
 | `transcription_timeout_s` | Timeout waiting for a transcription result (s) | `5.0` |
 | `action_server` | Enable action server mode (`false` = continuous, publishes to `/speech_event/text`) | `true` |
+| `verbose_mode` | Log VAD start/end and Whisper timing for every segment (both nodes; `sound_localization`: every direction) | `false` |
 | `vad_always_active` | Keep VAD running (publishing `/speech_event/vad_speech_prob`) even with no active goal, enabling barge-in monitoring during TTS playback | `true` |
 | `noise_cleaning_enabled` | Enable post-VAD noise reduction before ASR | `false` |
 | `noise_profile_path` | Path to a `.npy` mean-magnitude-spectrum file recorded at 16 kHz; leave empty for online-only estimation | `"data/noise_profile.npy"` |
 | `noise_alpha` | Wiener filter aggressiveness (0.0–1.0); higher = more suppression, more distortion risk | `0.5` |
 
-## 🚀 Running the Node
+## 🚀 Running
 
 ```bash
 # Source the workspace
@@ -105,7 +101,7 @@ ros2 run speech_event speech_event_localization
 
 | Topic | Type | Description |
 |-------|------|-------------|
-| `/naoqi_driver/audio` | `naoqi_bridge_msgs/AudioBuffer` | Raw multi-channel audio from robot microphone (48 kHz, 4 channels) |
+| `/audio` | `naoqi_bridge_msgs/AudioBuffer` | Raw multi-channel audio from robot microphone (48 kHz, 4 channels) |
 
 ### Published Topics
 
@@ -148,7 +144,7 @@ ros2 run speech_event speech_event_localization
 |-------|------|-------------|
 | `status` | string | "waiting", "speech", "transcribing" |
 
-## Sound Source Localization
+## 🎙️ Sound Source Localization
 
 The `speech_event_localization` node provides real-time sound source localization using SRP-PHAT beamforming.
 
@@ -204,7 +200,7 @@ speech_event/
 
 ```mermaid
 flowchart TD
-    A["/naoqi_driver/audio"] --> B["Resample to 16 kHz mono"]
+    A["/audio"] --> B["Resample to 16 kHz mono"]
     B --> C{"Silero VAD"}
     C -- "per-frame probability" --> D(["/speech_event/vad_speech_prob"])
     C -- "speech segment detected" --> E["Speech Segment Buffer"]
@@ -229,27 +225,12 @@ flowchart TD
 
 ### Node Lifecycle
 
-`SpeechRecognitionNode` is a `LifecycleNode`; `dec_launch`'s `nav2_lifecycle_manager` drives it through these transitions on startup:
-
-```mermaid
-stateDiagram-v2
-    [*] --> Unconfigured
-
-    Unconfigured --> Inactive: configure
-    Inactive --> Active: activate
-    Active --> Inactive: deactivate
-    Inactive --> Unconfigured: cleanup
-
-    Unconfigured --> Finalized: shutdown
-    Inactive --> Finalized: shutdown
-    Active --> Finalized: shutdown
-    Finalized --> [*]
-```
+`SpeechRecognitionNode` is a `LifecycleNode`; `dec_launch`'s `nav2_lifecycle_manager` drives it through these transitions on startup (the standard ROS 2 lifecycle):
 
 | Transition | What happens |
 |---|---|
 | `configure` | Load Silero VAD + Whisper models, construct `SpeechDenoiser`, create publishers, `set_enabled` service, and action server |
-| `activate` | Activate publishers, subscribe to `/naoqi_driver/audio` |
+| `activate` | Activate publishers, subscribe to `/audio` |
 | `deactivate` | Destroy the audio subscription, deactivate publishers |
 | `cleanup` | Destroy publishers/service/action server, release Whisper/Silero/denoiser instances |
 | `shutdown` | Log shutdown and exit (reachable from any state) |
@@ -257,22 +238,12 @@ stateDiagram-v2
 ## 🧪 Testing
 
 ```bash
-# Check node is running
-ros2 node list
-
-# Verify action server is available
-ros2 action list
-
-# Send a test transcription request
-ros2 action send_goal /speech_recognition dec_interfaces/action/SpeechRecognition \
-  "{wait: 5.0}"
-
-# Monitor VAD probabilities
-ros2 topic echo /speech_event/vad_speech_prob
-
-# Monitor transcribed text (standalone mode)
-ros2 topic echo /speech_event/text
+cd ~/ros2_ws
+colcon test --packages-select speech_event
+colcon test-result --verbose
 ```
+
+Besides the linters, this runs unit tests for the denoiser (bandpass, fan detection, harmonic notches) and the localization angle helpers.
 
 ## 💡 Support
 
@@ -286,5 +257,5 @@ see [MODELS.md](../MODELS.md) at the repo root for full attribution and
 licensing details on every model used across pepper4dec.
 
 ## 📜 License
-Copyright (C) 2026 Upanzi Network
+Copyright (C) 2025 Carnegie Mellon University Africa
 Licensed under the BSD-3-Clause License. See individual package licenses for details.

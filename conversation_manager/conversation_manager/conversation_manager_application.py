@@ -22,7 +22,7 @@ Parameters (declared as ROS2 parameters in the constructor; populated from
 config/conversation_manager_configuration.yaml via the launch file's
 parameters=[...], or `ros2 param set` at runtime):
     collection_name (str, default: "upanzi_knowledge")
-    verbose (bool, default: False)
+    verbose_mode (bool, default: False)
     llm_base_url (str, default: "http://localhost:8080/v1")
     llm_model (str, default: "HuggingFaceTB/SmolLM3-3B")
     embedding_model (str, default: "all-MiniLM-L6-v2")
@@ -111,7 +111,7 @@ class ConversationManagerNode(LifecycleNode):
         # Defaults here are generic fallbacks; config/conversation_manager_configuration.yaml
         # supplies this deployment's actual values via the launch file's parameters=[...].
         self.declare_parameter('collection_name', 'upanzi_knowledge')
-        self.declare_parameter('verbose', DEFAULT_VERBOSE)
+        self.declare_parameter('verbose_mode', DEFAULT_VERBOSE)
         self.declare_parameter('llm_base_url', DEFAULT_LLM_BASE_URL)
         self.declare_parameter('llm_model', DEFAULT_LLM_MODEL)
         self.declare_parameter('embedding_model', DEFAULT_EMBEDDING_MODEL)
@@ -142,7 +142,7 @@ class ConversationManagerNode(LifecycleNode):
             context_turns=self.get_parameter('context_turns').value,
             max_response_sentences=self.get_parameter('max_response_sentences').value,
             data_default_path=self.get_parameter('data_default_path').value,
-            verbose=self.get_parameter('verbose').value,
+            verbose=self.get_parameter('verbose_mode').value,
         )
         try:
             set_config(config)

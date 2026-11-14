@@ -21,7 +21,6 @@ within the DEC project.
 import os
 import numpy as np
 import scipy.ndimage
-import librosa
 import rclpy.logging
 from scipy.signal import butter, lfilter, iirnotch
 
@@ -197,7 +196,9 @@ class SpeechDenoiser:
         if self.fundamental_hz is not None:
             audio = self.apply_notch_filters(audio, self.fundamental_hz)
 
-        # 3. STFT
+        # 3. STFT. librosa is imported here, its only use, so the filters
+        #    above load (and are unit-tested) without it installed.
+        import librosa
         stft = librosa.stft(audio, n_fft=self.n_fft, hop_length=self.hop_length)
         signal_mag = np.abs(stft)
         signal_phase = np.angle(stft)

@@ -13,25 +13,11 @@
 
 #pragma once
 
-// ROS includes
-#include <rclcpp/rclcpp.hpp>
-#include <rclcpp/executors/multi_threaded_executor.hpp>
-#include <rclcpp_action/rclcpp_action.hpp>
-#include <rclcpp_lifecycle/lifecycle_node.hpp>
-#include <std_msgs/msg/string.hpp>
-#include <ament_index_cpp/get_package_share_directory.hpp>
-#include <nav2_msgs/action/navigate_to_pose.hpp>
-#include <geometry_msgs/msg/pose_stamped.hpp>
-
 // BehaviorTree.CPP includes
 #include <behaviortree_cpp/bt_factory.h>
 #include <behaviortree_cpp/loggers/groot2_publisher.h>
-
-// BehaviorTree.ROS2 includes
-#include <behaviortree_ros2/bt_service_node.hpp>
-#include <behaviortree_ros2/bt_action_node.hpp>
-#include <behaviortree_ros2/ros_node_params.hpp>
-#include <behaviortree_ros2/plugins.hpp>
+// YAML includes
+#include <yaml-cpp/yaml.h>
 
 // Standard includes
 #include <string>
@@ -41,6 +27,7 @@
 #include <mutex>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <optional>
 #include <csignal>
 #include <fstream>
@@ -50,25 +37,32 @@
 #include <thread>
 #include <iomanip>
 
-// YAML includes
-#include <yaml-cpp/yaml.h>
-
+// ROS includes
+#include <rclcpp/rclcpp.hpp>
+#include <rclcpp/executors/multi_threaded_executor.hpp>
+#include <rclcpp_action/rclcpp_action.hpp>
+#include <rclcpp_lifecycle/lifecycle_node.hpp>
+#include <std_msgs/msg/string.hpp>
+#include <ament_index_cpp/get_package_share_directory.hpp>
+#include <nav2_msgs/action/navigate_to_pose.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
+// BehaviorTree.ROS2 includes
+#include <behaviortree_ros2/bt_service_node.hpp>
+#include <behaviortree_ros2/bt_action_node.hpp>
+#include <behaviortree_ros2/ros_node_params.hpp>
+#include <behaviortree_ros2/plugins.hpp>
 // Custom message/service/action includes from dec_interfaces package
 // Messages
 #include "dec_interfaces/msg/face_detection.hpp"
-
 // naoqi_bridge_msgs actions
 #include "naoqi_bridge_msgs/action/speech_with_feedback.hpp"
-
 // Actions
 #include "dec_interfaces/action/tts.hpp"
 #include "dec_interfaces/action/gesture.hpp"
 #include "dec_interfaces/action/animate_behavior.hpp"
 #include "dec_interfaces/action/speech_recognition.hpp"
 #include "dec_interfaces/action/conversation_manager.hpp"
-
 // Services
-#include "dec_interfaces/srv/conversation_manager_prompt.hpp"
 #include <std_srvs/srv/trigger.hpp>
 #include <std_srvs/srv/set_bool.hpp>
 
@@ -76,19 +70,22 @@
 // Data Structures
 //=============================================================================
 /** @brief A 3D point in the map frame (gesture targets, exhibit locations). */
-struct Position3D {
-    double x = 0.0, y = 0.0, z = 0.0;
-    Position3D() = default;
-    Position3D(double x_val, double y_val, double z_val = 0.0) 
-        : x(x_val), y(y_val), z(z_val) {}
+struct Position3D
+{
+  double x = 0.0, y = 0.0, z = 0.0;
+  Position3D() = default;
+  Position3D(double x_val, double y_val, double z_val = 0.0)
+  : x(x_val), y(y_val), z(z_val) {}
 };
 
 /** @brief A 2D robot pose in the map frame: position plus heading. */
-struct RobotPose {
-    double x = 0.0, y = 0.0, theta = 0.0;
-    RobotPose() = default;
-    RobotPose(double x_val, double y_val, double theta_val) 
-        : x(x_val), y(y_val), theta(theta_val) {}
+struct RobotPose
+{
+  double x = 0.0, y = 0.0;
+  double theta = 0.0;  ///< heading in degrees, as in the knowledge base
+  RobotPose() = default;
+  RobotPose(double x_val, double y_val, double theta_val)
+  : x(x_val), y(y_val), theta(theta_val) {}
 };
 
 /**
@@ -97,17 +94,19 @@ struct RobotPose {
  * Carries the description, the robot pose to navigate to, the point to gesture
  * at, and the sentence spoken when presenting the exhibit.
  */
-struct LocationInfo {
-    std::string description;
-    RobotPose robotPose;
-    Position3D gestureTarget;
-    std::string gestureMessage;
+struct LocationInfo
+{
+  std::string description;
+  RobotPose robotPose;
+  Position3D gestureTarget;
+  std::string gestureMessage;
 };
 
 /** @brief The ordered list of exhibit location IDs making up one tour. */
-struct TourSpec {
-    std::vector<std::string> locationIds;
-    size_t getLocationCount() const { return locationIds.size(); }
+struct TourSpec
+{
+  std::vector<std::string> locationIds;
+  size_t getLocationCount() const {return locationIds.size();}
 };
 
 //=============================================================================
@@ -118,60 +117,70 @@ struct TourSpec {
  * @class ConfigManager
  * @brief Configuration Manager
  */
-class ConfigManager {
+class ConfigManager
+{
 public:
-    static ConfigManager& instance();
-    
-    // Reads the four settings from a YAML file laid out as a flat mapping.
-    // Retained for the fixture-driven unit tests; the node itself uses
-    // loadFromParameters() so the values go through the ROS parameter system.
-    [[nodiscard]] bool loadFromFile(const std::string& configPath);
+  static ConfigManager & instance();
 
-    // Reads the same four settings from the node's declared ROS parameters.
-    void loadFromParameters(rclcpp_lifecycle::LifecycleNode& node);
-    
-    // Getters
-    bool isVerbose() const;
-    std::string getScenarioSpecification() const;
-    std::string getCultureKnowledgeBasePath() const;
-    std::string getEnvironmentKnowledgeBasePath() const;
+  // Reads the four settings from a YAML file laid out as a flat mapping.
+  // Retained for the fixture-driven unit tests; the node itself uses
+  // loadFromParameters() so the values go through the ROS parameter system.
+  [[nodiscard]] bool loadFromFile(const std::string & configPath);
+
+  // Reads the same four settings from the node's declared ROS parameters.
+  void loadFromParameters(rclcpp_lifecycle::LifecycleNode & node);
+
+  // Getters
+  bool isVerbose() const;
+  std::string getScenarioSpecification() const;
+  std::string getCultureKnowledgeBasePath() const;
+  std::string getEnvironmentKnowledgeBasePath() const;
+  /// Seconds a tour waits after its goodbye before looking for the next visitor.
+  double getVisitorCooldown() const;
 
 private:
-    ConfigManager() = default;
-    bool verbose = false;
-    std::string scenarioSpecification = "lab_tour";
-    std::string cultureKnowledgeBasePath = "cultureKnowledgeBase.yaml";
-    std::string environmentKnowledgeBasePath = "labEnvironmentKnowledgeBase.yaml";
-    
-    // Non-copyable
-    ConfigManager(const ConfigManager&) = delete;
-    ConfigManager& operator=(const ConfigManager&) = delete;
+  ConfigManager() = default;
+  bool verbose = false;
+  std::string scenarioSpecification = "lab_tour";
+  std::string cultureKnowledgeBasePath = "cultureKnowledgeBase.yaml";
+  std::string environmentKnowledgeBasePath = "labEnvironmentKnowledgeBase.yaml";
+  double visitorCooldown = 15.0;
+
+  // Non-copyable
+  ConfigManager(const ConfigManager &) = delete;
+  ConfigManager & operator=(const ConfigManager &) = delete;
 };
 
 /**
  * @class KnowledgeManager
  * @brief Knowledge Base Manager
  */
-class KnowledgeManager {
+class KnowledgeManager
+{
 public:
-    static KnowledgeManager& instance();
-    
-    [[nodiscard]] bool loadFromPackage(const std::string& packagePath);
+  static KnowledgeManager & instance();
 
-    std::string getUtilityPhrase(const std::string& phraseId);
-    LocationInfo getLocationInfo(const std::string& locationId);
-    TourSpec getTourSpecification();
+  [[nodiscard]] bool loadFromPackage(const std::string & packagePath);
+
+  std::string getUtilityPhrase(const std::string & phraseId);
+  /// Every utility phrase, keyed by phrase ID.
+  const std::unordered_map<std::string, std::string> & getUtilityPhrases();
+  LocationInfo getLocationInfo(const std::string & locationId);
+  TourSpec getTourSpecification();
 
 private:
-    KnowledgeManager() = default;
-    std::unordered_map<std::string, std::string> utilityPhrases;
-    std::unordered_map<std::string, LocationInfo> locations;
-    std::optional<TourSpec> tourSpec;
-    bool loaded = false;
-    
-    // Non-copyable
-    KnowledgeManager(const KnowledgeManager&) = delete;
-    KnowledgeManager& operator=(const KnowledgeManager&) = delete;
+  KnowledgeManager() = default;
+  /// Adds a knowledge base's utility_phrases, replacing phrases already read.
+  void readUtilityPhrases(const YAML::Node & knowledgeBase);
+
+  std::unordered_map<std::string, std::string> utilityPhrases;
+  std::unordered_map<std::string, LocationInfo> locations;
+  std::optional<TourSpec> tourSpec;
+  bool loaded = false;
+
+  // Non-copyable
+  KnowledgeManager(const KnowledgeManager &) = delete;
+  KnowledgeManager & operator=(const KnowledgeManager &) = delete;
 };
 
 //=============================================================================
@@ -182,63 +191,69 @@ private:
  * @class Logger
  * @brief Simplified Logger
  */
-class Logger {
+class Logger
+{
 public:
-    explicit Logger(std::shared_ptr<rclcpp::Node> node);
-    
-    void info(const std::string& msg);
-    void warn(const std::string& msg);
-    void error(const std::string& msg);
-    void debug(const std::string& msg);
+  explicit Logger(std::shared_ptr<rclcpp::Node> node);
+
+  void info(const std::string & msg);
+  void warn(const std::string & msg);
+  void error(const std::string & msg);
+  void debug(const std::string & msg);
 
 private:
-    std::shared_ptr<rclcpp::Node> node;
-    std::string formatMessage(const std::string& msg);
+  std::shared_ptr<rclcpp::Node> node;
+  std::string formatMessage(const std::string & msg);
 };
 
 /**
  * @class ServiceManager
  * @brief Service Manager (for non-BT service calls)
  */
-class ServiceManager {
+class ServiceManager
+{
 public:
-    explicit ServiceManager(std::shared_ptr<rclcpp::Node> node);
+  explicit ServiceManager(std::shared_ptr<rclcpp::Node> node);
 
-    [[nodiscard]] bool checkServicesAvailable(const std::vector<std::string>& services);
-    [[nodiscard]] bool waitForService(const std::string& serviceName,
-                                     std::chrono::seconds timeout = std::chrono::seconds(5));
+  [[nodiscard]] bool checkServicesAvailable(const std::vector<std::string> & services);
+  [[nodiscard]] bool waitForService(
+    const std::string & serviceName,
+    std::chrono::seconds timeout = std::chrono::seconds(5));
 
 private:
-    std::shared_ptr<rclcpp::Node> node;
+  std::shared_ptr<rclcpp::Node> node;
 };
 
 /**
  * @class TopicMonitor
  * @brief Topic Monitor
  */
-class TopicMonitor {
+class TopicMonitor
+{
 public:
-    explicit TopicMonitor(std::shared_ptr<rclcpp::Node> node);
-    
-    [[nodiscard]] bool isTopicAvailable(const std::string& topicName);
-    [[nodiscard]] bool checkTopicsAvailable(const std::vector<std::string>& topics);
-    [[nodiscard]] bool waitForTopic(const std::string& topicName,
-                                   std::chrono::seconds timeout = std::chrono::seconds(5));
+  explicit TopicMonitor(std::shared_ptr<rclcpp::Node> node);
+
+  [[nodiscard]] bool isTopicAvailable(const std::string & topicName);
+  [[nodiscard]] bool checkTopicsAvailable(const std::vector<std::string> & topics);
+  [[nodiscard]] bool waitForTopic(
+    const std::string & topicName,
+    std::chrono::seconds timeout = std::chrono::seconds(5));
 
 private:
-    std::shared_ptr<rclcpp::Node> node;
+  std::shared_ptr<rclcpp::Node> node;
 };
 
 /**
  * @class TextUtils
  * @brief Text Utilities
  */
-class TextUtils {
+class TextUtils
+{
 public:
-    static bool containsAnyWord(const std::string& text, const std::vector<std::string>& words);
-    static std::string toLowerCase(const std::string& text);
-    static std::vector<std::string> split(const std::string& text, char delimiter);
-    static std::string trim(const std::string& text);
+  static bool containsAnyWord(const std::string & text, const std::vector<std::string> & words);
+  static std::string toLowerCase(const std::string & text);
+  static std::vector<std::string> split(const std::string & text, char delimiter);
+  static std::string trim(const std::string & text);
 };
 
 //=============================================================================
@@ -250,19 +265,20 @@ public:
  * @brief Wraps dec_interfaces::action::AnimateBehavior
  */
 class AnimateBehaviorNode
-    : public BT::RosActionNode<dec_interfaces::action::AnimateBehavior>
+  : public BT::RosActionNode<dec_interfaces::action::AnimateBehavior>
 {
 public:
-    AnimateBehaviorNode(const std::string& name,
-                        const BT::NodeConfig& config,
-                        const BT::RosNodeParams& params)
-        : BT::RosActionNode<dec_interfaces::action::AnimateBehavior>(name, config, params) {}
+  AnimateBehaviorNode(
+    const std::string & name,
+    const BT::NodeConfig & config,
+    const BT::RosNodeParams & params)
+  : BT::RosActionNode<dec_interfaces::action::AnimateBehavior>(name, config, params) {}
 
-    static BT::PortsList providedPorts();
-    bool setGoal(Goal& goal) override;
-    BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
-    BT::NodeStatus onResultReceived(const WrappedResult& result) override;
-    BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
+  static BT::PortsList providedPorts();
+  bool setGoal(Goal & goal) override;
+  BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
+  BT::NodeStatus onResultReceived(const WrappedResult & result) override;
+  BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
 };
 
 /**
@@ -270,19 +286,20 @@ public:
  * @brief Wraps dec_interfaces::action::Gesture
  */
 class GestureNode
-    : public BT::RosActionNode<dec_interfaces::action::Gesture>
+  : public BT::RosActionNode<dec_interfaces::action::Gesture>
 {
 public:
-    GestureNode(const std::string& name,
-                const BT::NodeConfig& config,
-                const BT::RosNodeParams& params)
-        : BT::RosActionNode<dec_interfaces::action::Gesture>(name, config, params) {}
+  GestureNode(
+    const std::string & name,
+    const BT::NodeConfig & config,
+    const BT::RosNodeParams & params)
+  : BT::RosActionNode<dec_interfaces::action::Gesture>(name, config, params) {}
 
-    static BT::PortsList providedPorts();
-    bool setGoal(Goal& goal) override;
-    BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
-    BT::NodeStatus onResultReceived(const WrappedResult& result) override;
-    BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
+  static BT::PortsList providedPorts();
+  bool setGoal(Goal & goal) override;
+  BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
+  BT::NodeStatus onResultReceived(const WrappedResult & result) override;
+  BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
 };
 
 /**
@@ -290,19 +307,20 @@ public:
  * @brief Wraps nav2_msgs::action::NavigateToPose  →  Nav2 /navigate_to_pose server
  */
 class Navigate
-    : public BT::RosActionNode<nav2_msgs::action::NavigateToPose>
+  : public BT::RosActionNode<nav2_msgs::action::NavigateToPose>
 {
 public:
-    Navigate(const std::string& name,
-                      const BT::NodeConfig& config,
-                      const BT::RosNodeParams& params)
-        : BT::RosActionNode<nav2_msgs::action::NavigateToPose>(name, config, params) {}
+  Navigate(
+    const std::string & name,
+    const BT::NodeConfig & config,
+    const BT::RosNodeParams & params)
+  : BT::RosActionNode<nav2_msgs::action::NavigateToPose>(name, config, params) {}
 
-    static BT::PortsList providedPorts();
-    bool setGoal(Goal& goal) override;
-    BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
-    BT::NodeStatus onResultReceived(const WrappedResult& result) override;
-    BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
+  static BT::PortsList providedPorts();
+  bool setGoal(Goal & goal) override;
+  BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
+  BT::NodeStatus onResultReceived(const WrappedResult & result) override;
+  BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
 };
 
 /**
@@ -310,19 +328,20 @@ public:
  * @brief Wraps dec_interfaces::action::SpeechRecognition
  */
 class SpeechRecognitionNode
-    : public BT::RosActionNode<dec_interfaces::action::SpeechRecognition>
+  : public BT::RosActionNode<dec_interfaces::action::SpeechRecognition>
 {
 public:
-    SpeechRecognitionNode(const std::string& name,
-                          const BT::NodeConfig& config,
-                          const BT::RosNodeParams& params)
-        : BT::RosActionNode<dec_interfaces::action::SpeechRecognition>(name, config, params) {}
+  SpeechRecognitionNode(
+    const std::string & name,
+    const BT::NodeConfig & config,
+    const BT::RosNodeParams & params)
+  : BT::RosActionNode<dec_interfaces::action::SpeechRecognition>(name, config, params) {}
 
-    static BT::PortsList providedPorts();
-    bool setGoal(Goal& goal) override;
-    BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
-    BT::NodeStatus onResultReceived(const WrappedResult& result) override;
-    BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
+  static BT::PortsList providedPorts();
+  bool setGoal(Goal & goal) override;
+  BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
+  BT::NodeStatus onResultReceived(const WrappedResult & result) override;
+  BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
 };
 
 /**
@@ -336,19 +355,20 @@ public:
  *   confidence – LLM confidence in the intent (0.0 – 1.0)
  */
 class ConversationManagerNode
-    : public BT::RosActionNode<dec_interfaces::action::ConversationManager>
+  : public BT::RosActionNode<dec_interfaces::action::ConversationManager>
 {
 public:
-    ConversationManagerNode(const std::string& name,
-                            const BT::NodeConfig& config,
-                            const BT::RosNodeParams& params)
-        : BT::RosActionNode<dec_interfaces::action::ConversationManager>(name, config, params) {}
+  ConversationManagerNode(
+    const std::string & name,
+    const BT::NodeConfig & config,
+    const BT::RosNodeParams & params)
+  : BT::RosActionNode<dec_interfaces::action::ConversationManager>(name, config, params) {}
 
-    static BT::PortsList providedPorts();
-    bool setGoal(Goal& goal) override;
-    BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
-    BT::NodeStatus onResultReceived(const WrappedResult& result) override;
-    BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
+  static BT::PortsList providedPorts();
+  bool setGoal(Goal & goal) override;
+  BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
+  BT::NodeStatus onResultReceived(const WrappedResult & result) override;
+  BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
 };
 
 /**
@@ -356,19 +376,20 @@ public:
  * @brief Wraps naoqi_bridge_msgs::action::SpeechWithFeedback
  */
 class SpeechWithFeedbackNode
-    : public BT::RosActionNode<naoqi_bridge_msgs::action::SpeechWithFeedback>
+  : public BT::RosActionNode<naoqi_bridge_msgs::action::SpeechWithFeedback>
 {
 public:
-    SpeechWithFeedbackNode(const std::string& name,
-                           const BT::NodeConfig& config,
-                           const BT::RosNodeParams& params)
-        : BT::RosActionNode<naoqi_bridge_msgs::action::SpeechWithFeedback>(name, config, params) {}
+  SpeechWithFeedbackNode(
+    const std::string & name,
+    const BT::NodeConfig & config,
+    const BT::RosNodeParams & params)
+  : BT::RosActionNode<naoqi_bridge_msgs::action::SpeechWithFeedback>(name, config, params) {}
 
-    static BT::PortsList providedPorts();
-    bool setGoal(Goal& goal) override;
-    BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
-    BT::NodeStatus onResultReceived(const WrappedResult& result) override;
-    BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
+  static BT::PortsList providedPorts();
+  bool setGoal(Goal & goal) override;
+  BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
+  BT::NodeStatus onResultReceived(const WrappedResult & result) override;
+  BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
 };
 
 /**
@@ -380,19 +401,20 @@ public:
  * configured backend. Blocks until playback is complete.
  */
 class TTSNode
-    : public BT::RosActionNode<dec_interfaces::action::TTS>
+  : public BT::RosActionNode<dec_interfaces::action::TTS>
 {
 public:
-    TTSNode(const std::string& name,
-            const BT::NodeConfig& config,
-            const BT::RosNodeParams& params)
-        : BT::RosActionNode<dec_interfaces::action::TTS>(name, config, params) {}
+  TTSNode(
+    const std::string & name,
+    const BT::NodeConfig & config,
+    const BT::RosNodeParams & params)
+  : BT::RosActionNode<dec_interfaces::action::TTS>(name, config, params) {}
 
-    static BT::PortsList providedPorts();
-    bool setGoal(Goal& goal) override;
-    BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
-    BT::NodeStatus onResultReceived(const WrappedResult& result) override;
-    BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
+  static BT::PortsList providedPorts();
+  bool setGoal(Goal & goal) override;
+  BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
+  BT::NodeStatus onResultReceived(const WrappedResult & result) override;
+  BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
 };
 
 /**
@@ -403,18 +425,19 @@ public:
  * Returns SUCCESS if the service reports success, FAILURE otherwise.
  */
 class StopAnimateBehavior
-    : public BT::RosServiceNode<std_srvs::srv::Trigger>
+  : public BT::RosServiceNode<std_srvs::srv::Trigger>
 {
 public:
-    StopAnimateBehavior(const std::string& name,
-                        const BT::NodeConfig& config,
-                        const BT::RosNodeParams& params)
-        : BT::RosServiceNode<std_srvs::srv::Trigger>(name, config, params) {}
+  StopAnimateBehavior(
+    const std::string & name,
+    const BT::NodeConfig & config,
+    const BT::RosNodeParams & params)
+  : BT::RosServiceNode<std_srvs::srv::Trigger>(name, config, params) {}
 
-    static BT::PortsList providedPorts();
-    bool setRequest(Request::SharedPtr& request) override;
-    BT::NodeStatus onResponseReceived(const Response::SharedPtr& response) override;
-    BT::NodeStatus onFailure(BT::ServiceNodeErrorCode error) override;
+  static BT::PortsList providedPorts();
+  bool setRequest(Request::SharedPtr & request) override;
+  BT::NodeStatus onResponseReceived(const Response::SharedPtr & response) override;
+  BT::NodeStatus onFailure(BT::ServiceNodeErrorCode error) override;
 };
 
 /**
@@ -426,18 +449,19 @@ public:
  * SUCCESS if the service confirms the change, FAILURE otherwise.
  */
 class SetOvertAttention
-    : public BT::RosServiceNode<std_srvs::srv::SetBool>
+  : public BT::RosServiceNode<std_srvs::srv::SetBool>
 {
 public:
-    SetOvertAttention(const std::string& name,
-                      const BT::NodeConfig& config,
-                      const BT::RosNodeParams& params)
-        : BT::RosServiceNode<std_srvs::srv::SetBool>(name, config, params) {}
+  SetOvertAttention(
+    const std::string & name,
+    const BT::NodeConfig & config,
+    const BT::RosNodeParams & params)
+  : BT::RosServiceNode<std_srvs::srv::SetBool>(name, config, params) {}
 
-    static BT::PortsList providedPorts();
-    bool setRequest(Request::SharedPtr& request) override;
-    BT::NodeStatus onResponseReceived(const Response::SharedPtr& response) override;
-    BT::NodeStatus onFailure(BT::ServiceNodeErrorCode error) override;
+  static BT::PortsList providedPorts();
+  bool setRequest(Request::SharedPtr & request) override;
+  BT::NodeStatus onResponseReceived(const Response::SharedPtr & response) override;
+  BT::NodeStatus onFailure(BT::ServiceNodeErrorCode error) override;
 };
 
 /**
@@ -451,21 +475,22 @@ public:
 class ListenForSpeech : public BT::StatefulActionNode
 {
 public:
-    ListenForSpeech(const std::string& name,
-                    const BT::NodeConfig& config,
-                    std::shared_ptr<rclcpp::Node> node);
+  ListenForSpeech(
+    const std::string & name,
+    const BT::NodeConfig & config,
+    std::shared_ptr<rclcpp::Node> node);
 
-    static BT::PortsList providedPorts();
-    BT::NodeStatus onStart() override;
-    BT::NodeStatus onRunning() override;
-    void onHalted() override;
+  static BT::PortsList providedPorts();
+  BT::NodeStatus onStart() override;
+  BT::NodeStatus onRunning() override;
+  void onHalted() override;
 
 private:
-    std::shared_ptr<rclcpp::Node> node_;
-    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_;
-    std::string latestText_;
-    bool newTextAvailable_ = false;
-    std::mutex mutex_;
+  std::shared_ptr<rclcpp::Node> node_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_;
+  std::string latestText_;
+  bool newTextAvailable_ = false;
+  std::mutex mutex_;
 };
 
 /**
@@ -477,18 +502,19 @@ private:
  * false = mute.
  */
 class SetSpeechListening
-    : public BT::RosServiceNode<std_srvs::srv::SetBool>
+  : public BT::RosServiceNode<std_srvs::srv::SetBool>
 {
 public:
-    SetSpeechListening(const std::string& name,
-                       const BT::NodeConfig& config,
-                       const BT::RosNodeParams& params)
-        : BT::RosServiceNode<std_srvs::srv::SetBool>(name, config, params) {}
+  SetSpeechListening(
+    const std::string & name,
+    const BT::NodeConfig & config,
+    const BT::RosNodeParams & params)
+  : BT::RosServiceNode<std_srvs::srv::SetBool>(name, config, params) {}
 
-    static BT::PortsList providedPorts();
-    bool setRequest(Request::SharedPtr& request) override;
-    BT::NodeStatus onResponseReceived(const Response::SharedPtr& response) override;
-    BT::NodeStatus onFailure(BT::ServiceNodeErrorCode error) override;
+  static BT::PortsList providedPorts();
+  bool setRequest(Request::SharedPtr & request) override;
+  BT::NodeStatus onResponseReceived(const Response::SharedPtr & response) override;
+  BT::NodeStatus onFailure(BT::ServiceNodeErrorCode error) override;
 };
 
 /**
@@ -501,22 +527,23 @@ public:
 class CheckFaceDetected : public BT::StatefulActionNode
 {
 public:
-    CheckFaceDetected(const std::string& name,
-                      const BT::NodeConfig& config,
-                      std::shared_ptr<rclcpp::Node> node);
+  CheckFaceDetected(
+    const std::string & name,
+    const BT::NodeConfig & config,
+    std::shared_ptr<rclcpp::Node> node);
 
-    static BT::PortsList providedPorts();
-    BT::NodeStatus onStart() override;
-    BT::NodeStatus onRunning() override;
-    void onHalted() override;
+  static BT::PortsList providedPorts();
+  BT::NodeStatus onStart() override;
+  BT::NodeStatus onRunning() override;
+  void onHalted() override;
 
 private:
-    BT::NodeStatus checkLatestMessage();
+  BT::NodeStatus checkLatestMessage();
 
-    std::shared_ptr<rclcpp::Node> node_;
-    rclcpp::Subscription<dec_interfaces::msg::FaceDetection>::SharedPtr sub_;
-    dec_interfaces::msg::FaceDetection::SharedPtr latestMsg_;
-    std::mutex mutex_;
+  std::shared_ptr<rclcpp::Node> node_;
+  rclcpp::Subscription<dec_interfaces::msg::FaceDetection>::SharedPtr sub_;
+  dec_interfaces::msg::FaceDetection::SharedPtr latestMsg_;
+  std::mutex mutex_;
 };
 
 /**
@@ -528,21 +555,22 @@ private:
 class IsVisitorDiscovered : public BT::StatefulActionNode
 {
 public:
-    IsVisitorDiscovered(const std::string& name,
-                        const BT::NodeConfig& config,
-                        std::shared_ptr<rclcpp::Node> node);
+  IsVisitorDiscovered(
+    const std::string & name,
+    const BT::NodeConfig & config,
+    std::shared_ptr<rclcpp::Node> node);
 
-    static BT::PortsList providedPorts();
-    BT::NodeStatus onStart() override;
-    BT::NodeStatus onRunning() override;
-    void onHalted() override;
+  static BT::PortsList providedPorts();
+  BT::NodeStatus onStart() override;
+  BT::NodeStatus onRunning() override;
+  void onHalted() override;
 
 private:
-    std::shared_ptr<rclcpp::Node> node_;
-    rclcpp::Subscription<dec_interfaces::msg::FaceDetection>::SharedPtr sub_;
-    dec_interfaces::msg::FaceDetection::SharedPtr latestMsg_;
-    rclcpp::Time deadline_;
-    std::mutex mutex_;
+  std::shared_ptr<rclcpp::Node> node_;
+  rclcpp::Subscription<dec_interfaces::msg::FaceDetection>::SharedPtr sub_;
+  dec_interfaces::msg::FaceDetection::SharedPtr latestMsg_;
+  rclcpp::Time deadline_;
+  std::mutex mutex_;
 };
 
 /**
@@ -554,22 +582,23 @@ private:
 class IsMutualGazeDiscovered : public BT::StatefulActionNode
 {
 public:
-    IsMutualGazeDiscovered(const std::string& name,
-                           const BT::NodeConfig& config,
-                           std::shared_ptr<rclcpp::Node> node);
+  IsMutualGazeDiscovered(
+    const std::string & name,
+    const BT::NodeConfig & config,
+    std::shared_ptr<rclcpp::Node> node);
 
-    static BT::PortsList providedPorts();
-    BT::NodeStatus onStart() override;
-    BT::NodeStatus onRunning() override;
-    void onHalted() override;
+  static BT::PortsList providedPorts();
+  BT::NodeStatus onStart() override;
+  BT::NodeStatus onRunning() override;
+  void onHalted() override;
 
 private:
-    std::shared_ptr<rclcpp::Node> node_;
-    rclcpp::Subscription<dec_interfaces::msg::FaceDetection>::SharedPtr sub_;
-    dec_interfaces::msg::FaceDetection::SharedPtr latestMsg_;
-    rclcpp::Time deadline_;
-    rclcpp::Time gazeStart_;   // when continuous mutual gaze began; zero if not currently gazing
-    std::mutex mutex_;
+  std::shared_ptr<rclcpp::Node> node_;
+  rclcpp::Subscription<dec_interfaces::msg::FaceDetection>::SharedPtr sub_;
+  dec_interfaces::msg::FaceDetection::SharedPtr latestMsg_;
+  rclcpp::Time deadline_;
+  rclcpp::Time gazeStart_;     // when continuous mutual gaze began; zero if not currently gazing
+  std::mutex mutex_;
 };
 
 /**
@@ -582,22 +611,23 @@ private:
 class GetVisitorResponse : public BT::StatefulActionNode
 {
 public:
-    GetVisitorResponse(const std::string& name,
-                       const BT::NodeConfig& config,
-                       std::shared_ptr<rclcpp::Node> node);
+  GetVisitorResponse(
+    const std::string & name,
+    const BT::NodeConfig & config,
+    std::shared_ptr<rclcpp::Node> node);
 
-    static BT::PortsList providedPorts();
-    BT::NodeStatus onStart() override;
-    BT::NodeStatus onRunning() override;
-    void onHalted() override;
+  static BT::PortsList providedPorts();
+  BT::NodeStatus onStart() override;
+  BT::NodeStatus onRunning() override;
+  void onHalted() override;
 
 private:
-    std::shared_ptr<rclcpp::Node> node_;
-    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_;
-    std::string latestText_;
-    bool newTextAvailable_ = false;
-    rclcpp::Time deadline_;
-    std::mutex mutex_;
+  std::shared_ptr<rclcpp::Node> node_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_;
+  std::string latestText_;
+  bool newTextAvailable_ = false;
+  rclcpp::Time deadline_;
+  std::mutex mutex_;
 };
 
 //=============================================================================
@@ -618,11 +648,11 @@ private:
 class RetrieveListOfExhibits : public BT::SyncActionNode
 {
 public:
-    RetrieveListOfExhibits(const std::string& name, const BT::NodeConfig& config)
-        : BT::SyncActionNode(name, config) {}
+  RetrieveListOfExhibits(const std::string & name, const BT::NodeConfig & config)
+  : BT::SyncActionNode(name, config) {}
 
-    static BT::PortsList providedPorts();
-    BT::NodeStatus tick() override;
+  static BT::PortsList providedPorts();
+  BT::NodeStatus tick() override;
 };
 
 /**
@@ -636,11 +666,11 @@ public:
 class IsListWithExhibit : public BT::SyncActionNode
 {
 public:
-    IsListWithExhibit(const std::string& name, const BT::NodeConfig& config)
-        : BT::SyncActionNode(name, config) {}
+  IsListWithExhibit(const std::string & name, const BT::NodeConfig & config)
+  : BT::SyncActionNode(name, config) {}
 
-    static BT::PortsList providedPorts();
-    BT::NodeStatus tick() override;
+  static BT::PortsList providedPorts();
+  BT::NodeStatus tick() override;
 };
 
 /**
@@ -657,11 +687,11 @@ public:
 class SelectExhibit : public BT::SyncActionNode
 {
 public:
-    SelectExhibit(const std::string& name, const BT::NodeConfig& config)
-        : BT::SyncActionNode(name, config) {}
+  SelectExhibit(const std::string & name, const BT::NodeConfig & config)
+  : BT::SyncActionNode(name, config) {}
 
-    static BT::PortsList providedPorts();
-    BT::NodeStatus tick() override;
+  static BT::PortsList providedPorts();
+  BT::NodeStatus tick() override;
 };
 
 /**
@@ -674,11 +704,11 @@ public:
 class PopExhibitFromList : public BT::SyncActionNode
 {
 public:
-    PopExhibitFromList(const std::string& name, const BT::NodeConfig& config)
-        : BT::SyncActionNode(name, config) {}
+  PopExhibitFromList(const std::string & name, const BT::NodeConfig & config)
+  : BT::SyncActionNode(name, config) {}
 
-    static BT::PortsList providedPorts();
-    BT::NodeStatus tick() override;
+  static BT::PortsList providedPorts();
+  BT::NodeStatus tick() override;
 };
 
 //=============================================================================
@@ -694,11 +724,11 @@ public:
 class LogEvent : public BT::SyncActionNode
 {
 public:
-    LogEvent(const std::string& name, const BT::NodeConfig& config)
-        : BT::SyncActionNode(name, config) {}
+  LogEvent(const std::string & name, const BT::NodeConfig & config)
+  : BT::SyncActionNode(name, config) {}
 
-    static BT::PortsList providedPorts();
-    BT::NodeStatus tick() override;
+  static BT::PortsList providedPorts();
+  BT::NodeStatus tick() override;
 };
 
 /**
@@ -710,11 +740,11 @@ public:
 class SetBlackboardValue : public BT::SyncActionNode
 {
 public:
-    SetBlackboardValue(const std::string& name, const BT::NodeConfig& config)
-        : BT::SyncActionNode(name, config) {}
+  SetBlackboardValue(const std::string & name, const BT::NodeConfig & config)
+  : BT::SyncActionNode(name, config) {}
 
-    static BT::PortsList providedPorts();
-    BT::NodeStatus tick() override;
+  static BT::PortsList providedPorts();
+  BT::NodeStatus tick() override;
 };
 
 /**
@@ -726,11 +756,11 @@ public:
 class CheckBlackboard : public BT::SyncActionNode
 {
 public:
-    CheckBlackboard(const std::string& name, const BT::NodeConfig& config)
-        : BT::SyncActionNode(name, config) {}
+  CheckBlackboard(const std::string & name, const BT::NodeConfig & config)
+  : BT::SyncActionNode(name, config) {}
 
-    static BT::PortsList providedPorts();
-    BT::NodeStatus tick() override;
+  static BT::PortsList providedPorts();
+  BT::NodeStatus tick() override;
 };
 
 /**
@@ -742,25 +772,27 @@ public:
  * otherwise.
  */
 class IsVisitorResponseYes
-    : public BT::RosActionNode<dec_interfaces::action::ConversationManager>
+  : public BT::RosActionNode<dec_interfaces::action::ConversationManager>
 {
 public:
-    IsVisitorResponseYes(const std::string& name,
-                         const BT::NodeConfig& config,
-                         const BT::RosNodeParams& params)
-        : BT::RosActionNode<dec_interfaces::action::ConversationManager>(name, config, params) {}
+  IsVisitorResponseYes(
+    const std::string & name,
+    const BT::NodeConfig & config,
+    const BT::RosNodeParams & params)
+  : BT::RosActionNode<dec_interfaces::action::ConversationManager>(name, config, params) {}
 
-    static BT::PortsList providedPorts();
-    bool setGoal(Goal& goal) override;
-    BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
-    BT::NodeStatus onResultReceived(const WrappedResult& result) override;
-    BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
+  static BT::PortsList providedPorts();
+  bool setGoal(Goal & goal) override;
+  BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
+  BT::NodeStatus onResultReceived(const WrappedResult & result) override;
+  BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
 };
 
 //=============================================================================
 // Function Declarations
 //=============================================================================
-namespace behavior_controller {
+namespace behavior_controller
+{
 
 /**
  * @brief Build and register all ROS2-aware and custom BehaviorTree nodes,
@@ -768,15 +800,43 @@ namespace behavior_controller {
  *
  * This function creates a BehaviorTreeFactory, registers all custom nodes
  * (both RosServiceNode-based and BtActionNode-based), and loads the XML
- * behavior tree definition for the specified scenario.
+ * behavior tree definition for the specified scenario on
+ * createRootBlackboard(), so the knowledge base must be loaded first.
  *
  * @param scenario      Base name (without ".xml") of the tree file under data/
  * @param node_handle   Shared pointer to your ROS2 node (used by all BT nodes)
  * @return BT::Tree     The fully constructed behavior tree
- * @throws std::runtime_error if the XML file cannot be found or loaded
+ * @throws std::runtime_error if the XML file cannot be found or loaded, or
+ *         the knowledge base is not loaded
  */
-BT::Tree initializeTree(const std::string& scenario,
-                        std::shared_ptr<rclcpp::Node> node_handle);
+BT::Tree initializeTree(
+  const std::string & scenario,
+  std::shared_ptr<rclcpp::Node> node_handle);
+
+/**
+ * @brief Register every custom BehaviorTree node type with a factory.
+ *
+ * The ROS action and service wrappers share @p params (node handle and
+ * server timeouts); the topic-driven stateful nodes subscribe through the
+ * same node. initializeTree() calls this; tests call it to build trees from
+ * any XML against the same registrations.
+ *
+ * @param factory  Factory to register the node types with
+ * @param params   Node handle and timeouts for the ROS-backed nodes
+ * @throws std::runtime_error if params.nh holds no node
+ */
+void registerNodes(BT::BehaviorTreeFactory & factory, const BT::RosNodeParams & params);
+
+/**
+ * @brief Root blackboard for a scenario tree.
+ *
+ * Holds every utility phrase of the culture knowledge base under its phrase
+ * ID, so the XML can say one as {welcome_speech}. initializeTree() builds
+ * its tree on it.
+ *
+ * @throws std::runtime_error if the knowledge base is not loaded
+ */
+BT::Blackboard::Ptr createRootBlackboard();
 
 /**
  * @brief Validate the format of an environment knowledge base YAML file.
@@ -786,7 +846,7 @@ BT::Tree initializeTree(const std::string& scenario,
  * location entry contains all mandatory fields with legal values:
  *   - robot_location_description  (non-empty string)
  *   - robot_location_pose         (map: x, y numeric; theta in [0, 360])
- *   - gesture_target              (map: x, y, z numeric; z >= 0)
+ *   - gesture_target              (map: x, y, z numeric; z in [0, 3] m)
  *   - gesture_message_english     (string, may be empty)
  *   - cultural_knowledge          (non-empty sequence of non-empty strings)
  *
@@ -796,7 +856,7 @@ BT::Tree initializeTree(const std::string& scenario,
  * @param filePath  Absolute path to the YAML file to validate
  * @return true if the file is fully valid, false otherwise
  */
-[[nodiscard]] bool validateEnvironmentKnowledgeBase(const std::string& filePath);
+[[nodiscard]] bool validateEnvironmentKnowledgeBase(const std::string & filePath);
 
 //=============================================================================
 // Utility Functions
@@ -813,14 +873,14 @@ void logSystemInfo(std::shared_ptr<rclcpp::Node> node);
  * @param filepath Path to the file
  * @return true if file exists and is readable, false otherwise
  */
-[[nodiscard]] bool fileExists(const std::string& filepath);
+[[nodiscard]] bool fileExists(const std::string & filepath);
 
 /**
  * @brief Get absolute path to a file relative to the package share directory
  * @param relativePath Path relative to the package data/ directory
  * @return Absolute path to the file
  */
-std::string getPackageDataPath(const std::string& relativePath);
+std::string getPackageDataPath(const std::string & relativePath);
 
 /**
  * @brief Print node name, namespace, and fully-qualified name to logs
@@ -835,7 +895,7 @@ void printNodeInfo(std::shared_ptr<rclcpp::Node> node);
  */
 std::string nodeStatusToString(BT::NodeStatus status);
 
-} // namespace behavior_controller
+}  // namespace behavior_controller
 
 //=============================================================================
 // BehaviorControllerNode
@@ -868,41 +928,40 @@ std::string nodeStatusToString(BT::NodeStatus status);
 class BehaviorControllerNode : public rclcpp_lifecycle::LifecycleNode
 {
 public:
-    using CallbackReturn =
-        rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
+  using CallbackReturn =
+    rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
-    explicit BehaviorControllerNode();
+  BehaviorControllerNode();
 
-    /// Expose the companion node so main() can add it to the executor.
-    rclcpp::Node::SharedPtr get_bt_node() const { return bt_node_; }
+  /// Expose the companion node so main() can add it to the executor.
+  rclcpp::Node::SharedPtr get_bt_node() const {return bt_node_;}
 
-    /** @brief Read the parameters and knowledge base and build the behavior tree. */
-    CallbackReturn on_configure (const rclcpp_lifecycle::State& state) override;
+  /** @brief Read the parameters and knowledge base and build the behavior tree. */
+  CallbackReturn on_configure(const rclcpp_lifecycle::State & state) override;
 
-    /** @brief Start the 50 Hz behavior-tree tick timer. */
-    CallbackReturn on_activate  (const rclcpp_lifecycle::State& state) override;
+  /** @brief Start the 50 Hz behavior-tree tick timer. */
+  CallbackReturn on_activate(const rclcpp_lifecycle::State & state) override;
 
-    /** @brief Cancel the tick timer; the tree stays built. */
-    CallbackReturn on_deactivate(const rclcpp_lifecycle::State& state) override;
+  /** @brief Cancel the tick timer; the tree stays built. */
+  CallbackReturn on_deactivate(const rclcpp_lifecycle::State & state) override;
 
-    /** @brief Halt and destroy the behavior tree. */
-    CallbackReturn on_cleanup   (const rclcpp_lifecycle::State& state) override;
+  /** @brief Halt and destroy the behavior tree. */
+  CallbackReturn on_cleanup(const rclcpp_lifecycle::State & state) override;
 
-    /** @brief Cancel the tick timer and halt the tree from any state. */
-    CallbackReturn on_shutdown  (const rclcpp_lifecycle::State& state) override;
+  /** @brief Cancel the tick timer and halt the tree from any state. */
+  CallbackReturn on_shutdown(const rclcpp_lifecycle::State & state) override;
 
 private:
-    /// Companion plain node — used by all BT nodes (BT::RosNodeParams,
-    /// StatefulActionNode subscriptions, etc.)
-    rclcpp::Node::SharedPtr bt_node_;
+  /// Companion plain node — used by all BT nodes (BT::RosNodeParams,
+  /// StatefulActionNode subscriptions, etc.)
+  rclcpp::Node::SharedPtr bt_node_;
 
-    /// The live behavior tree (empty until on_configure succeeds).
-    BT::Tree tree_;
+  /// The live behavior tree (empty until on_configure succeeds).
+  BT::Tree tree_;
 
-    /// 50 Hz tick timer — created in on_activate, cancelled in on_deactivate.
-    rclcpp::TimerBase::SharedPtr tick_timer_;
+  /// 50 Hz tick timer — created in on_activate, cancelled in on_deactivate.
+  rclcpp::TimerBase::SharedPtr tick_timer_;
 
-    /// Guard: true only after initializeTree() succeeds inside on_configure.
-    bool tree_initialized_ = false;
+  /// Guard: true only after initializeTree() succeeds inside on_configure.
+  bool tree_initialized_ = false;
 };
-

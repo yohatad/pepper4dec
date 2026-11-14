@@ -61,8 +61,10 @@
 
 #include "dec_common/node_runner.h"
 
-namespace {
-constexpr const char* kBanner = R"(
+namespace
+{
+constexpr const char * kBanner =
+  R"(
 ================================================================================
                         Person Detection v1.0
 ================================================================================
@@ -75,6 +77,7 @@ constexpr const char* kBanner = R"(
 )";
 }  // namespace
 
-int main(int argc, char** argv) {
-    return dec_common::runNode<Yolov11Node>(argc, argv, {kBanner, "person_detection", 2});
+int main(int argc, char ** argv)
+{
+  return dec_common::runNode<Yolov11Node>(argc, argv, {kBanner, "person_detection", 2});
 }

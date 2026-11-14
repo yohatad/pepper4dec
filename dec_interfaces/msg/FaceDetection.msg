@@ -1,6 +1,6 @@
 # FaceDetection.msg
 #
-# Published by: /faceDetection/data  (face_detection node)
+# Published on: /face_detection/data  (face_detection node)
 #
 # Contains per-frame detections for all faces currently visible.
 # All arrays are parallel — index i describes the i-th detected face.

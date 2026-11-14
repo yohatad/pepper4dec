@@ -20,21 +20,26 @@
 
 #include <algorithm>
 
-namespace animate_behavior_motion {
+namespace animate_behavior_motion
+{
 
-double clampToLimits(double value, double min_limit, double max_limit) {
-    // Ordering matches the original std::max(min, std::min(max, value)):
-    // with inverted limits the lower bound wins.
-    return std::max(min_limit, std::min(max_limit, value));
+double clampToLimits(double value, double min_limit, double max_limit)
+{
+  // Ordering matches the original std::max(min, std::min(max, value)):
+  // with inverted limits the lower bound wins.
+  return std::max(min_limit, std::min(max_limit, value));
 }
 
-double gestureTarget(double home, double noise, double range, double factor,
-                     double min_limit, double max_limit) {
-    return clampToLimits(home + noise * range * factor, min_limit, max_limit);
+double gestureTarget(
+  double home, double noise, double range, double factor,
+  double min_limit, double max_limit)
+{
+  return clampToLimits(home + noise * range * factor, min_limit, max_limit);
 }
 
-double smoothToward(double current, double target, double factor) {
-    return current + factor * (target - current);
+double smoothToward(double current, double target, double factor)
+{
+  return current + factor * (target - current);
 }
 
 }  // namespace animate_behavior_motion

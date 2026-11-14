@@ -1,0 +1,6 @@
+# Commits that only reformat code. Hide them from git blame with:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# (GitHub applies this file automatically.)
+
+# style: reformat all C++ to ROS 2 style with ament_uncrustify
+0227e9144a97bcf8cdd08cd738a0bcbe05b3dc5f

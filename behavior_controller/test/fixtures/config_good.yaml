@@ -5,3 +5,4 @@ scenario_specification: "test_tour"
 culture_knowledge_base: "testCultureKB.yaml"
 environment_knowledge_base: "testEnvKB.yaml"
 verbose_mode: false
+visitor_cooldown: 2.5

@@ -73,12 +73,24 @@ bow_extent_gratitude: 10
 sway_intensity: "ANIMATE_BEHAVIOR"
 
 # Utility Phrases
+# The behavior controller puts each phrase on the behavior tree's blackboard
+# under its key, so a scenario XML says one with
+# <SpeechWithFeedback say="{welcome_speech}"/>.
 utility_phrases:
   english:
-    1: "Please press Yes or No on my screen"
-    2: "Please follow me"
-    3: "Maybe another time"
-    4: "Hello! Welcome to the Robotics Lab! I'm Pepper, your friendly robot tour guide."
-    5: "Would you like a tour of the lab?"
-    6: "Here is the door"
-    7: "Goodbye"
+    press_yes_no_speech: "Please press Yes or No on my screen"
+    follow_me_speech: "Please follow me"
+    maybe_another_time_speech: "Maybe another time"
+    # Defaults: an environment knowledge base's own utility_phrases replace
+    # these (its welcome and tour question name the place).
+    welcome_speech: "Hello! I'm Pepper, your friendly robot tour guide."
+    query_tour_speech: "Would you like me to give you a tour?"
+    # When the answer to the tour question was neither yes nor no
+    repeat_question_speech: "Sorry, I did not catch that. Would you like a tour? Please say yes or no."
+    door_speech: "Here is the door"
+    # When Pepper cannot reach an exhibit and moves on to the next one
+    exhibit_unreachable_speech: "Sorry, I cannot get to this exhibit. Let's go on to the next one."
+    # When the tour cannot go on at all
+    tour_failed_speech: "Sorry, I cannot continue the tour right now."
+    # After a declined or failed tour (a completed tour says goodbye at its last stop)
+    brief_goodbye_speech: "Goodbye"

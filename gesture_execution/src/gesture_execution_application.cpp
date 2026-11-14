@@ -55,8 +55,10 @@
 
 #include "dec_common/node_runner.h"
 
-int main(int argc, char** argv) {
-    return dec_common::runNode<GestureExecutionNode>(
-        argc, argv,
-        {"gesture_execution v1.0 — This program comes with ABSOLUTELY NO WARRANTY.", "gesture_execution"});
+int main(int argc, char ** argv)
+{
+  return dec_common::runNode<GestureExecutionNode>(
+    argc, argv,
+    {"gesture_execution v1.0 — This program comes with ABSOLUTELY NO WARRANTY.",
+      "gesture_execution"});
 }

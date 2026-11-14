@@ -1,6 +1,6 @@
 # TTS.action
 #
-# Action server: /tts  (text_to_speech node)
+# Action server: /text_to_speech  (text_to_speech node)
 #
 # Synthesises the given text and plays it through the configured backend
 # (naoqi_ros, kokoro_local, kokoro_pepper, elevenlabs_local, or

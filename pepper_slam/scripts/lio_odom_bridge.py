@@ -14,6 +14,12 @@ disabled (publish_tf=false) or the tree splits. Output is stamped with the
 odometry message's own stamp.
 """
 
+import os
+# Must run before numpy is imported. numpy hands even these 4x4 products to
+# OpenBLAS, whose worker pool (one thread per core) busy-waits between calls:
+# on a 28-core laptop this node burned ~300% CPU replaying a bag; with one
+# thread it is ~3%. Small matrices gain nothing from more threads.
+os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
 import time
 
 import numpy as np
@@ -173,8 +179,8 @@ class LioMapOdomBridge(Node):
         # base_footprint, so every existing launch keeps its exact behaviour
         # until it asks for the guard.
         self.declare_parameter('guard_enable', False)
-        # Physical bounds, not tuning knobs. Nav2 commands at most 0.5 m/s and
-        # 0.5 rad/s (pepper_navigation/config/nav2_params.yaml:133-137), so
+        # Physical bounds, not tuning knobs. Nav2 commands at most 0.35 m/s and
+        # 0.3 rad/s (FollowPath in pepper_navigation/config/nav2_params_*.yaml), so
         # these sit above what the base can be told to do, with margin. Anything
         # faster is a broken estimate, not a fast robot.
         self.declare_parameter('max_linear_speed', 0.7)
@@ -235,6 +241,8 @@ class LioMapOdomBridge(Node):
                 "until publish_level_frame is also enabled.")
 
         self.tf_buffer = Buffer()
+        # Only needed until the static base_frame -> lidar_imu_frame is cached;
+        # _lookup_base_imu then unregisters it (see there).
         self.tf_listener = TransformListener(self.tf_buffer, self)
         self.tf_broadcaster = TransformBroadcaster(self)
         self.static_tf_broadcaster = StaticTransformBroadcaster(self)
@@ -322,6 +330,10 @@ class LioMapOdomBridge(Node):
                 self.base_frame, self.lidar_imu_frame,
                 rclpy.time.Time())  # static: latest is fine
             self._m_base_imu = transform_to_matrix(tf)
+            # Nothing else here reads TF. Left subscribed, the listener would
+            # keep deserializing naoqi_driver's joint tree on /tf (~4150
+            # transforms/s) for the whole run: MEASURED ~11% of a core.
+            self.tf_listener.unregister()
             return self._m_base_imu
         except (LookupException, ConnectivityException,
                 ExtrapolationException) as ex:

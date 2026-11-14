@@ -5,7 +5,7 @@
     <Sequence name="TestSequence">
 
       <!-- 1. Welcome gesture -->
-      <Action ID="Gesture" gesture_type="welcome" gesture_duration="2000"/>
+      <Action ID="Gesture" gesture_type="iconic" gesture_name="welcome" gesture_duration="2000"/>
 
       <!-- 2. Announce movement -->
       <Action ID="SpeechWithFeedback" say="I will now navigate to the exhibit."/>
@@ -15,7 +15,7 @@
 
       <!-- 4. Point at something once arrived -->
       <Action ID="Gesture"
-              gesture_type="point"
+              gesture_type="deictic"
               location_x="5.0"
               location_y="6.8"
               location_z="1.2"
@@ -28,7 +28,7 @@
       <Action ID="Navigate" goal_x="0.0" goal_y="0.0" goal_theta="0.0"/>
 
       <!-- 7. Goodbye gesture -->
-      <Action ID="Gesture" gesture_type="goodbye" gesture_duration="2000"/>
+      <Action ID="Gesture" gesture_type="iconic" gesture_name="wave" gesture_duration="2000"/>
 
     </Sequence>
   </BehaviorTree>
