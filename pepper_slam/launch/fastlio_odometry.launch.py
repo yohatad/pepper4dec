@@ -30,21 +30,24 @@ Launch arguments:
     publish_map_identity (default: "true")
         Publish the map -> odom identity transform.
     use_sim_time (default: "false")
-    bridge_level_frame (default: "true")
+    bridge_level_frame (default: "")
         Publish the gravity-leveled odom frame from the bridge.
     config_file (default: "l2_rsimu.yaml")
         FAST-LIO config (RealSense IMU); l2.yaml uses the L2's own.
     lidar_imu_frame (default: "camera_imu_optical_frame")
         Body frame matching config_file.
-    flatten_base_frame (default: "true")
+    flatten_base_frame (default: "")
         Clamp z, roll, and pitch to zero. Pass false to see FAST-LIO's own
         drifting estimate.
-    guard_enable (default: "false")
+    guard_enable (default: "")
         Reject LIO poses above a physical speed bound and dead reckon on wheel
         odometry through the gap, rather than republishing a diverged estimate
         onto odom -> base_footprint. Needs wheel_odom_topic flowing.
-    wheel_odom_topic (default: "/pepper_odom")
+    wheel_odom_topic (default: "")
         Wheel odometry the guard dead reckons on. Unused unless guard_enable.
+
+    The four bridge settings above default to "", which keeps the value in
+    config/lio_odom_bridge_configuration.yaml; pass one to override it.
 
 Configuration:
     FAST-LIO's config directory, selected by config_file.
@@ -119,7 +122,7 @@ def generate_launch_description():
         description='false (default) on the robot; true for bag replay with '
                     'ros2 bag play --clock. The bag_test wrappers set this for you.')
     declare_bridge_level_frame_cmd = DeclareLaunchArgument(
-        'bridge_level_frame', default_value='true',
+        'bridge_level_frame', default_value='',
         description='Have lio_odom_bridge publish the static odom -> '
                     'odom leveling frame. Set false when a higher layer owns '
                     'odom (e.g. PGO publishing map -> odom).'
@@ -144,21 +147,21 @@ def generate_launch_description():
                     'l2lidar_frame_imu for l2.yaml. Empty derives it from '
                     'config_file instead.')
     declare_flatten_base_frame_cmd = DeclareLaunchArgument(
-        'flatten_base_frame', default_value='true',
+        'flatten_base_frame', default_value='',
         description='Zero the leveled z/roll/pitch of odom -> base_footprint '
-                    'every cycle (keep x, y, yaw). Defaults true here: Pepper '
-                    'is confirmed flat-floor-only. Set false to see FAST-LIO\'s '
-                    'own (drifting) z/roll/pitch instead.'
+                    'every cycle (keep x, y, yaw). Empty keeps the configuration '
+                    'file\'s value (true: Pepper is flat-floor-only). Set false '
+                    'to see FAST-LIO\'s own (drifting) z/roll/pitch instead.'
     )
     declare_guard_enable_cmd = DeclareLaunchArgument(
-        'guard_enable', default_value='false',
+        'guard_enable', default_value='',
         description='Reject LIO poses that break a physical speed bound and '
                     'dead reckon on wheel odometry through the gap, instead of '
                     'republishing a diverged estimate onto odom -> '
                     'base_footprint. Needs wheel_odom_topic flowing.'
     )
     declare_wheel_odom_topic_cmd = DeclareLaunchArgument(
-        'wheel_odom_topic', default_value='/pepper_odom',
+        'wheel_odom_topic', default_value='',
         description='Wheel odometry the guard dead reckons on. Unused unless '
                     'guard_enable is true.'
     )
@@ -177,8 +180,6 @@ def generate_launch_description():
             'rviz': rviz,
             'rviz_cfg': rviz_cfg,
             'use_sim_time': use_sim_time,
-            'bridge_level_frame': bridge_level_frame,
-            'flatten_base_frame': flatten_base_frame,
         }.items())
 
     # Odometry only, so the REP-105 map -> odom correction is identity by

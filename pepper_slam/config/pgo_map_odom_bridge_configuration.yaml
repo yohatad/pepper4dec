@@ -1,0 +1,33 @@
+# pgo_map_odom_bridge Configuration File
+# ROS2 parameters for the pgo_map_odom_bridge node, which turns the pose-graph
+# optimizer's corrections into map -> odom (loaded by fastlio_lc_pgo's
+# fastlio_lc_l2.launch.py and pointlio_lc_l2.launch.py).
+#
+# Not here, on purpose: lidar_imu_frame. It MUST equal the estimator config's
+# publish.body_frame, or the map is levelled by the wrong mount and comes out
+# tilted with no error anywhere. The launch file passes it.
+
+pgo_map_odom_bridge:
+  ros__parameters:
+
+    # =========================================================================
+    # Frames and topics
+    # =========================================================================
+    map_frame: "pgo_init"            # the optimizer's world frame
+    odom_frame: "lio_init"           # the estimator's world frame
+    base_frame: "base_footprint"
+    odom_topic: "/odom_lio"          # the estimator's odometry
+    pgo_odom_topic: "/aft_pgo_odom"  # the optimizer's corrected keyframes
+
+    # =========================================================================
+    # Levelling: the gravity-aligned map frame above pgo_init
+    # =========================================================================
+    level_frame: "map"
+    publish_level_frame: true
+    level_frame_on_floor: true       # z = 0 is the floor (octomap needs this)
+    level_source: "calibration"      # levelling from the static rig TF
+
+    # =========================================================================
+    # Matching keyframes to odometry
+    # =========================================================================
+    odom_buffer_size: 1000           # recent odometry samples kept

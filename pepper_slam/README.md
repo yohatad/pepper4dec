@@ -184,11 +184,30 @@ ros2 bag play <bag> --clock --read-ahead-queue-size 2000
 Only one node may publish a frame's parent. RTAB-Map anchors on `odom`, not
 the tilted `lio_init`. `FRAMES.md` has the full frame contract.
 
+## ⚙️ Configuration
+
+Each node reads its parameters from `config/<node>_configuration.yaml`, the
+same convention as the other pepper4dec packages; `cloud_range_filter`'s file
+has one section per instance. The launch files add only `use_sim_time` and
+the body frame the bridges must share with the estimator (`lidar_imu_frame`,
+read from the estimator's config, so it is never in these files). A launch
+argument such as `guard_enable:=true` overrides the file for that launch only;
+left empty, the file's value stands.
+
+`sensor_tf.yaml` (the rig's measured geometry) and `record_qos.yaml` (the
+`ros2 bag record` QoS overrides) are data, not node parameters. The estimators'
+own configurations are `fast_lio`'s `config/l2_rsimu.yaml` and `point_lio`'s
+`config/l2lidar_rsimu.yaml`.
+
 ## 📁 Package Structure
 
 ```
 pepper_slam/
 ├── config/
+│   ├── lio_odom_bridge_configuration.yaml      # lio_odom_bridge + divergence guard
+│   ├── pgo_map_odom_bridge_configuration.yaml  # pgo_map_odom_bridge
+│   ├── cloud_range_filter_configuration.yaml   # points_safety_filter, points_costmap_filter
+│   ├── wheel_odom_tf_configuration.yaml        # wheel_odom_tf
 │   ├── record_qos.yaml                 # /tf_static QoS override for ros2 bag record
 │   └── sensor_tf.yaml                  # rig transform values; provenance in the header
 ├── launch/

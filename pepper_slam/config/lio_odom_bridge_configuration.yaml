@@ -1,0 +1,44 @@
+# lio_odom_bridge Configuration File
+# ROS2 parameters for the lio_odom_bridge node (loaded by
+# lio_odom_bridge.launch.py). Run `ros2 param get /lio_odom_bridge <name>` to
+# inspect these at runtime. A launch argument of the same name overrides a value
+# here only when it is passed explicitly.
+#
+# Not here, on purpose: lidar_imu_frame. It MUST equal the estimator config's
+# publish.body_frame, so the launch file reads it from that config (or takes it
+# explicitly). A fixed value here could silently disagree with the estimator.
+
+lio_odom_bridge:
+  ros__parameters:
+
+    # =========================================================================
+    # Frames and topics
+    # =========================================================================
+    odom_frame: "lio_init"           # the estimator's world frame
+    base_frame: "base_footprint"
+    odom_topic: "/odom_lio"          # the estimator's odometry
+
+    # =========================================================================
+    # Levelling: the gravity-aligned odom frame above lio_init
+    # =========================================================================
+    level_frame: "odom"
+    publish_level_frame: true        # false when a higher layer owns odom (PGO)
+    level_frame_as_child: false
+    level_frame_on_floor: true       # odom at floor height, not at the IMU
+    level_source: "calibration"      # levelling from the static rig TF
+    flatten_base_frame: true         # zero z, roll, pitch (flat floor only)
+
+    # =========================================================================
+    # Divergence guard: reject poses the base cannot physically reach
+    # =========================================================================
+    guard_enable: false              # changes what lands on odom -> base_footprint
+    wheel_odom_topic: "/pepper_odom"
+    max_linear_speed: 0.7            # m/s; Nav2 commands at most 0.35
+    max_angular_speed: 1.0           # rad/s
+    max_hold_duration: 3.0           # s on wheels alone before FAULT
+    zero_velocity_eps: 0.02          # m/s; wheels below this count as stopped
+    zero_velocity_lio_eps: 0.10      # m/s; LIO above this while stopped is rejected
+    trust_scale_topic: "/localization/wheel_trust_scale"
+    degraded_trust_scale: 0.5        # trust scale at the start of a hold
+    hold_drift_k: 1.0                # 1/m; scale = degraded + (k * distance)^2
+    max_trust_scale: 10.0

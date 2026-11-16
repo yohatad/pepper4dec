@@ -1,0 +1,11 @@
+# wheel_odom_tf Configuration File
+# ROS2 parameters for the wheel_odom_tf node, which relays Pepper's wheel
+# odometry as the odom -> base_footprint transform for the localizers' opt-in
+# odom mode (started by pepper_nav2_fastloc / pepper_nav2_pointloc with
+# odom_frame:=odom, which overrides odom_frame below).
+
+wheel_odom_tf:
+  ros__parameters:
+    wheel_odom_topic: "/pepper_odom"
+    odom_frame: "odom"
+    base_frame: "base_footprint"

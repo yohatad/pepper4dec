@@ -88,6 +88,13 @@ from ament_index_python.packages import get_package_share_directory
 from nav2_common.launch import RewrittenYaml
 
 
+# Both cloud_range_filter instances (points_safety_filter, points_costmap_filter)
+# read their parameters from this one file.
+_RANGE_FILTER_CONFIG = os.path.join(
+    get_package_share_directory('pepper_slam'), 'config',
+    'cloud_range_filter_configuration.yaml')
+
+
 def generate_launch_description():
     pkg_share = get_package_share_directory('pepper_navigation')
     sensor_tf_launch_dir = os.path.join(
@@ -273,40 +280,7 @@ def generate_launch_description():
         executable='cloud_range_filter',
         name='points_safety_filter',
         output='screen',
-        parameters=[{
-            'use_sim_time': use_sim_time,
-            'input_topic': '/points',
-            'output_topic': '/points_safety',
-            # 0.12, was 0.22: 0.22 hid a box ~0.10 m from the lidar (x ~0.22-0.26
-            # from base_footprint) entirely -- 1 point/scan reached the stop
-            # wedge, so no STOP. 0.12 put 113/scan there. MEASURED 2026-10-19,
-            # empty scene, 510 scans: no in-band returns between 0.12 and 0.22,
-            # so 0.12 adds no false stops (stop wedge max 1 pt/scan either way).
-            # The L2 housing itself returns at ~0.007 m.
-            'min_range': 0.12,
-            # Side-body cut. The forward cone is kept at every range, so nothing
-            # driven into is cut. 0.30, was 0.40: RE-MEASURED 2026-10-19, arms
-            # at rest, nothing around, stop wedge false-STOP rate: no cut 65%,
-            # 0.25 m 0% (max 3 pts, no margin), 0.30-0.40 m 0% (max 1-2 pts;
-            # 510 scans at 0.30). The body beside the lidar sits 0.11-0.25 m
-            # from it (x 0.18-0.22, |y| <= 0.20, z 0.22-0.28). 0.30 raises the
-            # stop zone the L2 can see from 19% to ~51% at z 0.30. The earlier
-            # measurement (shell at 0.355-0.368 m, 0.40 m 5.0%) no longer holds;
-            # re-check with the arms moving if autonomous life is on.
-            'self_cut_range': 0.30,
-            'self_cut_angle': 25.0,
-            # Body-box cut: Pepper's own front face, x ~0.18-0.22, |y| <= 0.12,
-            # straight ahead of the lidar, so neither range cut can drop it
-            # without blinding the forward cone. MEASURED 2026-10-19, nothing
-            # around: arms at rest it showed at z 0.70-0.90 only (0-3 pts in
-            # the stop wedge, trigger > 3); minutes later, same joints but a
-            # shifted stance, the face showed from z 0.38 up and a z >= 0.60
-            # box left 43% of scans false-STOPping. z >= 0.30: 0%. A box at
-            # 0.315 m still STOPs on 100% of scans. The box stays inside
-            # robot_radius 0.25, so it cannot hide anything outside the body.
-            'body_boxes': [0.10, 0.22, -0.13, 0.13, 0.30, 1.00],
-            'ror_min_neighbors': 0,   # ROR off (see cloud_range_filter notes)
-        }],
+        parameters=[_RANGE_FILTER_CONFIG, {'use_sim_time': use_sim_time}],
     )
 
     # Self-hit + ground-plane filter feeding the costmaps (separate instance
@@ -319,22 +293,7 @@ def generate_launch_description():
         executable='cloud_range_filter',
         name='points_costmap_filter',
         output='screen',
-        parameters=[{
-            'use_sim_time': use_sim_time,
-            'input_topic': '/points',
-            'output_topic': '/points_costmap',
-            'min_range': 0.8,
-            'ror_min_neighbors': 0,
-            'remove_ground_plane': True,
-            'ground_frame': 'base_footprint',
-            'ground_distance_thresh': 0.05,
-            'ground_angle_thresh': 0.15,
-            # Defaults (0.12, 60 iters) silently found no plane on ~half the
-            # scans -- 0.20 clears measured base_footprint z drift, and 300
-            # iterations reliably samples 3 floor points from a ~4k-point scan.
-            'ground_z_thresh': 0.20,
-            'ground_ransac_iterations': 300,
-        }],
+        parameters=[_RANGE_FILTER_CONFIG, {'use_sim_time': use_sim_time}],
         # It only listens, and only for base_footprint <- l2lidar_frame,
         # which is all /tf_static: the joint tree on /tf is dead weight here.
         remappings=[('/tf', '/tf_nav')],
