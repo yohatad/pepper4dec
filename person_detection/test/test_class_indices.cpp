@@ -7,9 +7,9 @@
  * Pure lookup logic: no ROS graph, no model, no camera. The rclcpp::Logger it
  * takes is obtained from rclcpp::get_logger(), which needs no rclcpp::init().
  *
- * This is the unit-level counterpart to test_bag_replay_launch.py — that test
- * exercises the whole node against recorded frames, this one pins the class
- * filtering that decides what those frames are allowed to produce.
+ * This is the unit-level counterpart to test_cssr4africa_bags_launch.py — that
+ * test exercises the whole node against recorded frames, this one pins the
+ * class filtering that decides what those frames are allowed to produce.
  *
  * Author: Yohannes Tadesse Haile
  * Affiliation: Carnegie Mellon University Africa

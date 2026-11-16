@@ -97,13 +97,10 @@ if(BUILD_TESTING)
   ament_add_gtest(test_class_indices test/test_class_indices.cpp)
   target_link_libraries(test_class_indices ${PROJECT_NAME}_lib)
 
-  # Integration level: the whole node against recorded frames. Skips itself
-  # when the ONNX model or the workspace-level mini-bag is absent.
+  # Integration level: the whole node against the CSSR4Africa RealSense bags
+  # at camera rate (scripts/fetch_test_bags.sh). Skips itself when the ONNX
+  # model or the bags are absent.
   find_package(launch_testing_ament_cmake REQUIRED)
-  add_launch_test(test/test_bag_replay_launch.py
-    TIMEOUT 300
-  )
-  # The CSSR4Africa RealSense bags at camera rate (scripts/fetch_test_bags.sh).
   add_launch_test(test/test_cssr4africa_bags_launch.py
     TIMEOUT 600
   )
