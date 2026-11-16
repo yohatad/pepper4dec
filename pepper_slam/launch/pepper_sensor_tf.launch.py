@@ -9,7 +9,7 @@ Publishes 10 transforms rooted at base_footprint:
 Nodes started:
     robot_state_publisher/robot_state_publisher (node: pepper_sensor_tf)
         When publisher is 'urdf'.
-    pepper_slam/static_tf_publisher.py (node: pepper_sensor_tf)
+    pepper_slam/static_tf_publisher (node: pepper_sensor_tf)
         When publisher is 'yaml'.
 
 Launch arguments:
@@ -136,7 +136,7 @@ def generate_launch_description():
 
         Node(
             package='pepper_slam',
-            executable='static_tf_publisher.py',
+            executable='static_tf_publisher',
             name='pepper_sensor_tf',
             output='screen',
             condition=IfCondition(use_yaml),
