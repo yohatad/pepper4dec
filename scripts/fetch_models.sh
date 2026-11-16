@@ -11,8 +11,6 @@
 # Licences differ per model (YOLO11m AGPL-3.0, Gold-YOLO GPL-3.0); see
 # MODELS.md. If the repository is private, export PEPPER4DEC_HF_TOKEN (a
 # read token for cssr4africa).
-# The MiVOLO age/gender model (age_gender_detection) is not in the repository
-# yet and must be placed by hand.
 #
 # Usage: scripts/fetch_models.sh
 #
@@ -37,6 +35,7 @@ MODELS=(
   "d2fd2ecaa7326b6684cd379897a9d00f30ae27a59cad274ce54e59cc246b22a1 person_detection/models/person_detection_yolov11m.onnx"
   "10b1c58fb46320fb73ab4e95104852a21c5a41ee64372b49060e580504e29881 face_detection/models/face_detection_goldYOLO.onnx"
   "221adb6688f5d1df5c9937e3e5e473bb84729a0853151c6429d8528ccd8b18b1 face_detection/models/face_detection_sixdrepnet360.onnx"
+  "4797d53e945f53e79f9b6d07567d53d5f173a4f3aed5464a66599e995b6dce67 face_detection/models/face_detection_mivolo_agegender.onnx"
   "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3 speech_event/models/silero_vad.onnx"
 )
 

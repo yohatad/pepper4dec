@@ -138,8 +138,7 @@ RUN /tmp/install_onnxruntime_gpu.sh ${WS}/.deps && rm /tmp/install_onnxruntime_g
 # .dockerignore keeps the host's models/ out of the build context, so they
 # are fetched here, into /tmp/models/<package>/models, and copied into the
 # sources below; colcon then installs them to share/<package>/models. Also a
-# layer of its own, ahead of the sources. The MiVOLO age/gender model is not
-# hosted yet, so age_gender_detection has no model in the image.
+# layer of its own, ahead of the sources.
 COPY scripts/fetch_models.sh /tmp/models/scripts/
 RUN /tmp/models/scripts/fetch_models.sh
 

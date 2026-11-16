@@ -151,7 +151,7 @@ source install/setup.bash
 Most perception/actuation packages (`animate_behavior`, `behavior_controller`, `face_detection`, `gesture_execution`, `overt_attention`, `person_detection`) are C++ and need no Python environment. The three Python packages (`conversation_manager`, `speech_event`, `text_to_speech`) each expect their own dedicated virtual environment under `~/ros2_ws/.venvs/` — see each package's own README for the exact venv name and `pip install -r requirements.txt` it expects. Pinned lockfiles used by the Docker image live in [`docker/requirements/`](docker/requirements/).
 
 4. **Download Model Files**
-   - Run `src/pepper4dec/scripts/fetch_models.sh`: it downloads the ONNX models from [cssr4africa/dec_models](https://huggingface.co/cssr4africa/dec_models) into their `models/` directories (`face_detection/models/`, `person_detection/models/`, `speech_event/models/`) and checks their SHA-256. The MiVOLO age/gender model is not hosted yet; place `face_detection_mivolo_agegender.onnx` by hand
+   - Run `src/pepper4dec/scripts/fetch_models.sh`: it downloads the ONNX models from [cssr4africa/dec_models](https://huggingface.co/cssr4africa/dec_models) into their `models/` directories (`face_detection/models/`, `person_detection/models/`, `speech_event/models/`) and checks their SHA-256
    - `models/` directories are **gitignored** — no weights are committed
    - Provenance and licensing for every pretrained model is recorded in [MODELS.md](MODELS.md); note that several are GPL-3.0/AGPL-3.0
 
@@ -244,7 +244,7 @@ includes the ONNX Runtime GPU release, so the perception nodes use the GPU when
 the NVIDIA Container Toolkit is installed on the host, and the CPU otherwise.
 The build also downloads the ONNX models from
 [cssr4africa/dec_models](https://huggingface.co/cssr4africa/dec_models) with
-`scripts/fetch_models.sh` (all but the MiVOLO age/gender model).
+`scripts/fetch_models.sh`.
 
 ```bash
 cp .env.example .env             # DISPLAY, ROS_DOMAIN_ID, API keys
