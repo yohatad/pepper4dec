@@ -76,7 +76,10 @@ bt_navigator:
     robot_base_frame: base_footprint
     # Only used for velocity checks, so the unlevelled frame is harmless.
     odom_topic: /odom_lio   # shared LIO odometry; every mapping launch remaps onto it
-    bt_loop_duration: 2
+    # 20 Hz, matching controller_frequency. 500 Hz and Nav2's default 100 Hz
+    # were both exceeded on this Jetson under full load, and the tree only waits
+    # on a 20 Hz controller. A "tick rate exceeded" warning here is a real stall.
+    bt_loop_duration: 50
     default_server_timeout: 20
     wait_for_service_timeout: 5
 

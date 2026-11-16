@@ -45,6 +45,16 @@ GEOMETRY = (
     "collision_monitor.ros__parameters.observation_sources",
 )
 
+# bt_navigator differs per mode only in odom_topic, so the rest is checked leaf
+# by leaf. bt_loop_duration drifted once already: the 500 Hz -> 20 Hz fix went
+# into fastloc/pointloc only, leaving amcl/kissicp/rtabmap_loc ticking at
+# 500 Hz.
+BT_NAVIGATOR = tuple(
+    "bt_navigator.ros__parameters." + k for k in (
+        "global_frame", "robot_base_frame", "bt_loop_duration",
+        "default_server_timeout", "wait_for_service_timeout",
+        "default_nav_to_pose_bt_xml", "plugin_lib_names"))
+
 
 def _load():
     """Load the nav2 param files, returning {filename: parsed yaml}."""
@@ -97,10 +107,10 @@ def _leaf(d, path):
     return d
 
 
-def _geometry_drift(loaded):
-    """Return drift reports for the GEOMETRY leaves; empty when all agree."""
+def _leaf_drift(loaded, paths):
+    """Return drift reports for the given leaves; empty when all agree."""
     out = []
-    for path in GEOMETRY:
+    for path in paths:
         vals = {f: _leaf(d, path) for f, d in loaded.items()}
         if len(set(map(repr, vals.values()))) > 1:
             out.append("%s differs: %s" % (path, ", ".join(
@@ -111,7 +121,13 @@ def _geometry_drift(loaded):
 
 def test_robot_geometry_identical_across_param_files():
     """Robot radius, inflation and safety zones must match in every mode."""
-    drift = _geometry_drift(_load())
+    drift = _leaf_drift(_load(), GEOMETRY)
+    assert not drift, "\n".join(drift)
+
+
+def test_bt_navigator_identical_across_param_files():
+    """Tick period, BT plugins and tree path must match in every mode."""
+    drift = _leaf_drift(_load(), BT_NAVIGATOR)
     assert not drift, "\n".join(drift)
 
 
@@ -132,13 +148,15 @@ def main():
         else:
             print("ok   %-20s identical across all %d files" % (node, len(FILES)))
 
-    geo = _geometry_drift(loaded)
-    for line in geo:
-        print("FAIL %s" % line)
-    if geo:
-        failures += 1
-    else:
-        print("ok   robot geometry       identical across all %d files" % len(FILES))
+    for label, paths in (("robot geometry", GEOMETRY),
+                         ("bt_navigator", BT_NAVIGATOR)):
+        drift = _leaf_drift(loaded, paths)
+        for line in drift:
+            print("FAIL %s" % line)
+        if drift:
+            failures += 1
+        else:
+            print("ok   %-20s identical across all %d files" % (label, len(FILES)))
 
     print("\n%s" % ("PASS" if not failures
                     else "%d shared section(s) have drifted" % failures))
