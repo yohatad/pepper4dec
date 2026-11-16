@@ -44,11 +44,11 @@ from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
 
-# points_safety_filter reads its parameters from this file, as in every Nav2
-# profile.
-_RANGE_FILTER_CONFIG = os.path.join(
+# pepper_slam's configuration file: points_safety_filter reads its section, as
+# in every Nav2 profile.
+_PEPPER_SLAM_CONFIG = os.path.join(
     get_package_share_directory('pepper_slam'), 'config',
-    'cloud_range_filter_configuration.yaml')
+    'pepper_slam_configuration.yaml')
 
 
 def generate_launch_description():
@@ -108,7 +108,7 @@ def generate_launch_description():
         # The same configuration file every Nav2 profile loads.
         Node(package='pepper_slam', executable='cloud_range_filter',
              name='points_safety_filter', output='screen',
-             parameters=[_RANGE_FILTER_CONFIG, sim]),
+             parameters=[_PEPPER_SLAM_CONFIG, sim]),
         Node(package='nav2_collision_monitor', executable='collision_monitor',
              name='collision_monitor', output='screen',
              parameters=[params, {

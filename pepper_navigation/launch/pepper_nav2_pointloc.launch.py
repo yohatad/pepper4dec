@@ -104,11 +104,12 @@ from ament_index_python.packages import get_package_share_directory
 from nav2_common.launch import RewrittenYaml
 
 
-# Both cloud_range_filter instances (points_safety_filter, points_costmap_filter)
-# read their parameters from this one file.
-_RANGE_FILTER_CONFIG = os.path.join(
+# pepper_slam's configuration file: the cloud_range_filter instances
+# (points_safety_filter, points_costmap_filter) and wheel_odom_tf read their
+# sections of it.
+_PEPPER_SLAM_CONFIG = os.path.join(
     get_package_share_directory('pepper_slam'), 'config',
-    'cloud_range_filter_configuration.yaml')
+    'pepper_slam_configuration.yaml')
 
 
 def generate_launch_description():
@@ -302,7 +303,7 @@ def generate_launch_description():
         executable='cloud_range_filter',
         name='points_safety_filter',
         output='screen',
-        parameters=[_RANGE_FILTER_CONFIG, {'use_sim_time': use_sim_time}],
+        parameters=[_PEPPER_SLAM_CONFIG, {'use_sim_time': use_sim_time}],
     )
 
     collision_monitor = Node(
@@ -444,10 +445,7 @@ def generate_launch_description():
         executable='wheel_odom_tf',
         name='wheel_odom_tf',
         output='screen',
-        # The rest of its parameters live in pepper_slam's
-        # config/wheel_odom_tf_configuration.yaml.
-        parameters=[os.path.join(get_package_share_directory('pepper_slam'), 'config',
-                                 'wheel_odom_tf_configuration.yaml'),
+        parameters=[_PEPPER_SLAM_CONFIG,
                     {'use_sim_time': use_sim_time, 'odom_frame': odom_frame}],
         condition=odom_on,
     )

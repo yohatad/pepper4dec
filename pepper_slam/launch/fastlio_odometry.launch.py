@@ -47,7 +47,7 @@ Launch arguments:
         Wheel odometry the guard dead reckons on. Unused unless guard_enable.
 
     The four bridge settings above default to "", which keeps the value in
-    config/lio_odom_bridge_configuration.yaml; pass one to override it.
+    config/pepper_slam_configuration.yaml; pass one to override it.
 
 Configuration:
     FAST-LIO's config directory, selected by config_file.

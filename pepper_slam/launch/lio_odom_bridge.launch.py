@@ -9,7 +9,7 @@ yourself — pass use_sim_time, config_path and config_file.
 
 Nodes started:
     pepper_slam/lio_odom_bridge.py (node: lio_odom_bridge), parameters from
-    config/lio_odom_bridge_configuration.yaml
+    config/pepper_slam_configuration.yaml
 
 Launch arguments:
     use_sim_time (default: "false")
@@ -24,7 +24,7 @@ Launch arguments:
     bridge_level_frame, level_frame_as_child, flatten_base_frame, odom_topic,
     guard_enable, wheel_odom_topic, max_linear_speed, max_angular_speed,
     max_hold_duration (default: "" for all)
-        Overrides. The values live in config/lio_odom_bridge_configuration.yaml;
+        Overrides. The values live in config/pepper_slam_configuration.yaml;
         a non-empty argument replaces the file's value for this launch only.
         bridge_level_frame sets the node's publish_level_frame.
 
@@ -99,7 +99,7 @@ def _resolve_body_frame(context, *args, **kwargs):
                         % (frame, os.path.basename(path)))]
 
 
-# Launch arguments that override config/lio_odom_bridge_configuration.yaml, and
+# Launch arguments that override config/pepper_slam_configuration.yaml, and
 # the node parameter each one sets.
 _OVERRIDES = {
     'bridge_level_frame': 'Publish the static odom leveling frame (node '
@@ -133,7 +133,7 @@ def _bridge_node(context, *args, **kwargs):
         output='screen',
         parameters=[
             os.path.join(get_package_share_directory('pepper_slam'), 'config',
-                         'lio_odom_bridge_configuration.yaml'),
+                         'pepper_slam_configuration.yaml'),
             {
                 'use_sim_time': LaunchConfiguration('use_sim_time'),
                 'lidar_imu_frame': LaunchConfiguration('resolved_body_frame'),
@@ -166,7 +166,7 @@ def generate_launch_description():
             description='Body frame the bridge stamps. Must match the '
                         'estimator config\'s publish.body_frame. Empty reads '
                         'it from that config instead.'),
-        # Overrides of config/lio_odom_bridge_configuration.yaml. Empty (the
+        # Overrides of config/pepper_slam_configuration.yaml. Empty (the
         # default) keeps the file's value; anything else replaces it.
         *[DeclareLaunchArgument(name, default_value='', description=desc)
           for name, desc in _OVERRIDES.items()],

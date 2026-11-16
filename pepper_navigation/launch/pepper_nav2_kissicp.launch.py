@@ -88,11 +88,12 @@ from ament_index_python.packages import get_package_share_directory
 from nav2_common.launch import RewrittenYaml
 
 
-# Both cloud_range_filter instances (points_safety_filter, points_costmap_filter)
-# read their parameters from this one file.
-_RANGE_FILTER_CONFIG = os.path.join(
+# pepper_slam's configuration file: the cloud_range_filter instances
+# (points_safety_filter, points_costmap_filter) and wheel_odom_tf read their
+# sections of it.
+_PEPPER_SLAM_CONFIG = os.path.join(
     get_package_share_directory('pepper_slam'), 'config',
-    'cloud_range_filter_configuration.yaml')
+    'pepper_slam_configuration.yaml')
 
 
 def generate_launch_description():
@@ -280,7 +281,7 @@ def generate_launch_description():
         executable='cloud_range_filter',
         name='points_safety_filter',
         output='screen',
-        parameters=[_RANGE_FILTER_CONFIG, {'use_sim_time': use_sim_time}],
+        parameters=[_PEPPER_SLAM_CONFIG, {'use_sim_time': use_sim_time}],
     )
 
     # Self-hit + ground-plane filter feeding the costmaps (separate instance
@@ -293,7 +294,7 @@ def generate_launch_description():
         executable='cloud_range_filter',
         name='points_costmap_filter',
         output='screen',
-        parameters=[_RANGE_FILTER_CONFIG, {'use_sim_time': use_sim_time}],
+        parameters=[_PEPPER_SLAM_CONFIG, {'use_sim_time': use_sim_time}],
         # It only listens, and only for base_footprint <- l2lidar_frame,
         # which is all /tf_static: the joint tree on /tf is dead weight here.
         remappings=[('/tf', '/tf_nav')],

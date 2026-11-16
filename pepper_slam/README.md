@@ -142,7 +142,6 @@ the `bag_test/` prefix fails with "not found".
 | `fastlio_odometry_bag` / `pointlio_odometry_bag` | `fastlio_odometry` / `pointlio_odometry` |
 | `fastlio_lc_bag` / `pointlio_lc_bag` | `fastlio_lc_pgo`'s `fastlio_lc_l2` / `pointlio_lc_l2` |
 | `rtabmap_*_bag` | `rtabmap_base` plus a LIO |
-| `odom_compare_bag` | FAST-LIO against the bag's wheel odometry, side by side in RViz |
 
 Localization and navigation need no wrapper; they take `use_sim_time`
 directly.
@@ -186,9 +185,10 @@ the tilted `lio_init`. `FRAMES.md` has the full frame contract.
 
 ## ⚙️ Configuration
 
-Each node reads its parameters from `config/<node>_configuration.yaml`, the
-same convention as the other pepper4dec packages; `cloud_range_filter`'s file
-has one section per instance. The launch files add only `use_sim_time` and
+Every node reads its parameters from `config/pepper_slam_configuration.yaml`,
+one section per node name (`lio_odom_bridge`, `pgo_map_odom_bridge`,
+`points_safety_filter`, `points_costmap_filter`, `wheel_odom_tf`), like the
+other pepper4dec packages' configuration files. The launch files add only `use_sim_time` and
 the body frame the bridges must share with the estimator (`lidar_imu_frame`,
 read from the estimator's config, so it is never in these files). A launch
 argument such as `guard_enable:=true` overrides the file for that launch only;
@@ -204,10 +204,7 @@ own configurations are `fast_lio`'s `config/l2_rsimu.yaml` and `point_lio`'s
 ```
 pepper_slam/
 ├── config/
-│   ├── lio_odom_bridge_configuration.yaml      # lio_odom_bridge + divergence guard
-│   ├── pgo_map_odom_bridge_configuration.yaml  # pgo_map_odom_bridge
-│   ├── cloud_range_filter_configuration.yaml   # points_safety_filter, points_costmap_filter
-│   ├── wheel_odom_tf_configuration.yaml        # wheel_odom_tf
+│   ├── pepper_slam_configuration.yaml  # every node's parameters, one section per node
 │   ├── record_qos.yaml                 # /tf_static QoS override for ros2 bag record
 │   └── sensor_tf.yaml                  # rig transform values; provenance in the header
 ├── launch/
@@ -225,9 +222,7 @@ pepper_slam/
 │   ├── lio_odom_bridge.py              # odom -> base_footprint from the LIO pose; levels lio_init once
 │   ├── lio_odom_guard.py               # divergence gate; a module imported by the bridge
 │   ├── pgo_map_odom_bridge.py          # map -> odom from a pose-graph-optimized trajectory
-│   ├── cloud_to_odom_frame.py          # re-expresses a cloud in the odom frame
 │   ├── check_frame_contract.py         # asserts the LIO frame contract, whichever backend runs
-│   ├── odom_compare.py                 # side-by-side odometry comparison
 │   └── static_tf_publisher.py          # a whole static TF chain from one node
 ├── src/
 │   ├── cloud_range_filter.cpp          # range / outlier / ground filters; feeds Nav2's /points_safety and /points_costmap

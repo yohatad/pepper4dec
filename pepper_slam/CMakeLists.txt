@@ -94,8 +94,6 @@ install(PROGRAMS
   # whether it lands on install/lib/pepper_slam or back on scripts/.
   scripts/lio_odom_guard.py
   scripts/pgo_map_odom_bridge.py
-  scripts/cloud_to_odom_frame.py
-  scripts/odom_compare.py
   scripts/check_frame_contract.py
   scripts/static_tf_publisher.py
   DESTINATION lib/${PROJECT_NAME}

@@ -1,0 +1,147 @@
+# pepper_slam Configuration File
+# ROS2 parameters for every pepper_slam node, one section per node name. Each
+# launch file loads this whole file; a node reads only its own section. Run
+# `ros2 param get /<node> <name>` to inspect a value at runtime. A launch
+# argument of the same name (e.g. guard_enable:=true) overrides a value here
+# for that launch only.
+#
+# Not here, on purpose: lidar_imu_frame, for both bridges. It MUST equal the
+# estimator config's publish.body_frame, or odom -> base_footprint (or the
+# whole map) comes out composed through the wrong mount with no error anywhere,
+# so the launch files read it from that config.
+#
+# Loaded by: lio_odom_bridge.launch.py (and point_lio's mapping launch),
+# fastlio_lc_pgo's *_lc_l2.launch.py (pgo_map_odom_bridge), and the
+# pepper_navigation Nav2 profiles (the two cloud_range_filter instances and
+# wheel_odom_tf).
+
+# =============================================================================
+# lio_odom_bridge: the estimator's odometry -> levelled odom ->
+# base_footprint, with the divergence guard
+# =============================================================================
+
+lio_odom_bridge:
+  ros__parameters:
+
+    # =========================================================================
+    # Frames and topics
+    # =========================================================================
+    odom_frame: "lio_init"           # the estimator's world frame
+    base_frame: "base_footprint"
+    odom_topic: "/odom_lio"          # the estimator's odometry
+
+    # =========================================================================
+    # Levelling: the gravity-aligned odom frame above lio_init
+    # =========================================================================
+    level_frame: "odom"
+    publish_level_frame: true        # false when a higher layer owns odom (PGO)
+    level_frame_as_child: false
+    level_frame_on_floor: true       # odom at floor height, not at the IMU
+    level_source: "calibration"      # levelling from the static rig TF
+    flatten_base_frame: true         # zero z, roll, pitch (flat floor only)
+
+    # =========================================================================
+    # Divergence guard: reject poses the base cannot physically reach
+    # =========================================================================
+    guard_enable: false              # changes what lands on odom -> base_footprint
+    wheel_odom_topic: "/pepper_odom"
+    max_linear_speed: 0.7            # m/s; Nav2 commands at most 0.35
+    max_angular_speed: 1.0           # rad/s
+    max_hold_duration: 3.0           # s on wheels alone before FAULT
+    zero_velocity_eps: 0.02          # m/s; wheels below this count as stopped
+    zero_velocity_lio_eps: 0.10      # m/s; LIO above this while stopped is rejected
+    trust_scale_topic: "/localization/wheel_trust_scale"
+    degraded_trust_scale: 0.5        # trust scale at the start of a hold
+    hold_drift_k: 1.0                # 1/m; scale = degraded + (k * distance)^2
+    max_trust_scale: 10.0
+
+# =============================================================================
+# pgo_map_odom_bridge: the pose-graph optimizer's corrections -> map -> odom
+# =============================================================================
+
+pgo_map_odom_bridge:
+  ros__parameters:
+
+    # =========================================================================
+    # Frames and topics
+    # =========================================================================
+    map_frame: "pgo_init"            # the optimizer's world frame
+    odom_frame: "lio_init"           # the estimator's world frame
+    base_frame: "base_footprint"
+    odom_topic: "/odom_lio"          # the estimator's odometry
+    pgo_odom_topic: "/aft_pgo_odom"  # the optimizer's corrected keyframes
+
+    # =========================================================================
+    # Levelling: the gravity-aligned map frame above pgo_init
+    # =========================================================================
+    level_frame: "map"
+    publish_level_frame: true
+    level_frame_on_floor: true       # z = 0 is the floor (octomap needs this)
+    level_source: "calibration"      # levelling from the static rig TF
+
+    # =========================================================================
+    # Matching keyframes to odometry
+    # =========================================================================
+    odom_buffer_size: 1000           # recent odometry samples kept
+
+# =============================================================================
+# cloud_range_filter: two instances, one section each
+# =============================================================================
+
+# The L2 cloud for the collision monitor (/points_safety). Every Nav2 profile
+# runs this one, so its stop zone depends on these values.
+points_safety_filter:
+  ros__parameters:
+    input_topic: "/points"
+    output_topic: "/points_safety"
+    # 0.12, was 0.22: 0.22 hid a box ~0.10 m from the lidar. Measured
+    # 2026-10-19 on an empty scene, 510 scans: no returns between 0.12 and 0.22,
+    # so 0.12 adds no false stops.
+    min_range: 0.12                  # m from the lidar
+    max_range: 0.0                   # m; 0 = no upper limit
+    # Side-body cut for Pepper's body beside the lidar (0.11-0.25 m from it);
+    # the forward cone is kept at every range, so nothing driven into is cut.
+    # Re-measured 2026-10-19, arms at rest: false-stop rate 65% with no cut,
+    # 0% at 0.30-0.40. 0.30 (was 0.40) lets the L2 see more of the stop zone.
+    self_cut_range: 0.30             # m
+    self_cut_angle: 25.0             # deg, half-width on each flank
+    # Pepper's front face, straight ahead of the lidar, which neither range cut
+    # can drop without blinding the forward cone: [x_min, x_max, y_min, y_max,
+    # z_min, z_max] in base_footprint, 6 values per box. Measured 2026-10-19:
+    # depending on stance the face shows from z 0.38 up, and z_min 0.60 left
+    # 43% of scans false-stopping; 0.30 gives 0%. The box stays inside
+    # robot_radius 0.25, so it cannot hide anything outside the body.
+    body_boxes: [0.10, 0.22, -0.13, 0.13, 0.30, 1.00]
+    ror_min_neighbors: 0             # radius outlier removal off
+    remove_ground_plane: false       # the monitor keeps 0.22-1.80 m itself
+
+# The L2 cloud for the amcl and kissicp costmaps (/points_costmap): near range
+# and the floor removed.
+points_costmap_filter:
+  ros__parameters:
+    input_topic: "/points"
+    output_topic: "/points_costmap"
+    min_range: 0.8                   # m from the lidar
+    max_range: 0.0                   # m; 0 = no upper limit
+    ror_min_neighbors: 0             # radius outlier removal off
+    remove_ground_plane: true
+    ground_frame: "base_footprint"
+    ground_distance_thresh: 0.05     # m from the plane counted as ground
+    ground_angle_thresh: 0.15        # rad from level
+    # The node's defaults (0.12 m, 60 iterations) found no plane on about half
+    # the scans: 0.20 clears the measured base_footprint z drift, and 300
+    # iterations reliably sample 3 floor points from a ~4k-point scan.
+    ground_z_thresh: 0.20            # m; only points below this can be ground
+    ground_ransac_iterations: 300
+    ground_min_points: 30
+
+# =============================================================================
+# wheel_odom_tf: /pepper_odom -> odom -> base_footprint, for the localizers'
+# opt-in odom mode (odom_frame is set by the Nav2 profiles' odom_frame argument)
+# =============================================================================
+
+wheel_odom_tf:
+  ros__parameters:
+    wheel_odom_topic: "/pepper_odom"
+    odom_frame: "odom"
+    base_frame: "base_footprint"
