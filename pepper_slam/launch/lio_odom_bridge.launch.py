@@ -8,8 +8,7 @@ need it identically, so include this file rather than starting the node
 yourself — pass use_sim_time, config_path and config_file.
 
 Nodes started:
-    pepper_slam/lio_odom_bridge.py (node: lio_odom_bridge), parameters from
-    config/pepper_slam_configuration.yaml
+    pepper_slam/lio_odom_bridge.py (node: lio_odom_bridge)
 
 Launch arguments:
     use_sim_time (default: "false")
@@ -21,12 +20,12 @@ Launch arguments:
     lidar_imu_frame (default: "camera_imu_optical_frame")
         The body frame the estimator stamps. Passing '' falls back to reading
         publish.body_frame from the config.
-    bridge_level_frame, level_frame_as_child, flatten_base_frame, odom_topic,
-    guard_enable, wheel_odom_topic, max_linear_speed, max_angular_speed,
-    max_hold_duration (default: "" for all)
-        Overrides. The values live in config/pepper_slam_configuration.yaml;
-        a non-empty argument replaces the file's value for this launch only.
-        bridge_level_frame sets the node's publish_level_frame.
+    bridge_level_frame (default: "true")
+        Publish the gravity-leveled odom frame.
+    level_frame_as_child (default: "false")
+    flatten_base_frame (default: "true")
+        Clamp z, roll, and pitch to zero (Pepper is flat-floor-only).
+    odom_topic (default: "/odom_lio")
 
 THE BODY FRAME MUST EQUAL WHAT THE ESTIMATOR STAMPS, or the bridge composes
 odom -> base_footprint through the wrong rigid offset and yields a pose that
@@ -99,50 +98,6 @@ def _resolve_body_frame(context, *args, **kwargs):
                         % (frame, os.path.basename(path)))]
 
 
-# Launch arguments that override config/pepper_slam_configuration.yaml, and
-# the node parameter each one sets.
-_OVERRIDES = {
-    'bridge_level_frame': 'Publish the static odom leveling frame (node '
-                          'parameter publish_level_frame). False when a higher '
-                          'layer owns odom, e.g. PGO map -> odom.',
-    'level_frame_as_child': 'Publish the leveling frame as the child.',
-    'flatten_base_frame': 'Zero the leveled z/roll/pitch every cycle.',
-    'odom_topic': "The estimator's odometry topic.",
-    'guard_enable': 'Reject LIO poses that break a physical speed bound and '
-                    'dead reckon on wheel odometry instead.',
-    'wheel_odom_topic': 'Wheel odometry the guard dead reckons on.',
-    'max_linear_speed': 'm/s the base cannot exceed.',
-    'max_angular_speed': 'rad/s the base cannot exceed.',
-    'max_hold_duration': 'Seconds the pose may coast on wheels before FAULT.',
-}
-_PARAM_NAME = {'bridge_level_frame': 'publish_level_frame'}
-
-
-def _bridge_node(context, *args, **kwargs):
-    """Start the bridge from its configuration file plus the passed overrides."""
-    import yaml
-    overrides = {}
-    for name in _OVERRIDES:
-        value = LaunchConfiguration(name).perform(context)
-        if value != '':
-            overrides[_PARAM_NAME.get(name, name)] = yaml.safe_load(value)
-    return [Node(
-        package='pepper_slam',
-        executable='lio_odom_bridge.py',
-        name='lio_odom_bridge',
-        output='screen',
-        parameters=[
-            os.path.join(get_package_share_directory('pepper_slam'), 'config',
-                         'pepper_slam_configuration.yaml'),
-            {
-                'use_sim_time': LaunchConfiguration('use_sim_time'),
-                'lidar_imu_frame': LaunchConfiguration('resolved_body_frame'),
-                **overrides,
-            },
-        ],
-    )]
-
-
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='false'),
@@ -166,11 +121,55 @@ def generate_launch_description():
             description='Body frame the bridge stamps. Must match the '
                         'estimator config\'s publish.body_frame. Empty reads '
                         'it from that config instead.'),
-        # Overrides of config/pepper_slam_configuration.yaml. Empty (the
-        # default) keeps the file's value; anything else replaces it.
-        *[DeclareLaunchArgument(name, default_value='', description=desc)
-          for name, desc in _OVERRIDES.items()],
+        DeclareLaunchArgument(
+            'bridge_level_frame', default_value='true',
+            description='Publish the static odom -> odom leveling frame. False '
+                        'when a higher layer owns odom (e.g. PGO map -> odom).'),
+        DeclareLaunchArgument('level_frame_as_child', default_value='false'),
+        DeclareLaunchArgument(
+            'flatten_base_frame', default_value='true',
+            description='Zero the leveled z/roll/pitch every cycle (keep x, y, '
+                        'yaw). Safe here: Pepper is flat-floor only.'),
+        DeclareLaunchArgument('odom_topic', default_value='/odom_lio'),
+        DeclareLaunchArgument(
+            'guard_enable', default_value='false',
+            description='Reject LIO poses that break a physical speed bound and '
+                        'dead reckon on wheel odometry instead. Off by default: '
+                        'it changes what lands on odom -> base_footprint.'),
+        DeclareLaunchArgument(
+            'wheel_odom_topic', default_value='/pepper_odom',
+            description='Wheel odometry the guard dead reckons on and uses as '
+                        'its zero-velocity reference.'),
+        DeclareLaunchArgument(
+            'max_linear_speed', default_value='0.7',
+            description='m/s the base cannot exceed; above this the estimate is '
+                        'broken, not fast. Nav2 commands at most 0.5.'),
+        DeclareLaunchArgument('max_angular_speed', default_value='1.0'),
+        DeclareLaunchArgument(
+            'max_hold_duration', default_value='3.0',
+            description='Seconds the pose may coast on wheels before the guard '
+                        'escalates to FAULT.'),
+
         # AFTER the declares: the resolver reads config_path/config_file.
         OpaqueFunction(function=_resolve_body_frame),
-        OpaqueFunction(function=_bridge_node),
+
+        Node(
+            package='pepper_slam',
+            executable='lio_odom_bridge.py',
+            name='lio_odom_bridge',
+            output='screen',
+            parameters=[{
+                'use_sim_time': LaunchConfiguration('use_sim_time'),
+                'odom_topic': LaunchConfiguration('odom_topic'),
+                'lidar_imu_frame': LaunchConfiguration('resolved_body_frame'),
+                'flatten_base_frame': LaunchConfiguration('flatten_base_frame'),
+                'publish_level_frame': LaunchConfiguration('bridge_level_frame'),
+                'level_frame_as_child': LaunchConfiguration('level_frame_as_child'),
+                'guard_enable': LaunchConfiguration('guard_enable'),
+                'wheel_odom_topic': LaunchConfiguration('wheel_odom_topic'),
+                'max_linear_speed': LaunchConfiguration('max_linear_speed'),
+                'max_angular_speed': LaunchConfiguration('max_angular_speed'),
+                'max_hold_duration': LaunchConfiguration('max_hold_duration'),
+            }],
+        ),
     ])

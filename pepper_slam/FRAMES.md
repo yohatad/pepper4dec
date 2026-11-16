@@ -227,8 +227,7 @@ accumulates -- not to widen the threshold.
 ## Static TF
 
 The rig's 10 static transforms live in `config/sensor_tf.yaml` and are published
-by a single `static_tf_publisher` node (C++; the parser is
-`src/rig_transforms.cpp`, tested by `test/test_rig_transforms.cpp`). This was previously 10 separate
+by a single `static_tf_publisher` node. This was previously 10 separate
 `static_transform_publisher` processes -- one per edge, each a full ROS node
 with its own executor and DDS participant, to publish seven constants. Edit the
 YAML, not the launch file. The node rejects a frame given two parents and warns

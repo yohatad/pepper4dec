@@ -20,7 +20,6 @@ find_package(nav_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
-find_package(yaml-cpp REQUIRED)
 
 # The filters behind cloud_range_filter, free of ROS so the tests can drive
 # them directly (test/test_cloud_filters.cpp).
@@ -56,28 +55,7 @@ ament_target_dependencies(wheel_odom_tf
   tf2_ros
 )
 
-# The rig's static transforms from config/sensor_tf.yaml, free of ROS so the
-# tests can drive the parser directly (test/test_rig_transforms.cpp).
-add_library(rig_transforms STATIC
-  src/rig_transforms.cpp
-)
-target_include_directories(rig_transforms PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-)
-target_link_libraries(rig_transforms yaml-cpp)
-
-# static_tf_publisher: the whole rig as one latched /tf_static message.
-add_executable(static_tf_publisher
-  src/static_tf_publisher.cpp
-)
-target_link_libraries(static_tf_publisher rig_transforms)
-ament_target_dependencies(static_tf_publisher
-  rclcpp
-  geometry_msgs
-  tf2_ros
-)
-
-install(TARGETS cloud_range_filter wheel_odom_tf static_tf_publisher
+install(TARGETS cloud_range_filter wheel_odom_tf
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -116,7 +94,10 @@ install(PROGRAMS
   # whether it lands on install/lib/pepper_slam or back on scripts/.
   scripts/lio_odom_guard.py
   scripts/pgo_map_odom_bridge.py
+  scripts/cloud_to_odom_frame.py
+  scripts/odom_compare.py
   scripts/check_frame_contract.py
+  scripts/static_tf_publisher.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -182,12 +163,6 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_cloud_filters test/test_cloud_filters.cpp)
   target_link_libraries(test_cloud_filters cloud_filters)
-
-  # static_tf_publisher's parser, on hand-written YAML and the shipped rig.
-  ament_add_gtest(test_rig_transforms test/test_rig_transforms.cpp)
-  target_link_libraries(test_rig_transforms rig_transforms)
-  target_compile_definitions(test_rig_transforms PRIVATE
-    SENSOR_TF_YAML="${CMAKE_CURRENT_SOURCE_DIR}/config/sensor_tf.yaml")
 endif()
 
 ament_package()

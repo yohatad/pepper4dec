@@ -279,8 +279,7 @@ the sides) when more than 10 points fall in a zone, independently of the
 costmaps and the planner. It reads `/points_safety`, the L2 cloud after
 `points_safety_filter` (C++ `cloud_range_filter`) has removed the lidar's own
 housing and Pepper's body; otherwise those self-hits would stop the robot for
-good. Every profile loads that filter's values, and their measurements, from
-`pepper_slam/config/pepper_slam_configuration.yaml`.
+good.
 
 `bumper_guard` is the last gate. Any bumper press stops all motion, turning
 included, and the stop holds after release until
