@@ -1,6 +1,6 @@
 """speech_event.launch.py
 
-Launch all three speech_event nodes against the shared package configuration.
+Launch the speech_event nodes against the shared package configuration.
 
 Nodes started:
     speech_event/speech_event (node: speech_recognition)
@@ -9,13 +9,14 @@ Nodes started:
     speech_event/speech_event_localization (node: sound_localization)
         SRP-PHAT sound-source azimuth from the 4-microphone array.
     speech_event/speech_event_recorder (node: audio_recorder)
-        Records the raw microphone stream to WAV. Note that this launch
-        starts the recorder unconditionally, so every run writes audio files
-        under the path set by output_base; comment the node out if that is
-        not wanted.
+        Only with record_audio:=true. Records the raw microphone stream to
+        WAV, about 1.4 GB an hour at 48 kHz x 4 channels, under
+        ~/.ros/speech_event/ by default and for at most max_seconds (1 hour
+        in the shipped configuration).
 
 Launch arguments:
-    (none)
+    record_audio (default: "false")
+        Also start audio_recorder.
 
 Configuration:
     config/speech_event_configuration.yaml — one block per node, keyed by
@@ -28,6 +29,7 @@ Prerequisites:
 
 Usage:
     ros2 launch speech_event speech_event.launch.py
+    ros2 launch speech_event speech_event.launch.py record_audio:=true
 
 Each node's ROS interface is documented in its application file
 (speech_event_application.py, speech_event_localization.py,
@@ -48,6 +50,9 @@ import os
 import launch
 import launch_ros.actions
 from ament_index_python.packages import get_package_share_directory
+from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition
+from launch.substitutions import LaunchConfiguration
 
 
 def generate_launch_description():
@@ -58,6 +63,12 @@ def generate_launch_description():
     )
 
     return launch.LaunchDescription([
+        DeclareLaunchArgument(
+            'record_audio',
+            default_value='false',
+            description='Also start audio_recorder, which writes the raw '
+                        'microphone stream to WAV (about 1.4 GB an hour)'
+        ),
         launch_ros.actions.Node(
             package='speech_event',
             executable='speech_event',
@@ -78,5 +89,6 @@ def generate_launch_description():
             name='audio_recorder',
             parameters=[config],
             output='screen',
+            condition=IfCondition(LaunchConfiguration('record_audio')),
         ),
     ])

@@ -155,7 +155,11 @@ audio_recorder:
     # -------------------------------------------------------------------------
     # Output
     # -------------------------------------------------------------------------
-    output_base: "data/pepper_audio"  # Relative to package share dir, or absolute path.
-                                     # Output: <output_base>_<Hz>_<N>ch.wav
-    max_seconds: 0               # Stop after N seconds (0 = run until Ctrl-C)
+    # A relative path goes under $ROS_HOME/speech_event (~/.ros/speech_event by
+    # default); "~" and absolute paths are used as given.
+    # Output: <output_base>_<YYYYmmdd-HHMMSS>_<Hz>Hz_<N>ch.wav
+    output_base: "pepper_audio"
+    # Stop after N seconds; 1 h is about 1.4 GB at 48 kHz x 4 channels.
+    # 0 = until Ctrl-C. Always stops at the 4 GB WAV limit (about 3 h).
+    max_seconds: 3600
     split_channels: false        # Also write one mono WAV per channel if true

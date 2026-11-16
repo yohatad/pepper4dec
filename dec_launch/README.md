@@ -45,6 +45,7 @@ ros2 launch dec_launch dec_system.launch.py enable_navigation:=false
 |---|---|---|
 | `enable_navigation` | `true` | bring up `pepper_navigation`. With `false`, `fastlio_localization` still starts on its own, so `/localization/pose` exists for `gesture_execution` |
 | `nav_profile` | `fastloc` | `fastloc`, `pointloc`, `rtabmap_loc` or `amcl`; see the `pepper_navigation` README |
+| `record_audio` | `false` | also record the raw microphones to WAV (about 1.4 GB an hour, under `~/.ros/speech_event/`); see the `speech_event` README |
 
 ### Sensors and robot
 

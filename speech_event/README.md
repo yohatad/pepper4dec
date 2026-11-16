@@ -88,12 +88,15 @@ ros2 run speech_event speech_event --ros-args -p action_server:=false
 ### Optional Nodes
 
 ```bash
-# Audio recorder (for debugging/data collection)
+# Audio recorder (for debugging/data collection), on its own or with the launch
 ros2 run speech_event speech_event_recorder
+ros2 launch speech_event speech_event.launch.py record_audio:=true
 
 # Sound-source localization (requires 4-mic array)
 ros2 run speech_event speech_event_localization
 ```
+
+The recorder is off unless asked for: `speech_event.launch.py` (and `dec_system.launch.py`) start it only with `record_audio:=true`. It writes the raw 4-microphone stream, about 1.4 GB an hour, to `~/.ros/speech_event/pepper_audio_<YYYYmmdd-HHMMSS>_48000Hz_4ch.wav`, and stops after `max_seconds` (1 hour in the shipped configuration; `0` = until Ctrl-C) or at the 4 GB WAV limit. Set `output_base` in the `audio_recorder` block of the configuration to write elsewhere.
 
 ## 🖥️ ROS Interface
 
@@ -243,7 +246,7 @@ colcon test --packages-select speech_event
 colcon test-result --verbose
 ```
 
-Besides the linters, this runs unit tests for the denoiser (bandpass, fan detection, harmonic notches) and the localization angle helpers.
+Besides the linters, this runs unit tests for the denoiser (bandpass, fan detection, harmonic notches), the localization angle helpers, and the recorder's output path and recording limit.
 
 ## 💡 Support
 

@@ -8,8 +8,14 @@ to WAV files for offline inspection or debugging.
 
 The node subscribes to a topic publishing naoqi_bridge_msgs/msg/AudioBuffer and
 writes the interleaved PCM data to a multichannel .wav file. It can optionally
-also write one mono .wav file per channel. Recording stops after `max_seconds`
-(if nonzero) or on Ctrl-C.
+also write one mono .wav file per channel. Recording stops, and the node exits,
+after `max_seconds`, on Ctrl-C, or when the file reaches the 4 GB WAV size
+limit (about 3 hours at 48 kHz x 4 channels, which is 1.4 GB an hour).
+
+Files are named <output_base>_<YYYYmmdd-HHMMSS>_<Hz>Hz_<N>ch.wav, so a new
+run never overwrites an earlier recording. A relative output_base is placed
+under $ROS_HOME/speech_event (ROS_HOME defaults to ~/.ros), never inside the
+installed package; "~" and absolute paths are used as given.
 
 Subscribers:
     <mic_topic> (naoqi_bridge_msgs/AudioBuffer)
@@ -18,8 +24,8 @@ Subscribers:
 
 Parameters (loaded from speech_event_configuration.yaml):
     mic_topic (string, default: "/audio")
-    output_base (string, default: "./pepper_audio")
-    max_seconds (int, default: 0)
+    output_base (string, default: "pepper_audio")
+    max_seconds (int, default: 3600; 0 = until Ctrl-C or the WAV size limit)
     split_channels (bool, default: false)
 
 Author: Yohannes Tadesse Haile
@@ -34,12 +40,19 @@ within the DEC project.
 """
 
 import os
+import time
 import wave
 import numpy as np
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from naoqi_bridge_msgs.msg import AudioBuffer
-from ament_index_python.packages import get_package_share_directory
+
+SAMPLE_WIDTH = 2  # bytes per sample (int16)
+
+# A WAV header stores the RIFF chunk size, 36 + the data size, in 32 bits, so
+# the audio data can be at most this many bytes.
+WAV_MAX_DATA_BYTES = 0xFFFFFFFF - 36
 
 CHANNEL_LABELS = {
     AudioBuffer.CHANNEL_FRONT_LEFT: "front_left",
@@ -53,6 +66,44 @@ CHANNEL_LABELS = {
     AudioBuffer.CHANNEL_SUBWOOFER: "subwoofer",
     AudioBuffer.CHANNEL_LFE: "lfe",
 }
+
+
+def resolve_output_base(raw, ros_home=None):
+    """Return the absolute path that output file names start with.
+
+    Args:
+        raw (str): The output_base parameter.
+        ros_home (str | None): Base for relative paths; None means
+            $ROS_HOME, or ~/.ros when that is unset.
+
+    Returns:
+        str: "~" expanded and absolute paths unchanged; a relative path
+        placed under <ros_home>/speech_event.
+    """
+    path = os.path.expanduser(raw)
+    if os.path.isabs(path):
+        return path
+    if ros_home is None:
+        ros_home = os.environ.get('ROS_HOME') or os.path.join('~', '.ros')
+    return os.path.join(os.path.expanduser(ros_home), 'speech_event', path)
+
+
+def frame_limit(freq, channels, max_seconds):
+    """Return how many frames (samples per channel) to record.
+
+    Args:
+        freq (int): Sample rate in Hz.
+        channels (int): Channels in the multichannel file.
+        max_seconds (int): Time limit; 0 means none.
+
+    Returns:
+        int: max_seconds worth of frames, but never more than fits in one
+        WAV file.
+    """
+    wav_cap = WAV_MAX_DATA_BYTES // (channels * SAMPLE_WIDTH)
+    if max_seconds > 0:
+        return min(max_seconds * freq, wav_cap)
+    return wav_cap
 
 
 class AudioRecorderNode(Node):
@@ -70,8 +121,8 @@ class AudioRecorderNode(Node):
 
         # Declare params
         self.declare_parameter('mic_topic', '/audio')
-        self.declare_parameter('output_base', './pepper_audio')
-        self.declare_parameter('max_seconds', 0)
+        self.declare_parameter('output_base', 'pepper_audio')
+        self.declare_parameter('max_seconds', 3600)
         self.declare_parameter('split_channels', False)
 
         self.mic_topic = self.get_parameter('mic_topic').get_parameter_value().string_value
@@ -81,13 +132,10 @@ class AudioRecorderNode(Node):
         self.split_channels = bool(self.get_parameter(
             'split_channels').get_parameter_value().bool_value)
 
-        # Resolve relative output_base against the package data directory
-        if os.path.isabs(raw_output_base):
-            self.output_base = raw_output_base
-        else:
-            self.output_base = os.path.join(
-                get_package_share_directory('speech_event'), raw_output_base
-            )
+        # Outside the installed package, and stamped with the start time so a
+        # new run does not overwrite the last recording.
+        self.output_base = (f"{resolve_output_base(raw_output_base)}_"
+                            f"{time.strftime('%Y%m%d-%H%M%S')}")
 
         # State
         self.wave_main = None           # wave.Wave_write handle (multi-channel)
@@ -95,14 +143,16 @@ class AudioRecorderNode(Node):
         self.freq = None                # sample rate
         self.channels = None            # number of channels
         self.frames_written = 0         # frames (per channel) written
+        self.frame_limit = None         # set from the first message
         self.shutting_down = False
+        self.done = False               # limit reached; main() exits
 
         # Subscribe
         self.sub = self.create_subscription(AudioBuffer, self.mic_topic, self.on_audio, 10)
         self.get_logger().info(f"Recording from: {self.mic_topic}")
         self.get_logger().info(
             f"Saving to base: {self.output_base}  split_channels={self.split_channels}  "
-            f"max_seconds={self.max_seconds or '∞'}")
+            f"max_seconds={self.max_seconds or 'until Ctrl-C (or 4 GB)'}")
 
     # ---------- helpers ----------
 
@@ -167,7 +217,7 @@ class AudioRecorderNode(Node):
                 audio; the first message also fixes the sample rate and
                 channel layout of the output files.
         """
-        if self.shutting_down:
+        if self.shutting_down or self.done:
             return
 
         try:
@@ -183,6 +233,7 @@ class AudioRecorderNode(Node):
             if self.wave_main is None:
                 self.freq = freq_in
                 self.channels = channels
+                self.frame_limit = frame_limit(freq_in, channels, self.max_seconds)
                 self.wave_main = self._open_main(freq_in, channels, channel_map)
                 if self.split_channels:
                     self.wave_split = self._open_splits(freq_in, channel_map)
@@ -195,7 +246,9 @@ class AudioRecorderNode(Node):
                 )
 
             # Frames = samples per channel
-            num_frames = data_i16.size // channels
+            # Never past the limit: the last buffer is cut to fit.
+            num_frames = min(data_i16.size // channels,
+                             self.frame_limit - self.frames_written)
             if num_frames <= 0:
                 return
 
@@ -208,14 +261,13 @@ class AudioRecorderNode(Node):
                 for i, wf in enumerate(self.wave_split):
                     wf.writeframes(frames[:, i].astype(np.int16).tobytes())
 
-            # Count frames for duration
             self.frames_written += num_frames
-            if self.max_seconds > 0:
-                seconds = self.frames_written / float(self.freq)
-                if seconds >= self.max_seconds:
-                    self.get_logger().info(f"Reached {self.max_seconds}s. Stopping.")
-                    self._close_all()
-                    rclpy.shutdown()
+            if self.frames_written >= self.frame_limit:
+                self.get_logger().info(
+                    f"Recorded {self.frames_written / float(self.freq):.0f} s, the "
+                    f"limit (max_seconds or the 4 GB WAV size). Stopping.")
+                self._close_all()
+                self.done = True
 
         except Exception as e:
             self.get_logger().error(f"Recorder error: {e}")
@@ -225,19 +277,20 @@ def main():
     """Entry point for the audio_recorder ROS2 node.
 
     Initializes rclpy, instantiates the AudioRecorderNode, and spins it until
-    Ctrl-C or the configured max_seconds is reached, closing the WAV files on
-    the way out.
+    Ctrl-C or until the node reaches its recording limit, closing the WAV files
+    on the way out.
     """
     rclpy.init()
     node = AudioRecorderNode()
     try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
+        while rclpy.ok() and not node.done:
+            rclpy.spin_once(node, timeout_sec=0.5)
+    except (KeyboardInterrupt, ExternalShutdownException):
         node.get_logger().info("Ctrl-C received. Stopping recording...")
     finally:
         node._close_all()
         node.destroy_node()
-        rclpy.shutdown()
+        rclpy.try_shutdown()
 
 
 if __name__ == '__main__':

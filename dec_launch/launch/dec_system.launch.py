@@ -38,6 +38,9 @@ Launch arguments:
         fastloc = fastlio_localization, FAST-LIO with the prior map inside the
         iEKF; pointloc = the Point-LIO equivalent; rtabmap_loc = RTAB-Map
         localization mode; amcl = AMCL on FAST-LIO odom.
+    record_audio (default: "false")
+        Passed to speech_event.launch.py: also record the raw microphones to
+        WAV (about 1.4 GB an hour, under ~/.ros/speech_event/).
 
 Configuration:
     None of its own; each included launch file loads its package's YAML.
@@ -140,6 +143,12 @@ def generate_launch_description():
                         'rtabmap_loc = RTAB-Map '
                         'localization mode; amcl = AMCL on FAST-LIO odom'
         ),
+        DeclareLaunchArgument(
+            'record_audio',
+            default_value='false',
+            description='Also record the raw microphones to WAV '
+                        '(speech_event audio_recorder, about 1.4 GB an hour)'
+        ),
 
         # Perception: shared camera + person/face detection + overt attention
         _include('overt_attention', 'attention_system.launch.py'),
@@ -161,7 +170,9 @@ def generate_launch_description():
         _include('gesture_execution', 'gesture_execution.launch.py'),
 
         # Speech / dialogue
-        _include('speech_event', 'speech_event.launch.py'),
+        _include('speech_event', 'speech_event.launch.py',
+                 launch_arguments={
+                     'record_audio': LaunchConfiguration('record_audio')}.items()),
         _include('text_to_speech', 'text_to_speech.launch.py'),
         _include('conversation_manager', 'conversation_manager.launch.py'),
 
