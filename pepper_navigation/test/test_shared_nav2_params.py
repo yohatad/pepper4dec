@@ -13,6 +13,7 @@ catches the same mistake.
 
     python3 test/test_shared_nav2_params.py     # or: colcon test
 """
+import copy
 import os
 import sys
 
@@ -20,6 +21,18 @@ import pytest
 import yaml
 
 SHARED = ("behavior_server", "controller_server", "planner_server")
+
+# Deliberate per-profile values inside a shared section: {dotted leaf under
+# ros__parameters: files allowed to differ}. Each is dropped from the
+# comparison in those files only, so the rest of the section stays guarded.
+# Keep this short, and say why in the param file.
+EXCEPTIONS = {
+    "controller_server": {
+        # fastloc alone at 1000 (fe0c122): 2000 used ~84% of a Jetson core and
+        # missed the 50 ms loop; the others follow once it has more mileage.
+        "FollowPath.batch_size": ("nav2_params_fastloc.yaml",),
+    },
+}
 FILES = ("nav2_params_amcl.yaml", "nav2_params_fastloc.yaml",
          "nav2_params_rtabmap_loc.yaml", "nav2_params_pointloc.yaml",
          "nav2_params_kissicp.yaml", "bag_test/nav2_params_l2voxel_test.yaml")
@@ -68,12 +81,36 @@ def _load():
     return loaded
 
 
+def _param_leaf(section, leaf, pop=False):
+    """Read (or remove, with pop) a dotted leaf under ros__parameters."""
+    *path, key = leaf.split(".")
+    d = section.get("ros__parameters", {})
+    for k in path:
+        d = d.get(k, {})
+    return d.pop(key, None) if pop else d.get(key)
+
+
+def _exception_drift(node, loaded):
+    """Each excepted leaf must still agree across the files NOT excepted."""
+    out = []
+    for leaf, files in EXCEPTIONS.get(node, {}).items():
+        vals = {f: _param_leaf(d[node], leaf) for f, d in loaded.items()
+                if node in d and f not in files}
+        if len(set(map(repr, vals.values()))) > 1:
+            out.append("%-20s %s differs outside its exception: %r" % (node, leaf, vals))
+    return out
+
+
 def _drift(node, loaded):
     """Return a list of human-readable drift reports for one shared node.
 
     An empty list means the node is byte-identical across all the param files.
     """
-    have = {f: d[node] for f, d in loaded.items() if node in d}
+    have = {f: copy.deepcopy(d[node]) for f, d in loaded.items() if node in d}
+    # Excepted leaves are compared by _exception_drift, not here.
+    for section in have.values():
+        for leaf in EXCEPTIONS.get(node, {}):
+            _param_leaf(section, leaf, pop=True)
     missing = [f for f in FILES if f not in have]
     if missing:
         return ["%-20s absent from %s" % (node, ", ".join(missing))]
@@ -95,7 +132,8 @@ def _drift(node, loaded):
 @pytest.mark.parametrize("node", SHARED)
 def test_shared_section_identical_across_param_files(node):
     """Each shared nav2 section must be identical in all the param files."""
-    drift = _drift(node, _load())
+    loaded = _load()
+    drift = _drift(node, loaded) + _exception_drift(node, loaded)
     assert not drift, "\n".join(drift)
 
 
