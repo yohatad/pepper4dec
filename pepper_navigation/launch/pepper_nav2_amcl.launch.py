@@ -225,6 +225,11 @@ def generate_launch_description():
     rviz_config = LaunchConfiguration('rviz_config')
 
     return LaunchDescription([
+        DeclareLaunchArgument(
+            'voxel_markers', default_value='false',
+            description='Start the voxel-marker converters for the 3D costmap view '
+                        '(nav2_*_voxel.rviz, nav2_amcl.rviz). Off by default: '
+                        'nothing in navigation uses them and they cost CPU.'),
         declare_use_sim_time_cmd,
         declare_map_cmd,
         declare_scan_min_height_cmd,
@@ -241,7 +246,8 @@ def generate_launch_description():
         nav2_nodes.points_costmap_filter(use_sim_time),
         nav2_nodes.collision_monitor(configured_params),
         nav2_nodes.sensor_guard(use_sim_time),
-        *nav2_nodes.voxel_markers(use_sim_time),
+        *nav2_nodes.voxel_markers(
+            use_sim_time, 'warn', IfCondition(LaunchConfiguration('voxel_markers'))),
         nav2_nodes.rviz(use_sim_time, rviz_config, IfCondition(rviz)),
         # map_server first so /map is up before amcl and the global costmap
         # activate; amcl before the costmaps so map -> odom exists.

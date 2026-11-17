@@ -330,6 +330,11 @@ def generate_launch_description():
             condition=IfCondition(cm_on) if with_monitor else UnlessCondition(cm_on))
 
     return LaunchDescription([
+        DeclareLaunchArgument(
+            'voxel_markers', default_value='false',
+            description='Start the voxel-marker converters for the 3D costmap view '
+                        '(nav2_*_voxel.rviz, nav2_amcl.rviz). Off by default: '
+                        'nothing in navigation uses them and they cost CPU.'),
         declare_use_sim_time_cmd,
         declare_sensor_tf_cmd,
         declare_sensor_tf_scope_cmd,
@@ -359,7 +364,8 @@ def generate_launch_description():
             log_level),
         # The 3D view's LOCAL grid covers the RealSense cone only: the L2 is
         # on a 2D ObstacleLayer beside it, which publishes no voxels.
-        *nav2_nodes.voxel_markers(use_sim_time, log_level),
+        *nav2_nodes.voxel_markers(
+            use_sim_time, log_level, IfCondition(LaunchConfiguration('voxel_markers'))),
         nav2_nodes.rviz(use_sim_time, LaunchConfiguration('rviz_config'),
                         IfCondition(rviz), log_level),
         make_lifecycle_manager(True),

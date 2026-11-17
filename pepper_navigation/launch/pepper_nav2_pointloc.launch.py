@@ -250,6 +250,11 @@ def generate_launch_description():
         convert_types=True)
 
     return LaunchDescription([
+        DeclareLaunchArgument(
+            'voxel_markers', default_value='false',
+            description='Start the voxel-marker converters for the 3D costmap view '
+                        '(nav2_*_voxel.rviz, nav2_amcl.rviz). Off by default: '
+                        'nothing in navigation uses them and they cost CPU.'),
         declare_use_sim_time_cmd,
         declare_sensor_tf_cmd,
         declare_sensor_tf_scope_cmd,
@@ -270,7 +275,8 @@ def generate_launch_description():
         nav2_nodes.points_safety_filter(use_sim_time),
         nav2_nodes.collision_monitor(configured_params),
         nav2_nodes.sensor_guard(use_sim_time),
-        *nav2_nodes.voxel_markers(use_sim_time),
+        *nav2_nodes.voxel_markers(
+            use_sim_time, 'warn', IfCondition(LaunchConfiguration('voxel_markers'))),
         nav2_nodes.rviz(use_sim_time, LaunchConfiguration('rviz_config'), IfCondition(rviz)),
         # autostart OFF, as in the fastloc profile: local_costmap blocks
         # configuring until map exists, which waits on ScanContext's lock, so

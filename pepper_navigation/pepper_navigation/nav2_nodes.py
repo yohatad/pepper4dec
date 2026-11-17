@@ -168,7 +168,7 @@ def sensor_guard(use_sim_time, cmd_vel_in=None, log_level=None):
     )
 
 
-def voxel_markers(use_sim_time, log_level='warn'):
+def voxel_markers(use_sim_time, log_level='warn', condition=None):
     """local_voxel_markers and global_voxel_markers, for the 3D RViz view.
 
     VoxelLayer publishes nav2_msgs/VoxelGrid, which RViz cannot draw; these
@@ -178,6 +178,11 @@ def voxel_markers(use_sim_time, log_level='warn'):
     markers" on every grid update (~30 lines/s for the pair), and output='log'
     does not hide it -- launch still echoes stderr, where rclcpp logs, to the
     screen.
+
+    condition: the profiles pass their voxel_markers argument (default false).
+    Nothing in navigation reads the markers -- only the *_voxel.rviz views and
+    nav2_amcl.rviz draw them -- and converting every grid update costs ~0.4 of
+    a Jetson core for the global grid alone, measured 2026-11-17.
     """
     def markers(costmap):
         return Node(
@@ -187,6 +192,7 @@ def voxel_markers(use_sim_time, log_level='warn'):
             output='log',
             arguments=_log(log_level),
             parameters=[{'use_sim_time': use_sim_time}],
+            condition=condition,
             remappings=[('voxel_grid', f'/{costmap}_costmap/voxel_grid'),
                         ('visualization_marker', f'/{costmap}_costmap/voxel_markers')],
         )
