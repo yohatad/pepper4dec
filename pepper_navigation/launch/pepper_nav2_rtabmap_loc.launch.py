@@ -17,7 +17,8 @@ Nodes started:
     nav2_behaviors/behavior_server, nav2_bt_navigator/bt_navigator.
     pepper_slam/cloud_range_filter (node: points_safety_filter).
     nav2_collision_monitor/collision_monitor.
-    pepper_navigation/localization_recovery.py.
+    pepper_navigation/localization_recovery.
+    pepper_navigation/tf_nav_relay.
     nav2_lifecycle_manager/lifecycle_manager x2 — one for navigation
     (lifecycle_manager_navigation) and a separate one for the collision
     monitor (lifecycle_manager_collision_monitor).
@@ -29,7 +30,10 @@ Launch arguments:
         Map database to localize against.
 
 Configuration:
-    config/nav2_params_rtabmap_loc.yaml and FAST-LIO's l2_rsimu.yaml.
+    config/nav2_params_rtabmap_loc.yaml, config/pepper_navigation_configuration.yaml,
+    pepper_slam's pepper_slam_configuration.yaml, and FAST-LIO's l2_rsimu.yaml.
+    The nodes shared by every profile are defined in
+    pepper_navigation/nav2_nodes.py.
 
 Frames:
     FAST-LIO odom -> lio_odom_bridge's gravity-leveled odom -> RTAB-Map map.
@@ -64,17 +68,9 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.substitutions import LaunchConfiguration
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 from nav2_common.launch import RewrittenYaml
-
-
-# pepper_slam's configuration file: the cloud_range_filter instances
-# (points_safety_filter, points_costmap_filter) and wheel_odom_tf read their
-# sections of it.
-_PEPPER_SLAM_CONFIG = os.path.join(
-    get_package_share_directory('pepper_slam'), 'config',
-    'pepper_slam_configuration.yaml')
+from pepper_navigation import nav2_nodes
 
 
 def generate_launch_description():
@@ -170,134 +166,30 @@ def generate_launch_description():
         param_rewrites={'use_sim_time': use_sim_time},
         convert_types=True)
 
-    controller_server = Node(
-        package='nav2_controller',
-        executable='controller_server',
-        name='controller_server',
-        output='screen',
-        parameters=[configured_params],
-        # Route velocity through the collision monitor: controller -> cmd_vel_raw
-        # -> collision_monitor -> cmd_vel (what Pepper drives on).
-        remappings=[('cmd_vel', 'cmd_vel_raw'), ('/tf', '/tf_nav')],
-    )
-    planner_server = Node(
-        package='nav2_planner',
-        executable='planner_server',
-        name='planner_server',
-        output='screen',
-        parameters=[configured_params],
-        remappings=[('/tf', '/tf_nav')],
-    )
-    behavior_server = Node(
-        package='nav2_behaviors',
-        executable='behavior_server',
-        name='behavior_server',
-        output='screen',
-        parameters=[configured_params],
-        # Recovery motions (spin/backup) also go through the collision monitor.
-        remappings=[('cmd_vel', 'cmd_vel_raw'), ('/tf', '/tf_nav')],
-    )
-
-    # Safety-layer input: drop the L2's own housing/bumper (< 0.22 m from the
-    # sensor). MEASURED: the old 0.8 m cut also hid everything below ~0.7 m
-    # inside both monitor zones, so legs never triggered a stop.
-    points_safety_filter = Node(
-        package='pepper_slam',
-        executable='cloud_range_filter',
-        name='points_safety_filter',
-        output='screen',
-        parameters=[_PEPPER_SLAM_CONFIG, {'use_sim_time': use_sim_time}],
-    )
-
-    collision_monitor = Node(
-        package='nav2_collision_monitor',
-        executable='collision_monitor',
-        name='collision_monitor',
-        output='screen',
-        parameters=[configured_params],
-        remappings=[('/tf', '/tf_nav')],
-    )
-    bt_navigator = Node(
-        package='nav2_bt_navigator',
-        executable='bt_navigator',
-        name='bt_navigator',
-        output='screen',
-        parameters=[configured_params],
-        remappings=[('/tf', '/tf_nav')],
-    )
-    lifecycle_manager = Node(
-        package='nav2_lifecycle_manager',
-        executable='lifecycle_manager',
-        name='lifecycle_manager_navigation',
-        output='screen',
-        parameters=[{
-            'use_sim_time': use_sim_time,
-            'autostart': True,
-            'bond_timeout': 4.0,
-            'node_names': [
-                'controller_server',
-                'planner_server',
-                'behavior_server',
-                'bt_navigator',
-                'collision_monitor',
-            ],
-        }],
-    )
-    # Separate manager so a planner failure and a collision monitor failure
-    # don't take each other's bond down.
-    lifecycle_manager_collision_monitor = Node(
-        package='nav2_lifecycle_manager',
-        executable='lifecycle_manager',
-        name='lifecycle_manager_collision_monitor',
-        output='screen',
-        parameters=[{
-            'use_sim_time': use_sim_time,
-            'autostart': True,
-            'bond_timeout': 4.0,
-            'node_names': ['collision_monitor'],
-        }],
-    )
-
-    # One /localization_recover entry point, identical across all three nav
-    # profiles. rtabmap has no forced re-search to forward to (it relocalizes
-    # from loop closure on its own), so here the service exists only to say so
-    # and point at /initialpose -- better than the operator discovering that
-    # by trying whatever worked on the other two profiles.
-    localization_recovery = Node(
-        package='pepper_navigation',
-        executable='localization_recovery.py',
-        name='localization_recovery',
-        output='screen',
-        parameters=[{'use_sim_time': use_sim_time, 'backend': 'rtabmap'}],
-    )
-
-    # Nav2 reads /tf_nav, a copy of /tf holding only the navigation edges:
-    # naoqi_driver's joint tree (~4150 transforms/s) saturated the costmap's
-    # TF thread until it stopped updating. See src/tf_nav_relay.cpp. Only
-    # nodes that LISTEN to TF are remapped -- never one that broadcasts it.
-    tf_nav_relay = Node(
-        package='pepper_navigation',
-        executable='tf_nav_relay',
-        name='tf_nav_relay',
-        output='screen',
-        parameters=[{'use_sim_time': use_sim_time}],
-    )
-
     return LaunchDescription([
         declare_use_sim_time_cmd,
         declare_database_path_cmd,
         fast_lio,
         lio_bridge,
         rtabmap_localization,
-        controller_server,
-        planner_server,
-        behavior_server,
-        bt_navigator,
-        points_safety_filter,
-        collision_monitor,
-        lifecycle_manager,
-        lifecycle_manager_collision_monitor,
-        localization_recovery,
-        # Last: it reads use_sim_time, declared above.
-        tf_nav_relay,
+        *nav2_nodes.nav2_servers(configured_params),
+        nav2_nodes.points_safety_filter(use_sim_time),
+        nav2_nodes.collision_monitor(configured_params),
+        nav2_nodes.lifecycle_manager(use_sim_time, [
+            'controller_server',
+            'planner_server',
+            'behavior_server',
+            'bt_navigator',
+            'collision_monitor',
+        ]),
+        # Separate manager so a planner failure and a collision monitor
+        # failure don't take each other's bond down.
+        nav2_nodes.lifecycle_manager(
+            use_sim_time, ['collision_monitor'],
+            name='lifecycle_manager_collision_monitor'),
+        # rtabmap has no forced re-search to forward to (it relocalizes from
+        # loop closure on its own), so here the service exists only to say so
+        # and point at /initialpose.
+        nav2_nodes.localization_recovery(use_sim_time, 'rtabmap'),
+        nav2_nodes.tf_nav_relay(use_sim_time),
     ])

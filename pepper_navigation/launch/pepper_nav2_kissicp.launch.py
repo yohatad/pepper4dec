@@ -28,7 +28,7 @@ Nodes started:
     points_costmap_filter).
     nav2_collision_monitor/collision_monitor.
     nav2_costmap_2d/nav2_costmap_2d_markers x2 — voxel visualization.
-    pepper_navigation/localization_recovery.py.
+    pepper_navigation/localization_recovery.
     pepper_navigation/tf_nav_relay.
     rviz2/rviz2 — only when rviz is true.
     nav2_lifecycle_manager/lifecycle_manager (node:
@@ -47,8 +47,10 @@ Launch arguments:
     rviz (default: "true")
 
 Configuration:
-    config/nav2_params_kissicp.yaml, map/pepper_map_lc.yaml, and kiss_icp's
-    pepper_l2.yaml.
+    config/nav2_params_kissicp.yaml, config/pepper_navigation_configuration.yaml,
+    pepper_slam's pepper_slam_configuration.yaml, map/pepper_map_lc.yaml, and
+    kiss_icp's pepper_l2.yaml. The nodes shared by every profile are defined in
+    pepper_navigation/nav2_nodes.py.
 
 Prerequisites:
     sudo apt install ros-humble-pointcloud-to-laserscan
@@ -86,14 +88,7 @@ from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from ament_index_python.packages import get_package_share_directory
 from nav2_common.launch import RewrittenYaml
-
-
-# pepper_slam's configuration file: the cloud_range_filter instances
-# (points_safety_filter, points_costmap_filter) and wheel_odom_tf read their
-# sections of it.
-_PEPPER_SLAM_CONFIG = os.path.join(
-    get_package_share_directory('pepper_slam'), 'config',
-    'pepper_slam_configuration.yaml')
+from pepper_navigation import nav2_nodes
 
 
 def generate_launch_description():
@@ -216,20 +211,6 @@ def generate_launch_description():
         param_rewrites={'use_sim_time': use_sim_time},
         convert_types=True)
 
-    # Serves the 2D grid both to amcl (match target) and to the global
-    # costmap's static layer.
-    map_server = Node(
-        package='nav2_map_server',
-        executable='map_server',
-        name='map_server',
-        output='screen',
-        parameters=[{
-            'use_sim_time': use_sim_time,
-            'yaml_filename': map_yaml,
-            'frame_id': 'map',
-        }],
-    )
-
     amcl = Node(
         package='nav2_amcl',
         executable='amcl',
@@ -238,180 +219,39 @@ def generate_launch_description():
         parameters=[configured_params],
     )
 
-    controller_server = Node(
-        package='nav2_controller',
-        executable='controller_server',
-        name='controller_server',
-        output='screen',
-        parameters=[configured_params],
-        # Route velocity through the collision monitor: controller -> cmd_vel_raw
-        # -> collision_monitor -> cmd_vel (what Pepper drives on).
-        remappings=[('cmd_vel', 'cmd_vel_raw'), ('/tf', '/tf_nav')],
-    )
-    planner_server = Node(
-        package='nav2_planner',
-        executable='planner_server',
-        name='planner_server',
-        output='screen',
-        parameters=[configured_params],
-        remappings=[('/tf', '/tf_nav')],
-    )
-    behavior_server = Node(
-        package='nav2_behaviors',
-        executable='behavior_server',
-        name='behavior_server',
-        output='screen',
-        parameters=[configured_params],
-        remappings=[('cmd_vel', 'cmd_vel_raw'), ('/tf', '/tf_nav')],
-    )
-    bt_navigator = Node(
-        package='nav2_bt_navigator',
-        executable='bt_navigator',
-        name='bt_navigator',
-        output='screen',
-        parameters=[configured_params],
-        remappings=[('/tf', '/tf_nav')],
-    )
-
-    # Safety-layer input: drop the L2's own housing/bumper (< 0.22 m from the
-    # sensor). MEASURED: the old 0.8 m cut also hid everything below ~0.7 m
-    # inside both monitor zones, so legs never triggered a stop.
-    points_safety_filter = Node(
-        package='pepper_slam',
-        executable='cloud_range_filter',
-        name='points_safety_filter',
-        output='screen',
-        parameters=[_PEPPER_SLAM_CONFIG, {'use_sim_time': use_sim_time}],
-    )
-
-    # Self-hit + ground-plane filter feeding the costmaps (separate instance
-    # from points_safety_filter -- the safety-critical stop zone stays on the
-    # simpler filter). RANSAC-fits the ground plane per scan in base_footprint
-    # instead of the costmap voxel_layer's fixed height band, which can drift
-    # into mis-marking the real floor as an obstacle over a long run.
-    points_costmap_filter = Node(
-        package='pepper_slam',
-        executable='cloud_range_filter',
-        name='points_costmap_filter',
-        output='screen',
-        parameters=[_PEPPER_SLAM_CONFIG, {'use_sim_time': use_sim_time}],
-        # It only listens, and only for base_footprint <- l2lidar_frame,
-        # which is all /tf_static: the joint tree on /tf is dead weight here.
-        remappings=[('/tf', '/tf_nav')],
-    )
-
-    collision_monitor = Node(
-        package='nav2_collision_monitor',
-        executable='collision_monitor',
-        name='collision_monitor',
-        output='screen',
-        parameters=[configured_params],
-        remappings=[('/tf', '/tf_nav')],
-    )
-
-    # Converts VoxelLayer's nav2_msgs/VoxelGrid (no RViz display exists for it)
-    # into a MarkerArray RViz can draw. Needs z_voxels <= 16 in the nav2 params.
-    local_voxel_markers = Node(
-        package='nav2_costmap_2d',
-        executable='nav2_costmap_2d_markers',
-        name='local_voxel_markers',
-        output='log',
-        parameters=[{'use_sim_time': use_sim_time}],
-        remappings=[('voxel_grid', '/local_costmap/voxel_grid'),
-                    ('visualization_marker', '/local_costmap/voxel_markers')],
-    )
-    global_voxel_markers = Node(
-        package='nav2_costmap_2d',
-        executable='nav2_costmap_2d_markers',
-        name='global_voxel_markers',
-        output='log',
-        parameters=[{'use_sim_time': use_sim_time}],
-        remappings=[('voxel_grid', '/global_costmap/voxel_grid'),
-                    ('visualization_marker', '/global_costmap/voxel_markers')],
-    )
-
     rviz_config = LaunchConfiguration('rviz_config')
-    rviz_node = Node(
-        package='rviz2',
-        executable='rviz2',
-        name='rviz2',
-        output='screen',
-        arguments=['-d', rviz_config],
-        parameters=[{'use_sim_time': use_sim_time}],
-        condition=IfCondition(rviz),
-    )
-
-    # One /localization_recover entry point, identical across all three nav
-    # profiles, so recovering does not depend on remembering which backend is
-    # up. Here it forwards to amcl's /reinitialize_global_localization.
-    localization_recovery = Node(
-        package='pepper_navigation',
-        executable='localization_recovery.py',
-        name='localization_recovery',
-        output='screen',
-        parameters=[{'use_sim_time': use_sim_time, 'backend': 'amcl'}],
-    )
-
-    lifecycle_manager = Node(
-        package='nav2_lifecycle_manager',
-        executable='lifecycle_manager',
-        name='lifecycle_manager_navigation',
-        output='screen',
-        parameters=[{
-            'use_sim_time': use_sim_time,
-            'autostart': True,
-            'bond_timeout': 4.0,
-            # map_server first so /map is up before amcl and the global costmap
-            # activate; amcl before the costmaps so map -> odom exists.
-            'node_names': [
-                'map_server',
-                'amcl',
-                'controller_server',
-                'planner_server',
-                'behavior_server',
-                'bt_navigator',
-                'collision_monitor',
-            ],
-        }],
-    )
-
-    # Nav2 reads /tf_nav, a copy of /tf holding only the navigation edges:
-    # naoqi_driver's joint tree (~4150 transforms/s) saturated the costmap's
-    # TF thread until it stopped updating. See src/tf_nav_relay.cpp. Only
-    # nodes that LISTEN to TF are remapped -- never one that broadcasts it.
-    tf_nav_relay = Node(
-        package='pepper_navigation',
-        executable='tf_nav_relay',
-        name='tf_nav_relay',
-        output='screen',
-        parameters=[{'use_sim_time': use_sim_time}],
-    )
 
     return LaunchDescription([
         declare_use_sim_time_cmd,
         declare_map_cmd,
+        declare_kiss_config_cmd,
         declare_scan_min_height_cmd,
         declare_scan_max_height_cmd,
         declare_rviz_cmd,
         declare_rviz_config_cmd,
-        declare_kiss_config_cmd,
         sensor_tf,
         kiss_icp,
         pointcloud_to_laserscan,
-        map_server,
+        nav2_nodes.map_server(use_sim_time, map_yaml),
         amcl,
-        controller_server,
-        planner_server,
-        behavior_server,
-        bt_navigator,
-        points_safety_filter,
-        points_costmap_filter,
-        collision_monitor,
-        local_voxel_markers,
-        global_voxel_markers,
-        rviz_node,
-        lifecycle_manager,
-        localization_recovery,
-        # Last: it reads use_sim_time, declared above.
-        tf_nav_relay,
+        *nav2_nodes.nav2_servers(configured_params),
+        nav2_nodes.points_safety_filter(use_sim_time),
+        nav2_nodes.points_costmap_filter(use_sim_time),
+        nav2_nodes.collision_monitor(configured_params),
+        *nav2_nodes.voxel_markers(use_sim_time),
+        nav2_nodes.rviz(use_sim_time, rviz_config, IfCondition(rviz)),
+        # map_server first so /map is up before amcl and the global costmap
+        # activate; amcl before the costmaps so map -> odom exists.
+        nav2_nodes.lifecycle_manager(use_sim_time, [
+            'map_server',
+            'amcl',
+            'controller_server',
+            'planner_server',
+            'behavior_server',
+            'bt_navigator',
+            'collision_monitor',
+        ]),
+        # Here it forwards to amcl's /reinitialize_global_localization.
+        nav2_nodes.localization_recovery(use_sim_time, 'amcl'),
+        nav2_nodes.tf_nav_relay(use_sim_time),
     ])

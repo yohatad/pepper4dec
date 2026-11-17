@@ -144,7 +144,7 @@ ros2 launch pepper_navigation costmap_bag.launch.py params_file:=/path/to/copy.y
 ```
 
 With `localize:=true`, nothing is drawn until FAST-LIO reports a lock (about
-25 s of replay). `config/nav2_params_l2voxel_test.yaml` is a ready-made
+25 s of replay). `config/bag_test/nav2_params_l2voxel_test.yaml` is a ready-made
 `params_file` that puts the L2 back into the local costmap as a voxel layer.
 
 To see what the collision monitor would count, without Nav2 running:
@@ -319,47 +319,80 @@ ros2 launch pepper_navigation pepper_nav2_amcl.launch.py map:=~/maps/my_new_map.
 The profiles take an absolute `map:=` path, so a map does not have to live in
 the package.
 
+## ⚙️ Configuration
+
+`config/pepper_navigation_configuration.yaml` holds the parameters of this
+package's own nodes, one section per node (`bumper_guard`, `tf_nav_relay`,
+`localization_watchdog`, `localization_recovery`, `wait_for_map_then_start`).
+Every profile loads the whole file and adds `use_sim_time`, plus what differs
+by profile: `localization_recovery`'s `backend`, Point-LIO's status names for
+the watchdog on pointloc, and `bumper_guard`'s input when
+`collision_monitor:=false`. Nav2's servers read `config/nav2_params_<profile>.yaml`;
+the cloud filters and `wheel_odom_tf` read `pepper_slam_configuration.yaml`.
+
+The nodes every profile starts are defined once, in
+`pepper_navigation/nav2_nodes.py`, which the launch files import.
+
 ## 📁 Package Structure
 
 ```
 pepper_navigation/
 ├── config/
+│   ├── pepper_navigation_configuration.yaml  # this package's nodes, one section each
 │   ├── nav2_params_fastloc.yaml        # Nav2 params, fastloc profile (default)
 │   ├── nav2_params_pointloc.yaml       # Nav2 params, pointloc profile
 │   ├── nav2_params_rtabmap_loc.yaml    # Nav2 params, RTAB-Map profile
 │   ├── nav2_params_amcl.yaml           # Nav2 params, AMCL profile
-│   └── nav2_params_l2voxel_test.yaml   # fastloc with the L2 as a local voxel layer; bag tests only
+│   ├── nav2_params_kissicp.yaml        # Nav2 params, KISS-ICP profile
+│   └── bag_test/
+│       └── nav2_params_l2voxel_test.yaml  # fastloc with the L2 as a local voxel layer
+├── include/pepper_navigation/          # headers: bumper_latch.h, topic_liveness.h, localization_health.h
 ├── launch/
 │   ├── pepper_nav2_fastloc.launch.py   # Nav2 + fastlio_localization (default)
 │   ├── pepper_nav2_pointloc.launch.py  # Nav2 + pointlio_localization
 │   ├── pepper_nav2_rtabmap_loc.launch.py # Nav2 + RTAB-Map localization
 │   ├── pepper_nav2_amcl.launch.py      # Nav2 + AMCL on FAST-LIO odom
-│   ├── rviz_remote.launch.py           # RViz only, for a laptop watching the robot
-│   ├── odom_test.launch.py             # odometry-only bringup with a path publisher
-│   └── bag_test/
-│       └── costmap_bag.launch.py       # the two costmaps on a recorded bag, for tuning
+│   ├── pepper_nav2_kissicp.launch.py   # Nav2 + AMCL on KISS-ICP odom
+│   ├── bag_test/
+│   │   ├── costmap_bag.launch.py       # the two costmaps on a recorded bag, for tuning
+│   │   └── collision_monitor_bag.launch.py  # the collision monitor on a bag, scored
+│   └── tools/
+│       ├── rviz_remote.launch.py       # RViz only, for a laptop watching the robot
+│       ├── safety_cut_viz.launch.py    # colours what the safety chain cuts, live
+│       └── odom_test.launch.py         # odometry-only bringup with a path publisher
 ├── map/
-│   ├── pepper_map_lc.yaml / .pgm       # the 2D grid every profile's map_server defaults to
-│   └── *.png                           # map preview renders
+│   └── pepper_map_lc.yaml / .pgm       # the 2D grid every profile's map_server defaults to
 ├── pcd/
 │   ├── sc_pose_20260823.json           # per-keyframe poses for fastloc / pointloc
 │   ├── pepper_map_lc_poses.txt         # the PGO run's trajectory
 │   └── sc_pcd_20260823/                # matching keyframe clouds; gitignored, copy in
+├── pepper_navigation/
+│   └── nav2_nodes.py                   # the nodes every profile starts, defined once
 ├── rviz/                               # one config per profile, plus voxel, remote and bag-test views
-├── scripts/
-│   ├── wait_for_map_then_start.py      # starts Nav2 once map -> base_footprint exists
-│   ├── localization_watchdog.py        # cancels goals while the localizer reports lost
-│   ├── localization_recovery.py        # /localization_recover, dispatched per backend
-│   └── cloud_delay.py, costmap_explain.py, depth_to_cloud.py, points_to_image.py  # costmap_bag helpers
-├── utils/
-│   └── collision_zone_viewer.py/.rviz  # what the collision monitor counts; run by hand
-├── src/
+├── scripts/                            # Python tools, installed; not in the navigation pipeline
+│   ├── safety_cut_viz.py               # live: what the safety chain cuts
+│   └── bag_test/                       # costmap_bag / collision_monitor_bag helpers
+│       └── cloud_delay.py, costmap_explain.py, depth_to_cloud.py, points_to_image.py, cm_bag_judge.py
+├── src/                                # one executable per node
+│   ├── bumper_guard.cpp                # last gate before cmd_vel: bumper stop, sensor liveness
 │   ├── tf_nav_relay.cpp                # /tf without Pepper's joint tree, on /tf_nav
+│   ├── localization_watchdog.cpp       # cancels goals while the localizer reports lost
+│   ├── localization_recovery.cpp       # /localization_recover, dispatched per backend
+│   ├── wait_for_map_then_start.cpp     # starts Nav2 once map -> base_footprint exists
+│   ├── lib/
+│   │   └── localization_health.cpp     # pepper_navigation_lib: the watchdog's decisions, ROS-free
 │   └── tools/
 │       ├── send_goal.cpp               # one-shot goal sender
 │       └── odom_path_publisher.cpp     # traversed path for RViz
 ├── test/
-│   └── test_shared_nav2_params.py      # guards the params blocks shared across profiles
+│   ├── test_localization_health.cpp    # the watchdog's timing, cancels and release
+│   ├── test_bumper_latch.cpp           # bumper_guard's stop latch
+│   ├── test_topic_liveness.cpp         # bumper_guard's sensor-liveness check
+│   ├── test_shared_nav2_params.py      # guards the params blocks shared across profiles
+│   └── test_collision_monitor_bag.py   # the collision monitor on the benchmark bag
+├── utils/                              # not installed; run by hand
+│   ├── collision_zone_viewer.py/.rviz  # what the collision monitor counts
+│   └── robot/                          # NAOqi probes that run ON Pepper (Python 2.7)
 ├── CMakeLists.txt
 ├── package.xml
 └── README.md
@@ -373,10 +406,18 @@ colcon test --packages-select pepper_navigation
 colcon test-result --verbose
 ```
 
-Besides the linters, this runs `test/test_shared_nav2_params.py`, which fails
-if `behavior_server`, `controller_server` or `planner_server` differ between
-the nav2 param files. It also runs standalone:
-`python3 test/test_shared_nav2_params.py`.
+Besides the linters, this runs:
+
+- the gtests: `test_localization_health` (the watchdog's lost and stale
+  timing, cancel cadence and release, on a simulated clock),
+  `test_bumper_latch` and `test_topic_liveness`;
+- `test/test_shared_nav2_params.py`, which fails if `behavior_server`,
+  `controller_server` or `planner_server` differ between the nav2 param files
+  (also runs standalone: `python3 test/test_shared_nav2_params.py`);
+- `test/test_collision_monitor_bag.py` (~75 s), which runs the real collision
+  monitor on the first 65 s of the benchmark bag and fails if any verdict
+  differs from plain polygon geometry. It skips when the bag
+  (`~/ros2_ws/bags/slam_20260823_aligned`, or `PEPPER_NAV_TEST_BAG`) is absent.
 
 ## 🔧 Troubleshooting
 

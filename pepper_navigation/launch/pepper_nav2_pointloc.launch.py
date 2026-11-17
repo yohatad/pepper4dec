@@ -56,8 +56,10 @@ Launch arguments:
         Cancel navigation goals while the localizer reports itself lost.
 
 Configuration:
-    config/nav2_params_pointloc.yaml, map/pepper_map_lc.yaml, and the
-    Point-LIO config selected by config_file.
+    config/nav2_params_pointloc.yaml, config/pepper_navigation_configuration.yaml,
+    pepper_slam's pepper_slam_configuration.yaml, map/pepper_map_lc.yaml, and
+    the Point-LIO config selected by config_file. The nodes shared by every
+    profile are defined in pepper_navigation/nav2_nodes.py.
 
 Frames:
     map --(pointlio_localization)--> base_footprint
@@ -99,17 +101,9 @@ from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDesc
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 from nav2_common.launch import RewrittenYaml
-
-
-# pepper_slam's configuration file: the cloud_range_filter instances
-# (points_safety_filter, points_costmap_filter) and wheel_odom_tf read their
-# sections of it.
-_PEPPER_SLAM_CONFIG = os.path.join(
-    get_package_share_directory('pepper_slam'), 'config',
-    'pepper_slam_configuration.yaml')
+from pepper_navigation import nav2_nodes
 
 
 def generate_launch_description():
@@ -255,209 +249,6 @@ def generate_launch_description():
         },
         convert_types=True)
 
-    # Serves the 2D grid as /map for the global costmap static layer.
-    map_server = Node(
-        package='nav2_map_server',
-        executable='map_server',
-        name='map_server',
-        output='screen',
-        parameters=[{
-            'use_sim_time': use_sim_time,
-            'yaml_filename': map_yaml,
-            'frame_id': 'map',
-        }],
-    )
-
-    controller_server = Node(
-        package='nav2_controller',
-        executable='controller_server',
-        name='controller_server',
-        output='screen',
-        parameters=[configured_params],
-        # Route velocity through the collision monitor: controller -> cmd_vel_raw
-        # -> collision_monitor -> cmd_vel (what Pepper drives on).
-        remappings=[('cmd_vel', 'cmd_vel_raw'), ('/tf', '/tf_nav')],
-    )
-    planner_server = Node(
-        package='nav2_planner',
-        executable='planner_server',
-        name='planner_server',
-        output='screen',
-        parameters=[configured_params],
-        remappings=[('/tf', '/tf_nav')],
-    )
-    behavior_server = Node(
-        package='nav2_behaviors',
-        executable='behavior_server',
-        name='behavior_server',
-        output='screen',
-        parameters=[configured_params],
-        remappings=[('cmd_vel', 'cmd_vel_raw'), ('/tf', '/tf_nav')],
-    )
-
-    # Safety-layer input: drop the L2's own housing/bumper (< 0.22 m from the
-    # sensor). MEASURED: the old 0.8 m cut also hid everything below ~0.7 m
-    # inside both monitor zones, so legs never triggered a stop.
-    points_safety_filter = Node(
-        package='pepper_slam',
-        executable='cloud_range_filter',
-        name='points_safety_filter',
-        output='screen',
-        parameters=[_PEPPER_SLAM_CONFIG, {'use_sim_time': use_sim_time}],
-    )
-
-    collision_monitor = Node(
-        package='nav2_collision_monitor',
-        executable='collision_monitor',
-        name='collision_monitor',
-        output='screen',
-        parameters=[configured_params],
-        remappings=[('/tf', '/tf_nav')],
-    )
-
-    # VoxelLayer publishes nav2_msgs/VoxelGrid, which RViz cannot draw --
-    # these converters turn it into a MarkerArray it can.
-    local_voxel_markers = Node(
-        package='nav2_costmap_2d',
-        executable='nav2_costmap_2d_markers',
-        name='local_voxel_markers',
-        output='log',
-        parameters=[{'use_sim_time': use_sim_time}],
-        remappings=[('voxel_grid', '/local_costmap/voxel_grid'),
-                    ('visualization_marker', '/local_costmap/voxel_markers')],
-    )
-    global_voxel_markers = Node(
-        package='nav2_costmap_2d',
-        executable='nav2_costmap_2d_markers',
-        name='global_voxel_markers',
-        output='log',
-        parameters=[{'use_sim_time': use_sim_time}],
-        remappings=[('voxel_grid', '/global_costmap/voxel_grid'),
-                    ('visualization_marker', '/global_costmap/voxel_markers')],
-    )
-
-    rviz_config = LaunchConfiguration('rviz_config')
-    rviz_node = Node(
-        package='rviz2',
-        executable='rviz2',
-        name='rviz2',
-        output='screen',
-        arguments=['-d', rviz_config],
-        parameters=[{'use_sim_time': use_sim_time}],
-        condition=IfCondition(rviz),
-    )
-
-    bt_navigator = Node(
-        package='nav2_bt_navigator',
-        executable='bt_navigator',
-        name='bt_navigator',
-        output='screen',
-        parameters=[configured_params],
-        remappings=[('/tf', '/tf_nav')],
-    )
-    nav2_starter = Node(
-        package='pepper_navigation',
-        executable='wait_for_map_then_start.py',
-        name='wait_for_map_then_start',
-        output='screen',
-        parameters=[{'use_sim_time': use_sim_time,
-                     'target_frame': 'map',
-                     'source_frame': 'base_footprint'}],
-    )
-
-    # One /localization_recover entry point, identical across every nav profile,
-    # so recovering does not depend on remembering which backend is up. Here it
-    # forwards to pointlio_localization's /relocalize.
-    localization_recovery = Node(
-        package='pepper_navigation',
-        executable='localization_recovery.py',
-        name='localization_recovery',
-        output='screen',
-        parameters=[{'use_sim_time': use_sim_time, 'backend': 'pointloc'}],
-    )
-
-    # Consumes pointlio_localization's own health status and holds navigation
-    # while it says it is lost. status_name must match what the node publishes
-    # -- Point-LIO reports under its own name, not fastlio's.
-    #
-    # call_recovery TRUE, replacing the node's own auto_relocalize, which was
-    # removed for the same reason as fastlio's: it re-armed while the robot
-    # kept driving and the next handover inherited that velocity at full
-    # confidence, so attempts compounded. The watchdog stops the robot first
-    # (cancel_goals) and fires once per LOST episode. treat_warn_as_lost
-    # stays FALSE: the node reports WARN while never yet localized and ERROR
-    # once a lock is lost, so only ERROR counting holds navigation through a
-    # re-arm without firing recovery into the initial search at startup.
-    localization_watchdog = Node(
-        package='pepper_navigation',
-        executable='localization_watchdog.py',
-        name='localization_watchdog',
-        output='screen',
-        condition=IfCondition(LaunchConfiguration('watchdog')),
-        parameters=[{
-            'use_sim_time': use_sim_time,
-            'status_names': ['point_lio_localization: pose lock',
-                             'point_lio_localization: map -> odom gate'],
-            'lost_duration': 5.0,
-            # Silence after an OK only trips stale_timeout (badness is timed
-            # from the first bad report), so match lost_duration here.
-            'stale_timeout': 5.0,
-            'cancel_goals': True,
-            'call_recovery': True,
-        }],
-    )
-
-    lifecycle_manager = Node(
-        package='nav2_lifecycle_manager',
-        executable='lifecycle_manager',
-        name='lifecycle_manager_navigation',
-        output='screen',
-        parameters=[{
-            'use_sim_time': use_sim_time,
-            # OFF deliberately. local_costmap blocks configuring until a
-            # transform to its global_frame (map) exists, and with this
-            # localizer that frame appears only after ScanContext locks, so the
-            # wait is unbounded and autostart stalls the whole bringup.
-            # wait_for_map_then_start calls STARTUP the moment the frame is up.
-            'autostart': False,
-            'bond_timeout': 4.0,
-            # map_server first so /map is up before the global costmap activates.
-            'node_names': [
-                'map_server',
-                'controller_server',
-                'planner_server',
-                'behavior_server',
-                'bt_navigator',
-                'collision_monitor',
-            ],
-        }],
-    )
-
-    # Nav2 reads /tf_nav, a copy of /tf holding only the navigation edges:
-    # naoqi_driver's joint tree (~4150 transforms/s) saturated the costmap's
-    # TF thread until it stopped updating. See src/tf_nav_relay.cpp. Only
-    # nodes that LISTEN to TF are remapped -- never one that broadcasts it.
-    # odom -> base_footprint from /pepper_odom, only with odom_frame set: in the
-    # default mode the localizer owns base_footprint's parent and a second one
-    # would split the tree.
-    wheel_odom_tf = Node(
-        package='pepper_slam',
-        executable='wheel_odom_tf',
-        name='wheel_odom_tf',
-        output='screen',
-        parameters=[_PEPPER_SLAM_CONFIG,
-                    {'use_sim_time': use_sim_time, 'odom_frame': odom_frame}],
-        condition=odom_on,
-    )
-
-    tf_nav_relay = Node(
-        package='pepper_navigation',
-        executable='tf_nav_relay',
-        name='tf_nav_relay',
-        output='screen',
-        parameters=[{'use_sim_time': use_sim_time}],
-    )
-
     return LaunchDescription([
         declare_use_sim_time_cmd,
         declare_sensor_tf_cmd,
@@ -474,21 +265,30 @@ def generate_launch_description():
         declare_odom_frame_cmd,
         sensor_tf,
         pointloc,
-        map_server,
-        controller_server,
-        planner_server,
-        behavior_server,
-        bt_navigator,
-        points_safety_filter,
-        collision_monitor,
-        local_voxel_markers,
-        global_voxel_markers,
-        rviz_node,
-        lifecycle_manager,
-        nav2_starter,
-        localization_recovery,
-        localization_watchdog,
-        # Last: it reads use_sim_time, declared above.
-        wheel_odom_tf,
-        tf_nav_relay,
+        nav2_nodes.map_server(use_sim_time, map_yaml),
+        *nav2_nodes.nav2_servers(configured_params),
+        nav2_nodes.points_safety_filter(use_sim_time),
+        nav2_nodes.collision_monitor(configured_params),
+        *nav2_nodes.voxel_markers(use_sim_time),
+        nav2_nodes.rviz(use_sim_time, LaunchConfiguration('rviz_config'), IfCondition(rviz)),
+        # autostart OFF, as in the fastloc profile: local_costmap blocks
+        # configuring until map exists, which waits on ScanContext's lock, so
+        # wait_for_map_then_start calls STARTUP the moment the frame is up.
+        # map_server first so /map is up before the global costmap activates.
+        nav2_nodes.lifecycle_manager(
+            use_sim_time,
+            ['map_server', 'controller_server', 'planner_server', 'behavior_server',
+             'bt_navigator', 'collision_monitor'],
+            autostart=False),
+        nav2_nodes.wait_for_map_then_start(use_sim_time),
+        # Here it forwards to pointlio_localization's /relocalize.
+        nav2_nodes.localization_recovery(use_sim_time, 'pointloc'),
+        # Point-LIO's own statuses in place of the configuration file's
+        # fastloc names. No bumper_guard in this profile, so no liveness.
+        nav2_nodes.localization_watchdog(
+            use_sim_time, IfCondition(LaunchConfiguration('watchdog')),
+            status_names=['point_lio_localization: pose lock',
+                          'point_lio_localization: map -> odom gate']),
+        nav2_nodes.wheel_odom_tf(use_sim_time, odom_frame, odom_on),
+        nav2_nodes.tf_nav_relay(use_sim_time),
     ])

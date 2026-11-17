@@ -11,6 +11,7 @@ endif()
 
 # Find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_python REQUIRED)
 find_package(nav2_bringup REQUIRED)
 find_package(nav2_map_server REQUIRED)
 find_package(nav2_amcl REQUIRED)
@@ -27,91 +28,87 @@ find_package(geometry_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(nav2_msgs REQUIRED)
+find_package(action_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
 find_package(tf2_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
 find_package(naoqi_bridge_msgs REQUIRED)
 
-# bumper_guard: last gate in the velocity chain. Blocks the direction a
-# bumper contact came from, leaving reverse open so BackUp can escape.
-add_executable(bumper_guard
-  src/bumper_guard.cpp
+# pepper_navigation_lib (src/lib/): the decisions the nodes make, free of ROS
+# so the tests drive them with time passed in. bumper_latch.h and
+# topic_liveness.h are header-only.
+#   localization_health.cpp  localization_watchdog's lost/cancel logic
+#                            (test_localization_health)
+add_library(${PROJECT_NAME}_lib STATIC
+  src/lib/localization_health.cpp
 )
-target_include_directories(bumper_guard PRIVATE include)
+target_include_directories(${PROJECT_NAME}_lib PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
+set_target_properties(${PROJECT_NAME}_lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# The runtime nodes, one executable each (src/<node>.cpp):
+#   bumper_guard             last gate before cmd_vel; a bumper contact blocks
+#                            its direction and leaves reverse open for BackUp
+#   tf_nav_relay             /tf without Pepper's joint tree, on /tf_nav
+#                            (~4150 transforms/s, so C++)
+#   localization_watchdog    cancels goals while the localizer reports lost
+#   localization_recovery    /localization_recover in front of every backend
+#   wait_for_map_then_start  starts Nav2 once map -> base_footprint exists
+set(NODES
+  bumper_guard
+  tf_nav_relay
+  localization_watchdog
+  localization_recovery
+  wait_for_map_then_start
+)
+foreach(node ${NODES})
+  add_executable(${node} src/${node}.cpp)
+  target_link_libraries(${node} ${PROJECT_NAME}_lib)
+endforeach()
 ament_target_dependencies(bumper_guard
-  rclcpp
-  geometry_msgs
-  sensor_msgs
-  diagnostic_msgs
-  std_srvs
-  naoqi_bridge_msgs
-)
-install(TARGETS bumper_guard
+  rclcpp geometry_msgs sensor_msgs diagnostic_msgs std_srvs naoqi_bridge_msgs)
+ament_target_dependencies(tf_nav_relay rclcpp tf2_msgs)
+ament_target_dependencies(localization_watchdog
+  rclcpp action_msgs diagnostic_msgs std_srvs)
+ament_target_dependencies(localization_recovery rclcpp std_srvs)
+ament_target_dependencies(wait_for_map_then_start rclcpp nav2_msgs tf2 tf2_ros)
+install(TARGETS ${NODES}
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
-# Dev/debug tooling (src/tools/) - not part of the production navigation
-# pipeline. pepper_odom_covariance now lives in its own top-level package.
-
-# odom_path_publisher: accumulates /pepper_odom into a nav_msgs/Path +
-# RViz markers for closed-loop odometry quality testing
-add_executable(odom_path_publisher
-  src/tools/odom_path_publisher.cpp
-)
+# Dev/debug tooling (src/tools/), not part of the navigation pipeline.
+#   odom_path_publisher  /pepper_odom as a nav_msgs/Path + RViz markers, for
+#                        closed-loop odometry testing (launch/tools/odom_test)
+#   send_goal            one-shot Nav2 goal sender (the relevant subset of
+#                        nav2_simple_commander's Python-only BasicNavigator)
+add_executable(odom_path_publisher src/tools/odom_path_publisher.cpp)
 ament_target_dependencies(odom_path_publisher
-  rclcpp
-  nav_msgs
-  geometry_msgs
-  visualization_msgs
-  std_srvs
-)
-install(TARGETS odom_path_publisher
+  rclcpp nav_msgs geometry_msgs visualization_msgs std_srvs)
+add_executable(send_goal src/tools/send_goal.cpp)
+ament_target_dependencies(send_goal rclcpp rclcpp_action geometry_msgs nav2_msgs)
+install(TARGETS odom_path_publisher send_goal
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
-# send_goal: one-shot Nav2 goal sender (reimplements the relevant subset of
-# nav2_simple_commander's Python-only BasicNavigator)
-add_executable(send_goal
-  src/tools/send_goal.cpp
-)
-ament_target_dependencies(send_goal
-  rclcpp
-  rclcpp_action
-  geometry_msgs
-  nav2_msgs
-)
-install(TARGETS send_goal
-  RUNTIME DESTINATION lib/${PROJECT_NAME}
-)
-
-# tf_nav_relay: /tf without Pepper's joint tree, on /tf_nav, for the Nav2
-# servers. C++ because it takes every /tf message (~4150 transforms/s).
-add_executable(tf_nav_relay
-  src/tf_nav_relay.cpp
-)
-ament_target_dependencies(tf_nav_relay
-  rclcpp
-  tf2_msgs
-)
-install(TARGETS tf_nav_relay
-  RUNTIME DESTINATION lib/${PROJECT_NAME}
-)
-
-# Install python helper scripts
+# Python tools, installed as executables. Not part of the navigation pipeline.
 install(PROGRAMS
-  scripts/wait_for_map_then_start.py
-  scripts/localization_recovery.py
-  scripts/localization_watchdog.py
   # bag_test only: replay helpers (see "Bag replay" in README.md)
-  scripts/cloud_delay.py
-  scripts/costmap_explain.py
-  scripts/depth_to_cloud.py
-  scripts/points_to_image.py
-  scripts/cm_bag_judge.py
+  scripts/bag_test/cloud_delay.py
+  scripts/bag_test/costmap_explain.py
+  scripts/bag_test/depth_to_cloud.py
+  scripts/bag_test/points_to_image.py
+  scripts/bag_test/cm_bag_judge.py
   # live tuning aid: colours what the safety chain cuts (safety_cut_viz.launch.py)
   scripts/safety_cut_viz.py
   DESTINATION lib/${PROJECT_NAME}
 )
+
+# pepper_navigation/nav2_nodes.py: the nodes every Nav2 profile starts, which
+# the launch files import.
+ament_python_install_package(${PROJECT_NAME})
 
 # Install launch, config, rviz, the 2D map and the prior map: one plain
 # install(DIRECTORY), matching pepper_slam and FAST_LIO.
@@ -172,12 +169,9 @@ if(BUILD_TESTING)
   find_package(ament_cmake_pep257 REQUIRED)
   ament_pep257(--add-ignore D205 D213 D400 D401 D406 D407 D413 D415)
 
-  # Guards that the 3 nav2 sections meant to be shared have not drifted apart
-  # across the 4 param files. Previously this file existed but was never
-  # registered, so it only ever ran if someone invoked it by hand.
+  find_package(ament_cmake_gtest REQUIRED)
   # bumper_guard's latch/direction logic, with time passed in so the cases
   # are exact instead of slept through.
-  find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_bumper_latch test/test_bumper_latch.cpp)
   target_include_directories(test_bumper_latch PRIVATE include)
 
@@ -186,15 +180,21 @@ if(BUILD_TESTING)
   ament_add_gtest(test_topic_liveness test/test_topic_liveness.cpp)
   target_include_directories(test_topic_liveness PRIVATE include)
 
+  # localization_watchdog's decisions on a simulated clock: lost_duration,
+  # stale_timeout, the recancel cadence and the release.
+  ament_add_gtest(test_localization_health test/test_localization_health.cpp)
+  target_link_libraries(test_localization_health ${PROJECT_NAME}_lib)
+
+  # Guards that the 3 nav2 sections meant to be shared have not drifted apart
+  # across the nav2 param files.
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_shared_nav2_params
     "${CMAKE_CURRENT_SOURCE_DIR}/test/test_shared_nav2_params.py")
 
-  # localization_watchdog.py on sim time with a fake nav2 cancel service.
-  # Isolates itself on a random loopback-only domain. ~2 min: the 60 s
-  # default timeout is too short.
-  ament_add_pytest_test(test_localization_watchdog
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/test_localization_watchdog.py"
+  # The real collision monitor on the benchmark bag, scored scan by scan
+  # against polygon geometry by cm_bag_judge. ~90 s; skips without the bag.
+  ament_add_pytest_test(test_collision_monitor_bag
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/test_collision_monitor_bag.py"
     TIMEOUT 300)
 endif()
 

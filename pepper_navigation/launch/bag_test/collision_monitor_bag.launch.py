@@ -42,13 +42,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
-
-
-# pepper_slam's configuration file: points_safety_filter reads its section, as
-# in every Nav2 profile.
-_PEPPER_SLAM_CONFIG = os.path.join(
-    get_package_share_directory('pepper_slam'), 'config',
-    'pepper_slam_configuration.yaml')
+from pepper_navigation import nav2_nodes
 
 
 def generate_launch_description():
@@ -102,13 +96,11 @@ def generate_launch_description():
             'rviz': 'false'}.items())], condition=IfCondition(localize))
 
     nodes = [
-        Node(package='pepper_navigation', executable='tf_nav_relay',
-             name='tf_nav_relay', output='screen', parameters=[sim],
-             condition=IfCondition(localize)),
+        nav2_nodes.tf_nav_relay(True, IfCondition(localize)),
         # The same configuration file every Nav2 profile loads.
         Node(package='pepper_slam', executable='cloud_range_filter',
              name='points_safety_filter', output='screen',
-             parameters=[_PEPPER_SLAM_CONFIG, sim]),
+             parameters=[nav2_nodes.PEPPER_SLAM_CONFIG, sim]),
         Node(package='nav2_collision_monitor', executable='collision_monitor',
              name='collision_monitor', output='screen',
              parameters=[params, {

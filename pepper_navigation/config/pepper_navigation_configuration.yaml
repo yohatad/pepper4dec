@@ -1,0 +1,101 @@
+# pepper_navigation Configuration File
+# ROS2 parameters for every pepper_navigation node, one section per node name.
+# Each Nav2 profile loads this whole file; a node reads only its own section.
+# Run `ros2 param get /<node> <name>` to inspect a value at runtime.
+#
+# Overridden by the launch files, per profile, on top of this file:
+#   use_sim_time                          every node
+#   bumper_guard.cmd_vel_in_topic         cmd_vel_raw when collision_monitor:=false
+#   localization_watchdog.status_names    the Point-LIO localizer's status names
+#   localization_recovery.backend         the profile's localization backend
+#   wait_for_map_then_start.manager       the bag_test costmap lifecycle manager
+#
+# Nav2's own servers are configured by config/nav2_params_<profile>.yaml, and
+# the two cloud_range_filter instances and wheel_odom_tf by pepper_slam's
+# pepper_slam_configuration.yaml.
+#
+# Loaded by: pepper_nav2_amcl, pepper_nav2_fastloc, pepper_nav2_kissicp,
+# pepper_nav2_pointloc and pepper_nav2_rtabmap_loc (.launch.py), and
+# bag_test/costmap_bag.launch.py.
+
+# =============================================================================
+# bumper_guard: the last gate before cmd_vel. A bumper contact blocks the
+# direction it came from and leaves reverse open, so BackUp can escape.
+# =============================================================================
+
+bumper_guard:
+  ros__parameters:
+    cmd_vel_in_topic: "cmd_vel_safe"    # the collision monitor's output
+    cmd_vel_out_topic: "cmd_vel"        # what Pepper drives on
+    stuck_timeout: 10.0                 # s of continuous press before ERROR (debris, or a fault)
+    driver_clear_service: "/naoqi_driver/clear_bumper"   # also reset by ~/clear; "" to skip
+
+    # Driver liveness: no joint states means naoqi_driver is down.
+    liveness_topic: "/joint_states"
+    liveness_timeout: 1.0               # s
+
+    # The collision monitor holds its last verdict when a source goes stale,
+    # so losing one of these must stop the robot here instead.
+    required_topics: ["/points_safety"]
+    required_timeout: 1.0               # s
+
+# =============================================================================
+# tf_nav_relay: /tf without Pepper's joint tree, on /tf_nav, for the Nav2
+# servers (~4150 joint transforms/s saturated the costmap's TF thread).
+# =============================================================================
+
+tf_nav_relay:
+  ros__parameters:
+    keep_parents: ["map", "odom", "lio_init", "base_footprint"]   # relay a transform with one of these parents...
+    drop_children: ["base_link"]        # ...unless its child is one of these
+
+# =============================================================================
+# localization_watchdog: cancels navigation goals while the localizer reports
+# itself lost (fastloc and pointloc profiles only).
+# =============================================================================
+
+localization_watchdog:
+  ros__parameters:
+    # Any one of these at ERROR for lost_duration means lost. The fastloc
+    # names; pepper_nav2_pointloc.launch.py replaces them with Point-LIO's.
+    status_names: ["fastlio_localization: pose lock",
+                   "fastlio_localization: map -> odom gate",
+                   "bumper_guard: sensor liveness"]
+    lost_duration: 5.0                  # s of continuous ERROR before acting
+    # Silence after an OK only trips stale_timeout (badness is timed from the
+    # first bad report), so it matches lost_duration. 0 disables.
+    stale_timeout: 5.0                  # s
+    # FALSE is load-bearing: the localizer reports WARN before its first lock
+    # and ERROR after losing one, so only ERROR holds navigation through a
+    # re-search without firing recovery into the startup search.
+    treat_warn_as_lost: false
+    cancel_goals: true                  # cancel every navigate_to_pose goal while lost
+    # On LOST, stop and then ask for one re-search (/localization_recover).
+    # Replaces the localizer's removed auto_relocalize, which re-armed while
+    # the robot kept driving.
+    call_recovery: true
+    nav_action: "/navigate_to_pose"
+    recovery_service: "/localization_recover"
+    check_period: 1.0                   # s between health checks
+    recancel_period: 3.0                # s between cancels while still lost
+
+# =============================================================================
+# localization_recovery: one /localization_recover service in front of every
+# localization backend.
+# =============================================================================
+
+localization_recovery:
+  ros__parameters:
+    backend: "auto"                     # each profile pins its own: fastloc, pointloc, amcl, rtabmap
+    service_timeout: 5.0                # s to wait for the backend's service
+
+# =============================================================================
+# wait_for_map_then_start: starts the Nav2 lifecycle manager once
+# map -> base_footprint exists (the localizer's lock waits on the world).
+# =============================================================================
+
+wait_for_map_then_start:
+  ros__parameters:
+    target_frame: "map"
+    source_frame: "base_footprint"
+    manager: "/lifecycle_manager_navigation/manage_nodes"

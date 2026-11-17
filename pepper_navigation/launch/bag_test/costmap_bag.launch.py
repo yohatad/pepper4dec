@@ -91,6 +91,7 @@ from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
+from pepper_navigation import nav2_nodes
 
 SUFFIX = '_delayed'
 
@@ -207,9 +208,7 @@ def generate_launch_description():
             'rviz': 'false'}.items())], condition=IfCondition(localize))
 
     helpers = [
-        Node(package='pepper_navigation', executable='tf_nav_relay',
-             name='tf_nav_relay', output='screen', parameters=[sim],
-             condition=IfCondition(localize)),
+        nav2_nodes.tf_nav_relay(True, IfCondition(localize)),
         Node(package='pepper_navigation', executable='depth_to_cloud.py',
              name='depth_to_cloud', output='screen',
              parameters=[{**sim, 'output': '/camera/depth/color/points'}],
@@ -242,7 +241,7 @@ def generate_launch_description():
         # "Timed out waiting for transform ... two or more unconnected trees"
         # (map -> lio_init is published at startup, so the frame exists while
         # nothing links it to base_footprint yet) and a Ctrl+C in that state
-        # leaves the servers in errorprocessing. wait_for_map_then_start.py
+        # leaves the servers in errorprocessing. wait_for_map_then_start
         # calls STARTUP the moment the transform is real -- same pattern as
         # pepper_nav2_fastloc.launch.py.
         Node(package='nav2_lifecycle_manager', executable='lifecycle_manager',
@@ -252,10 +251,10 @@ def generate_launch_description():
                               ["'", localize, "'.lower() not in ('true', '1')"]),
                           'node_names': ['map_server', 'controller_server',
                                          'planner_server']}]),
-        Node(package='pepper_navigation', executable='wait_for_map_then_start.py',
+        Node(package='pepper_navigation', executable='wait_for_map_then_start',
              name='wait_for_map_then_start', output='screen',
-             parameters=[{**sim, 'target_frame': 'map', 'source_frame': 'base_footprint',
-                          'manager': '/lifecycle_manager_costmaps/manage_nodes'}],
+             parameters=[nav2_nodes.NAV_CONFIG,
+                         {**sim, 'manager': '/lifecycle_manager_costmaps/manage_nodes'}],
              condition=IfCondition(localize)),
         Node(package='nav2_costmap_2d', executable='nav2_costmap_2d_markers',
              name='local_voxel_markers', output='log', parameters=[sim],

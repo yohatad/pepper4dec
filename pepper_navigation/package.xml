@@ -9,6 +9,8 @@
   <license>BSD-3-Clause</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <!-- installs pepper_navigation/nav2_nodes.py, which the launch files import -->
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
 
   <depend>nav2_bringup</depend>
   <depend>nav2_map_server</depend>
@@ -25,9 +27,10 @@
   <depend>rclcpp_action</depend>
   <!-- src/tf_nav_relay.cpp -->
   <depend>tf2_msgs</depend>
-  <!-- scripts/: wait_for_map_then_start.py, localization_recovery.py,
-       localization_watchdog.py -->
-  <depend>rclpy</depend>
+  <!-- src/wait_for_map_then_start.cpp -->
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+  <!-- src/localization_watchdog.cpp; bumper_guard -->
   <depend>diagnostic_msgs</depend>
   <depend>action_msgs</depend>
   <depend>nav_msgs</depend>
@@ -56,8 +59,9 @@
        in by nav2_bringup above; install it with
        "apt install ros-$ROS_DISTRO-pointcloud-to-laserscan". -->
   <exec_depend>pointcloud_to_laserscan</exec_depend>
-  <!-- bag_test tooling (launch/bag_test, scripts/cloud_delay.py,
-       costmap_explain.py, depth_to_cloud.py, points_to_image.py) -->
+  <!-- The Python tools: scripts/bag_test/ (the replay helpers that
+       launch/bag_test starts) and scripts/safety_cut_viz.py -->
+  <exec_depend>rclpy</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>sensor_msgs_py</exec_depend>
@@ -68,7 +72,7 @@
   <exec_depend>python3-scipy</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
 
-  <!-- Imported by the launch files and Python nodes. -->
+  <!-- Imported by the launch files, nav2_nodes.py and the Python tools. -->
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>nav2_common</exec_depend>
 
@@ -79,8 +83,6 @@
   <test_depend>ament_cmake_gtest</test_depend>
   <!-- test_shared_nav2_params.py parses the four nav2 param files. -->
   <test_depend>python3-yaml</test_depend>
-  <test_depend>rosgraph_msgs</test_depend>
-  <test_depend>builtin_interfaces</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>
