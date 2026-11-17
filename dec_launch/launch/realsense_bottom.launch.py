@@ -106,7 +106,7 @@ def generate_launch_description():
                 'enable_gyro': 'true',
                 'unite_imu_method': '2',
 
-                'rgb_camera.color_profile': '640x480x30',
+                'rgb_camera.color_profile': '640x480x15',
                 # Default (BGR8) never matches the pointcloud filter's texture
                 # format check (RGB8/Y8 only, see config_file below) -- the
                 # cloud published with no color regardless of stream_filter.
@@ -116,8 +116,8 @@ def generate_launch_description():
                 # in RViz, set that Image display's Image Transport Hint to
                 # 'raw', not 'compressed'.
                 'rgb_camera.color_format': 'RGB8',
-                'depth_module.depth_profile': '640x480x30',
-                'depth_module.infra_profile': '640x480x30',
+                'depth_module.depth_profile': '640x480x15',
+                'depth_module.infra_profile': '640x480x15',
 
                 # This is a NAME MISMATCH, not a toggle: this node's librealsense
                 # build exposes the point-cloud filter as `pointcloud__neon_.*`,
