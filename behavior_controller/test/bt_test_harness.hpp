@@ -304,6 +304,13 @@ protected:
     executor_->add_node(client_);
     executor_->add_node(stubs_);
     spinner_ = std::thread([this]() {executor_->spin();});
+    // Humble's Executor::cancel() only clears the spinning flag, so a cancel()
+    // that lands before spin() has set it is lost: spin() then never returns
+    // and TearDown's join() hangs until the ctest timeout. A test that does no
+    // ROS work (BlackboardNodesSetAndCompareStrings) is fast enough to hit it.
+    while (!executor_->is_spinning()) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
 
     params_.nh = client_;
     params_.server_timeout = std::chrono::milliseconds(2000);
