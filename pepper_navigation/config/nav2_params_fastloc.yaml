@@ -91,7 +91,8 @@ controller_server:
       # 3 m local costmap and under prune_distance.
       time_steps: 56
       model_dt: 0.05             # must equal 1 / controller_frequency
-      batch_size: 2000
+      batch_size: 1000   # was 2000: 84% of a Jetson core at 20 Hz, missing the
+                         # 50 ms loop ~every 3 s (measured 2026-11-17)
       iteration_count: 1
       # Sampling noise per axis; vy 0 as the base is driven diff-drive style.
       vx_std: 0.2
