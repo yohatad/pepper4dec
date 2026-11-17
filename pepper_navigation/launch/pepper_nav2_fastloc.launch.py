@@ -359,7 +359,7 @@ def generate_launch_description():
             log_level),
         # The 3D view's LOCAL grid covers the RealSense cone only: the L2 is
         # on a 2D ObstacleLayer beside it, which publishes no voxels.
-        *nav2_nodes.voxel_markers(use_sim_time),
+        *nav2_nodes.voxel_markers(use_sim_time, log_level),
         nav2_nodes.rviz(use_sim_time, LaunchConfiguration('rviz_config'),
                         IfCondition(rviz), log_level),
         make_lifecycle_manager(True),

@@ -168,11 +168,16 @@ def sensor_guard(use_sim_time, cmd_vel_in=None, log_level=None):
     )
 
 
-def voxel_markers(use_sim_time):
+def voxel_markers(use_sim_time, log_level='warn'):
     """local_voxel_markers and global_voxel_markers, for the 3D RViz view.
 
     VoxelLayer publishes nav2_msgs/VoxelGrid, which RViz cannot draw; these
     turn it into a MarkerArray it can. Needs z_voxels <= 16 in the nav2 params.
+
+    warn by default, in every profile: at info each one logs "Published N
+    markers" on every grid update (~30 lines/s for the pair), and output='log'
+    does not hide it -- launch still echoes stderr, where rclcpp logs, to the
+    screen.
     """
     def markers(costmap):
         return Node(
@@ -180,6 +185,7 @@ def voxel_markers(use_sim_time):
             executable='nav2_costmap_2d_markers',
             name=f'{costmap}_voxel_markers',
             output='log',
+            arguments=_log(log_level),
             parameters=[{'use_sim_time': use_sim_time}],
             remappings=[('voxel_grid', f'/{costmap}_costmap/voxel_grid'),
                         ('visualization_marker', f'/{costmap}_costmap/voxel_markers')],
