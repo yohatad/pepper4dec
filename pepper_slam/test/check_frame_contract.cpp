@@ -39,6 +39,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <exception>
 #include <memory>
 #include <string>
 #include <utility>
@@ -233,15 +234,22 @@ private:
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
-  auto node = std::make_shared<CheckFrameContract>();
-  const auto deadline =
-    std::chrono::steady_clock::now() + std::chrono::duration<double>(node->duration());
-  rclcpp::executors::SingleThreadedExecutor executor;
-  executor.add_node(node);
-  while (rclcpp::ok() && std::chrono::steady_clock::now() < deadline) {
-    executor.spin_once(std::chrono::milliseconds(100));
+  int rc = 1;
+  // An exception is a failed check, reported, not an abort with no verdict.
+  try {
+    auto node = std::make_shared<CheckFrameContract>();
+    const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::duration<double>(node->duration());
+    rclcpp::executors::SingleThreadedExecutor executor;
+    executor.add_node(node);
+    while (rclcpp::ok() && std::chrono::steady_clock::now() < deadline) {
+      executor.spin_once(std::chrono::milliseconds(100));
+    }
+    rc = node->finish();
+  } catch (const std::exception & ex) {
+    std::fprintf(stderr, "check_frame_contract: %s\n", ex.what());
+    rc = 2;
   }
-  const int rc = node->finish();
   rclcpp::shutdown();
   return rc;
 }
