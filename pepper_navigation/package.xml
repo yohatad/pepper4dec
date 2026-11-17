@@ -30,7 +30,7 @@
   <!-- src/wait_for_map_then_start.cpp -->
   <depend>tf2</depend>
   <depend>tf2_ros</depend>
-  <!-- src/localization_watchdog.cpp; bumper_guard -->
+  <!-- src/localization_watchdog.cpp, sensor_guard.cpp -->
   <depend>diagnostic_msgs</depend>
   <depend>action_msgs</depend>
   <depend>nav_msgs</depend>
@@ -39,8 +39,6 @@
   <depend>std_srvs</depend>
   <depend>nav2_msgs</depend>
   <depend>sensor_msgs</depend>
-  <!-- naoqi_bridge_msgs/Bumper, for bumper_guard -->
-  <depend>naoqi_bridge_msgs</depend>
 
   <!-- launched by inclusion (pepper_nav2_rtabmap_loc.launch.py), not linked.
        pepper_slam supplies rtabmap_base.launch.py, which this package

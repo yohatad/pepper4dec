@@ -5,7 +5,7 @@
 #
 # Overridden by the launch files, per profile, on top of this file:
 #   use_sim_time                          every node
-#   bumper_guard.cmd_vel_in_topic         cmd_vel_raw when collision_monitor:=false
+#   sensor_guard.cmd_vel_in_topic         cmd_vel_raw when collision_monitor:=false (fastloc)
 #   localization_watchdog.status_names    the Point-LIO localizer's status names
 #   localization_recovery.backend         the profile's localization backend
 #   wait_for_map_then_start.manager       the bag_test costmap lifecycle manager
@@ -19,25 +19,18 @@
 # bag_test/costmap_bag.launch.py.
 
 # =============================================================================
-# bumper_guard: the last gate before cmd_vel. A bumper contact blocks the
-# direction it came from and leaves reverse open, so BackUp can escape.
+# sensor_guard: the last gate before cmd_vel, in every profile. Humble's
+# collision monitor holds its last verdict when a source goes stale, so losing
+# one of these stops translation here instead (rotation stays free). Bumper
+# contacts are naoqi_driver's: it latches any press into a full stop.
 # =============================================================================
 
-bumper_guard:
+sensor_guard:
   ros__parameters:
     cmd_vel_in_topic: "cmd_vel_safe"    # the collision monitor's output
     cmd_vel_out_topic: "cmd_vel"        # what Pepper drives on
-    stuck_timeout: 10.0                 # s of continuous press before ERROR (debris, or a fault)
-    driver_clear_service: "/naoqi_driver/clear_bumper"   # also reset by ~/clear; "" to skip
-
-    # Driver liveness: no joint states means naoqi_driver is down.
-    liveness_topic: "/joint_states"
-    liveness_timeout: 1.0               # s
-
-    # The collision monitor holds its last verdict when a source goes stale,
-    # so losing one of these must stop the robot here instead.
     required_topics: ["/points_safety"]
-    required_timeout: 1.0               # s
+    required_timeout: 1.0               # s of silence before a topic counts as lost
 
 # =============================================================================
 # tf_nav_relay: /tf without Pepper's joint tree, on /tf_nav, for the Nav2
@@ -60,7 +53,7 @@ localization_watchdog:
     # names; pepper_nav2_pointloc.launch.py replaces them with Point-LIO's.
     status_names: ["fastlio_localization: pose lock",
                    "fastlio_localization: map -> odom gate",
-                   "bumper_guard: sensor liveness"]
+                   "sensor_guard: sensor liveness"]
     lost_duration: 5.0                  # s of continuous ERROR before acting
     # Silence after an OK only trips stale_timeout (badness is timed from the
     # first bad report), so it matches lost_duration. 0 disables.

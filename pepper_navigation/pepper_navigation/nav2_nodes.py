@@ -60,7 +60,8 @@ def nav2_servers(params, cmd_vel_out='cmd_vel_raw', log_level=None):
 
     The controller's and behaviours' velocity goes to cmd_vel_out: cmd_vel_raw
     is the collision monitor's input, so recovery motions (spin, backup) go
-    through it too.
+    through it too. The monitor publishes cmd_vel_safe (nav2_params_*.yaml),
+    and sensor_guard passes it on as cmd_vel.
     """
     def server(package, executable, remappings):
         return Node(
@@ -146,22 +147,24 @@ def collision_monitor(params, log_level=None, condition=None):
     )
 
 
-def bumper_guard(use_sim_time, cmd_vel_in, log_level=None, condition=None):
-    """The post-contact gate, between the collision monitor and cmd_vel.
+def sensor_guard(use_sim_time, cmd_vel_in=None, log_level=None):
+    """The last gate, between the collision monitor and cmd_vel, in every profile.
 
-    The collision monitor is preventive and isotropic -- its actions only zero
-    or scale the whole command -- so it cannot block forward while leaving the
-    reverse that BackUp needs to escape.
+    Humble's collision monitor holds its last verdict when its sensor goes
+    silent; this stops translation while /points_safety is lost (rotation
+    stays free). Bumper contacts are naoqi_driver's: it latches any press into
+    a full stop. cmd_vel_in: None keeps the configuration file's cmd_vel_safe.
     """
+    overrides = {'use_sim_time': use_sim_time}
+    if cmd_vel_in is not None:
+        overrides['cmd_vel_in_topic'] = cmd_vel_in
     return Node(
         package='pepper_navigation',
-        executable='bumper_guard',
-        name='bumper_guard',
+        executable='sensor_guard',
+        name='sensor_guard',
         output='screen',
         arguments=_log(log_level),
-        condition=condition,
-        parameters=[NAV_CONFIG,
-                    {'use_sim_time': use_sim_time, 'cmd_vel_in_topic': cmd_vel_in}],
+        parameters=[NAV_CONFIG, overrides],
     )
 
 

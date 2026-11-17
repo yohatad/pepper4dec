@@ -25,6 +25,8 @@ Nodes started:
     points_costmap_filter) — range-limited clouds for the safety chain and
     the costmaps.
     nav2_collision_monitor/collision_monitor.
+    pepper_navigation/sensor_guard — the last gate before cmd_vel: stops
+        translation while /points_safety is silent.
     nav2_costmap_2d/nav2_costmap_2d_markers x2 — voxel visualization.
     pepper_navigation/localization_recovery.
     pepper_navigation/tf_nav_relay.
@@ -238,6 +240,7 @@ def generate_launch_description():
         nav2_nodes.points_safety_filter(use_sim_time),
         nav2_nodes.points_costmap_filter(use_sim_time),
         nav2_nodes.collision_monitor(configured_params),
+        nav2_nodes.sensor_guard(use_sim_time),
         *nav2_nodes.voxel_markers(use_sim_time),
         nav2_nodes.rviz(use_sim_time, rviz_config, IfCondition(rviz)),
         # map_server first so /map is up before amcl and the global costmap

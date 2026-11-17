@@ -397,7 +397,7 @@ collision_monitor:
     # Levelled odom, as in the local costmap.
     odom_frame_id: "odom"
     cmd_vel_in_topic: "cmd_vel_raw"
-    cmd_vel_out_topic: "cmd_vel"
+    cmd_vel_out_topic: "cmd_vel_safe"   # sensor_guard -> cmd_vel; it stops translation when /points_safety goes silent
     # No state_topic: Humble's collision_monitor does not declare it and
     # never publishes the state. Read the verdict off cmd_vel instead.
     transform_tolerance: 0.2

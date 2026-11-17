@@ -34,11 +34,10 @@ find_package(tf2_ros REQUIRED)
 find_package(tf2_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
-find_package(naoqi_bridge_msgs REQUIRED)
 
 # pepper_navigation_lib (src/lib/): the decisions the nodes make, free of ROS
-# so the tests drive them with time passed in. bumper_latch.h and
-# topic_liveness.h are header-only.
+# so the tests drive them with time passed in. topic_liveness.h is
+# header-only.
 #   localization_health.cpp  localization_watchdog's lost/cancel logic
 #                            (test_localization_health)
 add_library(${PROJECT_NAME}_lib STATIC
@@ -50,15 +49,15 @@ target_include_directories(${PROJECT_NAME}_lib PUBLIC
 set_target_properties(${PROJECT_NAME}_lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # The runtime nodes, one executable each (src/<node>.cpp):
-#   bumper_guard             last gate before cmd_vel; a bumper contact blocks
-#                            its direction and leaves reverse open for BackUp
+#   sensor_guard             last gate before cmd_vel; stops translation while
+#                            a sensor the collision monitor reads is silent
 #   tf_nav_relay             /tf without Pepper's joint tree, on /tf_nav
 #                            (~4150 transforms/s, so C++)
 #   localization_watchdog    cancels goals while the localizer reports lost
 #   localization_recovery    /localization_recover in front of every backend
 #   wait_for_map_then_start  starts Nav2 once map -> base_footprint exists
 set(NODES
-  bumper_guard
+  sensor_guard
   tf_nav_relay
   localization_watchdog
   localization_recovery
@@ -68,8 +67,7 @@ foreach(node ${NODES})
   add_executable(${node} src/${node}.cpp)
   target_link_libraries(${node} ${PROJECT_NAME}_lib)
 endforeach()
-ament_target_dependencies(bumper_guard
-  rclcpp geometry_msgs sensor_msgs diagnostic_msgs std_srvs naoqi_bridge_msgs)
+ament_target_dependencies(sensor_guard rclcpp geometry_msgs diagnostic_msgs)
 ament_target_dependencies(tf_nav_relay rclcpp tf2_msgs)
 ament_target_dependencies(localization_watchdog
   rclcpp action_msgs diagnostic_msgs std_srvs)
@@ -170,11 +168,6 @@ if(BUILD_TESTING)
   ament_pep257(--add-ignore D205 D213 D400 D401 D406 D407 D413 D415)
 
   find_package(ament_cmake_gtest REQUIRED)
-  # bumper_guard's latch/direction logic, with time passed in so the cases
-  # are exact instead of slept through.
-  ament_add_gtest(test_bumper_latch test/test_bumper_latch.cpp)
-  target_include_directories(test_bumper_latch PRIVATE include)
-
   # The chain's only fail-safe on sensor loss: Humble's collision_monitor
   # holds its last verdict when a source goes stale (MEASURED, see the header).
   ament_add_gtest(test_topic_liveness test/test_topic_liveness.cpp)

@@ -65,7 +65,7 @@ ros2 launch pepper_slam pepper_sensor_tf.launch.py
 
 `naoqi_driver.launch.py` defaults `nao_ip` to `172.29.111.240` (the CMU-Pepper router). On the PepperNet access point the robot is at `10.42.0.204`. Its `network_interface` defaults to `eth0`; on Wi-Fi pass the Wi-Fi interface (`ip -br addr`). It passes `config/naoqi_driver.yaml` as `params_file`, which turns Pepper's microphones on (`/audio`, needed by `speech_event`); `naoqi_driver2`'s own default leaves audio off.
 
-A press on any base bumper stops the robot until it is reset, and the driver's terminal shows the lock in red: `ros2 service call /naoqi_driver/clear_bumper std_srvs/srv/Trigger`, or `/bumper_guard/clear` when Nav2 runs the fastloc profile.
+A press on any base bumper stops the robot until it is reset, and the driver's terminal shows the lock in red: `ros2 service call /naoqi_driver/clear_bumper std_srvs/srv/Trigger`. The same call resumes the robot under every Nav2 profile; Nav2 has no bumper stop of its own.
 
 ### Other launch files
 

@@ -27,7 +27,8 @@ Nodes started:
         a separate 2D layer that publishes no voxels (see
         nav2_params_fastloc.yaml). Sides and rear will look empty in the
         local voxel view even when the L2 has marked them.
-    pepper_navigation/bumper_guard — the post-contact gate before cmd_vel.
+    pepper_navigation/sensor_guard — the last gate before cmd_vel: stops
+        translation while /points_safety is silent.
     pepper_navigation/wait_for_map_then_start — holds the lifecycle
         manager until /map is available.
     pepper_navigation/localization_recovery — /relocalize recovery.
@@ -78,8 +79,9 @@ Launch arguments:
         TESTING ONLY. false leaves the collision monitor out entirely --
         not started, not in the lifecycle list (a deactivated monitor drops
         its bond and the manager treats it as a crash) -- and feeds the
-        controller and behaviours straight into bumper_guard. Nothing then
-        stops the robot BEFORE contact: keep the e-stop in hand.
+        controller and behaviours straight into sensor_guard. Nothing then
+        stops the robot BEFORE contact but naoqi_driver's 0.35 m proximity
+        stop: keep the e-stop in hand.
 
 Configuration:
     config/nav2_params_fastloc.yaml, config/pepper_navigation_configuration.yaml,
@@ -213,23 +215,13 @@ def generate_launch_description():
         'watchdog', default_value='true',
         description='Cancel navigation goals while fastlio_localization reports '
                     'itself lost. Set false to monitor without ever holding nav.')
-    declare_bumper_guard_cmd = DeclareLaunchArgument(
-        'bumper_guard', default_value='true',
-        description='Insert bumper_guard between collision_monitor and cmd_vel: '
-                    'a bumper press stops all motion until /bumper_guard/clear '
-                    'is called. Set false to drive straight off the collision monitor.')
     declare_collision_monitor_cmd = DeclareLaunchArgument(
         'collision_monitor', default_value='true',
         description='TESTING ONLY: false runs without the collision monitor '
-                    '(controller -> bumper_guard -> cmd_vel). Nothing stops '
-                    'the robot before contact.')
+                    '(controller -> sensor_guard -> cmd_vel). Nothing stops '
+                    'the robot before contact but the driver\'s proximity stop.')
     cm_on = LaunchConfiguration('collision_monitor')
     is_true = "'.lower() in ('true', '1')"
-    # Who receives the controller's and behaviours' output: the monitor when
-    # it runs, else the bumper gate, else (both off) the wheels directly.
-    nav_cmd_out = PythonExpression(
-        ["'cmd_vel_raw' if '", cm_on, is_true, " or '",
-         LaunchConfiguration('bumper_guard'), is_true, " else 'cmd_vel'"])
     declare_odom_frame_cmd = DeclareLaunchArgument(
         'odom_frame', default_value='',
         description='Empty (default): fastlio_localization broadcasts map -> '
@@ -310,20 +302,14 @@ def generate_launch_description():
             # map is the one that jumps on relocalization.
             'collision_monitor.ros__parameters.odom_frame_id':
                 PythonExpression(["'", odom_frame, "' or 'map'"]),
-            # With the gate in, the monitor stops one hop short of the wheels
-            # and bumper_guard owns cmd_vel; without it, nothing would.
-            'collision_monitor.ros__parameters.cmd_vel_out_topic':
-                PythonExpression(
-                    ["'cmd_vel_safe' if '",
-                     LaunchConfiguration('bumper_guard'),
-                     "'.lower() in ('true', '1') else 'cmd_vel'"]),
         },
         convert_types=True)
 
     collision_monitor_off_warning = LogInfo(
         msg='WARNING: collision_monitor:=false -- TESTING ONLY. No stop or '
-            'slowdown zone is active; only bumper_guard (after contact) stands '
-            'between the controller and the wheels. Keep the e-stop in hand.',
+            'slowdown zone is active; only the driver\'s proximity and bumper '
+            'stops stand between the controller and the wheels. Keep the e-stop '
+            'in hand.',
         condition=UnlessCondition(cm_on))
 
     def make_lifecycle_manager(with_monitor):
@@ -356,7 +342,6 @@ def generate_launch_description():
         declare_rviz_cmd,
         declare_rviz_config_cmd,
         declare_watchdog_cmd,
-        declare_bumper_guard_cmd,
         declare_collision_monitor_cmd,
         collision_monitor_off_warning,
         declare_odom_frame_cmd,
@@ -364,13 +349,14 @@ def generate_launch_description():
         sensor_tf,
         fastloc,
         nav2_nodes.map_server(use_sim_time, map_yaml, log_level),
-        *nav2_nodes.nav2_servers(configured_params, nav_cmd_out, log_level),
+        *nav2_nodes.nav2_servers(configured_params, log_level=log_level),
         nav2_nodes.points_safety_filter(use_sim_time, log_level),
         nav2_nodes.collision_monitor(configured_params, log_level, IfCondition(cm_on)),
-        nav2_nodes.bumper_guard(
+        # Without the monitor, sensor_guard takes the controller's output.
+        nav2_nodes.sensor_guard(
             use_sim_time,
             PythonExpression(["'cmd_vel_safe' if '", cm_on, is_true, " else 'cmd_vel_raw'"]),
-            log_level, IfCondition(LaunchConfiguration('bumper_guard'))),
+            log_level),
         # The 3D view's LOCAL grid covers the RealSense cone only: the L2 is
         # on a 2D ObstacleLayer beside it, which publishes no voxels.
         *nav2_nodes.voxel_markers(use_sim_time),
@@ -382,7 +368,7 @@ def generate_launch_description():
         # Here it forwards to fastlio_localization's /relocalize.
         nav2_nodes.localization_recovery(use_sim_time, 'fastloc', log_level),
         # The configuration file's status names are fastloc's: the pose lock,
-        # the map -> odom gate, and bumper_guard's sensor liveness.
+        # the map -> odom gate, and sensor_guard's sensor liveness.
         nav2_nodes.localization_watchdog(
             use_sim_time, IfCondition(LaunchConfiguration('watchdog')),
             log_level=log_level),

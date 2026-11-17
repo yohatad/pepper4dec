@@ -17,6 +17,8 @@ Nodes started:
     nav2_behaviors/behavior_server, nav2_bt_navigator/bt_navigator.
     pepper_slam/cloud_range_filter (node: points_safety_filter).
     nav2_collision_monitor/collision_monitor.
+    pepper_navigation/sensor_guard — the last gate before cmd_vel: stops
+        translation while /points_safety is silent.
     pepper_navigation/localization_recovery.
     pepper_navigation/tf_nav_relay.
     nav2_lifecycle_manager/lifecycle_manager x2 — one for navigation
@@ -175,6 +177,7 @@ def generate_launch_description():
         *nav2_nodes.nav2_servers(configured_params),
         nav2_nodes.points_safety_filter(use_sim_time),
         nav2_nodes.collision_monitor(configured_params),
+        nav2_nodes.sensor_guard(use_sim_time),
         nav2_nodes.lifecycle_manager(use_sim_time, [
             'controller_server',
             'planner_server',

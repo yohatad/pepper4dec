@@ -1,4 +1,4 @@
-// Sensor-liveness logic for bumper_guard. Time is passed in, so every case is
+// Sensor-liveness logic for sensor_guard. Time is passed in, so every case is
 // exact rather than slept through.
 
 #include <gtest/gtest.h>

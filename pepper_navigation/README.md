@@ -16,7 +16,7 @@ registers the live scan against a prior 3D map inside FAST-LIO's filter.
 - **ROS2 Native**: Built for ROS2 Humble and Nav2
 - **Localization profiles**: fastloc (default), pointloc, RTAB-Map and AMCL, chosen at launch time
 - **3D obstacle avoidance**: voxel-layer costmaps built from the Unitree L2 and the bottom RealSense
-- **Independent safety layer**: a collision monitor sits between the controller and the base
+- **Independent safety layer**: a collision monitor sits between the controller and the base, and `sensor_guard` stops it if the monitor's sensor goes silent
 - **Localization watchdog**: holds navigation while localization is lost, and re-arms the search
 
 ## ✅ Prerequisites
@@ -177,11 +177,11 @@ Standard Nav2 interfaces (`/navigate_to_pose`, `/map`, `/plan`, the costmaps,
 
 | Topic | Type | Notes |
 |---|---|---|
-| `/cmd_vel` | `geometry_msgs/Twist` | Safety-gated velocity, consumed by `naoqi_driver2`: from `bumper_guard` (fastloc) or the collision monitor (other profiles) |
-| `/cmd_vel_safe` | `geometry_msgs/Twist` | fastloc only: the collision monitor's output, gated by `bumper_guard` |
+| `/cmd_vel` | `geometry_msgs/Twist` | Safety-gated velocity, consumed by `naoqi_driver2`: from `sensor_guard`, in every profile |
+| `/cmd_vel_safe` | `geometry_msgs/Twist` | The collision monitor's output, gated by `sensor_guard` |
 | `/cmd_vel_raw` | `geometry_msgs/Twist` | Controller and behavior output, before the collision monitor. **Not** what the robot drives on |
 | `/polygon_stop`, `/polygon_slowdown` | `geometry_msgs/PolygonStamped` | Safety zones: 0.40 m and 0.90 m ahead (wedges, not circles) |
-| `/diagnostics` | `diagnostic_msgs/DiagnosticArray` | `bumper_guard`: contact, latched stop, stuck switch, sensor liveness |
+| `/diagnostics` | `diagnostic_msgs/DiagnosticArray` | `sensor_guard: sensor liveness` (ERROR naming any lost required topic) |
 | `/localization/overlap` | `std_msgs/Float32` | fastloc / pointloc: fraction of the live scan on the prior map, 1 Hz |
 
 ### Internal Topics
@@ -201,7 +201,7 @@ Published and consumed inside the stack; listed for debugging.
 |---|---|---|
 | `/localization_recover` | `std_srvs/Trigger` | "I am lost": same call on every profile, dispatched to the running backend |
 | `/relocalize` | `std_srvs/Trigger` | fastloc / pointloc: re-arm the ScanContext search from scratch |
-| `/bumper_guard/clear` | `std_srvs/Trigger` | fastloc: lift the bumper stop once no bumper is pressed; also resets `naoqi_driver`'s own stop |
+| `/naoqi_driver/clear_bumper` | `std_srvs/Trigger` | Served by `naoqi_driver2`, not this package: lifts the bumper stop once no bumper is pressed, in every profile |
 
 ## 🎯 Sending goals
 
@@ -265,13 +265,12 @@ Nothing reaches the wheels unvetted:
 
 ```
 controller_server ─┐
-                   ├─> /cmd_vel_raw ──> collision_monitor ──> /cmd_vel_safe ──> bumper_guard ──> /cmd_vel ──> naoqi_driver2
-behavior_server  ──┘                          ^                                    ^
-                                     /points_safety                             /bumper
+                   ├─> /cmd_vel_raw ──> collision_monitor ──> /cmd_vel_safe ──> sensor_guard ──> /cmd_vel ──> naoqi_driver2
+behavior_server  ──┘                          ^                                    ^                  (laser/sonar stop,
+                                     /points_safety ───────────────────────────────┘                   bumper stop)
 ```
 
-(`bumper_guard` runs in the fastloc profile; elsewhere the collision monitor
-publishes `/cmd_vel` directly.)
+The chain is the same in all five profiles.
 
 `collision_monitor` slows to 30 % inside a wedge reaching 0.90 m ahead
 (0.45 m to the sides) and stops inside one reaching 0.40 m ahead (0.31 m to
@@ -282,14 +281,20 @@ housing and Pepper's body; otherwise those self-hits would stop the robot for
 good. Every profile loads that filter's values, and their measurements, from
 `pepper_slam/config/pepper_slam_configuration.yaml`.
 
-`bumper_guard` is the last gate. Any bumper press stops all motion, turning
-included, and the stop holds after release until
-`ros2 service call /bumper_guard/clear std_srvs/srv/Trigger`, which is refused
-while a bumper is still pressed and also resets `naoqi_driver`'s own bumper
-stop. It also stops translation if `/points_safety` goes quiet for more than
-1 s (Humble's collision monitor keeps its last verdict when its source
-stops). `naoqi_driver`'s own proximity backstop (Pepper's laser and sonar,
-0.35 m stop) and bumper stop apply in every profile, with or without Nav2. `utils/collision_zone_viewer.py` shows what it counts without
+`sensor_guard` is the last gate. It stops translation (rotation stays free)
+while `/points_safety` has been silent for more than 1 s: Humble's collision
+monitor keeps its last verdict when its source stops, so without it a dead
+lidar would leave the robot driving on a stale "clear". It reports
+`sensor_guard: sensor liveness` on `/diagnostics`, which the watchdog also
+treats as lost.
+
+Bumpers are `naoqi_driver`'s: any press stops all motion, turning included,
+for every caller (Nav2, teleop, the behavior controller), and the stop holds
+after release until
+`ros2 service call /naoqi_driver/clear_bumper std_srvs/srv/Trigger`, which is
+refused while a bumper is still pressed. A switch held for more than 10 s is
+reported as ERROR on `/diagnostics`. The driver's proximity backstop
+(Pepper's laser and sonar, 0.35 m stop) also applies with or without Nav2. `utils/collision_zone_viewer.py` shows what it counts without
 Nav2 running (see [Tuning the costmaps on a bag](#tuning-the-costmaps-on-a-bag)).
 
 ## 🔁 Losing localization
@@ -322,11 +327,11 @@ the package.
 ## ⚙️ Configuration
 
 `config/pepper_navigation_configuration.yaml` holds the parameters of this
-package's own nodes, one section per node (`bumper_guard`, `tf_nav_relay`,
+package's own nodes, one section per node (`sensor_guard`, `tf_nav_relay`,
 `localization_watchdog`, `localization_recovery`, `wait_for_map_then_start`).
 Every profile loads the whole file and adds `use_sim_time`, plus what differs
 by profile: `localization_recovery`'s `backend`, Point-LIO's status names for
-the watchdog on pointloc, and `bumper_guard`'s input when
+the watchdog on pointloc, and `sensor_guard`'s input when
 `collision_monitor:=false`. Nav2's servers read `config/nav2_params_<profile>.yaml`;
 the cloud filters and `wheel_odom_tf` read `pepper_slam_configuration.yaml`.
 
@@ -346,7 +351,7 @@ pepper_navigation/
 │   ├── nav2_params_kissicp.yaml        # Nav2 params, KISS-ICP profile
 │   └── bag_test/
 │       └── nav2_params_l2voxel_test.yaml  # fastloc with the L2 as a local voxel layer
-├── include/pepper_navigation/          # headers: bumper_latch.h, topic_liveness.h, localization_health.h
+├── include/pepper_navigation/          # headers: topic_liveness.h, localization_health.h
 ├── launch/
 │   ├── pepper_nav2_fastloc.launch.py   # Nav2 + fastlio_localization (default)
 │   ├── pepper_nav2_pointloc.launch.py  # Nav2 + pointlio_localization
@@ -374,7 +379,7 @@ pepper_navigation/
 │   └── bag_test/                       # costmap_bag / collision_monitor_bag helpers
 │       └── cloud_delay.py, costmap_explain.py, depth_to_cloud.py, points_to_image.py, cm_bag_judge.py
 ├── src/                                # one executable per node
-│   ├── bumper_guard.cpp                # last gate before cmd_vel: bumper stop, sensor liveness
+│   ├── sensor_guard.cpp                # last gate before cmd_vel: stops translation on sensor loss
 │   ├── tf_nav_relay.cpp                # /tf without Pepper's joint tree, on /tf_nav
 │   ├── localization_watchdog.cpp       # cancels goals while the localizer reports lost
 │   ├── localization_recovery.cpp       # /localization_recover, dispatched per backend
@@ -386,8 +391,7 @@ pepper_navigation/
 │       └── odom_path_publisher.cpp     # traversed path for RViz
 ├── test/
 │   ├── test_localization_health.cpp    # the watchdog's timing, cancels and release
-│   ├── test_bumper_latch.cpp           # bumper_guard's stop latch
-│   ├── test_topic_liveness.cpp         # bumper_guard's sensor-liveness check
+│   ├── test_topic_liveness.cpp         # sensor_guard's sensor-liveness check
 │   ├── test_shared_nav2_params.py      # guards the params blocks shared across profiles
 │   └── test_collision_monitor_bag.py   # the collision monitor on the benchmark bag
 ├── utils/                              # not installed; run by hand
@@ -410,7 +414,7 @@ Besides the linters, this runs:
 
 - the gtests: `test_localization_health` (the watchdog's lost and stale
   timing, cancel cadence and release, on a simulated clock),
-  `test_bumper_latch` and `test_topic_liveness`;
+  and `test_topic_liveness` (`sensor_guard`'s check);
 - `test/test_shared_nav2_params.py`, which fails if `behavior_server`,
   `controller_server` or `planner_server` differ between the nav2 param files
   (also runs standalone: `python3 test/test_shared_nav2_params.py`);
@@ -427,7 +431,7 @@ Besides the linters, this runs:
 | Costmaps empty, no plan | `/points` not flowing: `ros2 topic hz /points` (and `/imu/data`) |
 | fastloc: local costmap empty, obstacles ignored | The RealSense is not running: `/camera/depth/color/points` is the local costmap's only source |
 | Local costmap stops updating after a while | The Nav2 nodes are on the full `/tf`: check `ros2 topic hz /tf_nav` |
-| Goal active but the robot does not move | `/cmd_vel_raw` flows but `/cmd_vel` is zero: the collision monitor is stopping it (`ros2 topic echo /collision_monitor_state`). If it never clears, check `/points_safety` exists |
+| Goal active but the robot does not move | `/cmd_vel_raw` flows but `/cmd_vel` is zero. Either the collision monitor is stopping it (`/cmd_vel_safe` zero too), or `sensor_guard` is (`/cmd_vel_safe` moves, `/cmd_vel` has no translation): check `ros2 topic hz /points_safety`. A bumper stop shows in red in the driver's terminal |
 | `map -> odom` jitter or TF warnings | Two publishers of one transform: check `bridge_level_frame`, and `ros2 run tf2_ros tf2_echo map base_footprint` |
 | AMCL particles never tighten | Flattened `/scan` does not match the grid: retune `scan_min_height` / `scan_max_height` |
 | Global costmap all unknown | `/map` never arrived: wrong `map:=` path, or `map_server` never activated |

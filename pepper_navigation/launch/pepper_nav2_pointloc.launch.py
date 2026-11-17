@@ -23,7 +23,7 @@ Launch files included:
 Nodes started:
     Same set as pepper_nav2_fastloc.launch.py: the Nav2 pipeline
     (map_server, controller_server, planner_server, behavior_server,
-    bt_navigator), the points_safety_filter and collision monitor, the two
+    bt_navigator), the points_safety_filter, collision monitor and sensor_guard, the two
     voxel marker converters, wait_for_map_then_start, localization_recovery,
     localization_watchdog, RViz when enabled, and
     lifecycle_manager_navigation.
@@ -269,6 +269,7 @@ def generate_launch_description():
         *nav2_nodes.nav2_servers(configured_params),
         nav2_nodes.points_safety_filter(use_sim_time),
         nav2_nodes.collision_monitor(configured_params),
+        nav2_nodes.sensor_guard(use_sim_time),
         *nav2_nodes.voxel_markers(use_sim_time),
         nav2_nodes.rviz(use_sim_time, LaunchConfiguration('rviz_config'), IfCondition(rviz)),
         # autostart OFF, as in the fastloc profile: local_costmap blocks
@@ -284,11 +285,12 @@ def generate_launch_description():
         # Here it forwards to pointlio_localization's /relocalize.
         nav2_nodes.localization_recovery(use_sim_time, 'pointloc'),
         # Point-LIO's own statuses in place of the configuration file's
-        # fastloc names. No bumper_guard in this profile, so no liveness.
+        # fastloc names, plus sensor_guard's sensor liveness.
         nav2_nodes.localization_watchdog(
             use_sim_time, IfCondition(LaunchConfiguration('watchdog')),
             status_names=['point_lio_localization: pose lock',
-                          'point_lio_localization: map -> odom gate']),
+                          'point_lio_localization: map -> odom gate',
+                          'sensor_guard: sensor liveness']),
         nav2_nodes.wheel_odom_tf(use_sim_time, odom_frame, odom_on),
         nav2_nodes.tf_nav_relay(use_sim_time),
     ])
