@@ -8,7 +8,7 @@
 # That race is why bags/slam_recording, slam_recording2 and slam_bench_run1..3
 # all contain ZERO /tf_static messages, while lidar_cam_calib* (started before
 # the publishers) contain 4. Without them nothing downstream can relate the
-# camera to the lidar, which is the entire reason config/sensor_tf.yaml had to
+# camera to the lidar, which is the entire reason data/sensor_tf.yaml had to
 # republish the rig by hand.
 #
 # Subscribing transient_local makes the recorder receive the already-latched
@@ -16,7 +16,7 @@
 #
 # Usage:
 #   ros2 bag record -a \
-#     --qos-profile-overrides-path $(ros2 pkg prefix pepper_slam)/share/pepper_slam/config/record_qos.yaml \
+#     --qos-profile-overrides-path $(ros2 pkg prefix pepper_slam)/share/pepper_slam/data/record_qos.yaml \
 #     -o <bag_name>
 #
 # On replay `ros2 bag play` re-offers /tf_static with the durability recorded

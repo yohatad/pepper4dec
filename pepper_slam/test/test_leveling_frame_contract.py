@@ -79,7 +79,7 @@ def test_bridge_levels_by_the_estimators_own_imu(launch_rel, config_rel):
         pytest.skip('needs a package this workspace has not built: %s' % e)
 
     bridges = [n for n in entries
-               if str(n.get('exe', '')).endswith('map_odom_bridge.py')]
+               if str(n.get('exe', '')).endswith('map_odom_bridge')]
     assert bridges, (
         '%s starts no *_map_odom_bridge; this test needs updating for a '
         'relayout.' % launch_rel)

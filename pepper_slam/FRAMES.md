@@ -166,12 +166,16 @@ and cannot separate floor from ceiling at all.
 
 ## Verifying
 
+`colcon test --packages-select pepper_slam` runs this on the benchmark bag
+through FAST-LIO and `lio_odom_bridge` (`test/test_frame_contract_bag.py`). The
+checker is a test executable, so against a live system, whichever backend runs:
+
 ```bash
-ros2 run pepper_slam check_frame_contract.py
-ros2 run pepper_slam check_frame_contract.py --ros-args -p level_frame:=map
+build/pepper_slam/check_frame_contract
+build/pepper_slam/check_frame_contract --ros-args -p level_frame:=map
 ```
 
-Asserts the leveling offset equals the calibration prediction (`t_base_imu.z`,
+It asserts the leveling offset equals the calibration prediction (`t_base_imu.z`,
 read from TF: 0.3139 m by default),
 `base_footprint` roll/pitch are small, and the floor plane sits at z ~= 0.
 
@@ -226,8 +230,9 @@ accumulates -- not to widen the threshold.
 
 ## Static TF
 
-The rig's 10 static transforms live in `config/sensor_tf.yaml` and are published
-by a single `static_tf_publisher` node. This was previously 10 separate
+The rig's 10 static transforms live in `data/sensor_tf.yaml` and are published
+by a single `static_tf_publisher` node (C++; the parser is
+`src/lib/rig_transforms.cpp`, tested by `test/test_rig_transforms.cpp`). This was previously 10 separate
 `static_transform_publisher` processes -- one per edge, each a full ROS node
 with its own executor and DDS participant, to publish seven constants. Edit the
 YAML, not the launch file. The node rejects a frame given two parents and warns

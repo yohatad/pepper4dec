@@ -79,7 +79,7 @@ def generate_launch_description():
     #
     # Publishing them here regardless is safe: MEASURED against this bag's own
     # /tf_static, the two agree to 4.8e-7 over all 10 shared edges (float32
-    # rounding), because both derive from config/sensor_tf.yaml. Duplicate
+    # rounding), because both derive from data/sensor_tf.yaml. Duplicate
     # publishers of IDENTICAL geometry are redundant, not harmful.
     #
     # Live is the opposite case and wants 'mount': there the RealSense driver

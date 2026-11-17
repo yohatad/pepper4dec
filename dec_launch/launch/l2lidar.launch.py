@@ -28,7 +28,7 @@ Topics published (by the driver):
     FAST-LIO, Point-LIO, FAST-LIVO2 and kiss-icp all subscribe BEST_EFFORT, the
     rtabmap launches pass qos:=2, and the RViz configs are set to Best Effort.
     `ros2 bag record` defaults to RELIABLE, so pass
-    `--qos-profile-overrides-path` (pepper_slam/config/record_qos.yaml) when
+    `--qos-profile-overrides-path` (pepper_slam/data/record_qos.yaml) when
     recording these topics.
 
 Launch arguments:
@@ -58,7 +58,7 @@ Prerequisites:
     The L2 wired to the host and reachable at l2_ip, with host_ip configured on
     the receiving interface. The l2lidar_frame -> base_footprint mount
     transform is NOT published here -- it lives in
-    pepper_slam/config/sensor_tf.yaml, the single owner of the rig's static
+    pepper_slam/data/sensor_tf.yaml, the single owner of the rig's static
     TF edges.
 
 Usage:

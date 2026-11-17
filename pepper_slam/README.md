@@ -87,7 +87,7 @@ the mapping path below for a map worth keeping.
 - `guard_enable` (default `false`): rejects poses implying motion the base
   cannot perform, carries the pose on wheel odometry meanwhile, and publishes
   `/localization/wheel_trust_scale` and `/diagnostics`. Thresholds are in
-  `lio_odom_guard.py`. `pointlio_odometry.launch.py` does not forward it; set
+  `pepper_slam_configuration.yaml`. `pointlio_odometry.launch.py` does not forward it; set
   it on the bridge node there.
 
 ### Mapping
@@ -123,7 +123,7 @@ when replaying a bag with `--clock`.
 
 ```bash
 ros2 bag record -a \
-  --qos-profile-overrides-path $(ros2 pkg prefix --share pepper_slam)/config/record_qos.yaml \
+  --qos-profile-overrides-path $(ros2 pkg prefix --share pepper_slam)/data/record_qos.yaml \
   -o my_bag
 ```
 
@@ -142,7 +142,6 @@ the `bag_test/` prefix fails with "not found".
 | `fastlio_odometry_bag` / `pointlio_odometry_bag` | `fastlio_odometry` / `pointlio_odometry` |
 | `fastlio_lc_bag` / `pointlio_lc_bag` | `fastlio_lc_pgo`'s `fastlio_lc_l2` / `pointlio_lc_l2` |
 | `rtabmap_*_bag` | `rtabmap_base` plus a LIO |
-| `odom_compare_bag` | FAST-LIO against the bag's wheel odometry, side by side in RViz |
 
 Localization and navigation need no wrapper; they take `use_sim_time`
 directly.
@@ -184,11 +183,30 @@ ros2 bag play <bag> --clock --read-ahead-queue-size 2000
 Only one node may publish a frame's parent. RTAB-Map anchors on `odom`, not
 the tilted `lio_init`. `FRAMES.md` has the full frame contract.
 
+## ⚙️ Configuration
+
+Every node reads its parameters from `config/pepper_slam_configuration.yaml`,
+one section per node name (`lio_odom_bridge`, `pgo_map_odom_bridge`,
+`points_safety_filter`, `points_costmap_filter`, `wheel_odom_tf`), like the
+other pepper4dec packages' configuration files. The launch files add only `use_sim_time` and
+the body frame the bridges must share with the estimator (`lidar_imu_frame`,
+read from the estimator's config, so it is never in these files). A launch
+argument such as `guard_enable:=true` overrides the file for that launch only;
+left empty, the file's value stands.
+
+`data/` holds the two files that are data, not node parameters:
+`sensor_tf.yaml` (the rig's measured geometry, read by `static_tf_publisher` and
+the rig URDF) and `record_qos.yaml` (the `ros2 bag record` QoS overrides). The estimators'
+own configurations are `fast_lio`'s `config/l2_rsimu.yaml` and `point_lio`'s
+`config/l2lidar_rsimu.yaml`.
+
 ## 📁 Package Structure
 
 ```
 pepper_slam/
 ├── config/
+│   └── pepper_slam_configuration.yaml  # every node's parameters, one section per node
+├── data/
 │   ├── record_qos.yaml                 # /tf_static QoS override for ros2 bag record
 │   └── sensor_tf.yaml                  # rig transform values; provenance in the header
 ├── launch/
@@ -202,18 +220,17 @@ pepper_slam/
 │   ├── view_rig.launch.py              # sensor rig visualization from the URDF
 │   └── bag_test/                       # bag-replay wrappers (see Bag replay)
 ├── rviz/                               # configs for the mapping, replay and rig-view launches
-├── scripts/
-│   ├── lio_odom_bridge.py              # odom -> base_footprint from the LIO pose; levels lio_init once
-│   ├── lio_odom_guard.py               # divergence gate; a module imported by the bridge
-│   ├── pgo_map_odom_bridge.py          # map -> odom from a pose-graph-optimized trajectory
-│   ├── cloud_to_odom_frame.py          # re-expresses a cloud in the odom frame
-│   ├── check_frame_contract.py         # asserts the LIO frame contract, whichever backend runs
-│   ├── odom_compare.py                 # side-by-side odometry comparison
-│   └── static_tf_publisher.py          # a whole static TF chain from one node
-├── src/
+├── src/                                # one executable per node
 │   ├── cloud_range_filter.cpp          # range / outlier / ground filters; feeds Nav2's /points_safety and /points_costmap
-│   ├── cloud_filters.cpp               # those filters, ROS-free (include/pepper_slam/cloud_filters.h)
-│   └── wheel_odom_tf.cpp               # odom -> base_footprint from /pepper_odom, for the loc stacks
+│   ├── lio_odom_bridge.cpp             # odom -> base_footprint from the LIO pose; levels lio_init once
+│   ├── pgo_map_odom_bridge.cpp         # map -> odom from a pose-graph-optimized trajectory
+│   ├── static_tf_publisher.cpp         # the whole static rig TF chain from one node
+│   ├── wheel_odom_tf.cpp               # odom -> base_footprint from /pepper_odom, for the loc stacks
+│   └── lib/                            # pepper_slam_lib: ROS-free code the nodes share (headers in include/pepper_slam/)
+│       ├── cloud_filters.cpp           # cloud_range_filter's filters
+│       ├── lio_odom_guard.cpp          # lio_odom_bridge's divergence gate
+│       ├── rig_transforms.cpp          # static_tf_publisher's sensor_tf.yaml parser
+│       └── transform_utils.cpp         # pose conversions and levelling shared by the two bridges
 ├── test/                               # pytest suites, resolve_launch.py and its baselines
 ├── urdf/                               # the L2 + D435i rig xacro, alone and on Pepper's body
 ├── FRAMES.md                           # the frame contract in full
@@ -234,8 +251,12 @@ colcon test-result --verbose
 ```
 
 Besides the linters, this runs `test_leveling_frame_contract.py` (skipped when
-the LIO packages are not built), `test_lio_odom_guard.py` and
-`test_cloud_filters` (the `cloud_range_filter` filters on synthetic clouds).
+the LIO packages are not built), `test_lio_odom_guard` (the divergence guard),
+`test_cloud_filters` (the `cloud_range_filter` filters on synthetic clouds) and
+`test_rig_transforms` (`static_tf_publisher`'s parser, including the shipped
+`sensor_tf.yaml`) and `test_frame_contract_bag.py` (the frame contract on the
+benchmark bag through FAST-LIO and the bridge; skipped without the bag or
+`fast_lio`).
 
 **Refactoring a launch file:** `test/resolve_launch.py` resolves one to the
 nodes, parameters and remappings it will start. Compare against the snapshots

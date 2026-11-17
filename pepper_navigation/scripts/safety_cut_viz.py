@@ -98,7 +98,7 @@ class SafetyCutViz(Node):
              'min_range': 0.12, 'self_cut_range': 0.30, 'self_cut_angle': 25.0,
              'body_boxes': [0.10, 0.22, -0.13, 0.13, 0.30, 1.00],
              'params_file': os.path.join(nav, 'config', 'nav2_params_fastloc.yaml'),
-             'transforms_file': os.path.join(slam, 'config', 'sensor_tf.yaml'),
+             'transforms_file': os.path.join(slam, 'data', 'sensor_tf.yaml'),
              'robot_radius': 0.25}
         for k, v in p.items():
             self.declare_parameter(k, v)

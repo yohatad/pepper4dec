@@ -12,7 +12,7 @@
   claiming it as a child. See pepper_sensor_rig.urdf.xacro for why that
   matters.
 
-  TRANSFORMS come from config/sensor_tf.yaml, which stays the calibration
+  TRANSFORMS come from data/sensor_tf.yaml, which stays the calibration
   source of truth. The rpy values here are its quaternions converted (verified
   lossless, worst round trip 0.0 deg over all 10 joints). Change geometry
   there, not here.
@@ -69,7 +69,7 @@
     <joint name="l2lidar_frame__to__camera_camera_link" type="fixed">
       <parent link="l2lidar_frame"/>
       <child  link="camera_camera_link"/>
-      <!-- KEEP IN SYNC WITH config/sensor_tf.yaml. This is the same physical
+      <!-- KEEP IN SYNC WITH data/sensor_tf.yaml. This is the same physical
            transform expressed twice: the YAML publishes it to /tf_static, this
            joint only positions the meshes for visualisation. They drifted once
            already (rotation measured 2026-08-06 and updated in the YAML while

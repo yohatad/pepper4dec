@@ -18,44 +18,68 @@ find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(builtin_interfaces REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(diagnostic_msgs REQUIRED)
+find_package(yaml-cpp REQUIRED)
 
-# The filters behind cloud_range_filter, free of ROS so the tests can drive
-# them directly (test/test_cloud_filters.cpp).
-add_library(cloud_filters STATIC
-  src/cloud_filters.cpp
+# pepper_slam_lib (src/lib/): the code the nodes share, free of ROS nodes so the
+# tests can drive it directly. Every src/*.cpp is a node executable.
+#   cloud_filters.cpp    cloud_range_filter's filters    (test_cloud_filters)
+#   rig_transforms.cpp   static_tf_publisher's parser    (test_rig_transforms)
+#   lio_odom_guard.cpp   lio_odom_bridge's divergence guard (test_lio_odom_guard)
+#   transform_utils.cpp  pose conversions and levelling shared by the bridges
+add_library(${PROJECT_NAME}_lib STATIC
+  src/lib/cloud_filters.cpp
+  src/lib/rig_transforms.cpp
+  src/lib/lio_odom_guard.cpp
+  src/lib/transform_utils.cpp
 )
-target_include_directories(cloud_filters PUBLIC
+target_include_directories(${PROJECT_NAME}_lib PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
-
-# cloud_range_filter: range / outlier / ground filters; feeds Nav2's
-# /points_safety and /points_costmap and octomap's
-# /cloud_registered_body_filtered.
-add_executable(cloud_range_filter
-  src/cloud_range_filter.cpp
-)
-target_link_libraries(cloud_range_filter cloud_filters)
-ament_target_dependencies(cloud_range_filter
-  rclcpp
-  sensor_msgs
-  tf2
-  tf2_ros
-)
-
-# wheel_odom_tf: odom -> base_footprint from /pepper_odom, for the loc stacks.
-add_executable(wheel_odom_tf
-  src/wheel_odom_tf.cpp
-)
-ament_target_dependencies(wheel_odom_tf
-  rclcpp
-  nav_msgs
+target_link_libraries(${PROJECT_NAME}_lib yaml-cpp)
+ament_target_dependencies(${PROJECT_NAME}_lib
+  builtin_interfaces
   geometry_msgs
-  tf2_ros
+  tf2
 )
 
-install(TARGETS cloud_range_filter wheel_odom_tf
+# The nodes, one executable each: different launch files start them in
+# different stacks (mapping, localization, Nav2).
+#   cloud_range_filter   range / outlier / ground filters; feeds Nav2's
+#                        /points_safety and /points_costmap and octomap's
+#                        /cloud_registered_body_filtered
+#   wheel_odom_tf        odom -> base_footprint from /pepper_odom, for the
+#                        localizers' opt-in odom mode
+#   static_tf_publisher  the whole rig as one latched /tf_static message
+#   lio_odom_bridge      odom -> base_footprint from a LIO estimator's odometry
+#   pgo_map_odom_bridge  map -> odom from the pose-graph optimizer's keyframes
+set(NODES
+  cloud_range_filter
+  wheel_odom_tf
+  static_tf_publisher
+  lio_odom_bridge
+  pgo_map_odom_bridge
+)
+foreach(node ${NODES})
+  add_executable(${node} src/${node}.cpp)
+  target_link_libraries(${node} ${PROJECT_NAME}_lib)
+  ament_target_dependencies(${node}
+    rclcpp
+    sensor_msgs
+    nav_msgs
+    geometry_msgs
+    std_msgs
+    diagnostic_msgs
+    tf2
+    tf2_ros
+  )
+endforeach()
+
+install(TARGETS ${NODES}
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -77,28 +101,9 @@ install(TARGETS cloud_range_filter wheel_odom_tf
 # *.urdf.xacro descriptions and the shared sensor_rig.xacro macro they include
 # both resolve at launch.
 install(DIRECTORY
-  launch config urdf rviz
+  launch config data urdf rviz
   DESTINATION share/${PROJECT_NAME}
   PATTERN "__pycache__" EXCLUDE
-)
-
-install(PROGRAMS
-  # Moved here from FAST_LIO/scripts. They are Pepper glue, not upstream
-  # FAST-LIO code: point_lio, fastlio_lc_pgo, FAST-LIVO2 and
-  # pepper_navigation all ran them out of fast_lio without declaring a
-  # dependency on it.
-  scripts/lio_odom_bridge.py
-  # Imported by lio_odom_bridge.py rather than run directly. It must install
-  # alongside it: Python puts the running script's own directory on sys.path,
-  # and under --symlink-install that resolves to a directory holding both,
-  # whether it lands on install/lib/pepper_slam or back on scripts/.
-  scripts/lio_odom_guard.py
-  scripts/pgo_map_odom_bridge.py
-  scripts/cloud_to_odom_frame.py
-  scripts/odom_compare.py
-  scripts/check_frame_contract.py
-  scripts/static_tf_publisher.py
-  DESTINATION lib/${PROJECT_NAME}
 )
 
 if(BUILD_TESTING)
@@ -153,16 +158,33 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_leveling_frame_contract
     "${CMAKE_CURRENT_SOURCE_DIR}/test/test_leveling_frame_contract.py")
 
-  # The divergence guard is plain numpy with no ROS imports, so it tests
-  # without a spin, a bag or a running estimator.
-  ament_add_pytest_test(test_lio_odom_guard
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/test_lio_odom_guard.py")
 
   # cloud_range_filter's range, outlier and ground-plane filters on synthetic
   # clouds, including a brute-force check of the outlier filter's grid.
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_cloud_filters test/test_cloud_filters.cpp)
-  target_link_libraries(test_cloud_filters cloud_filters)
+  target_link_libraries(test_cloud_filters ${PROJECT_NAME}_lib)
+
+  # static_tf_publisher's parser, on hand-written YAML and the shipped rig.
+  ament_add_gtest(test_rig_transforms test/test_rig_transforms.cpp)
+  target_link_libraries(test_rig_transforms ${PROJECT_NAME}_lib)
+
+  # The divergence guard, without a spin, a bag or a running estimator.
+  ament_add_gtest(test_lio_odom_guard test/test_lio_odom_guard.cpp)
+  target_link_libraries(test_lio_odom_guard ${PROJECT_NAME}_lib)
+
+  # The LIO frame contract (levelling offset, base roll/pitch, floor at z = 0)
+  # on the benchmark bag through FAST-LIO and lio_odom_bridge. The checker is a
+  # test executable, run by the pytest; it skips without the bag or fast_lio.
+  add_executable(check_frame_contract test/check_frame_contract.cpp)
+  target_link_libraries(check_frame_contract ${PROJECT_NAME}_lib)
+  ament_target_dependencies(check_frame_contract rclcpp sensor_msgs tf2 tf2_ros)
+  ament_add_pytest_test(test_frame_contract_bag
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/test_frame_contract_bag.py"
+    ENV "CHECK_FRAME_CONTRACT=$<TARGET_FILE:check_frame_contract>"
+    TIMEOUT 300)
+  target_compile_definitions(test_rig_transforms PRIVATE
+    SENSOR_TF_YAML="${CMAKE_CURRENT_SOURCE_DIR}/data/sensor_tf.yaml")
 endif()
 
 ament_package()

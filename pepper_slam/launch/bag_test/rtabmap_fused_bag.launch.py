@@ -77,7 +77,7 @@ def generate_launch_description():
         # whose /tf_static is EMPTY (recorded volatile, so the latched message
         # was missed). Nothing in the bag supplies the RealSense's internal
         # extrinsics, so camera_color_optical_frame would not exist and rtabmap
-        # would refuse to start. Bags recorded with config/record_qos.yaml carry
+        # would refuse to start. Bags recorded with data/record_qos.yaml carry
         # their own /tf_static and do not need this.
         launch_arguments={'use_sim_time': 'true', 'scope': 'all'}.items(),
     )

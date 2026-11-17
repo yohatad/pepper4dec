@@ -9,7 +9,7 @@ Publishes 10 transforms rooted at base_footprint:
 Nodes started:
     robot_state_publisher/robot_state_publisher (node: pepper_sensor_tf)
         When publisher is 'urdf'.
-    pepper_slam/static_tf_publisher.py (node: pepper_sensor_tf)
+    pepper_slam/static_tf_publisher (node: pepper_sensor_tf)
         When publisher is 'yaml'.
 
 Launch arguments:
@@ -18,19 +18,19 @@ Launch arguments:
         'urdf' — robot_state_publisher over urdf/pepper_sensor_rig.urdf.xacro;
         also gives an RViz RobotModel, so a wrong mount shows as geometry
         rather than bare axes. 'yaml' — static_tf_publisher over
-        config/sensor_tf.yaml. ANY OTHER VALUE (e.g. none) starts neither and
+        data/sensor_tf.yaml. ANY OTHER VALUE (e.g. none) starts neither and
         publishes nothing — correct for a bag that carries its own /tf_static.
     scope (default: "mount")
         'mount' — only the rig edges. 'all' adds the seven RealSense-internal
         edges, for a bag recorded without them. On the robot the camera driver
         publishes its own, and a second copy leaves whichever /tf_static lands
         last silently in force.
-    transforms_file (default: <share>/config/sensor_tf.yaml)
+    transforms_file (default: <share>/data/sensor_tf.yaml)
     urdf_file (default: <share>/urdf/pepper_sensor_rig.urdf.xacro)
 
 Configuration:
     The URDF is GENERATED from the YAML, so both publishers emit identical
-    geometry. THE GEOMETRY IS NOT EDITED HERE — config/sensor_tf.yaml is the
+    geometry. THE GEOMETRY IS NOT EDITED HERE — data/sensor_tf.yaml is the
     calibration source of truth and carries the provenance, including which
     DOF remain unverified. Regenerate the URDF after editing it.
 
@@ -95,7 +95,7 @@ def generate_launch_description():
                         "publish identical geometry."),
         DeclareLaunchArgument(
             'transforms_file',
-            default_value=os.path.join(pkg_share, 'config', 'sensor_tf.yaml'),
+            default_value=os.path.join(pkg_share, 'data', 'sensor_tf.yaml'),
             description='YAML transform list, used when publisher:=yaml. This '
                         'is the calibration source of truth.'),
         DeclareLaunchArgument(
@@ -136,7 +136,7 @@ def generate_launch_description():
 
         Node(
             package='pepper_slam',
-            executable='static_tf_publisher.py',
+            executable='static_tf_publisher',
             name='pepper_sensor_tf',
             output='screen',
             condition=IfCondition(use_yaml),

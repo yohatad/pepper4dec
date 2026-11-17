@@ -183,7 +183,7 @@ local_costmap:
     ros__parameters:
       update_frequency: 15.0
       publish_frequency: 2.0
-      # odom: FAST-LIO's levelled continuous frame from lio_odom_bridge.py --
+      # odom: FAST-LIO's levelled continuous frame from lio_odom_bridge --
       # NOT pepper_odom, whose TF would give base_footprint a second parent.
       global_frame: odom
       robot_base_frame: base_footprint

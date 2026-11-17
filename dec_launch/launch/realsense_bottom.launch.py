@@ -51,7 +51,7 @@ from launch_ros.substitutions import FindPackageShare
 
 
 # The l2lidar_frame -> camera_camera_link static transform used to be published
-# here. It now lives in pepper_slam/config/sensor_tf.yaml, so there is exactly
+# here. It now lives in pepper_slam/data/sensor_tf.yaml, so there is exactly
 # one owner; two publishers of a latched /tf_static edge means whichever lands
 # last silently wins.
 #
