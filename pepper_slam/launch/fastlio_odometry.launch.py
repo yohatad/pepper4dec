@@ -33,7 +33,8 @@ Launch arguments:
     bridge_level_frame (default: "")
         Publish the gravity-leveled odom frame from the bridge.
     config_file (default: "l2_rsimu.yaml")
-        FAST-LIO config (RealSense IMU); l2.yaml uses the L2's own.
+        FAST-LIO config (RealSense IMU), the only L2 config: l2.yaml, which
+        used the L2's own IMU, was removed.
     lidar_imu_frame (default: "camera_imu_optical_frame")
         Body frame matching config_file.
     flatten_base_frame (default: "")
@@ -130,22 +131,22 @@ def generate_launch_description():
     # The L2's own gyro cancels rotation about the gravity axis below ~16 deg/s
     # and cost 139 deg of heading over a 744 s run (utils/L2_IMU/REPORT.md).
     # The RealSense measured 3.8% -> 2.4% mean yaw error, 11.2% -> 4.6% worst,
-    # so it is the permanent choice; l2.yaml is kept for A/B only.
+    # so it is the permanent choice. l2.yaml (the L2's own IMU) was removed
+    # after it diverged on slam_20260823_aligned (FAST_LIO 78a8d0c).
     declare_config_file_cmd = DeclareLaunchArgument(
         'config_file', default_value='l2_rsimu.yaml',
-        description='FAST-LIO config under fast_lio/config. l2_rsimu.yaml uses '
-                    'the RealSense IMU (default); l2.yaml uses the L2 s own.')
+        description='FAST-LIO config under fast_lio/config. l2_rsimu.yaml '
+                    '(RealSense IMU, the default) is the only L2 config.')
     # Hardcoded, matching every other entry point, and NOT derived from
-    # config_file: an A/B run against l2.yaml must pass
-    # lidar_imu_frame:=l2lidar_frame_imu too, or the bridge stamps a frame the
+    # config_file: a config with another publish.body_frame needs
+    # lidar_imu_frame passed to match, or the bridge stamps a frame the
     # estimator never publishes and odom -> base_footprint never closes. An
     # empty string restores the config-derived behaviour.
     declare_lidar_imu_frame_cmd = DeclareLaunchArgument(
         'lidar_imu_frame', default_value='camera_imu_optical_frame',
         description='Static frame the estimated body corresponds to. '
-                    'camera_imu_optical_frame (default) for l2_rsimu.yaml; '
-                    'l2lidar_frame_imu for l2.yaml. Empty derives it from '
-                    'config_file instead.')
+                    'camera_imu_optical_frame (default) for l2_rsimu.yaml. '
+                    'Empty derives it from config_file instead.')
     declare_flatten_base_frame_cmd = DeclareLaunchArgument(
         'flatten_base_frame', default_value='',
         description='Zero the leveled z/roll/pitch of odom -> base_footprint '

@@ -157,8 +157,8 @@ def generate_launch_description():
             description='Config whose publish.body_frame the bridge must match.'),
         # Hardcoded to match every caller: the RealSense IMU is the only
         # configuration in use, and it is what l2_rsimu.yaml and
-        # l2lidar_rsimu.yaml both name as publish.body_frame. Bridging an
-        # L2-IMU config (l2.yaml, l2lidar_node.yaml -> l2lidar_frame_imu) now
+        # l2lidar_rsimu.yaml both name as publish.body_frame. Bridging
+        # Point-LIO's L2-IMU config (l2lidar_node.yaml -> l2lidar_frame_imu)
         # needs the frame passed explicitly; an empty string restores the
         # read-it-from-the-config behaviour _resolve_body_frame implements.
         DeclareLaunchArgument(

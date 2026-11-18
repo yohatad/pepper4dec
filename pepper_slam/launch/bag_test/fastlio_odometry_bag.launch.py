@@ -8,12 +8,12 @@ entry point -- with use_sim_time forced true. Nothing is duplicated here.
   ros2 launch pepper_slam fastlio_odometry_bag.launch.py
   ros2 bag play <bag> --clock \
     --read-ahead-queue-size 2000 --disable-keyboard-controls \
-    --topics /points /camera/imu /imu/data /tf /tf_static
+    --topics /points /camera/imu /tf /tf_static
 
 Launch arguments (--show-args lists ~10 more that leak up from the
 include tree and are not all meaningful here):
 
-  config_file         l2_rsimu.yaml = RealSense IMU (default) | l2.yaml = L2's
+  config_file         l2_rsimu.yaml = RealSense IMU (default, the only L2 config)
   rviz, rviz_cfg      open RViz, and with which config
   publisher           none (DEFAULT HERE) = publish no rig transforms, for
                       a bag that carries its own /tf_static. Pass urdf for
@@ -51,15 +51,14 @@ def generate_launch_description():
     pkg_launch_dir = os.path.join(
         get_package_share_directory('pepper_slam'), 'launch')
 
-    # Defaults to the RealSense IMU, and lidar_imu_frame is now hardcoded to the
-    # matching camera_imu_optical_frame rather than derived, so an A/B run
-    # against the L2's own IMU needs lidar_imu_frame:=l2lidar_frame_imu passed
-    # alongside config_file. The sensor_tf scope is not derived either -- pass
+    # The RealSense IMU config is the only L2 config (FAST_LIO removed l2.yaml),
+    # and lidar_imu_frame is hardcoded to its camera_imu_optical_frame rather
+    # than derived. The sensor_tf scope is not derived either -- pass
     # scope:=all with publisher:=urdf for a legacy bag with an empty /tf_static.
     declare_config_file_cmd = DeclareLaunchArgument(
         'config_file', default_value='l2_rsimu.yaml',
-        description='FAST-LIO config. l2_rsimu.yaml = RealSense IMU (default); '
-                    'l2.yaml = the L2 s own, for A/B only (utils/L2_IMU/REPORT.md).')
+        description='FAST-LIO config. l2_rsimu.yaml = RealSense IMU (default, '
+                    'the only L2 config; utils/L2_IMU/REPORT.md says why).')
     declare_rviz_cmd = DeclareLaunchArgument('rviz', default_value='true')
 
     # 'none': the bag carries its own /tf_static, and a second latched publisher
