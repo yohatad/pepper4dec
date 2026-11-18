@@ -137,7 +137,6 @@ def generate_launch_description():
             'scan_cloud_topic': '/points',
 
             # imu (gravity constraint)
-            'subscribe_imu': 'true',
             'imu_topic': '/imu/filtered',
             'wait_imu_to_init': 'false',
 

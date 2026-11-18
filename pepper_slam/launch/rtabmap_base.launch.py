@@ -24,11 +24,17 @@ Launch arguments:
         rgb_topic (default: "/camera/color/image_raw_custom")
         depth_topic (default: "/camera/aligned_depth_to_color/image_raw_custom")
         camera_info_topic (default: "/camera/color/camera_info")
-        imu_topic (default: "/camera/imu/filtered"), subscribe_imu true
         subscribe_scan (default: "true") on /scan
         database_path (default: "~/.ros/rtabmap_march_28.db")
         visual_odometry and icp_odometry both false — odometry comes from
         FAST-LIO or Point-LIO, not from RTAB-Map.
+
+IMU: with LIO odometry, RTAB-Map uses no IMU. The LIO reads the raw
+/camera/imu itself. rtabmap still remaps its `imu` input to imu_topic, but
+nothing on the robot publishes the default /camera/imu/filtered (it would
+need an orientation filter such as imu_filter_madgwick), and the only thing
+rtabmap would do with it is add gravity (roll/pitch) constraints, which the
+2D graph set below (Reg/Force3DoF, Optimizer/Slam2D) has no axes for.
 
 Usage:
     Included by other launch files. To avoid log buffering when running an
@@ -671,8 +677,7 @@ def generate_launch_description():
         DeclareLaunchArgument('subscribe_odom_info',        default_value='false',   description=''),
 
         # imu
-        DeclareLaunchArgument('subscribe_imu',default_value='true',description='Whether RTAB-Map should subscribe to IMU data'),
-        DeclareLaunchArgument('imu_topic',        default_value='/camera/imu/filtered', description='Used with VIO approaches and for SLAM graph optimization (gravity constraints).'),
+        DeclareLaunchArgument('imu_topic',        default_value='/camera/imu/filtered', description='IMU with orientation, for rtabmap\'s own odometry nodes and gravity constraints. Unused with LIO odometry and the 2D graph; nothing on the robot publishes the default (see the module docstring).'),
         DeclareLaunchArgument('wait_imu_to_init', default_value='false',     description=''),
         DeclareLaunchArgument('always_check_imu_tf', default_value='false',     description='The odometry node will always check if TF between IMU frame and base frame has changed. If false, it is checked till a valid transform is initialized.'),
 
