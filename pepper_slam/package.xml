@@ -34,9 +34,6 @@
   <exec_depend>image_transport</exec_depend>
   <exec_depend>fast_lio</exec_depend>
   <exec_depend>rviz2</exec_depend>
-  <!-- rtabmap_fused_bag_test: RealSense /camera/imu has no orientation, so it is
-       fused to /imu/filtered before rtabmap consumes it -->
-  <exec_depend>imu_filter_madgwick</exec_depend>
 
   <!-- lio_odom_bridge's divergence guard: the wheel trust scale that
        pepper_odom_covariance consumes, and its /diagnostics status. -->

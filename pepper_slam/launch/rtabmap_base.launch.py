@@ -29,12 +29,13 @@ Launch arguments:
         visual_odometry and icp_odometry both false — odometry comes from
         FAST-LIO or Point-LIO, not from RTAB-Map.
 
-IMU: with LIO odometry, RTAB-Map uses no IMU. The LIO reads the raw
-/camera/imu itself. rtabmap still remaps its `imu` input to imu_topic, but
-nothing on the robot publishes the default /camera/imu/filtered (it would
-need an orientation filter such as imu_filter_madgwick), and the only thing
-rtabmap would do with it is add gravity (roll/pitch) constraints, which the
-2D graph set below (Reg/Force3DoF, Optimizer/Slam2D) has no axes for.
+IMU: RTAB-Map uses none; with LIO odometry the LIO reads the raw /camera/imu
+itself. rtabmap still remaps its `imu` input to imu_topic, and nothing
+publishes the default /camera/imu/filtered, on purpose: rtabmap ignores an IMU
+without orientation (logging an error per message) and the raw /camera/imu
+has none. The only thing rtabmap would do with an IMU is add gravity
+(roll/pitch) constraints, which the 2D graph set below (Reg/Force3DoF,
+Optimizer/Slam2D) has no axes for.
 
 Usage:
     Included by other launch files. To avoid log buffering when running an
@@ -677,7 +678,7 @@ def generate_launch_description():
         DeclareLaunchArgument('subscribe_odom_info',        default_value='false',   description=''),
 
         # imu
-        DeclareLaunchArgument('imu_topic',        default_value='/camera/imu/filtered', description='IMU with orientation, for rtabmap\'s own odometry nodes and gravity constraints. Unused with LIO odometry and the 2D graph; nothing on the robot publishes the default (see the module docstring).'),
+        DeclareLaunchArgument('imu_topic',        default_value='/camera/imu/filtered', description='IMU with orientation, for rtabmap\'s own odometry nodes and gravity constraints. Unused with LIO odometry and the 2D graph; nothing publishes the default. Not the raw /camera/imu: it has no orientation, so rtabmap rejects it (see the module docstring).'),
         DeclareLaunchArgument('wait_imu_to_init', default_value='false',     description=''),
         DeclareLaunchArgument('always_check_imu_tf', default_value='false',     description='The odometry node will always check if TF between IMU frame and base frame has changed. If false, it is checked till a valid transform is initialized.'),
 

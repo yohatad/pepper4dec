@@ -1,7 +1,7 @@
 r"""rtabmap_fused_bag.launch.py
 
-RTAB-Map on a recorded bag using ALL THREE sensors: RealSense RGB + aligned
-depth, the RealSense IMU, and the Unitree L2 lidar.
+RTAB-Map on a recorded bag using the RealSense RGB + aligned depth and the
+Unitree L2 lidar together.
 
 Unlike rtabmap_l2_bag (lidar only) and rtabmap_fastlio_bag (FAST-LIO odometry,
 RGB for appearance), this variant also subscribes to the aligned depth image.
@@ -15,16 +15,16 @@ ODOMETRY (odom_source arg). Measured median step on slam_recording:
 Only ONE source may parent base_footprint, so with wheel (where the bag's /tf
 already supplies pepper_odom -> base_footprint) icp_odometry is not started.
 
-IMU: /camera/imu carries no orientation, so imu_filter_madgwick fuses it into
-/imu/filtered before RTAB-Map can use it for gravity. The RealSense is used
-over the L2's /imu/data, whose timestamps carry a ~17 ms sawtooth.
+IMU: none. The RealSense's /camera/imu has no orientation, which rtabmap
+rejects, and this test runs no orientation filter; the 2D graph it sets
+(Reg/Force3DoF) has no roll/pitch for gravity constraints anyway.
 
 Usage:
   ros2 launch pepper_slam rtabmap_fused_bag.launch.py
   ros2 launch pepper_slam rtabmap_fused_bag.launch.py odom_source:=icp
 
   ros2 bag play <bag> --clock --read-ahead-queue-size 2000 \
-    --topics /points /camera/imu /tf \
+    --topics /points /tf \
              /camera/color/image_raw /camera/color/camera_info \
              /camera/aligned_depth_to_color/image_raw \
              /camera/aligned_depth_to_color/camera_info \
@@ -48,7 +48,6 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PythonExpression
-from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 
 
@@ -80,19 +79,6 @@ def generate_launch_description():
         # would refuse to start. Bags recorded with data/record_qos.yaml carry
         # their own /tf_static and do not need this.
         launch_arguments={'use_sim_time': 'true', 'scope': 'all'}.items(),
-    )
-
-    # RealSense publishes no orientation; fuse accel+gyro so rtabmap gets gravity.
-    imu_filter = Node(
-        package='imu_filter_madgwick', executable='imu_filter_madgwick_node',
-        name='imu_filter', output='screen',
-        parameters=[{
-            'use_sim_time': True,
-            'use_mag': False,
-            'world_frame': 'enu',
-            'publish_tf': False,
-        }],
-        remappings=[('imu/data_raw', '/camera/imu'), ('imu/data', '/imu/filtered')],
     )
 
     rtabmap = IncludeLaunchDescription(
@@ -136,17 +122,13 @@ def generate_launch_description():
             'subscribe_scan_cloud': 'true',
             'scan_cloud_topic': '/points',
 
-            # imu (gravity constraint)
-            'imu_topic': '/imu/filtered',
-            'wait_imu_to_init': 'false',
-
             'approx_sync': 'true',
             'qos': '2',
             'database_path': '~/.ros/rtabmap_fused_bag_test.db',
 
             # Reg/Strategy 2 = visual bag-of-words proposes the loop closure,
             #   lidar ICP refines the constraint. This is the point of running
-            #   all three sensors: the L2 alone cannot do appearance-based
+            #   camera and lidar together: the L2 alone cannot do appearance-based
             #   global loop closure, and the camera alone registers poorly here
             #   (only ~1689 lidar points land in the 640x480 image, 30.7% of a
             #   scan -- see LOG.md section 4.5).
@@ -212,4 +194,4 @@ def generate_launch_description():
         }.items(),
     )
 
-    return LaunchDescription(declare_args + [sensor_tf, imu_filter, rtabmap])
+    return LaunchDescription(declare_args + [sensor_tf, rtabmap])

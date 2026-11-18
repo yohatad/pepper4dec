@@ -32,9 +32,7 @@ packages launched by name, so nothing here compiles.
 ## 🛠️ Installation
 
 ```bash
-sudo apt install \
-  ros-humble-rtabmap-ros \
-  ros-humble-imu-filter-madgwick
+sudo apt install ros-humble-rtabmap-ros
 
 cd ~/ros2_ws
 colcon build --packages-select pepper_slam
