@@ -114,12 +114,26 @@ def generate_launch_description():
             # residual odometry drift between passes printed walls twice in the
             # 2D grid (validated via rtabmap-reprocess on the first run's db:
             # 6 -> 49 loop closures, wall duplication gone).
+            #
+            # LoopClosureReextractFeatures true: with visual_odometry/icp_odometry
+            # both false, no odom node ever computes/caches RGB keypoints on a
+            # node, so by the time a GLOBAL (appearance) loop closure candidate
+            # is proposed, the old node has 0 stored features and Rtabmap.cpp
+            # rejects every single one ("Not enough features in images
+            # (old=0, new=N, min=20)") -- confirmed on a live run: 576 links,
+            # only 1 global closure vs. 83 local ICP proximity closures. Without
+            # it, drift only gets corrected when a revisit happens to land
+            # inside ICP's small proximity search radius, producing a late,
+            # large, visibly "jumpy" correction instead of early, small ones --
+            # and an uncorrected revisit outside that radius doubles the wall.
+            # rtabmap_fused_bag.launch.py already sets this; this file did not.
             'rtabmap_args': [
                 '--delete_db_on_start '
                 '--Reg/Strategy 1 '
                 '--RGBD/NeighborLinkRefining true '
                 '--RGBD/ProximityBySpace true '
                 '--RGBD/ProximityPathMaxNeighbors 10 '
+                '--RGBD/LoopClosureReextractFeatures true '
                 '--Icp/VoxelSize 0.15 --Icp/PointToPlaneK 20 '
                 '--Icp/MaxCorrespondenceDistance 0.5 '
                 '--Icp/CorrespondenceRatio 0.2 '
