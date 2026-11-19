@@ -220,16 +220,26 @@ def launch_setup(context, *args, **kwargs):
                 "frame_id": LaunchConfiguration('frame_id'),
                 "odom_frame_id": LaunchConfiguration('vo_frame_id'),
 
-                # Add visual odometry parameters here:
-                "Vis/MaxFeatures": 800,
-                "Vis/MinInliers": 15,
-                "Vis/InlierDistance": 0.1,
-                "Vis/MaxDepth": 3.0,
-                "Vis/FeatureType": 6,
-                "Odom/Strategy": 0,
-                "Vis/EstimationType": 1,
-                "RGBD/LinearUpdate": 0.1,
-                "RGBD/AngularUpdate": 0.1,
+                # Add visual odometry parameters here. All values quoted as
+                # strings, not left as Python int/float literals: RTAB-Map's
+                # dynamic params are string-typed (see "Reg/Strategy": "2"
+                # elsewhere) -- a bare int/float here makes rclcpp declare it
+                # as that numeric type, and rgbd_odometry throws
+                # InvalidParameterTypeException trying to read it back as a
+                # string and aborts on startup. Caught one at a time because
+                # declaration happens in order and each exception kills the
+                # node before the next parameter is reached (verified live:
+                # visual_odometry was never exercised in this repo before
+                # this, so the whole block was latent and untested).
+                "Vis/MaxFeatures": "800",
+                "Vis/MinInliers": "15",
+                "Vis/InlierDistance": "0.1",
+                "Vis/MaxDepth": "3.0",
+                "Vis/FeatureType": "6",
+                "Odom/Strategy": "0",
+                "Vis/EstimationType": "1",
+                "RGBD/LinearUpdate": "0.1",
+                "RGBD/AngularUpdate": "0.1",
 
 
                 "publish_tf": LaunchConfiguration('publish_tf_odom'),

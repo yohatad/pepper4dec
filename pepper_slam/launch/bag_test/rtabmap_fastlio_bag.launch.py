@@ -77,7 +77,26 @@ def generate_launch_description():
             'frame_id': 'base_footprint',
             'odom_frame_id': 'odom',   # gravity-leveled parent from the bridge
 
-            # odometry comes from FAST-LIO via TF; no rtabmap odometry nodes
+            # odometry comes from FAST-LIO via TF; no rtabmap odometry nodes.
+            #
+            # With no rtabmap odometry node, global (appearance) loop closures
+            # are rejected ~100% of the time: "Not enough features in images
+            # (old=0, ...)" -- the old keyframe's cached features are gone by
+            # the time a global candidate is checked. Tried and ruled out,
+            # all verified live with no change: RGBD/LoopClosureReextractFeatures
+            # true, Reg/Strategy 2, and running rtabmap_base's own rgbd_odometry
+            # alongside FAST-LIO (publish_tf_odom:=false, guessed from
+            # base_footprint, pose discarded) purely to feed Memory real
+            # OdomInfo keypoints -- rgbd_odometry ran healthy the whole time
+            # and it made no difference, meaning the old node's features are
+            # not retained regardless of whether they existed at creation.
+            # Likely cause: RTAB-Map's feature retention assumes whichever
+            # node computes the motion estimate is also the trusted odometry
+            # source; decoupling pose ownership (FAST-LIO/TF) from feature
+            # computation (an auxiliary rtabmap odometry node) appears to
+            # break that link. Not fixable from this launch file -- see
+            # RGBD/ProximityBySpace below, which carries all drift correction
+            # instead.
             'visual_odometry': 'false',
             'icp_odometry': 'false',
 
@@ -127,12 +146,34 @@ def generate_launch_description():
             # large, visibly "jumpy" correction instead of early, small ones --
             # and an uncorrected revisit outside that radius doubles the wall.
             # rtabmap_fused_bag.launch.py already sets this; this file did not.
+            # It does not fix the global-closure failure above (verified on a
+            # live run: identical old=0 rejections with it set), but it is
+            # harmless and correct for when visual_odometry/icp_odometry ARE
+            # enabled elsewhere, so it stays.
+            #
+            # Global (appearance) loop closures being effectively dead means
+            # drift correction is carried entirely by local ICP proximity
+            # closures (RGBD/ProximityBySpace) -- so tuned to catch a revisit
+            # BEFORE accumulated FAST-LIO drift pushes it outside ICP's search
+            # window, rather than after (a late catch is a large, visible pose
+            # jump; a miss leaves the wall mapped twice):
+            #   ProximityAngle 60 (default 45): FAST-LIO's yaw drift over a
+            #     multi-minute revisit can exceed 45 deg between the two
+            #     passes, which silently excludes the candidate before ICP
+            #     even runs.
+            #   Rtabmap/DetectionRate 2 (default 1): doubles keyframe density,
+            #     halving the odometry drift accumulated BETWEEN consecutive
+            #     candidate nodes, so a revisit is more likely to still be
+            #     within RGBD/LocalRadius (10 m, unmodified -- already
+            #     generous for this indoor rig) when tested.
             'rtabmap_args': [
                 '--delete_db_on_start '
                 '--Reg/Strategy 1 '
                 '--RGBD/NeighborLinkRefining true '
                 '--RGBD/ProximityBySpace true '
                 '--RGBD/ProximityPathMaxNeighbors 10 '
+                '--RGBD/ProximityAngle 60 '
+                '--Rtabmap/DetectionRate 2 '
                 '--RGBD/LoopClosureReextractFeatures true '
                 '--Icp/VoxelSize 0.15 --Icp/PointToPlaneK 20 '
                 '--Icp/MaxCorrespondenceDistance 0.5 '
@@ -200,7 +241,6 @@ def generate_launch_description():
         description="Rig transforms to publish. 'all' includes the RealSense "
                     "internal chain, needed when the bag's /tf_static is not "
                     "replayed. Use 'mount' on the live robot.")
-
     return LaunchDescription([
         declare_rgbd_cmd, declare_publisher_cmd, declare_scope_cmd,
         fast_lio, rtabmap])
