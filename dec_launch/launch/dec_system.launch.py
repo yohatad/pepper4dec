@@ -32,12 +32,11 @@ Nodes started:
 Launch arguments:
     enable_navigation (default: "true")
         Bring up pepper_navigation (the Nav2 navigation/localization stack).
-    nav_profile (default: "fastloc"; choices: amcl, fastloc, pointloc,
-                 rtabmap_loc)
+    nav_profile (default: "fastloc"; choices: amcl, fastloc, pointloc)
         Which Nav2 bringup to use when enable_navigation is true.
         fastloc = fastlio_localization, FAST-LIO with the prior map inside the
-        iEKF; pointloc = the Point-LIO equivalent; rtabmap_loc = RTAB-Map
-        localization mode; amcl = AMCL on FAST-LIO odom.
+        iEKF; pointloc = the Point-LIO equivalent; amcl = AMCL on FAST-LIO
+        odom.
     record_audio (default: "false")
         Passed to speech_event.launch.py: also record the raw microphones to
         WAV (about 1.4 GB an hour, under ~/.ros/speech_event/).
@@ -47,7 +46,7 @@ Configuration:
 
 Usage:
     ros2 launch dec_launch dec_system.launch.py
-    ros2 launch dec_launch dec_system.launch.py nav_profile:=rtabmap_loc
+    ros2 launch dec_launch dec_system.launch.py nav_profile:=amcl
     ros2 launch dec_launch dec_system.launch.py enable_navigation:=false
 
 Design notes:
@@ -96,7 +95,6 @@ NAV_PROFILES = {
     'fastloc': 'pepper_nav2_fastloc.launch.py',
     # Same arrangement with Point-LIO carrying the prior map instead.
     'pointloc': 'pepper_nav2_pointloc.launch.py',
-    'rtabmap_loc': 'pepper_nav2_rtabmap_loc.launch.py',
     'amcl': 'pepper_nav2_amcl.launch.py',
 }
 
@@ -140,8 +138,8 @@ def generate_launch_description():
             description='Which Nav2 bringup to use when enable_navigation is '
                         'true. fastloc = fastlio_localization, FAST-LIO with '
                         'the prior map inside the iEKF (the default); '
-                        'rtabmap_loc = RTAB-Map '
-                        'localization mode; amcl = AMCL on FAST-LIO odom'
+                        'pointloc = the Point-LIO equivalent; '
+                        'amcl = AMCL on FAST-LIO odom'
         ),
         DeclareLaunchArgument(
             'record_audio',

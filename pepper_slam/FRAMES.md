@@ -8,7 +8,7 @@ here rather than re-deriving the story.
 | frame | what it is | use it for |
 |---|---|---|
 | `map` | fixed world reference, **gravity-aligned, floor-referenced** | goals, global costmap, prior maps |
-| `odom` | continuous dead reckoning, **gravity-aligned, floor-referenced** | local costmap, collision monitor, AMCL/RTAB-Map odom frame |
+| `odom` | continuous dead reckoning, **gravity-aligned, floor-referenced** | local costmap, collision monitor, AMCL odom frame |
 | `lio_init` | the **LIO's own** world frame -- tilted ~90 deg by the sensor mount | nothing. Private to the backend. |
 | `pgo_init` | **PGO's own** world frame -- same tilt | nothing. Private to `pgo_node`. |
 | `base_footprint` | the robot, on the ground | -- |
@@ -110,7 +110,7 @@ the edge the bridge publishes. A lookup of `odom -> base_footprint` traverses
 | `l2lidar_frame -> l2lidar_frame_imu` | static | `static_tf_publisher` | IMU's position inside the lidar housing (17 mm, no rotation) |
 | `base_footprint -> l2lidar_frame` | static | `static_tf_publisher` | **the mount calibration** |
 | `lio_init -> base_footprint` | dynamic ~11 Hz | `lio_odom_bridge` | **the odometry** -- continuous, drifts, never corrected |
-| `map -> lio_init` | dynamic, jumps | AMCL / RTAB-Map | **the correction** -- discontinuous, does not drift |
+| `map -> lio_init` | dynamic, jumps | AMCL | **the correction** -- discontinuous, does not drift |
 | `map -> base_footprint` | dynamic, scan rate | `fastlio_localization`, `pointlio_localization` (default) | pose and correction in one: the map is inside the filter, so there is no separate correction edge |
 | `map -> odom` | dynamic, scan rate, gated | `fastlio_localization`, `pointlio_localization` (`odom_frame:=odom`) | the filter pose with wheel odometry composed out |
 | `odom -> base_footprint` | dynamic, 50 Hz | `wheel_odom_tf` (loc stacks, `odom_frame:=odom` only) | wheel odometry, planar |
@@ -190,22 +190,11 @@ ran on the L2 IMU (hence the 0.2571 m offset):
 | PGO (FAST-LIO) | -- | robot upright ~4 deg in `map` | -- | yes |
 | FAST-LIO localization † | -- | robot upright 3.69 deg in `map` | -- | yes |
 | Point-LIO localization † | -- | robot upright 2.68 deg in `map` | -- | yes |
-| RTAB-Map localization | -- | -- | -- | **blocked** |
 
 † Measured against the old `lio_localization` stack, which has since been
 removed. The numbers stand as a record of the leveling at that date, but they
 are **not** a verification of today's `fastlio_localization`, which reaches
 `map` by a different path (no `lio_init`, no `odom`).
-
-RTAB-Map localization is **blocked, not skipped**: its default database
-`~/.ros/rtabmap_fastlio_refined.db` does not exist, and the only `.db` present
-(`rtabmap_fastlio_bag_test.db`, 106 kB, Jul 22) is far too small to be a map of
-this environment and predates the floor-datum and frame changes. It needs a
-fresh RTAB-Map mapping run before it can be verified. Its configs *were*
-renamed correctly (`nav2_params_rtabmap_loc.yaml` `global_frame: odom`,
-`odom_frame_id: "odom"`; `pepper_nav2_rtabmap_loc.launch.py` `odom_frame_id`),
-and its topic remaps in `rtabmap_base.launch.py` were correctly left as bare
-`odom`.
 
 **KNOWN ISSUE:** the roll/pitch assertion cannot distinguish leveling error from
 LIO attitude drift, so it flags Point-LIO at -3.26 deg against an arbitrary
@@ -223,10 +212,6 @@ accumulates -- not to widen the threshold.
   tree (a second live parent for `base_footprint` would split the tree).
 * **`base_footprint` vs `base_link`** -- REP-105 specifies `base_link`;
   `base_footprint` (ground projection) is convention, not spec.
-* **bare `odom` is also a TOPIC name** in the rtabmap launch files
-  (`("odom", LaunchConfiguration('odom_topic'))`, `default_value='odom'`).
-  Never bulk-rename `odom` across this workspace without excluding those --
-  a blanket `\bodom\b` substitution silently corrupts the remappings.
 
 ## Static TF
 

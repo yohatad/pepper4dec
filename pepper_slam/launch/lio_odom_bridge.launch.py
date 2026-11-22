@@ -27,9 +27,9 @@ Launch arguments:
         Overrides. The values live in config/pepper_slam_configuration.yaml;
         a non-empty argument replaces the file's value for this launch only.
         bridge_level_frame sets the node's publish_level_frame.
-        lio_odom_topic sets the node's own odom_topic param -- renamed as a
-        launch argument so it cannot collide with rtabmap_base.launch.py's
-        unrelated global 'odom_topic' argument (see _OVERRIDES below).
+        lio_odom_topic sets the node's own odom_topic param -- named apart
+        from it so it cannot collide with another included file's generic
+        'odom_topic' argument (see _OVERRIDES below).
 
 THE BODY FRAME MUST EQUAL WHAT THE ESTIMATOR STAMPS, or the bridge composes
 odom -> base_footprint through the wrong rigid offset and yields a pose that
@@ -112,13 +112,11 @@ _OVERRIDES = {
     'flatten_base_frame': 'Zero the leveled z/roll/pitch every cycle.',
     # Launch-argument name deliberately differs from the node parameter
     # (odom_topic): LaunchConfiguration names are global across an entire
-    # include tree, and rtabmap_base.launch.py (vendored from upstream
-    # rtabmap_launch) declares its own unrelated 'odom_topic' argument for
-    # RTAB-Map's own odom subscription. Whichever file's DeclareLaunchArgument
-    # runs first wins the name; sharing it left RTAB-Map's 'odom_topic' stuck
-    # at this file's empty default, producing an invalid "-r odom:=" remap
-    # that crashed rtabmap and rtabmap_viz on startup in every bag_test launch
-    # that combines a LIO odometry include with rtabmap_base.
+    # include tree, so whichever file declares a shared name first wins it.
+    # When this was 'odom_topic' it silently overrode another included
+    # file's unrelated argument of the same name with this file's empty
+    # default, which produced an invalid "-r odom:=" remap and crashed that
+    # file's nodes on startup.
     'lio_odom_topic': "The estimator's odometry topic.",
     'guard_enable': 'Reject LIO poses that break a physical speed bound and '
                     'dead reckon on wheel odometry instead.',

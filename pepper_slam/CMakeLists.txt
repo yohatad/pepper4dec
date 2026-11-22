@@ -9,7 +9,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-# Every SLAM component (RTAB-Map, SLAM Toolbox, FAST-LIO) is an upstream
+# Every SLAM component (FAST-LIO, Point-LIO) is an upstream
 # package launched by name; their runtime requirements are declared as
 # exec_depend in package.xml. The only compiled code here is the Pepper glue
 # that runs on every scan or every odometry tick (src/).
@@ -115,8 +115,7 @@ if(BUILD_TESTING)
   set(ament_cmake_cppcheck_LANGUAGE "c++")
   # ROS 2 style; the .h headers are C++, which uncrustify must be told.
   set(ament_cmake_uncrustify_ADDITIONAL_ARGS LANGUAGE CPP)
-  # flake8 is run manually below so rtabmap_base.launch.py (vendored
-  # from an upstream rtabmap_ros example, not our style) can be excluded.
+  # flake8 is run manually below so it reads ament_flake8.ini.
   # ament_cmake_flake8_FOUND doesn't suppress the auto-discovered hook here
   # (its extension gets registered before that variable takes effect) -
   # AMENT_LINT_AUTO_EXCLUDE is the mechanism ament_lint_auto actually

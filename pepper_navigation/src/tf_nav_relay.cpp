@@ -19,7 +19,7 @@
  * and everything else keep the full /tf, so the robot model still renders.
  *
  * Only remap nodes that LISTEN to TF. A node that also BROADCASTS on /tf
- * (amcl, rtabmap, the localizers) must not be remapped, or its broadcasts
+ * (amcl, the localizers) must not be remapped, or its broadcasts
  * would go to /tf_nav only and vanish from the real tree.
  *
  * Parameters:

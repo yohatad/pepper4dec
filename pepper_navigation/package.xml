@@ -40,10 +40,11 @@
   <depend>nav2_msgs</depend>
   <depend>sensor_msgs</depend>
 
-  <!-- launched by inclusion (pepper_nav2_rtabmap_loc.launch.py), not linked.
-       pepper_slam supplies rtabmap_base.launch.py, which this package
-       runs in localization mode to get map -> odom and /map. The
-       dependency is one-way: pepper_slam never depends on pepper_navigation. -->
+  <!-- launched by inclusion, not linked: every profile includes
+       pepper_slam's pepper_sensor_tf.launch.py and runs its
+       cloud_range_filter, and the amcl / fastloc profiles also use its
+       lio_odom_bridge.launch.py and wheel_odom_tf. The dependency is
+       one-way: pepper_slam never depends on pepper_navigation. -->
   <exec_depend>pepper_slam</exec_depend>
   <!-- pepper_nav2_fastloc.launch.py includes fast_lio's
        localization_l2.launch.py, which runs fastlio_localization. -->

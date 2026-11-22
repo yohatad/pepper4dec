@@ -249,7 +249,7 @@ def localization_recovery(use_sim_time, backend, log_level=None):
     """One /localization_recover entry point, the same in every profile.
 
     Recovering does not depend on remembering which backend is up: it forwards
-    to the backend's own re-search, or (rtabmap) says there is none.
+    to the backend's own re-search.
     """
     return Node(
         package='pepper_navigation',
@@ -264,8 +264,8 @@ def localization_recovery(use_sim_time, backend, log_level=None):
 def localization_watchdog(use_sim_time, condition, status_names=None, log_level=None):
     """Cancels navigation goals while the localizer reports itself lost.
 
-    Only in the fastloc and pointloc profiles: amcl and rtabmap publish no
-    comparable signal. It also asks for one re-search per LOST episode
+    Only in the fastloc and pointloc profiles: amcl publishes no comparable
+    signal. It also asks for one re-search per LOST episode
     (call_recovery), replacing the localizers' removed auto_relocalize, which
     re-armed while the robot kept driving so attempts compounded. Recovery is
     still "stop and try once": in self-similar geometry the same ScanContext

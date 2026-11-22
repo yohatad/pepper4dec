@@ -19,7 +19,7 @@
 # topic, not the bare one.
 #
 # Fixed Frame is "map" -- requires an estimator publishing map -> ... to be
-# useful (FAST-LIO / PGO / RTAB-Map). Raw bag playback with NO estimator
+# useful (FAST-LIO / PGO). Raw bag playback with NO estimator
 # running has no map frame yet, so PointCloud2/Odometry/Path displays here
 # will sit empty until one is; TF, RobotModel and PepperHeadCamera still work
 # either way since they don't depend on the map frame existing.

@@ -25,8 +25,8 @@ Topics published (by the driver):
         incompatible QoS. ... Last incompatible policy: RELIABILITY_QOS_POLICY
 
     which is the only warning you get; the subscribing node stays silent.
-    FAST-LIO, Point-LIO, FAST-LIVO2 and kiss-icp all subscribe BEST_EFFORT, the
-    rtabmap launches pass qos:=2, and the RViz configs are set to Best Effort.
+    FAST-LIO, Point-LIO, FAST-LIVO2 and kiss-icp all subscribe BEST_EFFORT, and
+    the RViz configs are set to Best Effort.
     `ros2 bag record` defaults to RELIABLE, so pass
     `--qos-profile-overrides-path` (pepper_slam/data/record_qos.yaml) when
     recording these topics.

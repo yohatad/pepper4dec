@@ -12,14 +12,9 @@
  *             FAST-LIO one and exposes the same service
  *   amcl      /reinitialize_global_localization (std_srvs/Empty), scatters
  *             particles for a global re-draw
- *   rtabmap   no forced re-search exists; it relocalizes via loop closure, so
- *             the only operator action is seeding /initialpose
- *
- * For rtabmap it reports honestly that there is nothing to call rather than
- * pretending a no-op succeeded.
  *
  * Parameters (config/pepper_navigation_configuration.yaml):
- *   backend          fastloc | pointloc | amcl | rtabmap, or auto to detect
+ *   backend          fastloc | pointloc | amcl, or auto to detect
  *                    it from the graph; each Nav2 profile pins its own
  *   service_timeout  s to wait for the backend's service, and for its answer
  *
@@ -113,11 +108,6 @@ private:
     if (served.count(kAmclService)) {
       return "amcl";
     }
-    for (const auto & s : served) {
-      if (s.rfind("/rtabmap", 0) == 0) {
-        return "rtabmap";
-      }
-    }
     return "";
   }
 
@@ -163,18 +153,11 @@ private:
       res.message = error.empty() ?
         "amcl: particles re-scattered globally. Drive the robot so the filter can converge." :
         error;
-    } else if (backend == "rtabmap") {
-      // Not a failure of this node: rtabmap has no equivalent primitive, and
-      // saying so beats reporting a success that did nothing.
-      res.success = false;
-      res.message =
-        "rtabmap has no forced re-search: it relocalizes from loop closure on "
-        "its own. Seed it instead with RViz 2D Pose Estimate (/initialpose).";
     } else {
       res.success = false;
       res.message =
         "no known localization backend detected (looked for /relocalize, "
-        "/reinitialize_global_localization, /rtabmap*)";
+        "/reinitialize_global_localization)";
     }
 
     if (res.success) {

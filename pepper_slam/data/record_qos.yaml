@@ -20,7 +20,7 @@
 #     -o <bag_name>
 #
 # On replay `ros2 bag play` re-offers /tf_static with the durability recorded
-# here, so late-joining subscribers (RViz, RTAB-Map) still get it. With a bag
+# here, so late-joining subscribers (RViz, the estimators) still get it. With a bag
 # recorded this way you do NOT need pepper_sensor_tf.launch.py at all -- the
 # rig transforms come from the bag. Launch it only for the older bags, with
 # scope:=all.

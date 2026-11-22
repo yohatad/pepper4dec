@@ -14,7 +14,7 @@ registers the live scan against a prior 3D map inside FAST-LIO's filter.
 
 ## ✨ Key Features
 - **ROS2 Native**: Built for ROS2 Humble and Nav2
-- **Localization profiles**: fastloc (default), pointloc, RTAB-Map and AMCL, chosen at launch time
+- **Localization profiles**: fastloc (default), pointloc and AMCL, chosen at launch time
 - **3D obstacle avoidance**: voxel-layer costmaps built from the Unitree L2 and the bottom RealSense
 - **Independent safety layer**: a collision monitor sits between the controller and the base, and `sensor_guard` stops it if the monitor's sensor goes silent
 - **Localization watchdog**: holds navigation while localization is lost, and re-arms the search
@@ -23,7 +23,7 @@ registers the live scan against a prior 3D map inside FAST-LIO's filter.
 
 - **ROS 2 Humble**
 - **`pepper_slam`** built in the same workspace (supplies the sensor-rig static
-  TF, and `rtabmap_base.launch.py` for the RTAB-Map profile)
+  TF, `cloud_range_filter`, and the LIO bridge the AMCL profile uses)
 - **`fast_lio`** built in the same workspace (odometry for every profile, and
   the `fastlio_localization` node the default profile runs)
 - **Unitree L2 lidar** publishing `/points` and `/imu/data` via `l2lidar_node`.
@@ -65,9 +65,8 @@ ros2 launch dec_launch naoqi_driver.launch.py nao_ip:=<robot-ip>
 
 The RealSense is required for the default fastloc profile: it is the **only**
 obstacle source of that profile's local costmap (see [Costmaps](#-costmaps)).
-It is also required for RTAB-Map, which subscribes to RGB. On pointloc and
-AMCL it is a second, dense forward source next to the L2 and the local costmap
-still works without it.
+On pointloc and AMCL it is a second, dense forward source next to the L2 and
+the local costmap still works without it.
 
 ### 2. Bring up navigation
 
@@ -104,7 +103,6 @@ the others from the L2 and the RealSense (see [Costmaps](#-costmaps)).
 |---|---|---|---|
 | `pepper_nav2_fastloc.launch.py` *(default)* | `fastlio_localization`: prior map inside FAST-LIO's iEKF | keyframe clouds + `pose.json`, plus a 2D grid | automatic (ScanContext) |
 | `pepper_nav2_pointloc.launch.py` | `pointlio_localization`: the Point-LIO equivalent | same as fastloc | automatic |
-| `pepper_nav2_rtabmap_loc.launch.py` | RTAB-Map localization mode | an RTAB-Map `.db` via `database_path:=`, and RGB | RViz **2D Pose Estimate** |
 | `pepper_nav2_amcl.launch.py` | AMCL over a flattened `/scan`, on FAST-LIO odom | a 2D grid via `map:=` | RViz **2D Pose Estimate** |
 
 For the AMCL profile, if the particle cloud never tightens, the flattening
@@ -223,12 +221,11 @@ and the global costmap lives in `map`:
 | Profile | `map -> odom` | `odom -> base_footprint` | Local costmap frame |
 |---|---|---|---|
 | fastloc / pointloc | the localizer publishes `map -> base_footprint` directly; there is no `odom` edge | | `map` |
-| rtabmap_loc | `rtabmap` | `lio_odom_bridge` (FAST-LIO) | `odom` |
 | amcl | `amcl` | `lio_odom_bridge` (FAST-LIO) | `odom` |
 
 The static sensor chain (`base_footprint -> l2lidar_frame -> cameras`) comes
 from `pepper_slam`'s `pepper_sensor_tf.launch.py`, which every profile nests.
-**Exactly one node may own `map -> odom`**: the AMCL and RTAB-Map profiles run
+**Exactly one node may own `map -> odom`**: the AMCL profile runs
 FAST-LIO with `bridge_level_frame:=false` so the bridge's own `odom -> odom`
 edge does not give `odom` a second parent. Wheel odometry is `pepper_odom`,
 never `odom`: plain `odom` belongs to the LIO sources, and a second publisher
@@ -248,7 +245,7 @@ RViz use the normal topics.
 |---|---|---|---|
 | Global (`map`) | all | static, voxel, inflation | L2 |
 | Local (rolling, 10 x 10 m) | fastloc | voxel, inflation | RealSense only |
-| Local | pointloc, amcl, rtabmap_loc | voxel, inflation | L2 and RealSense |
+| Local | pointloc, amcl | voxel, inflation | L2 and RealSense |
 
 The L2 source is `/points`, except on AMCL, where both costmaps read
 `/points_costmap`: the L2 cloud with the near range and the ground plane
@@ -346,7 +343,6 @@ pepper_navigation/
 │   ├── pepper_navigation_configuration.yaml  # this package's nodes, one section each
 │   ├── nav2_params_fastloc.yaml        # Nav2 params, fastloc profile (default)
 │   ├── nav2_params_pointloc.yaml       # Nav2 params, pointloc profile
-│   ├── nav2_params_rtabmap_loc.yaml    # Nav2 params, RTAB-Map profile
 │   ├── nav2_params_amcl.yaml           # Nav2 params, AMCL profile
 │   ├── nav2_params_kissicp.yaml        # Nav2 params, KISS-ICP profile
 │   └── bag_test/
@@ -355,7 +351,6 @@ pepper_navigation/
 ├── launch/
 │   ├── pepper_nav2_fastloc.launch.py   # Nav2 + fastlio_localization (default)
 │   ├── pepper_nav2_pointloc.launch.py  # Nav2 + pointlio_localization
-│   ├── pepper_nav2_rtabmap_loc.launch.py # Nav2 + RTAB-Map localization
 │   ├── pepper_nav2_amcl.launch.py      # Nav2 + AMCL on FAST-LIO odom
 │   ├── pepper_nav2_kissicp.launch.py   # Nav2 + AMCL on KISS-ICP odom
 │   ├── bag_test/

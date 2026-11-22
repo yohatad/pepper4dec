@@ -2,9 +2,9 @@
 
 Nav2 bringup for Pepper: AMCL + map_server, over FAST-LIO odometry.
 
-Compare against pepper_nav2_fastloc.launch.py (fastlio_localization) and
-pepper_nav2_rtabmap_loc.launch.py (RTAB-Map) — everything downstream of
-localization is identical, so a behavioural difference is a localization one.
+Compare against pepper_nav2_fastloc.launch.py (fastlio_localization) —
+everything downstream of localization is identical, so a behavioural
+difference is a localization one.
 
 AMCL needs a LEVEL odom -> base_footprint TF (FAST-LIO's raw odom is tilted
 ~90 deg on Pepper's mount, so mapping.launch.py runs with

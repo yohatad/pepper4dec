@@ -5,8 +5,8 @@ Plain FAST-LIO ODOMETRY on the Pepper L2 rig, with its required static TF.
 ODOMETRY, not SLAM. "mapping" is upstream's word for the ikd-Tree each scan is
 aligned against — there is no loop closure, so revisiting a place after N
 metres of drift lays the same wall down twice, permanently. For a map worth
-keeping use fastlio_lc_pgo's fastlio_lc_l2.launch.py or
-bag_test/rtabmap_fastlio_bag.launch.py. This file is for MEASURING odometry,
+keeping use fastlio_lc_pgo's fastlio_lc_l2.launch.py (bag:
+bag_test/fastlio_lc_bag.launch.py). This file is for MEASURING odometry,
 precisely because nothing here hides the drift.
 
 It exists because fast_lio's own mapping.launch.py is not standalone-usable

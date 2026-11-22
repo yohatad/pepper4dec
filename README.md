@@ -62,7 +62,7 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 - **`overt_attention`** - Unified head-attention controller: engaged faces → detected faces → Boolean Map Saliency peaks, with inhibition of return
 
 ### **Navigation & Localization**
-- **`pepper_slam`** - 3D mapping and odometry backends: FAST-LIO / Point-LIO lidar-inertial mapping and odometry on the Unitree L2, and RTAB-Map (RGB-D). Launch files and parameters only; the SLAM backends themselves are upstream packages
+- **`pepper_slam`** - 3D mapping and odometry backends: FAST-LIO / Point-LIO lidar-inertial mapping and odometry on the Unitree L2, with pose-graph loop closure (`fastlio_lc_pgo`). Launch files, parameters and bridge nodes; the estimators themselves are upstream packages
 - **`pepper_navigation`** - Nav2 stack (path planning, obstacle avoidance, collision-monitor safety layer) localizing by default with FAST-LIO against a prior 3D map (`fastlio_localization`). The localization backend is a launch-time profile behind shared costmaps and tuning, so alternatives can be swapped in and compared directly
 
 Localization-only deployments get their `map → base_footprint` pose (`/localization/pose`) from **`fast_lio`**'s `fastlio_localization` node; `gesture_execution` consumes that pose for pointing IK.
@@ -172,7 +172,7 @@ source ~/ros2_ws/install/setup.bash
 ros2 launch dec_launch dec_system.launch.py
 
 # Pick a different Nav2 localization profile
-ros2 launch dec_launch dec_system.launch.py nav_profile:=rtabmap_loc
+ros2 launch dec_launch dec_system.launch.py nav_profile:=amcl
 
 # Perception + behavior only, without the Nav2 stack
 # (fastlio_localization still comes up standalone, so /localization/pose exists)
@@ -270,7 +270,7 @@ docker compose --profile dev up  # live-mounts the source over the image
 - **Tooling**: Publishes BT state for live Groot2 visualization
 
 ### **Navigation System**
-- **Mapping** (`pepper_slam`): FAST-LIO / Point-LIO 3D lidar-inertial mapping and odometry on the Unitree L2, or RTAB-Map (RGB-D)
+- **Mapping** (`pepper_slam`): FAST-LIO / Point-LIO 3D lidar-inertial mapping and odometry on the Unitree L2, with pose-graph loop closure
 - **Localization** (`pepper_navigation`): FAST-LIO against a prior 3D map via `fastlio_localization` by default; other backends are selectable as launch-time profiles sharing the same costmaps and tuning (see [pepper_navigation/README.md](pepper_navigation/README.md))
 - **Odometry**: wheel odometry (`/pepper_odom` from `naoqi_driver2`), LIO odometry
 - **Path Planning**: Nav2 with 3D voxel costmaps consuming the L2's 360° `PointCloud2` directly, no flattening step

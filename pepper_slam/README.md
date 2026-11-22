@@ -9,14 +9,14 @@
 Mapping, odometry and localization bringup for the Pepper sensor rig: a
 Unitree L2 lidar (`/points`, `/imu/data`) and a RealSense (RGB, aligned depth,
 IMU). The package ships launch files, parameters and a few rclpy helper nodes;
-the estimators themselves (FAST-LIO, Point-LIO, RTAB-Map) are upstream
+the estimators themselves (FAST-LIO, Point-LIO) are upstream
 packages launched by name, so nothing here compiles.
 
 ## ✨ Key Features
 - **ROS2 Native**: Built for ROS2 Humble
 - **LIO odometry**: FAST-LIO or Point-LIO on the Unitree L2, bridged to a gravity-levelled `odom`
 - **Divergence guard**: optionally rejects LIO poses the base cannot physically produce
-- **Mapping**: FAST-LIO odometry with RTAB-Map loop closure
+- **Mapping**: FAST-LIO odometry with pose-graph (`fastlio_lc_pgo`) loop closure
 - **Prior-map localization**: standalone FAST-LIO and Point-LIO localizers for testing outside Nav2
 - **Sensor rig TF**: one static `base_footprint -> l2lidar_frame -> camera` chain shared by every launch file
 
@@ -24,7 +24,8 @@ packages launched by name, so nothing here compiles.
 
 - **ROS 2 Humble**
 - **`fast_lio`** and/or **`point_lio`** built in the same workspace
-- **`rtabmap_ros`** for the RTAB-Map mapping and localization paths
+- **`fastlio_lc_pgo`** built in the same workspace, for mapping with loop
+  closure
 - **Unitree L2 lidar** via `l2lidar_node`, and the RealSense via
   `realsense2_camera`. Neither is started by this package:
   `ros2 launch dec_launch dec_robot.launch.py` brings both up
@@ -32,15 +33,13 @@ packages launched by name, so nothing here compiles.
 ## 🛠️ Installation
 
 ```bash
-sudo apt install ros-humble-rtabmap-ros
-
 cd ~/ros2_ws
 colcon build --packages-select pepper_slam
 source install/setup.bash
 ```
 
-`fast_lio` and `point_lio` are source packages: build them in the same
-workspace first (see Prerequisites).
+`fast_lio`, `point_lio` and `fastlio_lc_pgo` are source packages: build them
+in the same workspace first (see Prerequisites).
 
 ## 🚀 Running
 
@@ -80,8 +79,8 @@ which lacks the rig TF and hangs with no error. There is no loop closure: use
 the mapping path below for a map worth keeping.
 
 - `bridge_level_frame` (default `true`): publishes a gravity-levelled `odom`
-  above the estimator's tilted `lio_init`. Set it `false` whenever RTAB-Map,
-  PGO or AMCL owns `odom`'s parent, or `odom` gets two parents.
+  above the estimator's tilted `lio_init`. Set it `false` whenever PGO or
+  AMCL owns `odom`'s parent, or `odom` gets two parents.
 - `guard_enable` (default `false`): rejects poses implying motion the base
   cannot perform, carries the pose on wheel odometry meanwhile, and publishes
   `/localization/wheel_trust_scale` and `/diagnostics`. Thresholds are in
@@ -90,17 +89,22 @@ the mapping path below for a map worth keeping.
 
 ### Mapping
 
-The validated configuration is FAST-LIO odometry with RTAB-Map loop closure,
-run from a bag:
+Mapping is FAST-LIO odometry with pose-graph loop closure (radius search,
+ICP-verified, optimized in GTSAM), in `fastlio_lc_pgo`. From a bag:
 
 ```bash
-ros2 launch pepper_slam rtabmap_fastlio_bag.launch.py
-ros2 launch pepper_slam rtabmap_fastlio_bag.launch.py rgbd:=true   # colour the map from the depth camera
+ros2 launch pepper_slam fastlio_lc_bag.launch.py save_directory:=~/Lidar/run_l2_lc/pgo_output/
 ```
 
-Keep `rgbd:=false` for maps Nav2 will use: with it on, camera points are
-folded into the 2D grid too. `rtabmap_base.launch.py` is the underlying
-bringup (`localization:=true` to stop mapping, `rviz:=true` for RViz).
+`save_directory` is required (no default). When the bag finishes, write the
+map with `ros2 service call /pgo_batch_optimize std_srvs/srv/Trigger`; see
+`fastlio_lc_pgo`'s own README for the full option list. The same run also
+builds the 2D occupancy grid on `/projected_map` (octomap).
+
+RTAB-Map was the earlier mapping backend and has been removed: its
+appearance-based loop closure needs RTAB-Map's own visual odometry to own
+the pose, which is incompatible with using FAST-LIO, and every configuration
+tried produced worse maps than the pose-graph path.
 
 ### Localization against a prior map
 
@@ -139,7 +143,6 @@ the `bag_test/` prefix fails with "not found".
 |---|---|
 | `fastlio_odometry_bag` / `pointlio_odometry_bag` | `fastlio_odometry` / `pointlio_odometry` |
 | `fastlio_lc_bag` / `pointlio_lc_bag` | `fastlio_lc_pgo`'s `fastlio_lc_l2` / `pointlio_lc_l2` |
-| `rtabmap_*_bag` | `rtabmap_base` plus a LIO |
 
 Localization and navigation need no wrapper; they take `use_sim_time`
 directly.
@@ -175,11 +178,11 @@ ros2 bag play <bag> --clock --read-ahead-queue-size 2000
 | `pepper_odom` | `naoqi_driver2` | wheel odometry; deliberately **not** named `odom` |
 | `lio_init` | FAST-LIO / Point-LIO | the estimator's world frame, tilted by the sensor mount |
 | `odom` | `lio_odom_bridge` | gravity-levelled parent of `lio_init`; Z-up |
-| `map` | RTAB-Map or the PGO bridge | whichever layer owns the loop-closure correction |
+| `map` | the PGO bridge or AMCL | whichever layer owns the loop-closure correction |
 | `map` | `fastlio_localization` / `pointlio_localization` | publishes `map -> base_footprint` directly, with no `odom` edge |
 
-Only one node may publish a frame's parent. RTAB-Map anchors on `odom`, not
-the tilted `lio_init`. `FRAMES.md` has the full frame contract.
+Only one node may publish a frame's parent. `FRAMES.md` has the full frame
+contract.
 
 ## ⚙️ Configuration
 
@@ -214,7 +217,6 @@ pepper_slam/
 │   ├── lio_odom_bridge.launch.py       # the bridge alone, for an estimator started elsewhere
 │   ├── fastlio_localization.launch.py  # standalone prior-map localization
 │   ├── pointlio_localization.launch.py # same, for Point-LIO
-│   ├── rtabmap_base.launch.py          # RTAB-Map bringup (vendored upstream; excluded from flake8)
 │   ├── view_rig.launch.py              # sensor rig visualization from the URDF
 │   └── bag_test/                       # bag-replay wrappers (see Bag replay)
 ├── rviz/                               # configs for the mapping, replay and rig-view launches
@@ -237,8 +239,7 @@ pepper_slam/
 └── README.md
 ```
 
-Saved maps live in `pepper_navigation/`, which uses them; RTAB-Map `.db` files
-go to `~/.ros/`.
+Saved maps live in `pepper_navigation/`, which uses them.
 
 ## 🧪 Testing
 

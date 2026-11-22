@@ -3,9 +3,10 @@
 <package format="3">
   <name>pepper_slam</name>
   <version>0.0.0</version>
-  <description>SLAM and mapping for Pepper: RTAB-Map (RGB-D / lidar), FAST-LIO
-  odometry integration, and SLAM Toolbox. Produces the map frame and /map that
-  pepper_navigation consumes.</description>
+  <description>SLAM and mapping for Pepper: FAST-LIO / Point-LIO lidar-inertial
+  odometry, the bridges to the pose-graph loop closure in fastlio_lc_pgo, and
+  prior-map localization. Produces the map frame that pepper_navigation
+  consumes.</description>
   <maintainer email="yohatad123@gmail.com">yoha</maintainer>
   <license>BSD-3-Clause</license>
 
@@ -26,12 +27,6 @@
   <depend>diagnostic_msgs</depend>
 
   <!-- All launched by name, not linked against. -->
-  <exec_depend>rtabmap_slam</exec_depend>
-  <exec_depend>rtabmap_odom</exec_depend>
-  <exec_depend>rtabmap_sync</exec_depend>
-  <exec_depend>rtabmap_util</exec_depend>
-  <exec_depend>rtabmap_viz</exec_depend>
-  <exec_depend>image_transport</exec_depend>
   <exec_depend>fast_lio</exec_depend>
   <exec_depend>rviz2</exec_depend>
 

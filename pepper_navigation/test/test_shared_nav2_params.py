@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Guard the nav2 param sections that are meant to be identical across modes.
 
-Of the five nav2 param files (amcl / fastloc / pointloc / rtabmap_loc, plus
+Of the five nav2 param files (amcl / fastloc / pointloc / kissicp, plus
 the l2voxel_test bag variant), only 3 of 10 top-level nodes are true
 duplicates -- and those are the drift risk: tuning a controller gain means
 editing five files, with nothing to tell you if you edit four.
@@ -34,8 +34,8 @@ EXCEPTIONS = {
     },
 }
 FILES = ("nav2_params_amcl.yaml", "nav2_params_fastloc.yaml",
-         "nav2_params_rtabmap_loc.yaml", "nav2_params_pointloc.yaml",
-         "nav2_params_kissicp.yaml", "bag_test/nav2_params_l2voxel_test.yaml")
+         "nav2_params_pointloc.yaml", "nav2_params_kissicp.yaml",
+         "bag_test/nav2_params_l2voxel_test.yaml")
 
 # The robot's size, and the clearance kept around it, live inside sections
 # that are otherwise mode-specific (the costmaps and collision monitor differ

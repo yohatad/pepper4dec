@@ -51,7 +51,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ros-humble-nav2-controller ros-humble-nav2-planner ros-humble-nav2-behaviors \
       ros-humble-nav2-bt-navigator ros-humble-nav2-lifecycle-manager \
       ros-humble-nav2-costmap-2d ros-humble-nav2-msgs \
-      ros-humble-slam-toolbox ros-humble-rtabmap-ros ros-humble-realsense2-camera \
+      ros-humble-slam-toolbox ros-humble-realsense2-camera \
       ros-humble-message-filters ros-humble-cv-bridge ros-humble-image-transport \
       ros-humble-geometry-msgs ros-humble-sensor-msgs ros-humble-std-msgs \
       ros-humble-std-srvs ros-humble-robot-state-publisher \

@@ -14,9 +14,8 @@
 # the two cloud_range_filter instances and wheel_odom_tf by pepper_slam's
 # pepper_slam_configuration.yaml.
 #
-# Loaded by: pepper_nav2_amcl, pepper_nav2_fastloc, pepper_nav2_kissicp,
-# pepper_nav2_pointloc and pepper_nav2_rtabmap_loc (.launch.py), and
-# bag_test/costmap_bag.launch.py.
+# Loaded by: pepper_nav2_amcl, pepper_nav2_fastloc, pepper_nav2_kissicp and
+# pepper_nav2_pointloc (.launch.py), and bag_test/costmap_bag.launch.py.
 
 # =============================================================================
 # sensor_guard: the last gate before cmd_vel, in every profile. Humble's
@@ -79,7 +78,7 @@ localization_watchdog:
 
 localization_recovery:
   ros__parameters:
-    backend: "auto"                     # each profile pins its own: fastloc, pointloc, amcl, rtabmap
+    backend: "auto"                     # each profile pins its own: fastloc, pointloc, amcl
     service_timeout: 5.0                # s to wait for the backend's service
 
 # =============================================================================
