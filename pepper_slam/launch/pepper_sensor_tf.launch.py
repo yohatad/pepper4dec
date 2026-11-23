@@ -29,10 +29,13 @@ Launch arguments:
     urdf_file (default: <share>/urdf/pepper_sensor_rig.urdf.xacro)
 
 Configuration:
-    The URDF is GENERATED from the YAML, so both publishers emit identical
-    geometry. THE GEOMETRY IS NOT EDITED HERE — data/sensor_tf.yaml is the
-    calibration source of truth and carries the provenance, including which
-    DOF remain unverified. Regenerate the URDF after editing it.
+    The geometry is not edited here. data/sensor_tf.yaml is the calibration
+    source of truth and carries the provenance, including which DOF remain
+    unverified. The URDF's joint origins are a hand-kept copy of it (its
+    quaternions as rpy), so both publishers emit identical geometry. Nothing
+    generates the URDF: after editing the YAML, update urdf/sensor_rig.xacro
+    and the FAST-LIO / Point-LIO extrinsics to match.
+    test/test_rig_consistency.py fails until all of them agree.
 
     The rig is its own description rather than an extension of naoqi's
     pepper.urdf, which roots at base_link and would give base_footprint two

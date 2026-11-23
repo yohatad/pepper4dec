@@ -157,6 +157,13 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_leveling_frame_contract
     "${CMAKE_CURRENT_SOURCE_DIR}/test/test_leveling_frame_contract.py")
 
+  # data/sensor_tf.yaml against its hand-kept copies: the rig xacro (what
+  # publisher:=urdf, the default, actually publishes) and the FAST-LIO /
+  # Point-LIO extrinsics. Nothing generates them, so a recalibration that
+  # edits only the YAML changes nothing on the robot. The LIO cases skip when
+  # those sibling packages are not in the workspace, as above.
+  ament_add_pytest_test(test_rig_consistency
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/test_rig_consistency.py")
 
   # cloud_range_filter's range, outlier and ground-plane filters on synthetic
   # clouds, including a brute-force check of the outlier filter's grid.

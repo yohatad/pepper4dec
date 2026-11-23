@@ -196,10 +196,16 @@ argument such as `guard_enable:=true` overrides the file for that launch only;
 left empty, the file's value stands.
 
 `data/` holds the two files that are data, not node parameters:
-`sensor_tf.yaml` (the rig's measured geometry, read by `static_tf_publisher` and
-the rig URDF) and `record_qos.yaml` (the `ros2 bag record` QoS overrides). The estimators'
+`sensor_tf.yaml` (the rig's measured geometry, read by `static_tf_publisher`) and
+`record_qos.yaml` (the `ros2 bag record` QoS overrides). The estimators'
 own configurations are `fast_lio`'s `config/l2_rsimu.yaml` and `point_lio`'s
 `config/l2lidar_rsimu.yaml`.
+
+`sensor_tf.yaml` is the source of truth for the rig, but three files hold
+hand-kept copies of it: `urdf/sensor_rig.xacro` (what `publisher:=urdf`, the
+default, publishes) and the `extrinsic_R` / `extrinsic_T` in both estimator
+configs. After a recalibration, update all four; `test_rig_consistency.py`
+fails until they agree.
 
 ## 📁 Package Structure
 
@@ -253,7 +259,9 @@ Besides the linters, this runs `test_leveling_frame_contract.py` (skipped when
 the LIO packages are not built), `test_lio_odom_guard` (the divergence guard),
 `test_cloud_filters` (the `cloud_range_filter` filters on synthetic clouds) and
 `test_rig_transforms` (`static_tf_publisher`'s parser, including the shipped
-`sensor_tf.yaml`) and `test_frame_contract_bag.py` (the frame contract on the
+`sensor_tf.yaml`), `test_rig_consistency.py` (`sensor_tf.yaml` against the rig
+URDF and both estimators' extrinsics; the extrinsic cases skip when the LIO
+packages are not in the workspace) and `test_frame_contract_bag.py` (the frame contract on the
 benchmark bag through FAST-LIO and the bridge; skipped without the bag or
 `fast_lio`).
 
