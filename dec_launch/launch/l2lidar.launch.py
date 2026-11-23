@@ -13,10 +13,10 @@ Topics published (by the driver):
     /points     sensor_msgs/PointCloud2, ~11 Hz  (aggregateNframes: 19)
     /imu/data   sensor_msgs/Imu
     /tf_static  l2lidar_frame -> l2lidar_frame_imu (the L2's intrinsic IMU
-                offset). pepper_slam's sensor_tf.yaml publishes this edge
-                too, on purpose: bag replay runs no driver and the LIO
-                bridge needs it. Both carry the same Unitree spec value, so
-                the duplicate is harmless.
+                offset). pepper_slam's rig URDF publishes this edge too, on
+                purpose: bag replay runs no driver and the LIO bridge needs
+                it. Both carry the same Unitree spec value, so the duplicate
+                is harmless.
 
     BOTH TOPICS ARE PUBLISHED BEST_EFFORT (rclcpp::SensorDataQoS,
     l2lidar_node.cpp:357,360). A subscriber that asks for RELIABLE will not
@@ -59,9 +59,8 @@ Configuration:
 Prerequisites:
     The L2 wired to the host and reachable at l2_ip, with host_ip configured on
     the receiving interface. The l2lidar_frame -> base_footprint mount
-    transform is NOT published here -- it lives in
-    pepper_slam/data/sensor_tf.yaml, the single owner of the rig's static
-    TF edges.
+    transform is NOT published here -- it lives in pepper_slam's rig URDF
+    (urdf/sensor_rig.xacro), the single owner of the rig's static TF edges.
 
 Usage:
     ros2 launch dec_launch l2lidar.launch.py

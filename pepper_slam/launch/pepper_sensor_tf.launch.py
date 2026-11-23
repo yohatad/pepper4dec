@@ -2,40 +2,33 @@
 
 Static TF tree for the Pepper sensor rig: Unitree L2 + RealSense.
 
-Publishes 10 transforms rooted at base_footprint:
+Publishes up to 10 transforms rooted at base_footprint:
     base_footprint -> l2lidar_frame -> {l2lidar_frame_imu,
                                         camera_camera_link -> ...}
 
 Nodes started:
     robot_state_publisher/robot_state_publisher (node: pepper_sensor_tf)
         When publisher is 'urdf'.
-    pepper_slam/static_tf_publisher (node: pepper_sensor_tf)
-        When publisher is 'yaml'.
 
 Launch arguments:
     use_sim_time (default: "false")
     publisher (default: "urdf")
-        'urdf' — robot_state_publisher over urdf/pepper_sensor_rig.urdf.xacro;
-        also gives an RViz RobotModel, so a wrong mount shows as geometry
-        rather than bare axes. 'yaml' — static_tf_publisher over
-        data/sensor_tf.yaml. ANY OTHER VALUE (e.g. none) starts neither and
-        publishes nothing — correct for a bag that carries its own /tf_static.
+        'urdf': robot_state_publisher over urdf/pepper_sensor_rig.urdf.xacro.
+        It also gives RViz a RobotModel, so a wrong mount shows as geometry
+        rather than bare axes. 'none': publishes nothing, correct for a bag
+        that carries its own /tf_static.
     scope (default: "mount")
-        'mount' — only the rig edges. 'all' adds the seven RealSense-internal
+        'mount': only the rig edges. 'all' adds the seven RealSense-internal
         edges, for a bag recorded without them. On the robot the camera driver
         publishes its own, and a second copy leaves whichever /tf_static lands
         last silently in force.
-    transforms_file (default: <share>/data/sensor_tf.yaml)
     urdf_file (default: <share>/urdf/pepper_sensor_rig.urdf.xacro)
 
 Configuration:
-    The geometry is not edited here. data/sensor_tf.yaml is the calibration
-    source of truth and carries the provenance, including which DOF remain
-    unverified. The URDF's joint origins are a hand-kept copy of it (its
-    quaternions as rpy), so both publishers emit identical geometry. Nothing
-    generates the URDF: after editing the YAML, update urdf/sensor_rig.xacro
-    and the FAST-LIO / Point-LIO extrinsics to match.
-    test/test_rig_consistency.py fails until all of them agree.
+    The geometry is not edited here. urdf/sensor_rig.xacro holds it and is
+    the calibration source of truth; its header carries the provenance,
+    including which DOF remain unverified, and lists the files that hold
+    derived copies (test/test_rig_consistency.py checks them).
 
     The rig is its own description rather than an extension of naoqi's
     pepper.urdf, which roots at base_link and would give base_footprint two
@@ -44,8 +37,8 @@ Configuration:
 Usage:
     ros2 launch pepper_slam pepper_sensor_tf.launch.py
 
-Replaying /tf from a bag is safe and wanted — see "Bag replay" in the package README,
-which also covers which of publisher/scope your bag needs.
+Replaying /tf from a bag is safe and wanted. See "Bag replay" in the package
+README, which also covers which of publisher/scope your bag needs.
 
 Author: Yohannes Tadesse Haile
 Affiliation: Carnegie Mellon University Africa
@@ -76,11 +69,9 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
     scope = LaunchConfiguration('scope')
     publisher = LaunchConfiguration('publisher')
-    transforms_file = LaunchConfiguration('transforms_file')
     urdf_file = LaunchConfiguration('urdf_file')
 
     use_urdf = PythonExpression(["'", publisher, "' == 'urdf'"])
-    use_yaml = PythonExpression(["'", publisher, "' == 'yaml'"])
 
     return LaunchDescription([
         # false, not true: this is the LIVE entry point. Every bag wrapper in
@@ -91,16 +82,12 @@ def generate_launch_description():
         # Set those yourself: publisher:=none for a bag carrying its own
         # /tf_static, publisher:=urdf scope:=all for one without.
         DeclareLaunchArgument('use_sim_time', default_value='false'),
+        # choices, so a stale publisher:=yaml (the removed static_tf_publisher
+        # path) fails the launch instead of silently publishing no rig at all.
         DeclareLaunchArgument(
-            'publisher', default_value='urdf',
+            'publisher', default_value='urdf', choices=['urdf', 'none'],
             description="'urdf' (robot_state_publisher, gives an RViz "
-                        "RobotModel) or 'yaml' (static_tf_publisher). Both "
-                        "publish identical geometry."),
-        DeclareLaunchArgument(
-            'transforms_file',
-            default_value=os.path.join(pkg_share, 'data', 'sensor_tf.yaml'),
-            description='YAML transform list, used when publisher:=yaml. This '
-                        'is the calibration source of truth.'),
+                        "RobotModel) or 'none' (the bag carries the rig)."),
         DeclareLaunchArgument(
             'scope', default_value='mount', choices=['mount', 'all'],
             description="'mount' (default) publishes only the rig transforms "
@@ -112,9 +99,9 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'urdf_file',
             default_value=os.path.join(pkg_share, 'urdf', 'pepper_sensor_rig.urdf.xacro'),
-            description='Sensor-rig xacro, used when publisher:=urdf. Expanded with '
-                        '`xacro` at launch. Rooted at '
-                        'base_footprint so it never competes for that frame.'),
+            description='Sensor-rig xacro, expanded with `xacro` at launch. '
+                        'Rooted at base_footprint so it never competes for '
+                        'that frame.'),
 
         # robot_description is namespaced so it cannot clash with a Pepper body
         # description published by the naoqi driver.
@@ -134,19 +121,6 @@ def generate_launch_description():
                 # Every joint is fixed, so nothing needs /joint_states and
                 # nothing is published on /tf -- only /tf_static.
                 'publish_frequency': 0.0,
-            }],
-        ),
-
-        Node(
-            package='pepper_slam',
-            executable='static_tf_publisher',
-            name='pepper_sensor_tf',
-            output='screen',
-            condition=IfCondition(use_yaml),
-            parameters=[{
-                'use_sim_time': use_sim_time,
-                'transforms_file': transforms_file,
-                'scope': scope,
             }],
         ),
     ])

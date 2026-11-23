@@ -92,7 +92,7 @@ def generate_launch_description():
     declare_publisher_cmd = DeclareLaunchArgument(
         'publisher', default_value='urdf',
         description="Forwarded to pepper_sensor_tf.launch.py. 'urdf' (default) "
-                    "or 'yaml'.")
+                    "or 'none'.")
     declare_scope_cmd = DeclareLaunchArgument(
         'scope', default_value='mount', choices=['mount', 'all'],
         description="Forwarded to pepper_sensor_tf.launch.py. 'mount' (default) "

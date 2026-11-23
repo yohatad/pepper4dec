@@ -195,17 +195,16 @@ read from the estimator's config, so it is never in these files). A launch
 argument such as `guard_enable:=true` overrides the file for that launch only;
 left empty, the file's value stands.
 
-`data/` holds the two files that are data, not node parameters:
-`sensor_tf.yaml` (the rig's measured geometry, read by `static_tf_publisher`) and
-`record_qos.yaml` (the `ros2 bag record` QoS overrides). The estimators'
-own configurations are `fast_lio`'s `config/l2_rsimu.yaml` and `point_lio`'s
-`config/l2lidar_rsimu.yaml`.
+`data/record_qos.yaml` is the `ros2 bag record` QoS override for `/tf_static`
+(see "Recording bags"). The estimators' own configurations are `fast_lio`'s
+`config/l2_rsimu.yaml` and `point_lio`'s `config/l2lidar_rsimu.yaml`.
 
-`sensor_tf.yaml` is the source of truth for the rig, but three files hold
-hand-kept copies of it: `urdf/sensor_rig.xacro` (what `publisher:=urdf`, the
-default, publishes) and the `extrinsic_R` / `extrinsic_T` in both estimator
-configs. After a recalibration, update all four; `test_rig_consistency.py`
-fails until they agree.
+The rig's geometry and its calibration notes live in `urdf/sensor_rig.xacro`,
+which `pepper_sensor_tf.launch.py` publishes. Three values elsewhere are
+derived from it by hand: the `extrinsic_R` / `extrinsic_T` in both estimator
+configs and `sc_lidar_height` in `fastlio_lc_pgo`'s `fastlio_lc_l2.launch.py`.
+After a recalibration, update them too; `test_rig_consistency.py` fails until
+they agree.
 
 ## 📁 Package Structure
 
@@ -214,8 +213,7 @@ pepper_slam/
 ├── config/
 │   └── pepper_slam_configuration.yaml  # every node's parameters, one section per node
 ├── data/
-│   ├── record_qos.yaml                 # /tf_static QoS override for ros2 bag record
-│   └── sensor_tf.yaml                  # rig transform values; provenance in the header
+│   └── record_qos.yaml                 # /tf_static QoS override for ros2 bag record
 ├── launch/
 │   ├── pepper_sensor_tf.launch.py      # static rig TF, nested by everything else
 │   ├── fastlio_odometry.launch.py      # FAST-LIO odometry + bridge
@@ -230,15 +228,13 @@ pepper_slam/
 │   ├── cloud_range_filter.cpp          # range / outlier / ground filters; feeds Nav2's /points_safety and /points_costmap
 │   ├── lio_odom_bridge.cpp             # odom -> base_footprint from the LIO pose; levels lio_init once
 │   ├── pgo_map_odom_bridge.cpp         # map -> odom from a pose-graph-optimized trajectory
-│   ├── static_tf_publisher.cpp         # the whole static rig TF chain from one node
 │   ├── wheel_odom_tf.cpp               # odom -> base_footprint from /pepper_odom, for the loc stacks
 │   └── lib/                            # pepper_slam_lib: ROS-free code the nodes share (headers in include/pepper_slam/)
 │       ├── cloud_filters.cpp           # cloud_range_filter's filters
 │       ├── lio_odom_guard.cpp          # lio_odom_bridge's divergence gate
-│       ├── rig_transforms.cpp          # static_tf_publisher's sensor_tf.yaml parser
 │       └── transform_utils.cpp         # pose conversions and levelling shared by the two bridges
 ├── test/                               # pytest suites, resolve_launch.py and its baselines
-├── urdf/                               # the L2 + D435i rig xacro, alone and on Pepper's body
+├── urdf/                               # the L2 + D435i rig xacro (the calibration), alone and on Pepper's body
 ├── FRAMES.md                           # the frame contract in full
 ├── CMakeLists.txt
 ├── package.xml
@@ -257,10 +253,9 @@ colcon test-result --verbose
 
 Besides the linters, this runs `test_leveling_frame_contract.py` (skipped when
 the LIO packages are not built), `test_lio_odom_guard` (the divergence guard),
-`test_cloud_filters` (the `cloud_range_filter` filters on synthetic clouds) and
-`test_rig_transforms` (`static_tf_publisher`'s parser, including the shipped
-`sensor_tf.yaml`), `test_rig_consistency.py` (`sensor_tf.yaml` against the rig
-URDF and both estimators' extrinsics; the extrinsic cases skip when the LIO
+`test_cloud_filters` (the `cloud_range_filter` filters on synthetic clouds),
+`test_rig_consistency.py` (the rig URDF's `scope` split, and the values derived
+from it in the estimator configs and `fastlio_lc_pgo`; those cases skip when the
 packages are not in the workspace) and `test_frame_contract_bag.py` (the frame contract on the
 benchmark bag through FAST-LIO and the bridge; skipped without the bag or
 `fast_lio`).

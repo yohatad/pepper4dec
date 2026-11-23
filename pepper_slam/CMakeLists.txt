@@ -23,24 +23,20 @@ find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
-find_package(yaml-cpp REQUIRED)
 
 # pepper_slam_lib (src/lib/): the code the nodes share, free of ROS nodes so the
 # tests can drive it directly. Every src/*.cpp is a node executable.
 #   cloud_filters.cpp    cloud_range_filter's filters    (test_cloud_filters)
-#   rig_transforms.cpp   static_tf_publisher's parser    (test_rig_transforms)
 #   lio_odom_guard.cpp   lio_odom_bridge's divergence guard (test_lio_odom_guard)
 #   transform_utils.cpp  pose conversions and levelling shared by the bridges
 add_library(${PROJECT_NAME}_lib STATIC
   src/lib/cloud_filters.cpp
-  src/lib/rig_transforms.cpp
   src/lib/lio_odom_guard.cpp
   src/lib/transform_utils.cpp
 )
 target_include_directories(${PROJECT_NAME}_lib PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
-target_link_libraries(${PROJECT_NAME}_lib yaml-cpp)
 ament_target_dependencies(${PROJECT_NAME}_lib
   builtin_interfaces
   geometry_msgs
@@ -54,13 +50,11 @@ ament_target_dependencies(${PROJECT_NAME}_lib
 #                        /cloud_registered_body_filtered
 #   wheel_odom_tf        odom -> base_footprint from /pepper_odom, for the
 #                        localizers' opt-in odom mode
-#   static_tf_publisher  the whole rig as one latched /tf_static message
 #   lio_odom_bridge      odom -> base_footprint from a LIO estimator's odometry
 #   pgo_map_odom_bridge  map -> odom from the pose-graph optimizer's keyframes
 set(NODES
   cloud_range_filter
   wheel_odom_tf
-  static_tf_publisher
   lio_odom_bridge
   pgo_map_odom_bridge
 )
@@ -157,11 +151,11 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_leveling_frame_contract
     "${CMAKE_CURRENT_SOURCE_DIR}/test/test_leveling_frame_contract.py")
 
-  # data/sensor_tf.yaml against its hand-kept copies: the rig xacro (what
-  # publisher:=urdf, the default, actually publishes) and the FAST-LIO /
-  # Point-LIO extrinsics. Nothing generates them, so a recalibration that
-  # edits only the YAML changes nothing on the robot. The LIO cases skip when
-  # those sibling packages are not in the workspace, as above.
+  # The rig URDF (urdf/sensor_rig.xacro, the calibration source of truth)
+  # against the copies derived from it by hand: the FAST-LIO / Point-LIO
+  # extrinsics and fastlio_lc_pgo's sc_lidar_height. Also that scope:=mount
+  # leaves out exactly the RealSense driver's own edges. The sibling-package
+  # cases skip when those packages are not in the workspace, as above.
   ament_add_pytest_test(test_rig_consistency
     "${CMAKE_CURRENT_SOURCE_DIR}/test/test_rig_consistency.py")
 
@@ -170,10 +164,6 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_cloud_filters test/test_cloud_filters.cpp)
   target_link_libraries(test_cloud_filters ${PROJECT_NAME}_lib)
-
-  # static_tf_publisher's parser, on hand-written YAML and the shipped rig.
-  ament_add_gtest(test_rig_transforms test/test_rig_transforms.cpp)
-  target_link_libraries(test_rig_transforms ${PROJECT_NAME}_lib)
 
   # The divergence guard, without a spin, a bag or a running estimator.
   ament_add_gtest(test_lio_odom_guard test/test_lio_odom_guard.cpp)
@@ -189,8 +179,6 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/test/test_frame_contract_bag.py"
     ENV "CHECK_FRAME_CONTRACT=$<TARGET_FILE:check_frame_contract>"
     TIMEOUT 300)
-  target_compile_definitions(test_rig_transforms PRIVATE
-    SENSOR_TF_YAML="${CMAKE_CURRENT_SOURCE_DIR}/data/sensor_tf.yaml")
 endif()
 
 ament_package()

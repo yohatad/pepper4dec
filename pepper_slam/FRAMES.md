@@ -107,8 +107,8 @@ the edge the bridge publishes. A lookup of `odom -> base_footprint` traverses
 
 | edge | kind | published by | meaning |
 |---|---|---|---|
-| `l2lidar_frame -> l2lidar_frame_imu` | static | `static_tf_publisher` | IMU's position inside the lidar housing (17 mm, no rotation) |
-| `base_footprint -> l2lidar_frame` | static | `static_tf_publisher` | **the mount calibration** |
+| `l2lidar_frame -> l2lidar_frame_imu` | static | `pepper_sensor_tf` | IMU's position inside the lidar housing (17 mm, no rotation) |
+| `base_footprint -> l2lidar_frame` | static | `pepper_sensor_tf` | **the mount calibration** |
 | `lio_init -> base_footprint` | dynamic ~11 Hz | `lio_odom_bridge` | **the odometry** -- continuous, drifts, never corrected |
 | `map -> lio_init` | dynamic, jumps | AMCL | **the correction** -- discontinuous, does not drift |
 | `map -> base_footprint` | dynamic, scan rate | `fastlio_localization`, `pointlio_localization` (default) | pose and correction in one: the map is inside the filter, so there is no separate correction edge |
@@ -215,13 +215,13 @@ accumulates -- not to widen the threshold.
 
 ## Static TF
 
-The rig's 10 static transforms live in `data/sensor_tf.yaml` and are published
-by a single `static_tf_publisher` node (C++; the parser is
-`src/lib/rig_transforms.cpp`, tested by `test/test_rig_transforms.cpp`). This was previously 10 separate
-`static_transform_publisher` processes -- one per edge, each a full ROS node
-with its own executor and DDS participant, to publish seven constants. Edit the
-YAML, not the launch file. The node rejects a frame given two parents and warns
-on a non-unit quaternion.
+The rig's 10 static transforms live in `urdf/sensor_rig.xacro`, the
+calibration source of truth, and `pepper_sensor_tf.launch.py` publishes them
+through one `robot_state_publisher` (node `/sensor_rig/pepper_sensor_tf`). With
+`scope:=mount`, the default, it leaves out the seven edges below
+`camera_camera_link`, which the RealSense driver publishes itself. Edit the
+xacro, not the launch file, and update the values derived from it (listed in
+the xacro's header); `test/test_rig_consistency.py` checks them.
 
 ## History
 

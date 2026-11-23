@@ -1,58 +1,53 @@
 #!/usr/bin/env python3
-"""The rig geometry is written down in four places; they must agree.
+"""The rig URDF is the calibration source of truth; its copies must agree.
 
-data/sensor_tf.yaml is the calibration source of truth, but nothing generates
-the other copies from it:
+urdf/sensor_rig.xacro is what pepper_sensor_tf publishes. Three files hold
+values derived from it by hand, and nothing regenerates them:
 
-  urdf/sensor_rig.xacro          what pepper_sensor_tf publishes by default
-                                 (publisher:=urdf), its quaternions as rpy
-  FAST_LIO/config/l2_rsimu.yaml  extrinsic_R / extrinsic_T, the lidar in the
-  point_lio/config/              estimator's IMU body frame, composed from the
-      l2lidar_rsimu.yaml         YAML chain and inverted
+  FAST_LIO/config/l2_rsimu.yaml        extrinsic_R / extrinsic_T: the lidar in
+  point_lio/config/l2lidar_rsimu.yaml  the estimator's IMU body frame, composed
+                                       along the rig chain and inverted
+  fastlio_lc_pgo/launch/
+      fastlio_lc_l2.launch.py          sc_lidar_height: the lidar's height
 
-A recalibration that edits only the YAML changes nothing on the robot: the
-URDF keeps publishing the old mount and the estimators keep fusing with the
-old extrinsic. These tests fail until every copy is updated.
+A recalibration that edits only the URDF leaves the estimators fusing with
+the old extrinsic. These tests fail until every copy is updated.
 
-The LIO configs live in sibling repositories (fast_lio, point_lio), which
-cannot be test_depends here (they exec_depend on pepper_slam). Those cases
-skip when the file is not in the workspace.
+The URDF is expanded with xacro exactly as pepper_sensor_tf.launch.py does,
+for both scopes. The sibling packages cannot be test_depends here (they
+exec_depend on pepper_slam), so their cases skip when the file is not in the
+workspace.
 """
 import math
 import os
+import re
 import xml.etree.ElementTree as ET
 
 import pytest
+import xacro
 import yaml
 
 PKG = os.path.normpath(os.path.join(os.path.dirname(__file__), '..'))
 SRC = os.path.normpath(os.path.join(PKG, '..', '..'))
-SENSOR_TF = os.path.join(PKG, 'data', 'sensor_tf.yaml')
-RIG_XACRO = os.path.join(PKG, 'urdf', 'sensor_rig.xacro')
-XACRO_NS = '{http://www.ros.org/wiki/xacro}'
+RIG_URDF = os.path.join(PKG, 'urdf', 'pepper_sensor_rig.urdf.xacro')
 
+BASE_FRAME = 'base_footprint'
 # The frame the L2 stamps /points with (l2lidar_node.yaml: cloud_frame), i.e.
 # the "lidar" side of every LIO extrinsic.
 LIDAR_FRAME = 'l2lidar_frame'
+# realsense2_camera publishes everything below this frame itself, from the
+# device; scope:=mount must leave exactly that subtree out.
+CAMERA_ROOT = 'camera_camera_link'
+
 LIO_CONFIGS = [
     'FAST_LIO/config/l2_rsimu.yaml',
     'point_lio/config/l2lidar_rsimu.yaml',
 ]
+SC_LAUNCH = 'fastlio_lc_pgo/launch/fastlio_lc_l2.launch.py'
 
-# The xacro holds the YAML's values verbatim (xyz) or converted to 9 decimals
-# (rpy). The LIO configs are rounded to 6 decimals.
-URDF_TRANS_TOL = 1e-6   # m
-URDF_ROT_TOL = 1e-4     # deg
+# The LIO configs and sc_lidar_height are rounded to 6 / 4 decimals.
 LIO_TOL = 1e-5          # m for T, unitless for R entries
-
-
-def _quat_to_matrix(q):
-    x, y, z, w = q
-    n = math.sqrt(x * x + y * y + z * z + w * w)
-    x, y, z, w = x / n, y / n, z / n, w / n
-    return [[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
-            [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
-            [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]]
+HEIGHT_TOL = 1e-4       # m
 
 
 def _rpy_to_matrix(rpy):
@@ -79,37 +74,37 @@ def _transpose(a):
     return [[a[j][i] for j in range(3)] for i in range(3)]
 
 
-def _angle_deg(a, b):
-    """Angle of the rotation taking a to b."""
-    trace = sum(a[i][j] * b[i][j] for i in range(3) for j in range(3))
-    return math.degrees(math.acos(max(-1.0, min(1.0, (trace - 1.0) / 2.0))))
-
-
-def _sensor_tf():
-    """{(parent, child): edge} from data/sensor_tf.yaml."""
-    with open(SENSOR_TF, encoding='utf-8') as f:
-        edges = yaml.safe_load(f)['transforms']
-    return {(e['parent'], e['child']): e for e in edges}
-
-
-def _xacro_joints():
-    """{(parent, child): (xyz, rpy, scope_all_only)} from the rig macro.
-
-    Parsed as plain XML rather than expanded by xacro, so it needs no
-    ament index; the origins are literal numbers, not ${} expressions.
-    """
-    root = ET.parse(RIG_XACRO).getroot()
-    guarded = set()
-    for block in root.iter(XACRO_NS + 'if'):
-        guarded.update(id(j) for j in block.iter('joint'))
+def _joints(scope):
+    """{(parent, child): (xyz, rpy)} from the expanded rig URDF."""
+    doc = xacro.process_file(RIG_URDF, mappings={'scope': scope})
+    root = ET.fromstring(doc.toxml())
     joints = {}
     for j in root.iter('joint'):
+        assert j.get('type') == 'fixed', 'rig joint %s is not fixed' % j.get('name')
         origin = j.find('origin')
         key = (j.find('parent').get('link'), j.find('child').get('link'))
-        joints[key] = ([float(v) for v in origin.get('xyz').split()],
-                       [float(v) for v in origin.get('rpy').split()],
-                       id(j) in guarded)
+        joints[key] = ([float(v) for v in origin.get('xyz', '0 0 0').split()],
+                       [float(v) for v in origin.get('rpy', '0 0 0').split()])
     return joints
+
+
+def _chain(joints, ancestor, frame):
+    """(R, t): pose of frame in ancestor, composed along the URDF joints."""
+    parent_of = {child: parent for (parent, child) in joints}
+    path, target = [], frame
+    while frame != ancestor:
+        assert frame in parent_of, (
+            "the rig URDF has no chain from '%s' down to '%s' (it stops at '%s')"
+            % (ancestor, target, frame))
+        path.append((parent_of[frame], frame))
+        frame = parent_of[frame]
+    rot = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+    trans = [0.0, 0.0, 0.0]
+    for key in reversed(path):
+        xyz, rpy = joints[key]
+        trans = [a + b for a, b in zip(trans, _matvec(rot, xyz))]
+        rot = _matmul(rot, _rpy_to_matrix(rpy))
+    return rot, trans
 
 
 def _find(node, key):
@@ -124,66 +119,34 @@ def _find(node, key):
     return None
 
 
-def _chain(edges, ancestor, frame):
-    """Pose of frame in ancestor, composed along the sensor_tf.yaml tree."""
-    parent_of = {child: parent for (parent, child) in edges}
-    path, target = [], frame
-    while frame != ancestor:
-        assert frame in parent_of, (
-            "sensor_tf.yaml has no chain from '%s' down to '%s' (it stops at '%s')"
-            % (ancestor, target, frame))
-        path.append((parent_of[frame], frame))
-        frame = parent_of[frame]
-    rot = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
-    trans = [0.0, 0.0, 0.0]
-    for key in reversed(path):
-        e = edges[key]
-        trans = [a + b for a, b in zip(trans, _matvec(rot, e['xyz']))]
-        rot = _matmul(rot, _quat_to_matrix(e['qxyzw']))
-    return rot, trans
+def _sibling(rel):
+    path = os.path.join(SRC, rel)
+    if not os.path.exists(path):
+        pytest.skip('not in this workspace: %s' % path)
+    return path
 
 
-def test_urdf_has_the_same_edges_as_sensor_tf():
-    edges, joints = _sensor_tf(), _xacro_joints()
-    assert set(joints) == set(edges), (
-        'sensor_rig.xacro and sensor_tf.yaml list different edges. Only in the '
-        'xacro: %s. Only in the YAML: %s.'
-        % (sorted(set(joints) - set(edges)), sorted(set(edges) - set(joints))))
-
-
-def test_urdf_origins_match_sensor_tf():
-    edges, joints = _sensor_tf(), _xacro_joints()
-    for key in sorted(set(edges) & set(joints)):
-        xyz, rpy, _ = joints[key]
-        want = edges[key]
-        dt = max(abs(a - b) for a, b in zip(xyz, want['xyz']))
-        da = _angle_deg(_rpy_to_matrix(rpy), _quat_to_matrix(want['qxyzw']))
-        assert dt <= URDF_TRANS_TOL and da <= URDF_ROT_TOL, (
-            '%s -> %s: sensor_rig.xacro is %.4f mm / %.5f deg away from '
-            'sensor_tf.yaml. With publisher:=urdf (the default) the robot '
-            'publishes the xacro value; update its <origin> from the YAML.'
-            % (key[0], key[1], dt * 1000.0, da))
-
-
-def test_urdf_scope_guard_matches_driver_ownership():
-    # scope:=mount drops the owner:driver edges in static_tf_publisher; the
-    # xacro does the same with <xacro:if value="${scope == 'all'}">. If the
-    # two sets differ, publisher:=urdf and publisher:=yaml publish different
-    # trees for the same scope.
-    edges, joints = _sensor_tf(), _xacro_joints()
-    driver = {k for k, e in edges.items() if e.get('owner') == 'driver'}
-    guarded = {k for k, j in joints.items() if j[2]}
-    assert guarded == driver, (
-        "Edges only the xacro's scope=='all' block publishes: %s. Edges "
-        'sensor_tf.yaml tags owner: driver: %s.' % (sorted(guarded), sorted(driver)))
+def test_mount_scope_leaves_out_exactly_the_driver_subtree():
+    # Live, realsense2_camera publishes every edge below camera_camera_link
+    # from the device. If scope:=mount also published one, that edge would have
+    # two /tf_static publishers and whichever lands last silently wins; if it
+    # dropped a rig edge, the tree would not close on bag replay.
+    full, mount = _joints('all'), _joints('mount')
+    assert set(mount) <= set(full)
+    below = {CAMERA_ROOT}
+    for _ in full:
+        below |= {c for (p, c) in full if p in below}
+    driver = {(p, c) for (p, c) in full if p in below}
+    assert set(full) - set(mount) == driver, (
+        'scope:=mount should drop exactly the edges below %s.\n  dropped: %s\n'
+        '  below %s: %s' % (CAMERA_ROOT, sorted(set(full) - set(mount)),
+                            CAMERA_ROOT, sorted(driver)))
+    assert mount, 'scope:=mount publishes nothing'
 
 
 @pytest.mark.parametrize('config_rel', LIO_CONFIGS)
-def test_lio_extrinsic_matches_sensor_tf(config_rel):
-    config_path = os.path.join(SRC, config_rel)
-    if not os.path.exists(config_path):
-        pytest.skip('not in this workspace: %s' % config_path)
-    with open(config_path, encoding='utf-8') as f:
+def test_lio_extrinsic_matches_urdf(config_rel):
+    with open(_sibling(config_rel), encoding='utf-8') as f:
         doc = yaml.safe_load(f)
     body_frame = _find(doc, 'body_frame')
     ext_t, ext_r = _find(doc, 'extrinsic_T'), _find(doc, 'extrinsic_R')
@@ -191,8 +154,9 @@ def test_lio_extrinsic_matches_sensor_tf(config_rel):
         '%s: no publish.body_frame / extrinsic_T / extrinsic_R' % config_rel)
 
     # The config's convention: p_body = extrinsic_R * p_lidar + extrinsic_T,
-    # the inverse of the body frame's pose in the lidar frame.
-    rot, trans = _chain(_sensor_tf(), LIDAR_FRAME, body_frame)
+    # the inverse of the body frame's pose in the lidar frame. scope 'all':
+    # the body frame is the camera IMU, below the driver-owned subtree.
+    rot, trans = _chain(_joints('all'), LIDAR_FRAME, body_frame)
     want_r = _transpose(rot)
     want_t = [-v for v in _matvec(want_r, trans)]
     got_r = [ext_r[3 * i:3 * i + 3] for i in range(3)]
@@ -200,9 +164,21 @@ def test_lio_extrinsic_matches_sensor_tf(config_rel):
     err_t = max(abs(a - b) for a, b in zip(ext_t, want_t))
     err_r = max(abs(got_r[i][j] - want_r[i][j]) for i in range(3) for j in range(3))
     assert err_t <= LIO_TOL and err_r <= LIO_TOL, (
-        '%s: the %s -> %s extrinsic is off from sensor_tf.yaml by %.4f mm in T '
-        'and %.2e in R. Recompose it from the YAML.\n  extrinsic_T: %s\n'
-        '  extrinsic_R: %s'
+        '%s: the %s -> %s extrinsic is off from the rig URDF by %.4f mm in T '
+        'and %.2e in R. Recompose it from urdf/sensor_rig.xacro.\n'
+        '  extrinsic_T: %s\n  extrinsic_R: %s'
         % (config_rel, LIDAR_FRAME, body_frame, err_t * 1000.0, err_r,
            ['%.6f' % v for v in want_t],
            ['%.6f' % v for row in want_r for v in row]))
+
+
+def test_scan_context_height_matches_urdf():
+    with open(_sibling(SC_LAUNCH), encoding='utf-8') as f:
+        found = re.findall(r"'sc_lidar_height':\s*([-0-9.eE+]+)", f.read())
+    assert len(found) == 1, '%s: expected one sc_lidar_height, found %d' % (
+        SC_LAUNCH, len(found))
+    _, trans = _chain(_joints('mount'), BASE_FRAME, LIDAR_FRAME)
+    got = float(found[0])
+    assert abs(got - trans[2]) <= HEIGHT_TOL, (
+        '%s: sc_lidar_height is %.4f m, but the rig URDF puts %s at z = %.4f m '
+        'in %s.' % (SC_LAUNCH, got, LIDAR_FRAME, trans[2], BASE_FRAME))

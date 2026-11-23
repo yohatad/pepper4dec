@@ -67,7 +67,7 @@ def generate_launch_description():
             description='Run FAST-LIO for map -> base_footprint. Only '
                         'base_shift_correction:=true needs a pose.'),
         DeclareLaunchArgument(
-            'sensor_tf', default_value='urdf', choices=['urdf', 'yaml', 'none'],
+            'sensor_tf', default_value='urdf', choices=['urdf', 'none'],
             description="'none' for a bag whose /tf_static already holds the rig."),
         DeclareLaunchArgument('out_prefix', default_value='/tmp/cm_bag'),
         DeclareLaunchArgument('map_dir', default_value=os.path.join(nav, 'pcd')),

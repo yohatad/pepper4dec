@@ -153,7 +153,7 @@ def generate_launch_description():
     # /tf_static is skipped by --start-offset). Set sensor_tf:=none if playing
     # from the START, to avoid both publishing the same edges.
     declare_sensor_tf_cmd = DeclareLaunchArgument(
-        'sensor_tf', default_value='urdf', choices=['urdf', 'yaml', 'none'],
+        'sensor_tf', default_value='urdf', choices=['urdf', 'none'],
         description="Publish the sensor rig. 'urdf' also gives RViz a "
                     "RobotModel; 'none' if the bag already provides /tf_static.")
     declare_sensor_tf_scope_cmd = DeclareLaunchArgument(

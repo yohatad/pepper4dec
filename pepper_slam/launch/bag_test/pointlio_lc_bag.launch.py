@@ -57,8 +57,8 @@ def generate_launch_description():
     declare_publisher_cmd = DeclareLaunchArgument(
         'publisher', default_value='urdf',
         description="pepper_sensor_tf publisher: 'urdf' (default) publishes the "
-                    "rig and gives RViz a RobotModel; 'yaml' the same geometry "
-                    "without the model; 'none' relies on the bag's /tf_static.")
+                    "rig and gives RViz a RobotModel; 'none' relies on the "
+                    "bag's /tf_static.")
     # 'all', not 'mount'. The bag DOES carry these edges -- but all of its
     # /tf_static messages sit at t=0.000 s, so `ros2 bag play --start-offset N`
     # skips them entirely and nothing publishes the rig. base_footprint and
@@ -67,7 +67,7 @@ def generate_launch_description():
     #
     # Publishing them here regardless is safe: MEASURED against this bag's own
     # /tf_static, the two agree to 4.8e-7 over all 10 shared edges (float32
-    # rounding), because both derive from data/sensor_tf.yaml. Duplicate
+    # rounding), because both come from the same rig calibration. Duplicate
     # publishers of IDENTICAL geometry are redundant, not harmful.
     #
     # Live is the opposite case and wants 'mount': there the RealSense driver

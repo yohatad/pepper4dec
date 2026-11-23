@@ -30,8 +30,9 @@ All clouds are published already in base_footprint, so RViz needs no TF.
 
 TF: base_footprint <- l2lidar_frame comes from pepper_slam's
 pepper_sensor_tf.launch.py. When it is not running, this node falls back to
-sensor_tf.yaml and says so in the verdict -- the real collision monitor
-would IGNORE every cloud in that state (no STOP at all).
+the rig URDF (the same xacro that launch file publishes) and says so in the
+verdict -- the real collision monitor would IGNORE every cloud in that state
+(no STOP at all).
 
     ros2 launch pepper_navigation safety_cut_viz.launch.py
 
@@ -54,6 +55,7 @@ import sensor_msgs_py.point_cloud2 as pc2
 from std_msgs.msg import ColorRGBA
 import tf2_ros
 from visualization_msgs.msg import Marker, MarkerArray
+import xacro
 import yaml
 
 CLASSES = {  # name: rgb, in the order the stages remove points
@@ -98,13 +100,13 @@ class SafetyCutViz(Node):
              'min_range': 0.12, 'self_cut_range': 0.30, 'self_cut_angle': 25.0,
              'body_boxes': [0.10, 0.22, -0.13, 0.13, 0.30, 1.00],
              'params_file': os.path.join(nav, 'config', 'nav2_params_fastloc.yaml'),
-             'transforms_file': os.path.join(slam, 'data', 'sensor_tf.yaml'),
+             'urdf_file': os.path.join(slam, 'urdf', 'pepper_sensor_rig.urdf.xacro'),
              'robot_radius': 0.25}
         for k, v in p.items():
             self.declare_parameter(k, v)
         self.p = {k: self.get_parameter(k).value for k in p}
         self.load_monitor(self.p['params_file'])
-        self.yaml_tf = self.load_rig(self.p['transforms_file'])
+        self.rig_tf = self.load_rig(self.p['urdf_file'])
         self.add_on_set_parameters_callback(self.on_params)
 
         self.tf = tf2_ros.Buffer()
@@ -140,16 +142,19 @@ class SafetyCutViz(Node):
                                    'poly': list(zip(pts[0::2], pts[1::2]))})
 
     def load_rig(self, path):
-        """Return {child: 4x4} for the base_frame edges in sensor_tf.yaml."""
-        with open(os.path.expanduser(path), encoding='utf-8') as f:
-            edges = yaml.safe_load(f)['transforms']
+        """Return {child: 4x4} for the base_frame joints in the rig URDF."""
+        doc = xacro.process_file(os.path.expanduser(path), mappings={'scope': 'mount'})
         out = {}
-        for e in edges:
-            if e['parent'] == self.p['base_frame']:
-                m = np.eye(4)
-                m[:3, :3] = Rotation.from_quat(e['qxyzw']).as_matrix()
-                m[:3, 3] = e['xyz']
-                out[e['child']] = m
+        for j in doc.getElementsByTagName('joint'):
+            if j.getElementsByTagName('parent')[0].getAttribute('link') != self.p['base_frame']:
+                continue
+            origin = j.getElementsByTagName('origin')[0]
+            m = np.eye(4)
+            # URDF rpy is fixed-axis x, y, z: scipy's lowercase 'xyz'.
+            m[:3, :3] = Rotation.from_euler(
+                'xyz', [float(v) for v in origin.getAttribute('rpy').split()]).as_matrix()
+            m[:3, 3] = [float(v) for v in origin.getAttribute('xyz').split()]
+            out[j.getElementsByTagName('child')[0].getAttribute('link')] = m
         return out
 
     def on_params(self, params):
@@ -171,12 +176,12 @@ class SafetyCutViz(Node):
         return [b[i:i + 6] for i in range(0, len(b), 6)]
 
     def sensor_to_base(self, frame):
-        """(4x4, source) for base_frame <- frame: live TF, else sensor_tf.yaml."""
+        """(4x4, source) for base_frame <- frame: live TF, else the rig URDF."""
         try:
             t = self.tf.lookup_transform(self.p['base_frame'], frame, rclpy.time.Time())
         except tf2_ros.TransformException:
-            if frame in self.yaml_tf:
-                return self.yaml_tf[frame], 'yaml'
+            if frame in self.rig_tf:
+                return self.rig_tf[frame], 'urdf'
             return None, None
         q, tr = t.transform.rotation, t.transform.translation
         m = np.eye(4)
@@ -306,7 +311,7 @@ class SafetyCutViz(Node):
         mk.scale.z = 0.08
         poly_txt = '  '.join(f'{k} {v}' for k, v in counts.items())
         tf_txt = ('' if source == 'tf' else
-                  '\nNO RIG TF (sensor_tf.yaml used): the real monitor ignores this cloud')
+                  '\nNO RIG TF (rig URDF used): the real monitor ignores this cloud')
         mk.text = (f'{verdict}   ({poly_txt}; > max_points triggers)\n'
                    f"cut: min_range {n['min_range']}  self_cut {n['self_cut']}  "
                    f"body_box {n['body_box']}  height {n['height']}{tf_txt}")

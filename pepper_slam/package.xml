@@ -12,9 +12,8 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <!-- The C++ nodes in src/: cloud_range_filter and wheel_odom_tf. tf2_ros
-       also serves pepper_sensor_tf, which republishes the rig extrinsics
-       missing from bag /tf_static. -->
+  <!-- The C++ nodes in src/: cloud_range_filter, wheel_odom_tf and the two
+       bridges. The rig's static TF is robot_state_publisher's (below). -->
   <depend>rclcpp</depend>
   <depend>sensor_msgs</depend>
   <depend>nav_msgs</depend>
@@ -22,7 +21,6 @@
   <depend>builtin_interfaces</depend>
   <depend>tf2</depend>
   <depend>tf2_ros</depend>
-  <depend>yaml-cpp</depend>
   <depend>std_msgs</depend>
   <depend>diagnostic_msgs</depend>
 

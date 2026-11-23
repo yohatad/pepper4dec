@@ -12,10 +12,40 @@
   claiming it as a child. See pepper_sensor_rig.urdf.xacro for why that
   matters.
 
-  TRANSFORMS come from data/sensor_tf.yaml, which stays the calibration
-  source of truth. The rpy values here are its quaternions converted (verified
-  lossless, worst round trip 0.0 deg over all 10 joints). Change geometry
-  there, not here.
+  TRANSFORMS: this file is the rig's calibration source of truth, and
+  pepper_sensor_tf.launch.py publishes it through robot_state_publisher.
+  Three other files hold derived copies, which test/test_rig_consistency.py
+  checks against the joints here. After changing a joint, update them too:
+    FAST_LIO/config/l2_rsimu.yaml         extrinsic_R / extrinsic_T
+    point_lio/config/l2lidar_rsimu.yaml   extrinsic_R / extrinsic_T
+    fastlio_lc_pgo/launch/fastlio_lc_l2.launch.py   sc_lidar_height
+  The two measured edges also keep their quaternion in a comment: that is
+  the form the calibration produced, and rpy is only its URDF spelling.
+
+  CALIBRATION, l2lidar_frame -> camera_camera_link (the one edge that is
+  ours to get right):
+    TRANSLATION  tape measure, 2026-08-04: L2 mounting plate centre to the
+      RealSense BACK face, X +0.62 mm, Y 0, Z +50.85 mm. The xyz below is
+      that offset to camera_camera_link, which is NOT a surface (it sits
+      4.3 mm behind the front plate, per realsense2_description's
+      _d435.urdf.xacro). Re-derive from the plate; do not re-measure to this
+      point directly.
+    ROTATION  measured 2026-08-06 by utils/plane_calib.py against
+      bag/corner_pose1: three planes segmented in both clouds, Kabsch on the
+      matched normals, mean of 4 reruns spreading 0.44 deg. Only the rotation
+      was taken: the same runs scattered up to 25 mm in translation, so they
+      cannot improve on a direct measurement.
+    UNVERIFIED  no calibration agrees with the translation (closest 13.9 mm,
+      rest 20-61 mm), and Y=0 is inferred rather than measured. A
+      target-based calibration would settle all six DOF at once; NID-based
+      direct registration cannot (the L2 panorama is ~77% empty toward the
+      camera).
+    Calibrate against a manufactured-flat board, not a painted wall: a wall
+      sagging 89 mm over 4 m is not a plane, and RANSAC locks onto a
+      different fragment every run.
+  The RealSense-internal edges (scope=all only) were recovered from
+  bags/lidar_cam_calib2: most bags recorded /tf_static with ZERO messages,
+  so the device's own extrinsics were never captured otherwise.
 
   VISUALS are the vendors' own CAD, referenced across packages - nothing is
   copied into pepper_slam. They exist so a wrong mount is obvious in RViz, not
@@ -45,6 +75,8 @@
     <joint name="base_footprint__to__l2lidar_frame" type="fixed">
       <parent link="base_footprint"/>
       <child  link="l2lidar_frame"/>
+      <!-- The mount. Quaternion qxyzw [0.69313, -0.147438, 0.690138, -0.14677].
+           z 0.2582 is also fastlio_lc_pgo's sc_lidar_height. -->
       <origin xyz="0.133 0.0 0.2582" rpy="-1.581448566 -1.151639968 -1.561109916"/>
     </joint>
     <!-- Intel's own D435 mesh, shipped with realsense2_description. Declares
@@ -69,12 +101,8 @@
     <joint name="l2lidar_frame__to__camera_camera_link" type="fixed">
       <parent link="l2lidar_frame"/>
       <child  link="camera_camera_link"/>
-      <!-- KEEP IN SYNC WITH data/sensor_tf.yaml. This is the same physical
-           transform expressed twice: the YAML publishes it to /tf_static, this
-           joint only positions the meshes for visualisation. They drifted once
-           already (rotation measured 2026-08-06 and updated in the YAML while
-           this still held the old inherited value), so a rig view can silently
-           show geometry the robot is not using. Equivalent quaternion:
+      <!-- The camera mount; see CALIBRATION in the header. Rotation measured
+           2026-08-06, translation from the tape measure. Quaternion:
            qxyzw [0.674794, -0.166617, 0.703353, 0.148951] -->
       <origin xyz="0.038541 -0.036473 0.021032" rpy="-0.779068046 -1.523300726 -2.812723308"/>
     </joint>

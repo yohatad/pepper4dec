@@ -8,8 +8,8 @@
 # That race is why bags/slam_recording, slam_recording2 and slam_bench_run1..3
 # all contain ZERO /tf_static messages, while lidar_cam_calib* (started before
 # the publishers) contain 4. Without them nothing downstream can relate the
-# camera to the lidar, which is the entire reason data/sensor_tf.yaml had to
-# republish the rig by hand.
+# camera to the lidar, which is the entire reason pepper_sensor_tf.launch.py
+# has scope:=all, to republish the whole rig for those bags.
 #
 # Subscribing transient_local makes the recorder receive the already-latched
 # message regardless of start order, so the race disappears.

@@ -165,11 +165,10 @@ def generate_launch_description():
             description='Build the RealSense cloud from the recorded depth+colour '
                         'images. false for a bag that records the cloud itself.'),
         DeclareLaunchArgument(
-            'sensor_tf', default_value='urdf', choices=['urdf', 'yaml', 'none'],
+            'sensor_tf', default_value='urdf', choices=['urdf', 'none'],
             description="Sensor rig TF. 'urdf' also publishes the rig's model on "
                         '/sensor_rig/robot_description, which RViz draws at the '
-                        "lidar; 'yaml' publishes the same transforms without a "
-                        "model; 'none' for a bag whose /tf_static already holds "
+                        "lidar; 'none' for a bag whose /tf_static already holds "
                         'the rig.'),
         DeclareLaunchArgument(
             'map', default_value=os.path.join(nav, 'map', 'pepper_map_lc.yaml')),

@@ -25,9 +25,10 @@ Configuration:
 
 Prerequisites:
     A RealSense device on USB. The l2lidar_frame -> camera_camera_link static
-    transform is NOT published here — it lives in pepper_slam/config/
-    sensor_tf.yaml so there is exactly one owner, since two publishers of a
-    latched /tf_static edge means whichever lands last silently wins.
+    transform is NOT published here: it lives in pepper_slam's rig URDF
+    (urdf/sensor_rig.xacro) so there is exactly one owner, since two
+    publishers of a latched /tf_static edge means whichever lands last
+    silently wins.
 
 Usage:
     ros2 launch dec_launch realsense_bottom.launch.py
@@ -51,7 +52,7 @@ from launch_ros.substitutions import FindPackageShare
 
 
 # The l2lidar_frame -> camera_camera_link static transform used to be published
-# here. It now lives in pepper_slam/data/sensor_tf.yaml, so there is exactly
+# here. It now lives in pepper_slam/urdf/sensor_rig.xacro, so there is exactly
 # one owner; two publishers of a latched /tf_static edge means whichever lands
 # last silently wins.
 #
@@ -65,7 +66,7 @@ from launch_ros.substitutions import FindPackageShare
 #     L2 mounting-plate centre -> camera BACK-face centre, base_footprint axes
 #     X +0.62 mm   Y 0.00 mm   Z +50.85 mm
 # so is its rotation into l2lidar_frame ([0.04644, -0.02069, 0.00040]) -- the
-# value now in sensor_tf.yaml reproduces that to 0.01 mm. What was wrong was
+# value now in sensor_rig.xacro reproduces that to 0.01 mm. What was wrong was
 # publishing that as camera_camera_link directly, without Intel's 21.5 mm
 # internal offset; the numbers it actually published were a CAD value that did
 # not match its own comment either.
