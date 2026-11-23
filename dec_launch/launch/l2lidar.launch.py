@@ -13,8 +13,10 @@ Topics published (by the driver):
     /points     sensor_msgs/PointCloud2, ~11 Hz  (aggregateNframes: 19)
     /imu/data   sensor_msgs/Imu
     /tf_static  l2lidar_frame -> l2lidar_frame_imu (the L2's intrinsic IMU
-                offset; the driver owns this edge, and pepper_slam's
-                sensor_tf.yaml tags it owner:driver so it is not republished)
+                offset). pepper_slam's sensor_tf.yaml publishes this edge
+                too, on purpose: bag replay runs no driver and the LIO
+                bridge needs it. Both carry the same Unitree spec value, so
+                the duplicate is harmless.
 
     BOTH TOPICS ARE PUBLISHED BEST_EFFORT (rclcpp::SensorDataQoS,
     l2lidar_node.cpp:357,360). A subscriber that asks for RELIABLE will not
@@ -27,9 +29,9 @@ Topics published (by the driver):
     which is the only warning you get; the subscribing node stays silent.
     FAST-LIO, Point-LIO, FAST-LIVO2 and kiss-icp all subscribe BEST_EFFORT, and
     the RViz configs are set to Best Effort.
-    `ros2 bag record` defaults to RELIABLE, so pass
-    `--qos-profile-overrides-path` (pepper_slam/data/record_qos.yaml) when
-    recording these topics.
+    `ros2 bag record` needs no override for them: it adapts its subscription
+    to each publisher's offered reliability. pepper_slam/data/record_qos.yaml
+    is for /tf_static only.
 
 Launch arguments:
     params_file (default: l2lidar_node/config/l2lidar_node.yaml)

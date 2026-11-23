@@ -10,10 +10,10 @@ Usage:
   ros2 bag play <bag> --clock \
     --read-ahead-queue-size 2000
 
-The QoS overrides are REQUIRED: /imu/data and /camera/imu were recorded
-BEST_EFFORT, so without them the estimator waits forever for IMU init and
-prints nothing. Replaying /tf is safe and wanted. README.md in this directory
-has both in full, plus the pre-8edd1f5 bags that need a check first.
+No QoS overrides are needed: the sensor topics replay BEST_EFFORT, as
+recorded, and Point-LIO subscribes with SensorDataQoS. Replaying /tf is safe
+and wanted. "Bag replay" in the package README has both in full, plus the
+older bags whose /tf needs a check first.
 
 Point-LIO variant of fastlio_lc_bag.launch.py; same /pgo_batch_optimize step
 applies.

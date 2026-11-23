@@ -84,7 +84,7 @@ ros2 run dec_launch lidar_colorizer.py          # colours /points from the RealS
 ros2 run dec_launch depth_roi_service.py        # serves get_depth_roi (dec_interfaces/srv/GetDepthROI)
 ```
 
-**The L2 publishes `/points` and `/imu/data` BEST_EFFORT.** A subscriber that asks for RELIABLE receives nothing, and only the driver logs a warning. `ros2 bag record` defaults to RELIABLE, so record with `--qos-profile-overrides-path` (see the `pepper_slam` README).
+**The L2 publishes `/points` and `/imu/data` BEST_EFFORT.** A subscriber that asks for RELIABLE receives nothing, and only the driver logs a warning. `ros2 bag record` adapts to the publisher's reliability, so these topics record without an override; the one override recording needs is for `/tf_static` (see "Recording bags" in the `pepper_slam` README).
 
 ## 🖥️ ROS Interface
 
