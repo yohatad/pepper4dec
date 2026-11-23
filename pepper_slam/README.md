@@ -156,9 +156,10 @@ ros2 bag play <bag> --clock --read-ahead-queue-size 2000
 - **Replay `/tf`:** it carries Pepper's body chain, including the head-camera
   frames. Older bags may also carry a wheel-odometry `odom -> base_footprint`
   edge that fights the bridge; check with `view_frames` before trusting one.
-- **Rig transforms:** every wrapper defaults `publisher:=none`, which suits
-  bags recorded with `record_qos.yaml`. For `slam_recording*` and
-  `slam_bench_run*` (no `/tf_static`), pass `publisher:=urdf scope:=all`.
+- **Rig transforms:** every wrapper defaults `publisher:=urdf scope:=all`
+  and republishes the whole rig, so any bag replays, with or without
+  `/tf_static`. A bag's own copy sits at t=0, so `--start-offset` skips it.
+  Pass `publisher:=none` only to replay a bag's recorded rig, from the start.
 - **IMU:** the wrappers use the RealSense IMU, and that is now the only
   option: `l2.yaml`, which drove the estimator from the L2's own IMU, was
   removed after it diverged on `slam_20260823_aligned` (map overlap 1.00 ->

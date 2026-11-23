@@ -50,10 +50,11 @@ def generate_launch_description():
         description='Where PGO writes its outputs.')
     declare_rviz_cmd = DeclareLaunchArgument('rviz', default_value='true')
 
-    # 'none': the bag carries its own /tf_static, and a second latched publisher
-    # duplicates the rig edges -- whichever lands last silently wins. Keep it
+    # 'urdf' with scope 'all' (below): the whole rig is republished even when
+    # the bag carries it, because --start-offset skips the bag's copy. Pass
+    # 'none' to replay a bag's own /tf_static from the start instead. Keep it
     # DECLARED, not forwarded, or a launch_arguments entry shadows the command
-    # line and makes publisher:=urdf a silent no-op.
+    # line and makes publisher:=none a silent no-op.
     declare_publisher_cmd = DeclareLaunchArgument(
         'publisher', default_value='urdf',
         description="pepper_sensor_tf publisher: 'urdf' (default) publishes the "
