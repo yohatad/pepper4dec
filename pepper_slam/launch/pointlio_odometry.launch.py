@@ -6,14 +6,15 @@ The Point-LIO twin of fastlio_odometry.launch.py; see that file for why this is
 odometry and not SLAM, and use fastlio_lc_pgo's pointlio_lc_l2.launch.py for a
 loop-corrected map.
 
-It exists for the same reason: point_lio's mapping_l2lidar_node.launch.py runs
-lio_odom_bridge itself but never includes pepper_sensor_tf.launch.py, so
-launched alone it hangs waiting for a transform that never appears.
+It exists for the same reason: point_lio's mapping_l2lidar_node.launch.py
+starts the odom bridge (through this package's lio_odom_bridge.launch.py) but
+never includes pepper_sensor_tf.launch.py, so launched alone it hangs waiting
+for a transform that never appears.
 
 Launch files included:
     pepper_sensor_tf.launch.py — the rig's static TF.
-    point_lio/mapping_l2lidar_node.launch.py — the estimator, which runs the
-        odom bridge itself.
+    point_lio/mapping_l2lidar_node.launch.py — the estimator, which includes
+        lio_odom_bridge.launch.py for the odom bridge.
 
 Nodes started:
     tf2_ros/static_transform_publisher (node: map_odom_identity)

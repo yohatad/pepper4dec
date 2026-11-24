@@ -37,8 +37,12 @@ looks plausible and is wrong. lidar_imu_frame names it explicitly, which makes
 the two impossible to desync.
 
 Usage:
-    Included by fastlio_odometry.launch.py, pointlio_odometry.launch.py, and
-    the Nav2 profiles rather than launched directly.
+    Included rather than launched directly: by fastlio_odometry.launch.py,
+    fastlio_lc_pgo's fastlio_lc_l2.launch.py and point_lio's
+    mapping_l2lidar_node.launch.py, which pointlio_odometry.launch.py,
+    pointlio_lc_l2.launch.py and pointlio_localization_l2.launch.py reach it
+    through, and by the Nav2 profiles that run on LIO odometry. Every LIO
+    bridge in the workspace starts here.
 
 The node's behavior is documented in src/lio_odom_bridge.cpp.
 
