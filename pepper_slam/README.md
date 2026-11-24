@@ -226,7 +226,7 @@ pepper_slam/
 │   └── bag_test/                       # bag-replay wrappers (see Bag replay)
 ├── rviz/                               # configs for the mapping, replay and rig-view launches
 ├── src/                                # one executable per node
-│   ├── cloud_range_filter.cpp          # range / outlier / ground filters; feeds Nav2's /points_safety and /points_costmap
+│   ├── cloud_range_filter.cpp          # range / outlier / ground filters; feeds Nav2's /points_safety and /points_costmap, and octomap's grid while mapping
 │   ├── lio_odom_bridge.cpp             # odom -> base_footprint from the LIO pose; levels lio_init once
 │   ├── pgo_map_odom_bridge.cpp         # map -> odom from a pose-graph-optimized trajectory
 │   ├── wheel_odom_tf.cpp               # odom -> base_footprint from /pepper_odom, for the loc stacks

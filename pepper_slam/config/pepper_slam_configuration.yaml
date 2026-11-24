@@ -8,12 +8,14 @@
 # Not here, on purpose: lidar_imu_frame, for both bridges. It MUST equal the
 # estimator config's publish.body_frame, or odom -> base_footprint (or the
 # whole map) comes out composed through the wrong mount with no error anywhere,
-# so the launch files read it from that config.
+# so it stays with the launch files, which all default it to
+# camera_imu_optical_frame (what both RealSense-IMU configs name). An L2-IMU
+# run must pass lidar_imu_frame:=l2lidar_frame_imu.
 #
-# Loaded by: lio_odom_bridge.launch.py (and point_lio's mapping launch),
-# fastlio_lc_pgo's *_lc_l2.launch.py (pgo_map_odom_bridge), and the
-# pepper_navigation Nav2 profiles (the two cloud_range_filter instances and
-# wheel_odom_tf).
+# Loaded by: lio_odom_bridge.launch.py (every LIO bridge, FAST-LIO and
+# Point-LIO), fastlio_lc_pgo's *_lc_l2.launch.py (pgo_map_odom_bridge and
+# octomap_cloud_filter), and the pepper_navigation Nav2 profiles (the two
+# Nav2 cloud_range_filter instances and wheel_odom_tf).
 
 # =============================================================================
 # lio_odom_bridge: the estimator's odometry -> levelled odom ->
@@ -85,7 +87,7 @@ pgo_map_odom_bridge:
     odom_buffer_size: 1000           # recent odometry samples kept
 
 # =============================================================================
-# cloud_range_filter: two instances, one section each
+# cloud_range_filter: three instances, one section each
 # =============================================================================
 
 # The L2 cloud for the collision monitor (/points_safety). Every Nav2 profile
@@ -134,6 +136,24 @@ points_costmap_filter:
     ground_z_thresh: 0.20            # m; only points below this can be ground
     ground_ransac_iterations: 300
     ground_min_points: 30
+
+# The per-scan registered cloud for octomap's 2D grid (/projected_map) while
+# mapping (fastlio_lc_pgo's *_lc_l2.launch.py, occupancy:=true). Only octomap
+# reads the output; SLAM is untouched. The launch arguments self_hit_range,
+# ror_min_neighbors and ror_radius override these for one run.
+octomap_cloud_filter:
+  ros__parameters:
+    input_topic: "/cloud_registered_body"
+    output_topic: "/cloud_registered_body_filtered"
+    # The low lidar sees Pepper itself; those self-hits print as a black trail
+    # along the path in the grid.
+    min_range: 0.8                   # m from the lidar
+    max_range: 0.0                   # m; 0 = no upper limit
+    # Radius outlier removal for the isolated single-shot specks in the grid.
+    # Keep the radius large: the per-scan cloud is sparse, and a small one
+    # deletes real far returns. It does not remove clearing-ray spokes.
+    ror_min_neighbors: 0             # 0 = off
+    ror_radius: 0.5                  # m
 
 # =============================================================================
 # wheel_odom_tf: /pepper_odom -> odom -> base_footprint, for the localizers'
