@@ -36,6 +36,7 @@ import time
 import numpy as np
 import os
 import onnxruntime
+import rclpy
 import threading
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
@@ -359,6 +360,9 @@ class SpeechRecognitionNode(LifecycleNode):
         self.action_goal_complete = threading.Event()
         self.speech_detected_event = threading.Event()
         self._current_goal_handle = None
+        # Set when a goal starts; the audio thread then drops any segment that
+        # began before the goal (e.g. the tail of the robot's own speech).
+        self._drop_stale_segment = False
         self.asr_action_server = None
         self._action_cb_group = MutuallyExclusiveCallbackGroup()
         self._audio_cb_group = MutuallyExclusiveCallbackGroup()
@@ -497,9 +501,12 @@ class SpeechRecognitionNode(LifecycleNode):
 
             self.action_started = True
             self._current_goal_handle = goal_handle
-
-        self.speech_detected_event.clear()
-        self.action_goal_complete.clear()
+            # Clear the events before raising the drop flag, under the lock,
+            # so a speech START the audio thread records after dropping the
+            # stale segment cannot be wiped by a later clear().
+            self.speech_detected_event.clear()
+            self.action_goal_complete.clear()
+            self._drop_stale_segment = True
 
         self.get_logger().info(
             f"ASR Action Goal received. Waiting up to "
@@ -520,6 +527,12 @@ class SpeechRecognitionNode(LifecycleNode):
         speech_started = False
 
         while time.monotonic() < onset_deadline:
+            if not rclpy.ok(context=self.context):
+                # Ctrl+C: return now so this executor thread does not hold
+                # up process exit for the rest of the wait window.
+                cleanup()
+                return SpeechRecognition.Result()
+
             if goal_handle.is_cancel_requested:
                 self.get_logger().info("Goal cancelled while waiting for speech.")
                 cleanup()
@@ -545,6 +558,10 @@ class SpeechRecognitionNode(LifecycleNode):
         completed = False
 
         while time.monotonic() < transcription_deadline:
+            if not rclpy.ok(context=self.context):
+                cleanup()
+                return SpeechRecognition.Result()
+
             if goal_handle.is_cancel_requested:
                 self.get_logger().info("Goal cancelled during transcription.")
                 cleanup()
@@ -721,6 +738,20 @@ class SpeechRecognitionNode(LifecycleNode):
         Process a single 512-sample VAD chunk through the state machine.
         Works for both action server mode and standalone topic mode.
         """
+        with self.action_server_lock:
+            drop_stale = self._drop_stale_segment
+            self._drop_stale_segment = False
+        if drop_stale:
+            # A new goal started. Audio collected before it (typically the
+            # robot finishing its own sentence, or its echo) must not be
+            # transcribed as the visitor's speech, so discard the segment and
+            # the VAD's recurrent state and start detection afresh.
+            if self.speech_active:
+                self._vlog("VAD: dropping segment that started before the goal")
+                self.speech_active = False
+                self.reset_speech_state()
+            self.reset_vad_state()
+
         speech_prob = self.run_silero_vad(vad_chunk)
 
         prob_msg = Float32()
