@@ -30,8 +30,7 @@ Topics published (by the driver):
     FAST-LIO, Point-LIO, FAST-LIVO2 and kiss-icp all subscribe BEST_EFFORT, and
     the RViz configs are set to Best Effort.
     `ros2 bag record` needs no override for them: it adapts its subscription
-    to each publisher's offered reliability. pepper_slam/data/record_qos.yaml
-    is for /tf_static only.
+    to each publisher's offered reliability (and, for /tf_static, durability).
 
 Launch arguments:
     params_file (default: l2lidar_node/config/l2lidar_node.yaml)

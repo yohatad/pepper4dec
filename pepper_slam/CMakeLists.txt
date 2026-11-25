@@ -95,7 +95,7 @@ install(TARGETS ${NODES}
 # *.urdf.xacro descriptions and the shared sensor_rig.xacro macro they include
 # both resolve at launch.
 install(DIRECTORY
-  launch config data urdf rviz
+  launch config urdf rviz
   DESTINATION share/${PROJECT_NAME}
   PATTERN "__pycache__" EXCLUDE
 )

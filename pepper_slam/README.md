@@ -121,17 +121,16 @@ when replaying a bag with `--clock`.
 
 ### Recording bags
 
-**Record `/tf_static` with the QoS override, or you will lose it:**
-
 ```bash
-ros2 bag record -a \
-  --qos-profile-overrides-path $(ros2 pkg prefix --share pepper_slam)/data/record_qos.yaml \
-  -o my_bag
+ros2 bag record -a -o my_bag
 ```
 
-`/tf_static` is published once and latched, and the recorder only catches it
-with the override. A bag recorded this way needs no `pepper_sensor_tf` on
-replay. `-a` includes 30 Hz colour; name topics explicitly for long sessions.
+`/tf_static` is published once and latched; `ros2 bag record` subscribes to it
+latched as well (it matches the publishers' QoS), so the bag gets the rig
+transforms whether recording starts before the stack or partway through, and
+needs no `pepper_sensor_tf` on replay. Check with `ros2 bag info my_bag`:
+`/tf_static` should have a count above 0. `-a` includes 30 Hz colour; name
+topics explicitly for long sessions.
 
 ### Bag replay
 
@@ -196,8 +195,7 @@ read from the estimator's config, so it is never in these files). A launch
 argument such as `guard_enable:=true` overrides the file for that launch only;
 left empty, the file's value stands.
 
-`data/record_qos.yaml` is the `ros2 bag record` QoS override for `/tf_static`
-(see "Recording bags"). The estimators' own configurations are `fast_lio`'s
+The estimators' own configurations are `fast_lio`'s
 `config/l2_rsimu.yaml` and `point_lio`'s `config/l2lidar_rsimu.yaml`.
 
 The rig's geometry and its calibration notes live in `urdf/sensor_rig.xacro`,
@@ -213,8 +211,6 @@ they agree.
 pepper_slam/
 ├── config/
 │   └── pepper_slam_configuration.yaml  # every node's parameters, one section per node
-├── data/
-│   └── record_qos.yaml                 # /tf_static QoS override for ros2 bag record
 ├── launch/
 │   ├── pepper_sensor_tf.launch.py      # static rig TF, nested by everything else
 │   ├── fastlio_odometry.launch.py      # FAST-LIO odometry + bridge
