@@ -6,11 +6,12 @@ Nodes started:
         Microphone capture, VAD, and ASR; publishes
         /speech_event/vad_speech_prob and serves /speech_recognition.
     conversation_manager/conversation_manager (node: conversation_manager)
-        RAG + LLM; serves the /conversation_manager action. Loads its own YAML
-        config internally, so only the two overrides below are passed here.
+        RAG + LLM; serves the /conversation_manager action. Gets its package
+        YAML, then the collection_name/verbose_mode launch overrides.
     behavior_controller/behavior_controller (node: behavior_controller)
-        BehaviorTree.CPP executor running asr_cm_tts_pipeline.xml. Also loads
-        its config internally; no parameters are passed from this launch.
+        BehaviorTree.CPP executor running asr_cm_tts_pipeline.xml. Gets its
+        package YAML, with scenario_specification forced to
+        asr_cm_tts_pipeline.
     nav2_lifecycle_manager/lifecycle_manager (node:
     lifecycle_manager_asr_cm_pipeline)
         Drives configure -> activate for the three lifecycle nodes above, in
@@ -25,9 +26,9 @@ Launch arguments:
         also declares verbose_mode, reads it from its own config file.
 
 Configuration:
-    speech_event/config/speech_event_configuration.yaml is passed as
-    parameters; conversation_manager and behavior_controller read their own
-    config files at startup and must not be given them here.
+    Each node is given its package config YAML as parameters (the nodes do
+    not read the files themselves; without it they run on code defaults,
+    e.g. a localhost LLM and the lab_tour scenario).
 
 Prerequisites (start separately before this launch):
     ros2 launch dec_launch naoqi_driver.launch.py nao_ip:=<PEPPER_IP>
@@ -52,7 +53,7 @@ This software is provided 'as-is' for research and educational purposes
 within the DEC project.
 """
 
-import os  # needed for speech_event config path
+import os
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, LogInfo
 from launch.substitutions import LaunchConfiguration
@@ -80,6 +81,8 @@ def generate_launch_description():
     # ── Package share directories ─────────────────────────────────────────────
 
     speech_event_share = get_package_share_directory('speech_event')
+    conversation_manager_share = get_package_share_directory('conversation_manager')
+    behavior_controller_share = get_package_share_directory('behavior_controller')
 
     # ── Config file paths ─────────────────────────────────────────────────────
 
@@ -87,8 +90,13 @@ def generate_launch_description():
     speech_event_config = os.path.join(
         speech_event_share, 'config', 'speech_event_configuration.yaml')
 
-    # conversation_manager and behavior_controller load their own config files
-    # internally at startup — do NOT pass them via parameters= here.
+    conversation_manager_config = os.path.join(
+        conversation_manager_share, 'config',
+        'conversation_manager_configuration.yaml')
+
+    behavior_controller_config = os.path.join(
+        behavior_controller_share, 'config',
+        'behavior_controller_configuration.yaml')
 
     # ── Node definitions ──────────────────────────────────────────────────────
 
@@ -107,19 +115,19 @@ def generate_launch_description():
         parameters=[speech_event_config],
     )
 
-    # 2. Conversation manager — loads its YAML config internally
+    # 2. Conversation manager — package YAML, then the launch overrides
     conversation_manager_node = Node(
         package='conversation_manager',
         executable='conversation_manager',
         name='conversation_manager',
         output='screen',
-        parameters=[{
+        parameters=[conversation_manager_config, {
             'collection_name': LaunchConfiguration('collection_name'),
             'verbose_mode':    LaunchConfiguration('verbose_mode'),
         }],
     )
 
-    # 3. Behavior controller — loads its YAML config internally
+    # 3. Behavior controller — package YAML, scenario pinned to this pipeline
     #    SpeechWithFeedback connects to /naoqi_driver/speech_with_feedback
     #    which is served by naoqi_driver (started separately).
     behavior_controller_node = Node(
@@ -127,6 +135,9 @@ def generate_launch_description():
         executable='behavior_controller',
         name='behavior_controller',
         output='screen',
+        parameters=[behavior_controller_config, {
+            'scenario_specification': 'asr_cm_tts_pipeline',
+        }],
     )
 
     # ── Launch description ────────────────────────────────────────────────────
