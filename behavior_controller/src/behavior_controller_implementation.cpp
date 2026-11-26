@@ -498,6 +498,126 @@ BT::NodeStatus SpeechRecognitionNode::onFailure(BT::ActionNodeErrorCode error)
 }
 
 //=============================================================================
+// RemoteDialogueTurnNode
+// Action: dec_interfaces::action::RemoteDialogueTurn  (remote_dialogue node)
+//
+// Goal fields:
+//   float32 wait  – seconds to wait for the visitor to start speaking
+//   string  text  – optional typed question (no listening)
+//
+// Result fields:
+//   bool success, string status, string user_text, string assistant_text,
+//   string language, int32 turn_id
+//
+// Feedback fields:
+//   string state – "waiting" | "listening" | "thinking" | "speaking"
+//
+// SUCCESS once the reply has finished playing; FAILURE otherwise (status says
+// why: no_speech, not_connected, disconnected, timeout, busy, cancelled).
+//=============================================================================
+
+BT::PortsList RemoteDialogueTurnNode::providedPorts()
+{
+  return {
+    BT::InputPort<std::string>("action_name", "/remote_dialogue", "Action server name"),
+    BT::InputPort<float>("wait", 20.0f, "Seconds to wait for the visitor to start speaking"),
+    BT::InputPort<std::string>("text", "", "Typed question instead of listening (optional)"),
+    BT::OutputPort<std::string>("user_text", "What the server heard"),
+    BT::OutputPort<std::string>("assistant_text", "The spoken reply"),
+    BT::OutputPort<std::string>("language", "Session language after the turn"),
+    BT::OutputPort<int>("turn_id", "Server turn number"),
+    BT::OutputPort<std::string>(
+      "status",
+      "completed | no_speech | not_connected | disconnected | timeout | busy | cancelled"),
+    BT::OutputPort<std::string>("state", "Server state during the turn"),
+  };
+}
+
+bool RemoteDialogueTurnNode::setGoal(Goal & goal)
+{
+  goal.wait = getInput<float>("wait").value_or(20.0f);
+  goal.text = getInput<std::string>("text").value_or("");
+
+  if (ConfigManager::instance().isVerbose()) {
+    RCLCPP_INFO(
+      rclcpp::get_logger("behavior_controller"),
+      "[RemoteDialogueTurnNode] Goal → wait=%.1fs text=\"%s\"", goal.wait, goal.text.c_str());
+  }
+  return true;
+}
+
+BT::NodeStatus RemoteDialogueTurnNode::onFeedback(const std::shared_ptr<const Feedback> feedback)
+{
+  setOutput("state", feedback->state);
+
+  if (ConfigManager::instance().isVerbose()) {
+    RCLCPP_INFO(
+      rclcpp::get_logger("behavior_controller"),
+      "[RemoteDialogueTurnNode] State: %s", feedback->state.c_str());
+  }
+  return BT::NodeStatus::RUNNING;
+}
+
+void RemoteDialogueTurnNode::writeResult(
+  const dec_interfaces::action::RemoteDialogueTurn::Result & r)
+{
+  setOutput("status", r.status);
+  setOutput("user_text", r.user_text);
+  setOutput("assistant_text", r.assistant_text);
+  setOutput("language", r.language);
+  setOutput("turn_id", static_cast<int>(r.turn_id));
+}
+
+BT::NodeStatus RemoteDialogueTurnNode::onResultReceived(const WrappedResult & result)
+{
+  const auto & r = *result.result;
+  writeResult(r);
+
+  if (!r.success) {
+    RCLCPP_WARN(
+      rclcpp::get_logger("behavior_controller"),
+      "[RemoteDialogueTurnNode] Turn ended without a reply: %s", r.status.c_str());
+    return BT::NodeStatus::FAILURE;
+  }
+
+  if (ConfigManager::instance().isVerbose()) {
+    RCLCPP_INFO(
+      rclcpp::get_logger("behavior_controller"),
+      "[RemoteDialogueTurnNode] Heard \"%s\" → replied \"%s\" (%s)",
+      r.user_text.c_str(), r.assistant_text.c_str(), r.language.c_str());
+  }
+  return BT::NodeStatus::SUCCESS;
+}
+
+BT::NodeStatus RemoteDialogueTurnNode::onFailure(
+  BT::ActionNodeErrorCode error,
+  const std::optional<WrappedResult> & result)
+{
+  if (result && result->result) {
+    // An ordinary outcome (no_speech, not_connected, ...), not a fault.
+    writeResult(*result->result);
+    RCLCPP_WARN(
+      rclcpp::get_logger("behavior_controller"),
+      "[RemoteDialogueTurnNode] Turn ended without a reply: %s",
+      result->result->status.c_str());
+    return BT::NodeStatus::FAILURE;
+  }
+  setOutput("status", std::string(toStr(error)));
+  return onFailure(error);
+}
+
+BT::NodeStatus RemoteDialogueTurnNode::onFailure(BT::ActionNodeErrorCode error)
+{
+  if (error == BT::GOAL_REJECTED_BY_SERVER) {
+    setOutput("status", std::string("busy"));  // a turn is already running
+  }
+  RCLCPP_ERROR(
+    rclcpp::get_logger("behavior_controller"),
+    "[RemoteDialogueTurnNode] Action error: %s", toStr(error));
+  return BT::NodeStatus::FAILURE;
+}
+
+//=============================================================================
 // ConversationManagerNode
 // Action: dec_interfaces::action::ConversationManager
 //
@@ -1750,6 +1870,7 @@ void registerNodes(BT::BehaviorTreeFactory & factory, const BT::RosNodeParams & 
   factory.registerNodeType<GestureNode>("Gesture", params);
   factory.registerNodeType<Navigate>("Navigate", params);
   factory.registerNodeType<SpeechRecognitionNode>("SpeechRecognition", params);
+  factory.registerNodeType<RemoteDialogueTurnNode>("RemoteDialogueTurn", params);
   factory.registerNodeType<ConversationManagerNode>("ConversationManager", params);
   factory.registerNodeType<SpeechWithFeedbackNode>("SpeechWithFeedback", params);
   factory.registerNodeType<TTSNode>("TTS", params);
@@ -1829,7 +1950,8 @@ BT::Tree initializeTree(
       logger,
       "[initializeTree] Registered nodes: AnimateBehavior, StopAnimateBehavior, "
       "SetOvertAttention, SetSpeechListening, Gesture, Navigate, SpeechRecognition, "
-      "ConversationManager, SpeechWithFeedback, TTS, CheckFaceDetected, ListenForSpeech");
+      "RemoteDialogueTurn, ConversationManager, SpeechWithFeedback, TTS, CheckFaceDetected, "
+      "ListenForSpeech");
     RCLCPP_INFO(logger, "[initializeTree] Loading tree: %s", xmlPath.c_str());
   }
 

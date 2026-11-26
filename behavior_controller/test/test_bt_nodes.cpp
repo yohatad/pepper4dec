@@ -53,6 +53,7 @@ using ConversationManager = dec_interfaces::action::ConversationManager;
 using Gesture = dec_interfaces::action::Gesture;
 using NavigateToPose = nav2_msgs::action::NavigateToPose;
 using SpeechRecognition = dec_interfaces::action::SpeechRecognition;
+using RemoteDialogueTurn = dec_interfaces::action::RemoteDialogueTurn;
 using SpeechWithFeedback = naoqi_bridge_msgs::action::SpeechWithFeedback;
 using TTS = dec_interfaces::action::TTS;
 using SetBool = std_srvs::srv::SetBool;
@@ -284,6 +285,59 @@ TEST_F(BtRosTest, SpeechRecognitionFailsWhenNothingWasHeard) {
   auto tree = treeFromText(R"(<SpeechRecognition transcription="{heard}"/>)");
 
   EXPECT_EQ(tickUntilDone(tree), NodeStatus::FAILURE);
+}
+
+TEST_F(BtRosTest, RemoteDialogueTurnSendsGoalAndWritesResult) {
+  auto server = serveAction<RemoteDialogueTurn>(
+    "/remote_dialogue", [](const RemoteDialogueTurn::Goal &) {
+      Reply<RemoteDialogueTurn> reply;
+      reply.result.success = true;
+      reply.result.status = "completed";
+      reply.result.user_text = "Tell me about the Digital Experience Center.";
+      reply.result.assistant_text = "It is the Upanzi DEC.";
+      reply.result.language = "kin";
+      reply.result.turn_id = 4;
+      RemoteDialogueTurn::Feedback feedback;
+      feedback.state = "thinking";
+      reply.feedback = feedback;
+      reply.delay = milliseconds(300);
+      return reply;
+    });
+  auto tree = treeFromText(
+    R"(<RemoteDialogueTurn wait="12.5" text="typed" user_text="{heard}"
+         assistant_text="{reply}" language="{lang}" turn_id="{turn}" status="{status}"
+         state="{state}"/>)");
+
+  ASSERT_EQ(tickUntilDone(tree), NodeStatus::SUCCESS);
+  ASSERT_EQ(server->goals().size(), 1u);
+  EXPECT_FLOAT_EQ(server->goals()[0].wait, 12.5f);
+  EXPECT_EQ(server->goals()[0].text, "typed");
+  auto bb = tree.rootBlackboard();
+  EXPECT_EQ(bb->get<std::string>("heard"), "Tell me about the Digital Experience Center.");
+  EXPECT_EQ(bb->get<std::string>("reply"), "It is the Upanzi DEC.");
+  EXPECT_EQ(bb->get<std::string>("lang"), "kin");
+  EXPECT_EQ(bb->get<int>("turn"), 4);
+  EXPECT_EQ(bb->get<std::string>("status"), "completed");
+  EXPECT_EQ(bb->get<std::string>("state"), "thinking");
+}
+
+TEST_F(BtRosTest, RemoteDialogueTurnFailsAndReportsStatusWhenNobodySpoke) {
+  auto server = serveAction<RemoteDialogueTurn>(
+    "/remote_dialogue", [](const RemoteDialogueTurn::Goal &) {
+      // remote_dialogue aborts a failed turn, with the result filled in.
+      Reply<RemoteDialogueTurn> reply;
+      reply.outcome = Outcome::kAbort;
+      reply.result.success = false;
+      reply.result.status = "no_speech";
+      return reply;
+    });
+  auto tree = treeFromText(R"(<RemoteDialogueTurn status="{status}"/>)");
+
+  EXPECT_EQ(tickUntilDone(tree), NodeStatus::FAILURE);
+  ASSERT_EQ(server->goals().size(), 1u);
+  EXPECT_FLOAT_EQ(server->goals()[0].wait, 20.0f);  // port default
+  EXPECT_EQ(server->goals()[0].text, "");
+  EXPECT_EQ(tree.rootBlackboard()->get<std::string>("status"), "no_speech");
 }
 
 TEST_F(BtRosTest, ConversationManagerWritesResponseIntentAndConfidence) {

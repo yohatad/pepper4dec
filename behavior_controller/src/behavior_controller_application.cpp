@@ -32,6 +32,8 @@
  *       Drive to a goal pose via Nav2 (Navigate).
  *   /speech_recognition (dec_interfaces/action/SpeechRecognition)
  *       Run one speech-recognition turn (SpeechRecognitionNode).
+ *   /remote_dialogue (dec_interfaces/action/RemoteDialogueTurn)
+ *       One turn with the remote ASR-LLM-TTS voice server (RemoteDialogueTurnNode).
  *   /conversation_manager (dec_interfaces/action/ConversationManager)
  *       Classify visitor intent and generate a dialogue response (ConversationManagerNode, IsVisitorResponseYes).
  *   /text_to_speech (dec_interfaces/action/TTS)

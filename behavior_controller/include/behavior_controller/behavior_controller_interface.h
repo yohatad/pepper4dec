@@ -61,6 +61,7 @@
 #include "dec_interfaces/action/gesture.hpp"
 #include "dec_interfaces/action/animate_behavior.hpp"
 #include "dec_interfaces/action/speech_recognition.hpp"
+#include "dec_interfaces/action/remote_dialogue_turn.hpp"
 #include "dec_interfaces/action/conversation_manager.hpp"
 // Services
 #include <std_srvs/srv/trigger.hpp>
@@ -342,6 +343,40 @@ public:
   BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
   BT::NodeStatus onResultReceived(const WrappedResult & result) override;
   BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
+};
+
+/**
+ * @class RemoteDialogueTurnNode
+ * @brief Wraps dec_interfaces::action::RemoteDialogueTurn (remote_dialogue node).
+ *
+ * One turn with the remote voice server, which does recognition, the
+ * language model and speech synthesis: listen (or send `text`), play the
+ * reply on Pepper, and return what was said. Replaces the
+ * SpeechRecognition → ConversationManager → SpeechWithFeedback sequence.
+ */
+class RemoteDialogueTurnNode
+  : public BT::RosActionNode<dec_interfaces::action::RemoteDialogueTurn>
+{
+public:
+  RemoteDialogueTurnNode(
+    const std::string & name,
+    const BT::NodeConfig & config,
+    const BT::RosNodeParams & params)
+  : BT::RosActionNode<dec_interfaces::action::RemoteDialogueTurn>(name, config, params) {}
+
+  static BT::PortsList providedPorts();
+  bool setGoal(Goal & goal) override;
+  BT::NodeStatus onFeedback(const std::shared_ptr<const Feedback> feedback) override;
+  BT::NodeStatus onResultReceived(const WrappedResult & result) override;
+  // remote_dialogue aborts failed turns with the result filled in (status says
+  // why), so the result-carrying overload writes the output ports too.
+  BT::NodeStatus onFailure(
+    BT::ActionNodeErrorCode error,
+    const std::optional<WrappedResult> & result) override;
+  BT::NodeStatus onFailure(BT::ActionNodeErrorCode error) override;
+
+private:
+  void writeResult(const dec_interfaces::action::RemoteDialogueTurn::Result & result);
 };
 
 /**

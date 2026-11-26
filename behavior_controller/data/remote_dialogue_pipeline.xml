@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<!--
+  remote_dialogue_pipeline.xml
+  Remote voice server pipeline (ASR → LLM → TTS on a GPU server)
+
+  A minimal loop for validating the remote_dialogue node end to end. The
+  server does speech recognition, turn-taking, the language model and speech
+  synthesis; one RemoteDialogueTurn replaces the local
+  SpeechRecognition → ConversationManager → SpeechWithFeedback sequence of
+  asr_cm_tts_pipeline.xml.
+
+  Each turn opens the microphone gate, waits up to 20 s for the visitor to
+  start speaking, plays the reply on Pepper and returns. The gate is closed
+  between turns and while Pepper speaks, so the server never hears the robot.
+
+  Requires: remote_dialogue (dec_launch remote_dialogue_pipeline.launch.py)
+  and naoqi_driver with audio on.
+
+  Language: set it with /remote_dialogue/set_language (or the node's
+  `language` parameter); {language} records the language each turn ran in.
+-->
+<root BTCPP_format="4">
+
+  <BehaviorTree ID="remote_dialogue_pipeline">
+    <Repeat num_cycles="-1">
+      <Fallback>
+
+        <!-- Happy path: visitor speaks → server answers → reply played -->
+        <RemoteDialogueTurn
+          wait="20.0"
+          user_text="{user_speech}"
+          assistant_text="{reply}"
+          language="{language}"
+          status="{turn_status}"/>
+
+        <!-- Nobody spoke, or the server is unreachable: pause, then listen again -->
+        <Sleep msec="1000"/>
+
+      </Fallback>
+    </Repeat>
+  </BehaviorTree>
+
+</root>
