@@ -1,0 +1,13 @@
+# ResetDialogue.srv
+#
+# Service: /remote_dialogue/reset  (remote_dialogue node)
+#
+# A new visitor has arrived: clear the server's conversation memory.
+
+# Speak the welcome line again
+bool greet
+# Optional language for the new conversation; empty keeps the current one
+string language
+---
+bool success
+string message

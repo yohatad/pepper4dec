@@ -1,0 +1,39 @@
+# RemoteDialogueTurn.action
+#
+# Action server: /remote_dialogue  (remote_dialogue node)
+#
+# Runs one conversation turn against the remote /ws/pepper voice server, which
+# does speech recognition, the language model and speech synthesis itself.
+# The node opens the microphone gate, waits for the visitor to speak, plays
+# the spoken reply on Pepper and returns once the reply has finished playing.
+# If `text` is set, it is sent as a typed question instead and the microphone
+# is not used.
+
+# ── Goal ──────────────────────────────────────────────────────────────────────
+# Seconds to wait for the visitor to start speaking (ignored when `text` is set)
+float32 wait
+# Optional typed question; empty means listen to the microphone
+string text
+
+---
+
+# ── Result ────────────────────────────────────────────────────────────────────
+# True if a reply was received and played to the end
+bool success
+# "completed" | "no_speech" | "not_connected" | "disconnected" | "timeout" |
+# "cancelled" | "busy"
+string status
+# What the server heard (or the typed `text`)
+string user_text
+# The full spoken reply, all sentences of the turn joined
+string assistant_text
+# Session language when the turn ended, e.g. "eng", "kin"
+string language
+# Server turn number (0 is the welcome line; visitor turns start at 1)
+int32 turn_id
+
+---
+
+# ── Feedback ──────────────────────────────────────────────────────────────────
+# "waiting" | "listening" | "thinking" | "speaking"
+string state

@@ -16,11 +16,15 @@
 #include "dec_interfaces/action/animate_behavior.hpp"
 #include "dec_interfaces/action/conversation_manager.hpp"
 #include "dec_interfaces/action/gesture.hpp"
+#include "dec_interfaces/action/remote_dialogue_turn.hpp"
 #include "dec_interfaces/action/speech_recognition.hpp"
 #include "dec_interfaces/action/tts.hpp"
+#include "dec_interfaces/msg/dialogue_transcript.hpp"
 #include "dec_interfaces/msg/face_detection.hpp"
 #include "dec_interfaces/msg/person_detection.hpp"
 #include "dec_interfaces/srv/get_depth_roi.hpp"
+#include "dec_interfaces/srv/reset_dialogue.hpp"
+#include "dec_interfaces/srv/set_dialogue_language.hpp"
 #include "geometry_msgs/msg/point.hpp"
 #include "rclcpp/serialization.hpp"
 #include "rclcpp/serialized_message.hpp"
@@ -212,6 +216,64 @@ TEST(Serialization, SpeechRecognition)
   A::Feedback feedback;
   feedback.status = "listening";
   EXPECT_EQ(roundTrip(feedback), feedback);
+}
+
+TEST(Serialization, RemoteDialogueTurn)
+{
+  using A = dec_interfaces::action::RemoteDialogueTurn;
+  A::Goal goal;
+  goal.wait = 10.0f;
+  goal.text = kText;
+  EXPECT_EQ(roundTrip(goal), goal);
+
+  A::Result result;
+  result.success = true;
+  result.status = "completed";
+  result.user_text = kText;
+  result.assistant_text = kText;
+  result.language = "kin";
+  result.turn_id = 3;
+  EXPECT_EQ(roundTrip(result), result);
+
+  A::Feedback feedback;
+  feedback.state = "thinking";
+  EXPECT_EQ(roundTrip(feedback), feedback);
+}
+
+TEST(Serialization, DialogueTranscript)
+{
+  dec_interfaces::msg::DialogueTranscript msg;
+  msg.role = "assistant";
+  msg.text = kText;
+  msg.turn_id = 2;
+  EXPECT_EQ(roundTrip(msg), msg);
+}
+
+TEST(Serialization, SetDialogueLanguage)
+{
+  using S = dec_interfaces::srv::SetDialogueLanguage;
+  S::Request request;
+  request.language = "amh";
+  EXPECT_EQ(roundTrip(request), request);
+
+  S::Response response;
+  response.success = true;
+  response.message = kText;
+  EXPECT_EQ(roundTrip(response), response);
+}
+
+TEST(Serialization, ResetDialogue)
+{
+  using S = dec_interfaces::srv::ResetDialogue;
+  S::Request request;
+  request.greet = true;
+  request.language = "kin";
+  EXPECT_EQ(roundTrip(request), request);
+
+  S::Response response;
+  response.success = false;
+  response.message = kText;
+  EXPECT_EQ(roundTrip(response), response);
 }
 
 TEST(Serialization, TTS)

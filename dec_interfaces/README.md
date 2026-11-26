@@ -47,6 +47,7 @@ ros2 interface show dec_interfaces/action/TTS
 | `AnimateBehavior` | `/animate_behavior` (`animate_behavior`) | `behavior_type`, `selected_range`, `duration_seconds` | `success`, `message`, `total_duration` |
 | `ConversationManager` | `/conversation_manager` (`conversation_manager`) | `prompt` | `success`, `response`, `intent`, `confidence` |
 | `Gesture` | `/gesture_execution` (`gesture_execution`) | `gesture_type`, `gesture_name`, `gesture_duration`, `bow_nod_angle`, `location_x/y/z` | `success`, `message`, `actual_duration_seconds` |
+| `RemoteDialogueTurn` | `/remote_dialogue` (`remote_dialogue`) | `wait`, `text` | `success`, `status`, `user_text`, `assistant_text`, `language`, `turn_id` |
 | `SpeechRecognition` | `/speech_recognition` (`speech_event`) | `wait` | `transcription` |
 | `TTS` | `/text_to_speech` (`text_to_speech`) | `text` | `success`, `message` |
 
@@ -56,6 +57,7 @@ Each package README describes its action's feedback and field meanings in full.
 
 | Message | Published on | Contents |
 |---|---|---|
+| `DialogueTranscript` | `/remote_dialogue/transcript` (`remote_dialogue`) | one transcript line: `role` (user/assistant), `text`, `turn_id` |
 | `FaceDetection` | `/face_detection/data` (`face_detection`) | parallel arrays per face: track ID, centroid (pixels, depth in m), box size, mutual gaze |
 | `PersonDetection` | `/person_detection/data` (`person_detection`) | parallel arrays per person: track ID, class, confidence, centroid (pixels, depth in m), box size |
 
@@ -64,6 +66,8 @@ Each package README describes its action's feedback and field meanings in full.
 | Service | Server | Purpose |
 |---|---|---|
 | `GetDepthROI` | `get_depth_roi` (`dec_launch`'s `depth_roi_service.py`) | depth statistics for one ROI, a list of points, or a list of ROIs |
+| `ResetDialogue` | `/remote_dialogue/reset` (`remote_dialogue`) | new visitor: clear the remote conversation, optionally greet and change language |
+| `SetDialogueLanguage` | `/remote_dialogue/set_language` (`remote_dialogue`) | switch the remote session's language |
 
 ## 📁 Package Structure
 
@@ -73,13 +77,17 @@ dec_interfaces/
 │   ├── AnimateBehavior.action
 │   ├── ConversationManager.action
 │   ├── Gesture.action
+│   ├── RemoteDialogueTurn.action
 │   ├── SpeechRecognition.action
 │   └── TTS.action
 ├── msg/
+│   ├── DialogueTranscript.msg
 │   ├── FaceDetection.msg
 │   └── PersonDetection.msg
 ├── srv/
-│   └── GetDepthROI.srv
+│   ├── GetDepthROI.srv
+│   ├── ResetDialogue.srv
+│   └── SetDialogueLanguage.srv
 ├── test/
 │   └── test_serialization.cpp    # CDR round-trip of every type
 ├── CMakeLists.txt

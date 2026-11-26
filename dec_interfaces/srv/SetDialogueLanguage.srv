@@ -1,0 +1,12 @@
+# SetDialogueLanguage.srv
+#
+# Service: /remote_dialogue/set_language  (remote_dialogue node)
+#
+# Switch recognition, replies and voice for the rest of the session.
+
+# Language code understood by the server, e.g. "eng", "kin", "amh", "swh", "fra"
+string language
+---
+# True once the server has confirmed the change
+bool success
+string message

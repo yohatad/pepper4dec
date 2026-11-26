@@ -12,12 +12,16 @@ find_package(geometry_msgs REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/FaceDetection.msg"
   "msg/PersonDetection.msg"
+  "msg/DialogueTranscript.msg"
   "srv/GetDepthROI.srv"
+  "srv/SetDialogueLanguage.srv"
+  "srv/ResetDialogue.srv"
   "action/ConversationManager.action"
   "action/TTS.action"
   "action/Gesture.action"
   "action/AnimateBehavior.action"
   "action/SpeechRecognition.action"
+  "action/RemoteDialogueTurn.action"
   DEPENDENCIES builtin_interfaces std_msgs geometry_msgs
 )
 
