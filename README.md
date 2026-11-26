@@ -55,6 +55,7 @@ The system is built on **ROS2 (Humble)** and follows a modular architecture with
 - **`gesture_execution`** - Deictic (pointing), iconic, bowing and nodding gestures with Bézier interpolation, IK, and joint-limit validation
 - **`speech_event`** - Whisper ASR with Silero VAD, a post-VAD/pre-ASR noise-reduction pipeline, and optional SRP-PHAT sound-source localization on Pepper's 4-mic array
 - **`text_to_speech`** - Streaming TTS across five backends (naoqi_ros, kokoro_local/pepper, elevenlabs_local/pepper) with sentence queueing and automatic mic muting
+- **`remote_dialogue`** - Client for the remote `/ws/pepper` voice server (speech recognition, LLM and multilingual speech synthesis on a GPU server): streams Pepper's microphone, plays the replies, and exposes each conversation turn as a ROS action (`remote_dialogue_pipeline.xml`)
 
 ### **Perception & Attention Packages**
 - **`face_detection`** - Real-time face detection, head pose estimation, and mutual gaze detection (SixDRepNet), plus age/gender estimation (MiVOLO) for persons exhibiting mutual gaze — two lifecycle nodes, `face_detection` and `age_gender_detection`, in one package
@@ -148,7 +149,7 @@ source install/setup.bash
 
 3. **Set Up Python Environments**
 
-Most perception/actuation packages (`animate_behavior`, `behavior_controller`, `face_detection`, `gesture_execution`, `overt_attention`, `person_detection`) are C++ and need no Python environment. The three Python packages (`conversation_manager`, `speech_event`, `text_to_speech`) each expect their own dedicated virtual environment under `~/ros2_ws/.venvs/` — see each package's own README for the exact venv name and `pip install -r requirements.txt` it expects. Pinned lockfiles used by the Docker image live in [`docker/requirements/`](docker/requirements/).
+Most perception/actuation packages (`animate_behavior`, `behavior_controller`, `face_detection`, `gesture_execution`, `overt_attention`, `person_detection`) are C++ and need no Python environment. The four Python packages (`conversation_manager`, `speech_event`, `text_to_speech`, `remote_dialogue`) each expect their own dedicated virtual environment under `~/ros2_ws/.venvs/` — see each package's own README for the exact venv name and `pip install -r requirements.txt` it expects. Pinned lockfiles used by the Docker image live in [`docker/requirements/`](docker/requirements/).
 
 4. **Download Model Files**
    - Run `src/pepper4dec/scripts/fetch_models.sh`: it downloads the ONNX models from [cssr4africa/dec_models](https://huggingface.co/cssr4africa/dec_models) into their `models/` directories (`face_detection/models/`, `person_detection/models/`, `speech_event/models/`) and checks their SHA-256

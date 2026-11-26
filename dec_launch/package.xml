@@ -21,6 +21,7 @@
   <exec_depend>speech_event</exec_depend>
   <exec_depend>text_to_speech</exec_depend>
   <exec_depend>conversation_manager</exec_depend>
+  <exec_depend>remote_dialogue</exec_depend>
   <exec_depend>behavior_controller</exec_depend>
   <exec_depend>pepper_navigation</exec_depend>
   <exec_depend>dec_interfaces</exec_depend>

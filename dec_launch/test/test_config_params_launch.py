@@ -88,6 +88,8 @@ NODES = [
      'text_to_speech_configuration.yaml', False, []),
     ('conversation_manager', 'conversation_manager', 'conversation_manager',
      'conversation_manager_configuration.yaml', False, ['openai', 'chromadb']),
+    ('remote_dialogue', 'remote_dialogue', 'remote_dialogue',
+     'remote_dialogue_configuration.yaml', False, ['websockets']),
 ]
 
 SERVICE_TIMEOUT_S = 30.0
