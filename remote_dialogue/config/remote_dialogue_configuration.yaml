@@ -1,0 +1,59 @@
+# Remote Dialogue Configuration File
+# ROS2 parameters for the remote_dialogue node (loaded via the launch file's
+# `parameters=[...]`). Run `ros2 param get /remote_dialogue <name>` to inspect.
+#
+# The token is NOT set here: export REMOTE_DIALOGUE_TOKEN (ROS parameters are
+# visible to anyone on the ROS graph). REMOTE_DIALOGUE_URL, if exported,
+# overrides server_url, since the address changes with each GPU job.
+
+remote_dialogue:
+  ros__parameters:
+
+    # =========================================================================
+    # Server
+    # =========================================================================
+    # ws://<laptop-ip>:<port>/ws/pepper, without ?token=
+    server_url: ""
+    # "eng", "kin" (tested), or another server-supported code: "amh", "swh", "fra"
+    language: "eng"
+    # Reply audio rate. 48000 is Pepper's speaker rate, so no resampling.
+    output_sample_rate: 48000
+    # Speak the welcome line on first connect. Usually false: the behavior
+    # tree calls /remote_dialogue/reset with greet when a visitor arrives.
+    greet_on_connect: false
+    reconnect_interval_s: 3.0
+
+    # =========================================================================
+    # Microphone
+    # =========================================================================
+    microphone_topic: "/audio"
+    # AudioBuffer channel sent to the server: 0 front-left, 2 front-right,
+    # 3 rear-left, 5 rear-right
+    microphone_channel: 0
+    # Keep sending zeros this long after the robot's own speech ends
+    mic_guard_s: 0.3
+
+    # =========================================================================
+    # Speaker
+    # =========================================================================
+    send_audio_buffer_service: "/naoqi_driver/send_audio_buffer"
+    # Length of each piece handed to send_audio_buffer (max ~0.34 s)
+    playback_piece_s: 0.2
+    # Send the next piece when Pepper has at most this much left to play
+    playback_lead_s: 0.15
+    # Added to the computed end of playback before playback_done is sent
+    # (Pepper's output latency)
+    playback_tail_s: 0.15
+
+    # =========================================================================
+    # Turns
+    # =========================================================================
+    # Longest a whole turn (listen + think + speak) may take
+    turn_timeout_s: 90.0
+    # Wait this long for the server to confirm set_language
+    language_timeout_s: 5.0
+
+    # =========================================================================
+    # Debug Settings
+    # =========================================================================
+    verbose_mode: false

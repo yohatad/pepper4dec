@@ -12,3 +12,9 @@ export VENV_LANGUAGE_MODEL="$VENVS_DIR/conversation/bin/python3"
 
 # text_to_speech: Kokoro-82M, misaki, sounddevice
 export VENV_TEXT_TO_SPEECH="$VENVS_DIR/tts_virtual_env/bin/python3"
+
+# remote_dialogue: websockets, numpy, scipy
+export VENV_REMOTE_DIALOGUE="$VENVS_DIR/remote_dialogue/bin/python3"
+
+# remote_dialogue: websockets, numpy, scipy
+export VENV_REMOTE_DIALOGUE="$VENVS_DIR/remote_dialogue/bin/python3"

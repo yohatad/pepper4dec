@@ -1,0 +1,4 @@
+# remote_dialogue venv (~/ros2_ws/.venvs/remote_dialogue)
+numpy==2.2.6
+scipy==1.15.3
+websockets==16.1.1

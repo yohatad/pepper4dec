@@ -1,0 +1,3 @@
+#!/bin/bash
+source "$HOME/ros2_ws/.venvs/venv_map.sh"
+exec "$VENV_REMOTE_DIALOGUE" -m remote_dialogue.remote_dialogue_application "$@"

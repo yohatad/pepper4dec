@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>remote_dialogue</name>
+  <version>0.1.0</version>
+  <description>Pepper client for the remote /ws/pepper voice server (speech recognition, language model and speech synthesis on a GPU server)</description>
+  <maintainer email="yohatad123@gmail.com">Yohannes</maintainer>
+  <license>BSD-3-Clause</license>
+
+  <buildtool_depend>python3-setuptools</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>naoqi_bridge_msgs</depend>
+  <depend>dec_interfaces</depend>
+  <depend>ament_index_python</depend>
+  <depend>python3-numpy</depend>
+  <depend>python3-scipy</depend>
+  <!-- websockets (>= 13, for websockets.asyncio) comes from the remote_dialogue
+       venv; Ubuntu 22.04's python3-websockets is too old. -->
+
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+  <test_depend>domain_coordinator</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

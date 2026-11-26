@@ -37,7 +37,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     # mid-stream often enough to fail a build. --retries only covers
     # establishing a connection, so it does NOT help with a truncated
     # response (IncompleteRead); --resume-retries is what resumes a partial
-    # download. Set as env vars so all three venv stages inherit them;
+    # download. Set as env vars so all four venv stages inherit them;
     # the venv's bundled older pip ignores names it does not recognise.
     PIP_RESUME_RETRIES=5 \
     PIP_RETRIES=10 \
@@ -115,6 +115,14 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=shared \
     python3 -m venv ${WS}/.venvs/tts_virtual_env && \
     ${WS}/.venvs/tts_virtual_env/bin/pip install --upgrade pip setuptools wheel && \
     ${WS}/.venvs/tts_virtual_env/bin/pip install -r /tmp/tts.lock.txt
+
+FROM base AS venv-remote-dialogue
+ARG WS
+COPY docker/requirements/remote_dialogue.lock.txt /tmp/
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=shared \
+    python3 -m venv ${WS}/.venvs/remote_dialogue && \
+    ${WS}/.venvs/remote_dialogue/bin/pip install --upgrade pip setuptools wheel && \
+    ${WS}/.venvs/remote_dialogue/bin/pip install -r /tmp/remote_dialogue.lock.txt
 
 # -----------------------------------------------------------------------------
 # workspace - clone third-party sources and colcon build.
@@ -205,7 +213,7 @@ RUN . /opt/ros/humble/setup.sh && \
       --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
 
 # -----------------------------------------------------------------------------
-# runtime - workspace + all three venvs
+# runtime - workspace + all four venvs
 # -----------------------------------------------------------------------------
 FROM workspace AS runtime
 ARG WS
@@ -215,13 +223,14 @@ ARG WS
 COPY --chown=pepper:pepper --from=venv-sound        ${WS}/.venvs/sound           ${WS}/.venvs/sound
 COPY --chown=pepper:pepper --from=venv-conversation ${WS}/.venvs/conversation    ${WS}/.venvs/conversation
 COPY --chown=pepper:pepper --from=venv-tts          ${WS}/.venvs/tts_virtual_env ${WS}/.venvs/tts_virtual_env
+COPY --chown=pepper:pepper --from=venv-remote-dialogue ${WS}/.venvs/remote_dialogue ${WS}/.venvs/remote_dialogue
 COPY --chown=pepper:pepper docker/venv_map.sh ${WS}/.venvs/venv_map.sh
 
 # Put ROS2 + the built workspace on each venv's path. The host venvs achieve
 # this with editable installs into the colcon build tree; a .pth is the
 # container-appropriate equivalent and does not depend on inherited PYTHONPATH.
 RUN set -eux; \
-    for v in sound conversation tts_virtual_env; do \
+    for v in sound conversation tts_virtual_env remote_dialogue; do \
       sp="${WS}/.venvs/${v}/lib/python3.10/site-packages"; \
       { echo /opt/ros/humble/lib/python3.10/site-packages; \
         echo /opt/ros/humble/local/lib/python3.10/dist-packages; \
