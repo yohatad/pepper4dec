@@ -74,7 +74,7 @@ A press on any base bumper stops the robot until it is reset, and the driver's t
 | `l2lidar.launch.py` | the L2 driver alone (`/points` about 11 Hz, `/imu/data`) |
 | `realsense_bottom.launch.py` | the bottom RealSense alone, with its point cloud |
 | `asr_cm_pipeline.launch.py` | `speech_event`, `conversation_manager` and `behavior_controller` with their own lifecycle manager |
-| `remote_dialogue_pipeline.launch.py` | `remote_dialogue` (client for the remote ASR-LLM-TTS voice server) and `behavior_controller` running `remote_dialogue_pipeline.xml`, with their own lifecycle manager; needs `REMOTE_DIALOGUE_TOKEN` and `REMOTE_DIALOGUE_URL` |
+| `remote_dialogue_pipeline.launch.py` | `remote_dialogue` (client for the remote ASR-LLM-TTS voice server) and `behavior_controller` running `remote_dialogue_pipeline.xml`, with their own lifecycle manager; needs `REMOTE_DIALOGUE_TOKEN` and `REMOTE_DIALOGUE_URL`. `attention:=true` adds the overt attention stack and runs `remote_dialogue_attention.xml` (a conversation starts on eye contact) |
 | `bag_static_tf.launch.py` | the static TF recorded in `slam_august_8_bag`, for replaying it with `--start-offset` (which skips the bag's own `/tf_static`) |
 
 ### Tools

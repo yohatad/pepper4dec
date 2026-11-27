@@ -80,6 +80,18 @@ ros2 launch dec_launch remote_dialogue_pipeline.launch.py language:=kin
 
 Do not run `speech_event` at the same time: the server does the recognition.
 
+With face following: Pepper looks for faces, starts a conversation when
+someone within 2 m makes eye contact, keeps its head on them while they talk,
+and resets the conversation for the next visitor
+(`remote_dialogue_attention.xml`). The server's greeting is spoken once per
+launch, to the first visitor. This needs Pepper's front camera:
+
+```bash
+ssh nao@<PEPPER_IP> ./start_camera.sh
+ros2 launch dec_launch naoqi_driver.launch.py nao_ip:=<PEPPER_IP> use_camera:=true
+ros2 launch dec_launch remote_dialogue_pipeline.launch.py attention:=true
+```
+
 The node alone, without the behavior tree:
 
 ```bash
