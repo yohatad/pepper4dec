@@ -14,6 +14,7 @@ topics:
     peak: "/overt_attention/saliency_peak"
     map: "/overt_attention/saliency_map/compressed"
   face: "/face_detection/data"
+  person: "/person_detection/data"
   audio: "/audio/azimuth_rad"
   target_angles: "/overt_attention/target_angles"
   joint_state: "/head_cmd/joint_states"

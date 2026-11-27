@@ -55,6 +55,7 @@
 #include <std_srvs/srv/set_bool.hpp>
 #include <naoqi_bridge_msgs/msg/joint_angles_with_speed.hpp>
 #include <dec_interfaces/msg/face_detection.hpp>
+#include <dec_interfaces/msg/person_detection.hpp>
 #include <opencv2/opencv.hpp>
 
 //=============================================================================
@@ -93,6 +94,7 @@ struct TopicsConfig
   } camera_info;
 
   std::string face;
+  std::string person;
   std::string audio;
   std::string target_angles;
   std::string joint_state;
@@ -280,7 +282,7 @@ class OvertAttentionNode : public rclcpp_lifecycle::LifecycleNode
 public:
   using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
-  OvertAttentionNode();
+  explicit OvertAttentionNode(const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
 
   // Parameters are declared once in the constructor; the rest of the
   // resources follow the lifecycle transitions below.
@@ -326,6 +328,10 @@ private:
   void onCamInfo(const sensor_msgs::msg::CameraInfo::SharedPtr msg);
   void onJointStates(const sensor_msgs::msg::JointState::SharedPtr msg);
   void onFaces(const dec_interfaces::msg::FaceDetection::SharedPtr msg);
+  void onPersons(const dec_interfaces::msg::PersonDetection::SharedPtr msg);
+  // Depth if known, else fx * real_width / width_px; 0 when neither is known.
+  double estimateDistance(double depth, double width_px, double real_width_m) const;
+  bool withinAttentionDistance(double depth, double width_px, double real_width_m) const;
   void onSaliency(const std_msgs::msg::Float32MultiArray::SharedPtr msg);
 
   void moveHeadToDefault();
@@ -365,6 +371,19 @@ private:
   bool prefer_closer_ = true;
   double max_face_distance_ = 5.0;
 
+  // Distance filter: faces and persons farther than this are ignored. Pepper's
+  // camera has no depth, so distance is estimated from size when depth is 0.
+  double max_attention_distance_ = 2.0;  // m, 0 = no limit
+  double face_width_m_ = 0.31;           // face box width at fx 525 (calibrated)
+  double person_width_m_ = 0.74;         // person box width at fx 525 (calibrated)
+
+  // Person parameters: a person in view without a detected face
+  bool person_attention_ = true;
+  double person_timeout_ = 1.5;         // s
+  double person_head_fraction_ = 0.12;  // head centre, as a fraction of box height
+  double person_top_margin_px_ = 8.0;   // box this close to the top: head is cut off
+  double person_lookup_step_ = 0.12;    // rad to look up while the head is cut off
+
   // Stability parameters (anti-jitter)
   double min_angular_change_ = 0.0;    // radians
   double target_smoothing_alpha_ = 0.4;
@@ -373,6 +392,7 @@ private:
   double saliency_min_ = 0.30;
   double min_cooldown_ = 1.5;
   double max_dwell_ = 3.0;
+  double saliency_recenter_timeout_ = 4.0;  // s without a target before recentering
   double switch_ratio_ = 1.4;
   double same_target_threshold_ = 0.0;    // radians
 
@@ -402,8 +422,12 @@ private:
   std::optional<std::string> current_face_id_;
   std::optional<std::pair<double, double>> current_face_location_;
 
+  // Person state
+  double last_person_time_ = 0.0;
+
   // Saliency state
   double last_saliency_cmd_time_ = 0.0;
+  double last_reenter_time_ = 0.0;   // last saliency_reenter head command
   std::optional<std::pair<double, double>> current_saliency_target_;
   double current_saliency_score_ = 0.0;
 
@@ -411,6 +435,7 @@ private:
   std::vector<VisitedLocation> visited_locations_;
 
   rclcpp::Subscription<dec_interfaces::msg::FaceDetection>::SharedPtr sub_faces_;
+  rclcpp::Subscription<dec_interfaces::msg::PersonDetection>::SharedPtr sub_persons_;
   rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr sub_saliency_;
   rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr sub_caminfo_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr sub_joint_states_;

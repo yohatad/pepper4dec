@@ -48,6 +48,7 @@ Copyright (C) 2025 Carnegie Mellon University Africa
 import math
 import os
 import signal
+import tempfile
 import time
 import unittest
 
@@ -102,6 +103,26 @@ MODELS = [os.path.join(_FACE_SHARE, 'models', m) for m in
 CONFIG = os.path.join(get_package_share_directory('overt_attention'), 'config',
                       'overt_attention_configuration.yaml')
 
+
+def _no_distance_limit_config():
+    """
+    Return a params file that switches the attention distance filter off.
+
+    The people in these recordings stand farther than the 2 m
+    max_attention_distance, and the checks are about which face is chosen and
+    when, so every face counts. It has to be a file with its own
+    overt_attention: entry: a launch parameter dict or a -p argument is a /**
+    entry, which never overrides the config's overt_attention: entry.
+    """
+    f = tempfile.NamedTemporaryFile('w', prefix='overt_attention_no_distance_',
+                                    suffix='.yaml', delete=False)
+    f.write('overt_attention:\n  ros__parameters:\n    max_attention_distance: 0.0\n')
+    f.close()
+    return f.name
+
+
+NO_DISTANCE_LIMIT = _no_distance_limit_config()
+
 # From config/overt_attention_configuration.yaml and the controller.
 FACE_TIMEOUT = 2.0
 SAL_YAW, SAL_PITCH_UP, SAL_PITCH_DN = 1.2, 0.3, -0.3
@@ -138,7 +159,7 @@ def generate_test_description():
     attention = launch_ros.actions.Node(
         package='overt_attention', executable='overt_attention',
         name=ATTENTION_NODE, output='screen',
-        parameters=[CONFIG, {'camera_type': 'realsense'}],
+        parameters=[CONFIG, NO_DISTANCE_LIMIT, {'camera_type': 'realsense'}],
         remappings=[('/face_detection/data', FACES),
                     ('/overt_attention/saliency_peak', PEAKS),
                     ('/camera/color/camera_info', INFO),

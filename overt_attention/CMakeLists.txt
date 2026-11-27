@@ -126,6 +126,15 @@ if(BUILD_TESTING)
   )
   target_link_libraries(test_boolean_map_saliency ${PROJECT_NAME}_lib)
 
+  # The controller itself, over ROS: its own ROS_DOMAIN_ID (isolated), so a
+  # robot stack on this machine cannot interfere.
+  find_package(ament_cmake_ros REQUIRED)
+  ament_add_ros_isolated_gtest(test_attention_controller
+    test/test_attention_controller.cpp
+    TIMEOUT 60
+  )
+  target_link_libraries(test_attention_controller ${PROJECT_NAME}_lib)
+
   # The attention pipeline (face_detection, saliency, controller) on the
   # CSSR4Africa RealSense bags at 15 fps; skips without the bags or models.
   find_package(launch_testing_ament_cmake REQUIRED)

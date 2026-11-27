@@ -68,17 +68,24 @@ its own parameter set; a shared `/**` block applies `use_compressed`/`camera_typ
 | `default_yaw` / `default_pitch` | Default head pose (radians) | `0.0` / `-0.2` |
 | `default_move_speed` | ALMotion speed used moving to default pose | `0.1` |
 | `saliency_yaw_lim` | Head yaw joint limit for saliency (radians) | `1.2` |
-| `saliency_pitch_up` / `saliency_pitch_dn` | Head pitch limits for saliency (radians) | `0.3` / `-0.3` |
+| `saliency_pitch_up` / `saliency_pitch_dn` | Head pitch limits for saliency (radians). HeadPitch is positive looking down, so `_up` is the downward limit; `0.0` keeps saliency at or above level | `0.0` / `-0.3` |
 | `face_timeout` | Time after losing faces before switching to saliency (s) | `2.0` |
 | `engaged_priority_bonus` | Priority multiplier for engaged (mutual-gaze) faces | `2.0` |
 | `face_switch_cooldown` | Minimum time between switching tracked faces (s) | `1.0` |
 | `prefer_closer_faces` | Prefer nearer faces when scoring candidates | `true` |
 | `max_face_distance` | Max face depth considered for tracking (m) | `5.0` |
+| `max_attention_distance` | Ignore faces and persons farther than this (m); without depth (Pepper's camera) the distance is estimated as fx × width_m / box width; `0` = no limit | `2.0` |
+| `face_width_m` / `person_width_m` | Face / person box width at fx 525, for that estimate (calibrated on Pepper: 82 px / 195 px at 2 m) | `0.31` / `0.74` |
+| `person_attention` | Follow a person whose face is not detected: aim at the top of their box | `true` |
+| `person_timeout` | Time without a person before saliency resumes (s) | `1.5` |
+| `person_head_fraction` | Head centre, as a fraction of the person box height from its top | `0.12` |
+| `person_top_margin_px` / `person_lookup_step` | Box top this close to the image top means the head is cut off: tilt up this much (rad) per update | `8.0` / `0.12` |
 | `min_angular_change_deg` | Dead-zone: skip a head command if already this close (deg) | `2.0` |
 | `target_smoothing_alpha` | EMA weight for new target (0=frozen, 1=raw) | `0.4` |
 | `saliency_min_score` | Minimum saliency score to consider switching to it | `0.30` |
 | `saliency_min_cooldown` | Minimum dwell before switching saliency targets (s) | `1.5` |
 | `saliency_max_dwell` | Max time to stay on one saliency target (s) | `3.0` |
+| `saliency_recenter_timeout` | With no saliency peak inside the limits for this long, return to the default pose (s) | `4.0` |
 | `switch_score_ratio` | Required score ratio to switch saliency targets | `1.4` |
 | `same_target_threshold_deg` | Angular threshold to treat a saliency peak as "the same" | `5.0` |
 | `enable_ior` | Enable Inhibition of Return | `true` |

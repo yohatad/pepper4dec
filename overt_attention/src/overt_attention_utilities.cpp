@@ -35,6 +35,8 @@ TopicsConfig loadTopicsConfig(const std::string & package_name, const std::strin
   cfg.saliency.peak = topics["saliency"]["peak"].as<std::string>();
   cfg.saliency.map = topics["saliency"]["map"].as<std::string>();
   cfg.face = topics["face"].as<std::string>();
+  cfg.person = topics["person"] ? topics["person"].as<std::string>() :
+    std::string("/person_detection/data");
   cfg.audio = topics["audio"].as<std::string>();
   cfg.camera_info.pepper = topics["camera_info"]["pepper"].as<std::string>();
   cfg.camera_info.realsense = topics["camera_info"]["realsense"].as<std::string>();

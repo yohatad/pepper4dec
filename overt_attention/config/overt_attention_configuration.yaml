@@ -40,9 +40,13 @@ overt_attention:
     default_pitch: -0.2
     default_move_speed: 0.1
 
-    # Joint limits for saliency
+    # Joint limits for saliency. HeadPitch is positive looking DOWN, so
+    # saliency_pitch_up is the downward limit and saliency_pitch_dn the upward
+    # one. 0.0 keeps saliency at or above level: below it Pepper's camera sees
+    # mostly floor and table edges, which outscore everything else and pull
+    # the head down while nobody is in view.
     saliency_yaw_lim: 1.2
-    saliency_pitch_up: 0.3
+    saliency_pitch_up: 0.0
     saliency_pitch_dn: -0.3
 
     # Face parameters
@@ -52,6 +56,27 @@ overt_attention:
     prefer_closer_faces: true
     max_face_distance: 5.0
 
+    # Distance filter: faces and persons farther than max_attention_distance
+    # are ignored (passers-by at the back of the room). Pepper's camera has no
+    # depth, so distance is estimated from size: fx * width_m / box width.
+    # width_m is the detector's box width at fx 525 (the camera_info default),
+    # calibrated on the robot on 2026-11-27: at 2.0 m the face box was 82 px
+    # and the person box 195 px. Boxes are wider than the face/body itself,
+    # so these are not anatomical widths. 0 = no limit.
+    max_attention_distance: 2.0
+    face_width_m: 0.31
+    person_width_m: 0.74
+
+    # Person parameters: a person in view without a detected face (often a
+    # close visitor whose face is above the frame). The head aims at the top
+    # of their box, or tilts up while the box reaches the top edge, until a
+    # face is detected. Faces always win; saliency waits person_timeout.
+    person_attention: true
+    person_timeout: 1.5          # s without a person before saliency resumes
+    person_head_fraction: 0.12   # head centre, fraction of box height from the top
+    person_top_margin_px: 8.0    # box top this close to the image top: head cut off
+    person_lookup_step: 0.12     # rad to tilt up per update while the head is cut off
+
     # Stability parameters (anti-jitter)
     min_angular_change_deg: 2.0   # Dead-zone: skip cmd if head already close
     target_smoothing_alpha: 0.4   # EMA weight for new target (0=frozen, 1=raw)
@@ -60,6 +85,10 @@ overt_attention:
     saliency_min_score: 0.30
     saliency_min_cooldown: 1.5
     saliency_max_dwell: 3.0
+    # With no saliency peak inside the limits for this long (the strongest
+    # spots are past the edge the head is turned to), go back to
+    # default_yaw/default_pitch.
+    saliency_recenter_timeout: 4.0
     switch_score_ratio: 1.4
     same_target_threshold_deg: 5.0
 

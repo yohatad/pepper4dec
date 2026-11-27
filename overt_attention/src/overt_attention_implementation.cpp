@@ -19,8 +19,8 @@
 
 #include "overt_attention/overt_attention_interface.h"
 
-OvertAttentionNode::OvertAttentionNode()
-: LifecycleNode("overt_attention")
+OvertAttentionNode::OvertAttentionNode(const rclcpp::NodeOptions & options)
+: LifecycleNode("overt_attention", options)
 {
   try {
     topics_config_ = loadTopicsConfig("overt_attention", "data/pepper_topics.yaml");
@@ -51,6 +51,18 @@ OvertAttentionNode::OvertAttentionNode()
   declare_parameter("prefer_closer_faces", true);
   declare_parameter("max_face_distance", 5.0);
 
+  // Distance filter (faces and persons beyond it are ignored)
+  declare_parameter("max_attention_distance", 2.0);
+  declare_parameter("face_width_m", 0.31);
+  declare_parameter("person_width_m", 0.74);
+
+  // Person parameters (a person in view without a detected face)
+  declare_parameter("person_attention", true);
+  declare_parameter("person_timeout", 1.5);
+  declare_parameter("person_head_fraction", 0.12);
+  declare_parameter("person_top_margin_px", 8.0);
+  declare_parameter("person_lookup_step", 0.12);
+
   // Stability parameters (anti-jitter)
   declare_parameter("min_angular_change_deg", 2.0);
   declare_parameter("target_smoothing_alpha", 0.4);
@@ -59,6 +71,7 @@ OvertAttentionNode::OvertAttentionNode()
   declare_parameter("saliency_min_score", 0.30);
   declare_parameter("saliency_min_cooldown", 1.5);
   declare_parameter("saliency_max_dwell", 3.0);
+  declare_parameter("saliency_recenter_timeout", 4.0);
   declare_parameter("switch_score_ratio", 1.4);
   declare_parameter("same_target_threshold_deg", 5.0);
 
@@ -99,6 +112,14 @@ OvertAttentionNode::on_configure(const rclcpp_lifecycle::State &)
   saliency_pitch_dn_ = get_parameter("saliency_pitch_dn").as_double();
 
   face_timeout_ = get_parameter("face_timeout").as_double();
+  max_attention_distance_ = get_parameter("max_attention_distance").as_double();
+  face_width_m_ = get_parameter("face_width_m").as_double();
+  person_width_m_ = get_parameter("person_width_m").as_double();
+  person_attention_ = get_parameter("person_attention").as_bool();
+  person_timeout_ = get_parameter("person_timeout").as_double();
+  person_head_fraction_ = get_parameter("person_head_fraction").as_double();
+  person_top_margin_px_ = get_parameter("person_top_margin_px").as_double();
+  person_lookup_step_ = get_parameter("person_lookup_step").as_double();
   engaged_bonus_ = get_parameter("engaged_priority_bonus").as_double();
   face_switch_cooldown_ = get_parameter("face_switch_cooldown").as_double();
   prefer_closer_ = get_parameter("prefer_closer_faces").as_bool();
@@ -110,6 +131,7 @@ OvertAttentionNode::on_configure(const rclcpp_lifecycle::State &)
   saliency_min_ = get_parameter("saliency_min_score").as_double();
   min_cooldown_ = get_parameter("saliency_min_cooldown").as_double();
   max_dwell_ = get_parameter("saliency_max_dwell").as_double();
+  saliency_recenter_timeout_ = get_parameter("saliency_recenter_timeout").as_double();
   switch_ratio_ = get_parameter("switch_score_ratio").as_double();
   same_target_threshold_ = get_parameter("same_target_threshold_deg").as_double() * M_PI / 180.0;
 
@@ -125,6 +147,11 @@ OvertAttentionNode::on_configure(const rclcpp_lifecycle::State &)
   auto qos_img = getImageQoS();
   sub_faces_ = create_subscription<dec_interfaces::msg::FaceDetection>(
     face_topic, 10, std::bind(&OvertAttentionNode::onFaces, this, std::placeholders::_1));
+  if (person_attention_) {
+    sub_persons_ = create_subscription<dec_interfaces::msg::PersonDetection>(
+      topics_config_.person, 10,
+      std::bind(&OvertAttentionNode::onPersons, this, std::placeholders::_1));
+  }
   sub_saliency_ = create_subscription<std_msgs::msg::Float32MultiArray>(
     saliency_topic, 10, std::bind(&OvertAttentionNode::onSaliency, this, std::placeholders::_1));
   sub_caminfo_ = create_subscription<sensor_msgs::msg::CameraInfo>(
@@ -174,6 +201,7 @@ OvertAttentionNode::CallbackReturn
 OvertAttentionNode::on_cleanup(const rclcpp_lifecycle::State &)
 {
   sub_faces_.reset();
+  sub_persons_.reset();
   sub_saliency_.reset();
   sub_caminfo_.reset();
   sub_joint_states_.reset();
@@ -349,6 +377,10 @@ void OvertAttentionNode::onFaces(const dec_interfaces::msg::FaceDetection::Share
   // Build candidate list with priorities
   std::vector<FaceCandidate> candidates;
   for (size_t i = 0; i < msg->centroids.size(); ++i) {
+    const double width_px = i < msg->width.size() ? msg->width[i] : 0.0;
+    if (!withinAttentionDistance(msg->centroids[i].z, width_px, face_width_m_)) {
+      continue;  // too far away to be the robot's visitor
+    }
     FaceCandidate cand;
     cand.face_id =
       (i < msg->face_label_id.size()) ? msg->face_label_id[i] : ("unknown_" + std::to_string(i));
@@ -364,6 +396,18 @@ void OvertAttentionNode::onFaces(const dec_interfaces::msg::FaceDetection::Share
     cand.world_pitch = cam_pitch + *head_pitch_;
 
     candidates.push_back(cand);
+  }
+
+  if (candidates.empty()) {
+    // Only faces beyond max_attention_distance: as if none were seen.
+    if (current_face_id_.has_value()) {
+      if (verbose_mode_) {
+        RCLCPP_INFO(get_logger(), "Face out of range: %s", current_face_id_->c_str());
+      }
+      current_face_id_.reset();
+      current_face_location_.reset();
+    }
+    return;
   }
 
   // Select best face
@@ -499,6 +543,101 @@ void OvertAttentionNode::cleanupWeakIor()
   visited_locations_ = std::move(kept);
 }
 
+double OvertAttentionNode::estimateDistance(
+  double depth, double width_px, double real_width_m) const
+{
+  if (depth > 0.0) {
+    return depth;
+  }
+  if (width_px > 0.0 && fx_.has_value()) {
+    return *fx_ * real_width_m / width_px;
+  }
+  return 0.0;
+}
+
+bool OvertAttentionNode::withinAttentionDistance(
+  double depth, double width_px, double real_width_m) const
+{
+  if (max_attention_distance_ <= 0.0) {
+    return true;
+  }
+  const double distance = estimateDistance(depth, width_px, real_width_m);
+  return distance <= 0.0 || distance <= max_attention_distance_;  // unknown: keep
+}
+
+// A person is in view but no face is detected: often the visitor is close and,
+// Pepper being short, their face is above the frame or too steep for the face
+// detector. Aim where their head should be (near the top of the person box),
+// or, when the box reaches the top edge, tilt up step by step, until a face is
+// detected and onFaces takes over. Faces always win; saliency waits until no
+// person has been seen for person_timeout.
+void OvertAttentionNode::onPersons(const dec_interfaces::msg::PersonDetection::SharedPtr msg)
+{
+  if (!attention_enabled_ || !fx_.has_value() || !head_yaw_.has_value() ||
+    !head_pitch_.has_value())
+  {
+    return;
+  }
+  const double now = get_clock()->now().seconds();
+  if (now - last_face_time_ < face_timeout_) {
+    return;  // a face is being tracked
+  }
+
+  // The largest box: the nearest person.
+  int best = -1;
+  double best_area = 0.0;
+  for (size_t i = 0; i < msg->centroids.size(); ++i) {
+    if (i >= msg->width.size() || i >= msg->height.size()) {
+      break;
+    }
+    if (!withinAttentionDistance(msg->centroids[i].z, msg->width[i], person_width_m_)) {
+      continue;
+    }
+    const double area = static_cast<double>(msg->width[i]) * msg->height[i];
+    if (area > best_area) {
+      best_area = area;
+      best = static_cast<int>(i);
+    }
+  }
+  if (best < 0) {
+    return;
+  }
+
+  const auto & centroid = msg->centroids[best];
+  const double box_h = msg->height[best];
+  const double top = centroid.y - box_h / 2.0;
+
+  double yaw;
+  double pitch;
+  std::string source;
+  if (top <= person_top_margin_px_) {
+    // The head is cut off above the frame: keep tilting up.
+    yaw = pixelToAngles(centroid.x, *cy_, *fx_, *fy_, *cx_, *cy_).first + *head_yaw_;
+    pitch = *head_pitch_ - person_lookup_step_;
+    source = "person_lookup";
+  } else {
+    auto [cam_yaw, cam_pitch] = pixelToAngles(
+      centroid.x, top + person_head_fraction_ * box_h, *fx_, *fy_, *cx_, *cy_);
+    yaw = cam_yaw + *head_yaw_;
+    pitch = cam_pitch + *head_pitch_;
+    source = "person_head";
+  }
+
+  if (current_saliency_target_.has_value() || current_face_id_.has_value()) {
+    current_saliency_target_.reset();   // saliency starts afresh afterwards
+    target_yaw_.reset();                // and the EMA does not drag toward it
+    target_pitch_.reset();
+  }
+  last_person_time_ = now;
+
+  if (verbose_mode_ && source == "person_lookup") {
+    RCLCPP_INFO(get_logger(), "Person without a face, head above the frame: looking up");
+  }
+  publishHead(
+    clamp(yaw, -face_yaw_lim_, face_yaw_lim_), clamp(pitch, face_pitch_dn_, face_pitch_up_),
+    0.0, source);
+}
+
 void OvertAttentionNode::onSaliency(const std_msgs::msg::Float32MultiArray::SharedPtr msg)
 {
   if (!attention_enabled_) {
@@ -510,6 +649,10 @@ void OvertAttentionNode::onSaliency(const std_msgs::msg::Float32MultiArray::Shar
   }
 
   if (get_clock()->now().seconds() - last_face_time_ < face_timeout_) {
+    return;
+  }
+  // A person in view without a face: onPersons is looking for their face.
+  if (get_clock()->now().seconds() - last_person_time_ < person_timeout_) {
     return;
   }
 
@@ -525,13 +668,26 @@ void OvertAttentionNode::onSaliency(const std_msgs::msg::Float32MultiArray::Shar
     // Reset smoothed target so the face position doesn't bias saliency EMA
     target_yaw_.reset();
     target_pitch_.reset();
+  }
 
-    // If head is outside saliency limits (e.g. from face tracking), pull it back in
-    double head_yaw_val = *head_yaw_;
-    double head_pitch_val = head_pitch_.value_or(0.0);
-    double clamped_yaw = clamp(head_yaw_val, -saliency_yaw_lim_, saliency_yaw_lim_);
-    double clamped_pitch = clamp(head_pitch_val, saliency_pitch_dn_, saliency_pitch_up_);
-    if (clamped_yaw != head_yaw_val || clamped_pitch != head_pitch_val) {
+  // Peaks are judged in world angles from the current head pose, so with the
+  // head outside the saliency limits almost every peak lands outside them too
+  // and is rejected, and the head never moves again. It gets there not only
+  // from face tracking but also when a restart finds it where face tracking
+  // left it, or another node moved it. Bring it back in before choosing a
+  // target, at most once per kReenterInterval so the move can finish.
+  constexpr double kReenterTolerance = 0.03;  // rad, joint tracking error
+  constexpr double kReenterInterval = 2.0;    // s
+  const double head_yaw_val = *head_yaw_;
+  const double head_pitch_val = head_pitch_.value_or(0.0);
+  const double clamped_yaw = clamp(head_yaw_val, -saliency_yaw_lim_, saliency_yaw_lim_);
+  const double clamped_pitch = clamp(head_pitch_val, saliency_pitch_dn_, saliency_pitch_up_);
+  if (std::abs(clamped_yaw - head_yaw_val) > kReenterTolerance ||
+    std::abs(clamped_pitch - head_pitch_val) > kReenterTolerance)
+  {
+    const double now = get_clock()->now().seconds();
+    if (now - last_reenter_time_ >= kReenterInterval) {
+      last_reenter_time_ = now;
       if (verbose_mode_) {
         RCLCPP_INFO(
           get_logger(),
@@ -542,6 +698,7 @@ void OvertAttentionNode::onSaliency(const std_msgs::msg::Float32MultiArray::Shar
       }
       publishHead(clamped_yaw, clamped_pitch, 0.0, "saliency_reenter", true);
     }
+    return;
   }
 
   if (msg->data.size() < 3) {
@@ -581,6 +738,30 @@ void OvertAttentionNode::onSaliency(const std_msgs::msg::Float32MultiArray::Shar
   }
 
   if (candidates.empty()) {
+    // Every peak is outside the limits (or inhibited): the strongest spots
+    // lie beyond the edge the head is turned toward, so it would never move
+    // again. After saliency_recenter_timeout without a target, go back to the
+    // default pose, where the peaks fall inside the limits again.
+    const double now = get_clock()->now().seconds();
+    const double home_yaw = clamp(default_yaw_, -saliency_yaw_lim_, saliency_yaw_lim_);
+    const double home_pitch = clamp(default_pitch_, saliency_pitch_dn_, saliency_pitch_up_);
+    const bool away_from_home = std::abs(head_yaw_val - home_yaw) > kReenterTolerance ||
+      std::abs(head_pitch_val - home_pitch) > kReenterTolerance;
+    if (away_from_home && now - last_saliency_cmd_time_ >= saliency_recenter_timeout_ &&
+      now - last_reenter_time_ >= kReenterInterval)
+    {
+      last_reenter_time_ = now;
+      last_saliency_cmd_time_ = now;
+      current_saliency_target_.reset();
+      if (verbose_mode_) {
+        RCLCPP_INFO(
+          get_logger(),
+          "No saliency target within the limits for %.1f s \xe2\x86\x92 recentering "
+          "(yaw=%.1f\xc2\xb0, pitch=%.1f\xc2\xb0)",
+          saliency_recenter_timeout_, home_yaw * 180.0 / M_PI, home_pitch * 180.0 / M_PI);
+      }
+      publishHead(home_yaw, home_pitch, 0.0, "saliency_recenter", true);
+    }
     return;
   }
 
