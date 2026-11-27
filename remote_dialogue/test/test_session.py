@@ -1,10 +1,10 @@
-"""Tests for remote_dialogue_session against the fake /ws/pepper server."""
+"""Tests for remote_dialogue_session against a stub of the /ws/pepper server."""
 
 import json
 import threading
 import time
 
-from fake_voice_server import FakeVoiceServer
+from voice_server_stub import VoiceServerStub
 import pytest
 
 from remote_dialogue.remote_dialogue_session import build_url, DialogueSession, redact_url
@@ -53,7 +53,7 @@ def wait_for(predicate, timeout=5.0):
 
 @pytest.fixture
 def server():
-    srv = FakeVoiceServer(token='s3cret', reply_seconds=0.3).start()
+    srv = VoiceServerStub(token='s3cret', reply_seconds=0.3).start()
     yield srv
     srv.stop()
 
@@ -187,5 +187,62 @@ def test_failing_callbacks_do_not_kill_the_session(server):
         server.drop_connections()
         assert wait_for(lambda: session.ready and session.connections == 2)
         assert any('session callback failed' in line for line in rec.logs)
+    finally:
+        session.stop()
+
+
+def test_stop_is_prompt_when_the_server_is_busy_loading():
+    """A server whose event loop is blocked never answers the closing handshake."""
+    import asyncio
+    from websockets.asyncio.server import serve
+
+    started = threading.Event()
+    port = []
+    release = threading.Event()
+
+    async def handler(ws):
+        await ws.recv()
+        release.wait(10.0)      # synchronous model load: blocks the whole loop
+
+    def run():
+        async def main():
+            async with serve(handler, '127.0.0.1', 0) as server:
+                port.append(server.sockets[0].getsockname()[1])
+                started.set()
+                await asyncio.get_running_loop().run_in_executor(None, release.wait, 15.0)
+        asyncio.run(main())
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    assert started.wait(5.0)
+    session = DialogueSession(f'ws://127.0.0.1:{port[0]}/ws/pepper', 't')
+    session.start()
+    try:
+        assert wait_for(lambda: session.connected)
+        time.sleep(0.2)
+        start = time.monotonic()
+        session.stop()
+        assert time.monotonic() - start < 2.5
+    finally:
+        release.set()
+        thread.join(5.0)
+
+
+def test_server_close_leaves_no_unretrieved_task_errors(server, caplog):
+    """A server-initiated close must not leave asyncio "never retrieved" errors."""
+    import gc
+    import logging
+    rec = Recorder()
+    session = make_session(server, rec, greet_on_connect=False)
+    session.start()
+    try:
+        assert wait_for(lambda: session.ready)
+        for _ in range(20):
+            session.send_audio(b'\x00' * 640)   # keep the sender busy
+        with caplog.at_level(logging.ERROR, logger='asyncio'):
+            server.drop_connections()
+            assert wait_for(lambda: session.ready and session.connections == 2)
+            gc.collect()
+        assert not [r for r in caplog.records if 'never retrieved' in r.getMessage()]
     finally:
         session.stop()

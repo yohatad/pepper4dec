@@ -1,6 +1,6 @@
-"""fake_voice_server.py
+"""voice_server_stub.py
 
-A stand-in for the /ws/pepper voice server (PEPPER_API.md, v1.1), for tests.
+A stub of the /ws/pepper voice server (PEPPER_API.md, v1.1), for tests.
 
 It follows the documented protocol: token check during the handshake, the
 `config` message within 10 s, `ready`, an optional welcome line, server-side
@@ -44,12 +44,12 @@ def tone(seconds, rate, freq=440.0, amplitude=8000):
     return (amplitude * np.sin(2 * np.pi * freq * t)).astype('<i2').tobytes()
 
 
-class FakeVoiceServer:
-    """Run the fake server on a background thread."""
+class VoiceServerStub:
+    """Run the voice server stub on a background thread."""
 
     def __init__(self, token='secret', reply_seconds=0.6, speech_rms=500.0,
-                 end_silence_frames=15, chunk_s=0.04):
-        """Configure the fake server.
+                 end_silence_frames=15, chunk_s=0.04, host='127.0.0.1', port=0):
+        """Configure the stub.
 
         Args:
             token: the accepted ?token=
@@ -57,13 +57,16 @@ class FakeVoiceServer:
             speech_rms: RMS above which a 20 ms mic frame counts as speech
             end_silence_frames: quiet frames that end a visitor's turn
             chunk_s: reply audio chunk length (sent at playback speed)
+            host: the address to listen on
+            port: the port to listen on; 0 picks a free one
         """
         self.token = token
         self.reply_seconds = reply_seconds
         self.speech_rms = speech_rms
         self.end_silence_frames = end_silence_frames
         self.chunk_s = chunk_s
-        self.port = None
+        self.host = host
+        self.port = port
 
         # Recorded client behaviour
         self.configs = []
@@ -89,7 +92,7 @@ class FakeVoiceServer:
         """Start serving on a free localhost port."""
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
-        assert self._ready.wait(5.0), 'fake server did not start'
+        assert self._ready.wait(5.0), 'voice server stub did not start'
         return self
 
     def stop(self):
@@ -118,7 +121,7 @@ class FakeVoiceServer:
         asyncio.set_event_loop(self._loop)
 
         async def start():
-            self._server = await serve(self._handler, '127.0.0.1', 0,
+            self._server = await serve(self._handler, self.host, self.port,
                                        process_request=self._check_token, max_size=None)
             self.port = self._server.sockets[0].getsockname()[1]
             self._ready.set()
@@ -146,7 +149,7 @@ class FakeVoiceServer:
 
 
 class Session:
-    """One client session on the fake server."""
+    """One client session on the stub."""
 
     def __init__(self, server, ws):
         """Bind to the server's recorder and the socket."""

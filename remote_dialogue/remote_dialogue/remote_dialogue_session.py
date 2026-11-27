@@ -11,7 +11,7 @@ through one outgoing queue, so they reach the server in the order given.
 
 The token is part of the URL query; it is never logged.
 
-None of this module touches ROS, so it is tested against a local fake server.
+None of this module touches ROS, so it is tested against a local voice server stub.
 
 Author: Yohannes Tadesse Haile
 Affiliation: Carnegie Mellon University Africa
@@ -204,8 +204,10 @@ class DialogueSession:
                 pass
 
     async def _session_once(self):
+        # close_timeout: a server busy loading models does not answer the
+        # closing handshake, and the default 10 s wait held up shutdown.
         async with connect(self._url, max_size=None, open_timeout=self.open_timeout_s,
-                           ping_interval=20, ping_timeout=20) as ws:
+                           ping_interval=20, ping_timeout=20, close_timeout=1.0) as ws:
             config = {'type': 'config', 'language': self.language,
                       'output_sample_rate': self.output_sample_rate,
                       'greet': self._greet_next}
@@ -226,9 +228,15 @@ class DialogueSession:
                 {sender, receiver, stopper}, return_when=asyncio.FIRST_COMPLETED)
             for task in pending:
                 task.cancel()
-            for task in done:
-                if task is not stopper and task.exception() is not None:
-                    raise task.exception()
+            await asyncio.gather(*pending, return_exceptions=True)
+            # When the server closes the socket both the sender and the
+            # receiver fail; collect every error so asyncio does not log the
+            # second one as "Task exception was never retrieved".
+            errors = [task.exception() for task in done
+                      if task is not stopper and not task.cancelled()
+                      and task.exception() is not None]
+            if errors:
+                raise errors[0]
 
     async def _sender(self, ws):
         while True:

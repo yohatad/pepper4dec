@@ -253,6 +253,8 @@ class RemoteDialogueNode(LifecycleNode):
     def _on_connection(self, connected, ready):
         if rclpy.ok(context=self.context):
             self._publish_connected(ready)
+        with self._lock:
+            self._turn_changed.notify_all()   # wakes turns waiting for ready
         if not ready:
             with self._lock:
                 self.gate.server_speaking = False
@@ -421,10 +423,25 @@ class RemoteDialogueNode(LifecycleNode):
     def _execute_turn(self, goal_handle):
         goal = goal_handle.request
         result = RemoteDialogueTurn.Result()
+        # Not ready yet (models loading, or reconnecting): wait for it up to
+        # the goal's `wait` rather than failing at once, so a behavior tree
+        # that loops turns does not spin while the server comes up.
+        deadline = time.monotonic() + max(0.0, float(goal.wait))
+        with self._lock:
+            while not (self.session is not None and self.session.ready):
+                remaining = deadline - time.monotonic()
+                if (remaining <= 0.0 or goal_handle.is_cancel_requested or
+                        not rclpy.ok(context=self.context)):
+                    break
+                self._turn_changed.wait(min(remaining, 0.2))
         session = self.session
         if session is None or not session.ready:
             result.status = 'not_connected'
-            goal_handle.abort()
+            if goal_handle.is_cancel_requested:
+                result.status = 'cancelled'
+                goal_handle.canceled()
+            elif rclpy.ok(context=self.context):
+                goal_handle.abort()
             return result
 
         text = goal.text.strip()

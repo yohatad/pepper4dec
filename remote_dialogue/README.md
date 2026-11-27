@@ -176,10 +176,10 @@ remote_dialogue/
 │   ├── remote_dialogue_logic.py                 # playback pacing, mic gate, turn outcome
 │   └── remote_dialogue_audio.py                 # format conversion
 ├── test/
-│   ├── fake_voice_server.py                     # stand-in for /ws/pepper
+│   ├── voice_server_stub.py                     # stub of the /ws/pepper server
 │   ├── test_audio.py, test_logic.py             # pure unit tests
-│   ├── test_session.py                          # client against the fake server
-│   ├── test_node.py                             # node + fake Pepper + fake server
+│   ├── test_session.py                          # client against the server stub
+│   ├── test_node.py                             # node + driver + Pepper and server stubs
 │   └── test_flake8.py, test_pep257.py
 ├── requirements.txt
 ├── package.xml, setup.py, setup.cfg
@@ -194,7 +194,12 @@ colcon test --packages-select remote_dialogue
 colcon test-result --verbose
 ```
 
-No robot or real server is needed. `fake_voice_server.py` implements the documented protocol, with an energy detector in place of a real VAD. `test_node.py` runs the node against it and against a fake Pepper. The fake Pepper publishes `/audio` at real-time rate, serves `send_audio_buffer`, and echoes its own speaker into its microphones. The tests check that:
+No robot or real server is needed. `test_node.py` exercises the node with a driver and two stubs:
+- **Driver** (`DialogueDriver`): sends `RemoteDialogueTurn` goals, calls `set_language`, `reset` and `set_listening`, and records what the node publishes, as the behavior tree would.
+- **Voice server stub** (`voice_server_stub.py`, `VoiceServerStub`): implements the documented `/ws/pepper` protocol, with an energy detector in place of a real VAD.
+- **Pepper stub** (`PepperStub`, for naoqi_driver): publishes `/audio` at real-time rate, serves `send_audio_buffer`, and echoes its own speaker into its microphones.
+
+`test_session.py` runs the WebSocket client alone against the voice server stub. The tests check that:
 - no live audio reaches the server while a reply plays;
 - `playback_done` arrives only after the last sample has played;
 - typed and spoken turns, language changes, resets and reconnects all work.

@@ -50,8 +50,9 @@ remote_dialogue:
     # =========================================================================
     # Longest a whole turn (listen + think + speak) may take
     turn_timeout_s: 90.0
-    # Wait this long for the server to confirm set_language
-    language_timeout_s: 5.0
+    # Wait this long for the server to confirm set_language (below the
+    # behavior tree's 5 s service timeout, so SetDialogueLanguage gets an answer)
+    language_timeout_s: 4.0
 
     # =========================================================================
     # Debug Settings
