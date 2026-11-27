@@ -1270,6 +1270,15 @@ BT::PortsList IsMutualGazeDiscovered::providedPorts()
   return {
     BT::InputPort<double>("timeout", 10.0, "Overall timeout in seconds"),
     BT::InputPort<double>("min_duration", 0.5, "Seconds of continuous gaze required to succeed"),
+    BT::InputPort<double>(
+      "max_distance", 0.0,
+      "Ignore faces farther than this (m); 0 = no limit. Without depth (Pepper's camera) "
+      "the distance is estimated from the face box width"),
+    BT::InputPort<double>(
+      "focal_length_px", 525.0, "Camera focal length in pixels, for the size estimate"),
+    BT::InputPort<double>(
+      "face_width_m", 0.31,
+      "Face box width at focal_length_px (calibrated on Pepper: 82 px at 2 m)"),
   };
 }
 
@@ -1309,9 +1318,26 @@ BT::NodeStatus IsMutualGazeDiscovered::onRunning()
     return BT::NodeStatus::RUNNING;
   }
 
+  const double maxDistance = getInput<double>("max_distance").value_or(0.0);
+  const double focal = getInput<double>("focal_length_px").value_or(525.0);
+  const double faceWidth = getInput<double>("face_width_m").value_or(0.31);
   bool anyMutualGaze = false;
-  for (bool gaze : msg->mutual_gaze) {
-    if (gaze) {anyMutualGaze = true; break;}
+  for (size_t i = 0; i < msg->mutual_gaze.size(); ++i) {
+    if (!msg->mutual_gaze[i]) {
+      continue;
+    }
+    if (maxDistance > 0.0) {
+      // Depth when known, else focal * real width / box width; unknown: keep.
+      double distance = i < msg->centroids.size() ? msg->centroids[i].z : 0.0;
+      if (distance <= 0.0 && i < msg->width.size() && msg->width[i] > 0.0f) {
+        distance = focal * faceWidth / msg->width[i];
+      }
+      if (distance > maxDistance) {
+        continue;  // eye contact from too far away to be the visitor
+      }
+    }
+    anyMutualGaze = true;
+    break;
   }
 
   if (!anyMutualGaze) {

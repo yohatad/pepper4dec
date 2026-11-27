@@ -619,6 +619,51 @@ TEST_F(BtRosTest, IsMutualGazeDiscoveredTimesOutWithoutGaze) {
   EXPECT_EQ(tickUntilDone(tree, milliseconds(3000)), NodeStatus::FAILURE);
 }
 
+// Pepper's camera has no depth: z = 0 and distance comes from the box width.
+// 525 * 0.31 / 30 px = 5.4 m (passer-by); / 120 px = 1.4 m (visitor).
+TEST_F(BtRosTest, IsMutualGazeDiscoveredIgnoresEyeContactFromFarAway) {
+  publishEvery<FaceDetection>(
+    "/face_detection/data", milliseconds(50), []() {
+      auto msg = bt_test::faces({true});
+      msg.centroids[0].z = 0.0;
+      msg.width[0] = 30.0f;
+      return msg;
+    });
+  auto tree = treeFromText(
+    R"(<IsMutualGazeDiscovered timeout="0.6" min_duration="0.1" max_distance="2.0"/>)");
+
+  EXPECT_EQ(tickUntilDone(tree, milliseconds(3000)), NodeStatus::FAILURE);
+}
+
+TEST_F(BtRosTest, IsMutualGazeDiscoveredAcceptsAVisitorWithinRange) {
+  publishEvery<FaceDetection>(
+    "/face_detection/data", milliseconds(50), []() {
+      auto msg = bt_test::faces({true});
+      msg.centroids[0].z = 0.0;
+      msg.width[0] = 120.0f;
+      return msg;
+    });
+  auto tree = treeFromText(
+    R"(<IsMutualGazeDiscovered timeout="3.0" min_duration="0.1" max_distance="2.0"/>)");
+
+  EXPECT_EQ(tickUntilDone(tree), NodeStatus::SUCCESS);
+}
+
+TEST_F(BtRosTest, IsMutualGazeDiscoveredPrefersMeasuredDepthOverSize) {
+  // A small box, but the depth camera says 1.2 m: in range.
+  publishEvery<FaceDetection>(
+    "/face_detection/data", milliseconds(50), []() {
+      auto msg = bt_test::faces({true});
+      msg.centroids[0].z = 1.2;
+      msg.width[0] = 30.0f;
+      return msg;
+    });
+  auto tree = treeFromText(
+    R"(<IsMutualGazeDiscovered timeout="3.0" min_duration="0.1" max_distance="2.0"/>)");
+
+  EXPECT_EQ(tickUntilDone(tree), NodeStatus::SUCCESS);
+}
+
 TEST_F(BtRosTest, GetVisitorResponseIgnoresSpeechFromBeforeItStarted) {
   auto tree = treeFromText(
     R"(<GetVisitorResponse timeout="5.0" visitor_response="{visitor_response}"/>)");
