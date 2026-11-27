@@ -618,6 +618,110 @@ BT::NodeStatus RemoteDialogueTurnNode::onFailure(BT::ActionNodeErrorCode error)
 }
 
 //=============================================================================
+// ResetDialogue
+// Service: dec_interfaces::srv::ResetDialogue  (/remote_dialogue/reset)
+//=============================================================================
+
+BT::PortsList ResetDialogue::providedPorts()
+{
+  return {
+    BT::InputPort<std::string>("service_name", "/remote_dialogue/reset", "Service name"),
+    BT::InputPort<bool>("greet", true, "Speak the welcome line"),
+    BT::InputPort<std::string>("language", "", "Language for the new conversation (optional)"),
+    BT::OutputPort<std::string>("message", "Response message from the service"),
+  };
+}
+
+bool ResetDialogue::setRequest(Request::SharedPtr & request)
+{
+  request->greet = getInput<bool>("greet").value_or(true);
+  request->language = getInput<std::string>("language").value_or("");
+
+  if (ConfigManager::instance().isVerbose()) {
+    RCLCPP_INFO(
+      rclcpp::get_logger("behavior_controller"),
+      "[ResetDialogue] Request → greet=%s language=\"%s\"",
+      request->greet ? "true" : "false", request->language.c_str());
+  }
+  return true;
+}
+
+BT::NodeStatus ResetDialogue::onResponseReceived(const Response::SharedPtr & response)
+{
+  setOutput("message", response->message);
+
+  if (!response->success) {
+    RCLCPP_WARN(
+      rclcpp::get_logger("behavior_controller"),
+      "[ResetDialogue] Service returned failure: %s", response->message.c_str());
+    return BT::NodeStatus::FAILURE;
+  }
+  return BT::NodeStatus::SUCCESS;
+}
+
+BT::NodeStatus ResetDialogue::onFailure(BT::ServiceNodeErrorCode error)
+{
+  RCLCPP_ERROR(
+    rclcpp::get_logger("behavior_controller"),
+    "[ResetDialogue] Service error: %s", toStr(error));
+  return BT::NodeStatus::FAILURE;
+}
+
+//=============================================================================
+// SetDialogueLanguage
+// Service: dec_interfaces::srv::SetDialogueLanguage  (/remote_dialogue/set_language)
+//=============================================================================
+
+BT::PortsList SetDialogueLanguage::providedPorts()
+{
+  return {
+    BT::InputPort<std::string>(
+      "service_name", "/remote_dialogue/set_language", "Service name"),
+    BT::InputPort<std::string>("language", "Language code, e.g. eng, kin, amh"),
+    BT::OutputPort<std::string>("message", "Response message from the service"),
+  };
+}
+
+bool SetDialogueLanguage::setRequest(Request::SharedPtr & request)
+{
+  auto language = getInput<std::string>("language");
+  if (!language || language.value().empty()) {
+    RCLCPP_ERROR(
+      rclcpp::get_logger("behavior_controller"),
+      "[SetDialogueLanguage] Missing required input port 'language'");
+    return false;
+  }
+  request->language = language.value();
+  return true;
+}
+
+BT::NodeStatus SetDialogueLanguage::onResponseReceived(const Response::SharedPtr & response)
+{
+  setOutput("message", response->message);
+
+  if (!response->success) {
+    RCLCPP_WARN(
+      rclcpp::get_logger("behavior_controller"),
+      "[SetDialogueLanguage] Service returned failure: %s", response->message.c_str());
+    return BT::NodeStatus::FAILURE;
+  }
+  if (ConfigManager::instance().isVerbose()) {
+    RCLCPP_INFO(
+      rclcpp::get_logger("behavior_controller"),
+      "[SetDialogueLanguage] %s", response->message.c_str());
+  }
+  return BT::NodeStatus::SUCCESS;
+}
+
+BT::NodeStatus SetDialogueLanguage::onFailure(BT::ServiceNodeErrorCode error)
+{
+  RCLCPP_ERROR(
+    rclcpp::get_logger("behavior_controller"),
+    "[SetDialogueLanguage] Service error: %s", toStr(error));
+  return BT::NodeStatus::FAILURE;
+}
+
+//=============================================================================
 // ConversationManagerNode
 // Action: dec_interfaces::action::ConversationManager
 //
@@ -1897,6 +2001,8 @@ void registerNodes(BT::BehaviorTreeFactory & factory, const BT::RosNodeParams & 
   factory.registerNodeType<Navigate>("Navigate", params);
   factory.registerNodeType<SpeechRecognitionNode>("SpeechRecognition", params);
   factory.registerNodeType<RemoteDialogueTurnNode>("RemoteDialogueTurn", params);
+  factory.registerNodeType<ResetDialogue>("ResetDialogue", params);
+  factory.registerNodeType<SetDialogueLanguage>("SetDialogueLanguage", params);
   factory.registerNodeType<ConversationManagerNode>("ConversationManager", params);
   factory.registerNodeType<SpeechWithFeedbackNode>("SpeechWithFeedback", params);
   factory.registerNodeType<TTSNode>("TTS", params);
@@ -1976,8 +2082,8 @@ BT::Tree initializeTree(
       logger,
       "[initializeTree] Registered nodes: AnimateBehavior, StopAnimateBehavior, "
       "SetOvertAttention, SetSpeechListening, Gesture, Navigate, SpeechRecognition, "
-      "RemoteDialogueTurn, ConversationManager, SpeechWithFeedback, TTS, CheckFaceDetected, "
-      "ListenForSpeech");
+      "RemoteDialogueTurn, ResetDialogue, SetDialogueLanguage, ConversationManager, "
+      "SpeechWithFeedback, TTS, CheckFaceDetected, ListenForSpeech");
     RCLCPP_INFO(logger, "[initializeTree] Loading tree: %s", xmlPath.c_str());
   }
 

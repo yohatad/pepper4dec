@@ -1,0 +1,84 @@
+<?xml version="1.0"?>
+<!--
+  remote_dialogue_attention.xml
+  Remote voice server conversation, started by eye contact
+
+  Combines overt_attention with the remote_dialogue node. Per visitor:
+    1. SetOvertAttention on: the head follows faces (engaged faces first),
+       then saliency.
+    2. IsMutualGazeDiscovered: wait for someone within 2 m to look at Pepper.
+    3. ResetDialogue: the server forgets the previous visitor. Only the
+       first visitor after launch is greeted (the welcome line, in the session
+       language); later visitors get a reset without the greeting.
+    4. Converse: RemoteDialogueTurn after RemoteDialogueTurn, while
+       overt_attention keeps the head on the visitor, until `max_missed`
+       turns in a row end without a reply (nobody spoke, or the server
+       dropped).
+    5. Wait visitor_cooldown (behavior_controller parameter) so the visitor
+       who just left is not greeted again, then look for the next one.
+  If any step before the conversation fails (no eye contact within 30 s,
+  server not connected), wait a second and start over.
+
+  Requires: remote_dialogue, overt_attention + face_detection (dec_launch
+  remote_dialogue_pipeline.launch.py attention:=true) and naoqi_driver.
+-->
+<root BTCPP_format="4" main_tree_to_execute="remote_dialogue_attention">
+
+  <BehaviorTree ID="remote_dialogue_attention">
+    <Sequence name="Main">
+      <Script code="greeted := 0"/>
+      <Repeat num_cycles="-1">
+        <Fallback name="ServeOneVisitor">
+
+          <Sequence name="VisitorConversation">
+            <SetOvertAttention enabled="true"/>
+            <!-- Eye contact from within 2 m: farther faces are passers-by -->
+            <IsMutualGazeDiscovered timeout="30.0" max_distance="2.0"/>
+            <!-- Greet once per launch: the first eye contact only -->
+            <Fallback name="GreetOnce">
+              <Sequence>
+                <ScriptCondition code="greeted == 0"/>
+                <ResetDialogue greet="true"/>
+                <Script code="greeted := 1"/>
+              </Sequence>
+              <ResetDialogue greet="false"/>
+            </Fallback>
+            <SubTree ID="Converse" max_missed="2" _autoremap="true"/>
+            <Sleep msec="{visitor_cooldown_msec}"/>
+          </Sequence>
+
+          <!-- No eye contact yet, or the server is not connected: retry -->
+          <Sleep msec="1000"/>
+
+        </Fallback>
+      </Repeat>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- Turns until `max_missed` in a row end without a reply. Always SUCCESS. -->
+  <BehaviorTree ID="Converse">
+    <Sequence name="ConverseSequence">
+      <Script code="missed_turns := 0"/>
+      <ForceSuccess>
+        <KeepRunningUntilFailure>
+          <Sequence name="OneTurn">
+            <ScriptCondition code="missed_turns &lt; max_missed"/>
+            <Fallback>
+              <Sequence>
+                <RemoteDialogueTurn
+                  wait="15.0"
+                  user_text="{user_speech}"
+                  assistant_text="{reply}"
+                  language="{language}"
+                  status="{turn_status}"/>
+                <Script code="missed_turns := 0"/>
+              </Sequence>
+              <Script code="missed_turns += 1"/>
+            </Fallback>
+          </Sequence>
+        </KeepRunningUntilFailure>
+      </ForceSuccess>
+    </Sequence>
+  </BehaviorTree>
+
+</root>

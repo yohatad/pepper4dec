@@ -54,6 +54,8 @@ using Gesture = dec_interfaces::action::Gesture;
 using NavigateToPose = nav2_msgs::action::NavigateToPose;
 using SpeechRecognition = dec_interfaces::action::SpeechRecognition;
 using RemoteDialogueTurn = dec_interfaces::action::RemoteDialogueTurn;
+using ResetDialogueSrv = dec_interfaces::srv::ResetDialogue;
+using SetDialogueLanguageSrv = dec_interfaces::srv::SetDialogueLanguage;
 using SpeechWithFeedback = naoqi_bridge_msgs::action::SpeechWithFeedback;
 using TTS = dec_interfaces::action::TTS;
 using SetBool = std_srvs::srv::SetBool;
@@ -546,6 +548,94 @@ TEST_F(BtRosTest, ServiceNodeFailsWhenItsServiceIsMissing) {
   auto tree = treeFromText(R"(<SetOvertAttention enabled="true"/>)");
 
   EXPECT_EQ(tickUntilDone(tree, milliseconds(3000)), NodeStatus::FAILURE);
+}
+
+TEST_F(BtRosTest, ResetDialogueSendsGreetAndLanguage) {
+  auto server = serveService<ResetDialogueSrv>("/remote_dialogue/reset");
+  auto tree = treeFromText(
+    R"(<Sequence>
+         <ResetDialogue/>
+         <ResetDialogue greet="false" language="kin" message="{message}"/>
+       </Sequence>)");
+
+  ASSERT_EQ(tickUntilDone(tree), NodeStatus::SUCCESS);
+  const auto requests = server->requests();
+  ASSERT_EQ(requests.size(), 2u);
+  EXPECT_TRUE(requests[0].greet);          // port default
+  EXPECT_EQ(requests[0].language, "");     // keep the current language
+  EXPECT_FALSE(requests[1].greet);
+  EXPECT_EQ(requests[1].language, "kin");
+  EXPECT_EQ(tree.rootBlackboard()->get<std::string>("message"), "ok");
+}
+
+// The GreetOnce pattern of data/remote_dialogue_attention.xml: three visitors,
+// only the first is greeted; the others still get a reset.
+TEST_F(BtRosTest, GreetOnceGreetsOnlyTheFirstVisitor) {
+  auto server = serveService<ResetDialogueSrv>("/remote_dialogue/reset");
+  auto tree = treeFromText(
+    R"(<Sequence>
+         <Script code="greeted := 0"/>
+         <Repeat num_cycles="3">
+           <Fallback name="GreetOnce">
+             <Sequence>
+               <ScriptCondition code="greeted == 0"/>
+               <ResetDialogue greet="true"/>
+               <Script code="greeted := 1"/>
+             </Sequence>
+             <ResetDialogue greet="false"/>
+           </Fallback>
+         </Repeat>
+       </Sequence>)");
+
+  ASSERT_EQ(tickUntilDone(tree), NodeStatus::SUCCESS);
+  const auto requests = server->requests();
+  ASSERT_EQ(requests.size(), 3u);
+  EXPECT_TRUE(requests[0].greet);
+  EXPECT_FALSE(requests[1].greet);
+  EXPECT_FALSE(requests[2].greet);
+}
+
+TEST_F(BtRosTest, ResetDialogueFailsWhenTheServerIsNotConnected) {
+  serveService<ResetDialogueSrv>(
+    "/remote_dialogue/reset",
+    [](const ResetDialogueSrv::Request &, ResetDialogueSrv::Response & response) {
+      response.success = false;
+      response.message = "voice server not connected";
+    });
+  auto tree = treeFromText(R"(<ResetDialogue message="{message}"/>)");
+
+  EXPECT_EQ(tickUntilDone(tree), NodeStatus::FAILURE);
+  EXPECT_EQ(
+    tree.rootBlackboard()->get<std::string>("message"), "voice server not connected");
+}
+
+TEST_F(BtRosTest, SetDialogueLanguageSendsTheLanguageAndMapsFailure) {
+  auto server = serveService<SetDialogueLanguageSrv>(
+    "/remote_dialogue/set_language",
+    [](const SetDialogueLanguageSrv::Request & request,
+    SetDialogueLanguageSrv::Response & response) {
+      response.success = request.language != "xx";
+      response.message = "language is " + request.language;
+    });
+  auto ok = treeFromText(R"(<SetDialogueLanguage language="amh" message="{message}"/>)");
+  ASSERT_EQ(tickUntilDone(ok), NodeStatus::SUCCESS);
+  EXPECT_EQ(ok.rootBlackboard()->get<std::string>("message"), "language is amh");
+
+  auto bad = treeFromText(R"(<SetDialogueLanguage language="xx"/>)");
+  EXPECT_EQ(tickUntilDone(bad), NodeStatus::FAILURE);
+
+  const auto requests = server->requests();
+  ASSERT_EQ(requests.size(), 2u);
+  EXPECT_EQ(requests[0].language, "amh");
+  EXPECT_EQ(requests[1].language, "xx");
+}
+
+TEST_F(BtRosTest, SetDialogueLanguageWithoutALanguageSendsNothing) {
+  auto server = serveService<SetDialogueLanguageSrv>("/remote_dialogue/set_language");
+  auto tree = treeFromText(R"(<SetDialogueLanguage language=""/>)");
+
+  EXPECT_EQ(tickUntilDone(tree), NodeStatus::FAILURE);
+  EXPECT_TRUE(server->requests().empty());
 }
 
 //=============================================================================

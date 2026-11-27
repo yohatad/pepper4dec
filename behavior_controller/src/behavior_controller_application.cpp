@@ -48,6 +48,10 @@
  *       Enable or disable overt attention (SetOvertAttention).
  *   /speech_event/set_enabled (std_srvs/srv/SetBool)
  *       Mute or unmute speech recognition (SetSpeechListening).
+ *   /remote_dialogue/reset (dec_interfaces/srv/ResetDialogue)
+ *       New visitor: clear the remote conversation (ResetDialogue).
+ *   /remote_dialogue/set_language (dec_interfaces/srv/SetDialogueLanguage)
+ *       Switch the remote session's language (SetDialogueLanguage).
  *
  * Parameters (config/behavior_controller_configuration.yaml, under
  * behavior_controller/ros__parameters):

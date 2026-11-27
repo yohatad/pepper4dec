@@ -62,6 +62,8 @@
 #include "dec_interfaces/action/animate_behavior.hpp"
 #include "dec_interfaces/action/speech_recognition.hpp"
 #include "dec_interfaces/action/remote_dialogue_turn.hpp"
+#include "dec_interfaces/srv/reset_dialogue.hpp"
+#include "dec_interfaces/srv/set_dialogue_language.hpp"
 #include "dec_interfaces/action/conversation_manager.hpp"
 // Services
 #include <std_srvs/srv/trigger.hpp>
@@ -377,6 +379,54 @@ public:
 
 private:
   void writeResult(const dec_interfaces::action::RemoteDialogueTurn::Result & result);
+};
+
+/**
+ * @class ResetDialogue
+ * @brief Calls /remote_dialogue/reset (dec_interfaces::srv::ResetDialogue):
+ *        a new visitor, so the remote voice server forgets the conversation.
+ *
+ * Input ports: 'greet' (bool, speak the welcome line), 'language' (string,
+ * optional). SUCCESS once the reset is sent; FAILURE if the server is not
+ * connected.
+ */
+class ResetDialogue
+  : public BT::RosServiceNode<dec_interfaces::srv::ResetDialogue>
+{
+public:
+  ResetDialogue(
+    const std::string & name,
+    const BT::NodeConfig & config,
+    const BT::RosNodeParams & params)
+  : BT::RosServiceNode<dec_interfaces::srv::ResetDialogue>(name, config, params) {}
+
+  static BT::PortsList providedPorts();
+  bool setRequest(Request::SharedPtr & request) override;
+  BT::NodeStatus onResponseReceived(const Response::SharedPtr & response) override;
+  BT::NodeStatus onFailure(BT::ServiceNodeErrorCode error) override;
+};
+
+/**
+ * @class SetDialogueLanguage
+ * @brief Calls /remote_dialogue/set_language (dec_interfaces::srv::SetDialogueLanguage).
+ *
+ * Input port 'language' (e.g. "eng", "kin"). SUCCESS once the server has
+ * confirmed the change.
+ */
+class SetDialogueLanguage
+  : public BT::RosServiceNode<dec_interfaces::srv::SetDialogueLanguage>
+{
+public:
+  SetDialogueLanguage(
+    const std::string & name,
+    const BT::NodeConfig & config,
+    const BT::RosNodeParams & params)
+  : BT::RosServiceNode<dec_interfaces::srv::SetDialogueLanguage>(name, config, params) {}
+
+  static BT::PortsList providedPorts();
+  bool setRequest(Request::SharedPtr & request) override;
+  BT::NodeStatus onResponseReceived(const Response::SharedPtr & response) override;
+  BT::NodeStatus onFailure(BT::ServiceNodeErrorCode error) override;
 };
 
 /**
