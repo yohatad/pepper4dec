@@ -18,7 +18,9 @@ Nothing in this file commands motion or removes a safeguard, because it runs
 unattended at every boot:
 
   * no wakeUp, no goToPosture, no setStiffnesses -- the robot must not stand up
-    or stiffen on its own when someone powers it on.
+    or stiffen on its own when someone powers it on. The one motion-related
+    call is ALAutonomousLife.setState("disabled"), only on a boot where the
+    DisableLifeAndDialog preference had been lost: it puts the robot to rest.
   * no setExternalCollisionProtectionEnabled("Arms", False) -- that is a
     collision safeguard. It is off only for a navigation run, from nav_ready.py.
   * no setSmartStiffnessEnabled(False) -- Smart Stiffness is a heat-limiting
@@ -49,7 +51,16 @@ LOG_PATH = "/home/nao/pepper_boot_defaults.log"
 PREFS = [
     ("com.aldebaran.robotwebpage", "CurrentPage", "menu.root.myrobot"),
     ("com.aldebaran.settings", "InteractiveConfigModality", "NoInteractive"),
+    # Keeps Autonomous Life off at boot, so Pepper stays at rest. NAOqi
+    # sometimes judges prefs.db corrupted at boot (Corrupted-*.db, the files
+    # pass sqlite's integrity_check) and starts an empty one; then Life comes
+    # up "solitary" and wakes the robot. Seen 2026-11-27.
+    ("com.aldebaran.debug", "DisableLifeAndDialog", "1"),
+    ("com.aldebaran.robotwebpage", "EulaVersion", "2.9"),
 ]
+
+LIFE_PREF = ("com.aldebaran.debug", "DisableLifeAndDialog")
+LIFE_SETTLE_TIMEOUT = 120.0   # how long to wait for Life to start, if it does
 
 VOLUME = 20                 # ALAudioDevice master, 0-100
 CONNECT_TIMEOUT = 240.0     # NAOqi is still starting when this module loads
@@ -89,7 +100,36 @@ def connect():
     return None
 
 
+def disable_life_when_it_starts(session):
+    """Turn Autonomous Life off if it starts on this boot.
+
+    Only needed when DisableLifeAndDialog had been lost: Life read the empty
+    store before this module restored it. Setting Life to "disabled" puts the
+    robot to rest -- the direction this file allows; it never wakes it.
+    """
+    try:
+        life = session.service("ALAutonomousLife")
+    except Exception as exc:                                      # noqa: B902
+        log("ALAutonomousLife unavailable: %s" % exc)
+        return
+    deadline = time.time() + LIFE_SETTLE_TIMEOUT
+    while time.time() < deadline:
+        try:
+            state = life.getState()
+            if state != "disabled":
+                life.setState("disabled")
+                log("Autonomous Life was %r on boot -> %r"
+                    % (state, life.getState()))
+                return
+        except Exception as exc:                                  # noqa: B902
+            log("Autonomous Life check FAILED: %s" % exc)
+            return
+        time.sleep(RETRY_EVERY)
+    log("Autonomous Life stayed disabled")
+
+
 def apply_all(session):
+    life_pref_restored = False
     try:
         pref = session.service("ALPreferenceManager")
         for domain, key, value in PREFS:
@@ -98,6 +138,12 @@ def apply_all(session):
                 if before == value:
                     log("%s/%s already %r" % (domain, key, value))
                     continue
+                if (domain, key) == LIFE_PREF:
+                    life_pref_restored = True
+                # setValue keeps a stored value's type; a value stored
+                # wrongly (for example with extra quotes) is replaced.
+                if before is not None:
+                    pref.removeValue(domain, key)
                 pref.setValue(domain, key, value)
                 log("%s/%s  %r -> %r" % (domain, key, before,
                                          pref.getValue(domain, key)))
@@ -124,6 +170,9 @@ def apply_all(session):
             % motion.getMoveArmsEnabled("Arms"))
     except Exception as exc:                                      # noqa: B902
         log("ALMotion settings FAILED: %s" % exc)
+
+    if life_pref_restored:
+        disable_life_when_it_starts(session)
 
 
 def worker():
